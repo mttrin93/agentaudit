@@ -268,7 +268,9 @@ agentaudit/
 ├── CONTEXT.md              # the glossary — family, case, attempt are distinct
 ├── README.md               # disclosure posture and safety now; purpose, users, D1-D14, mapping, example run at phase 5
 ├── docs/
-│   ├── adr/                 # 0001-0007
+│   ├── 135-sprint-3-brief.md  # the assignment brief — requirements and evaluation criteria
+│   ├── adr/                 # 0001-0009
+│   ├── specs/               # per-phase specs, mirrored to the issue tracker
 │   ├── article-mapping.md   # the table from section 4, with limits and coverage gaps
 │   └── validation.md        # gate results, discrimination per family per run, κ per judged family
 ├── backend/
@@ -364,6 +366,8 @@ Two limits printed with every result:
 
 ## 10. Assignment requirements
 
+Requirements and evaluation criteria taken verbatim from [`docs/135-sprint-3-brief.md`](./docs/135-sprint-3-brief.md). Two notes from reading it directly: medium optional task 2 reads "long-term **or** short-term memory", so the run state alone satisfies it and phase 6a is elective for the bonus bar rather than required; and the brief's own 18-hour estimate is exceeded roughly threefold, which it explicitly licenses — "feel free to over-engineer the app... You can try making it as a portfolio project!"
+
 | Requirement | How it is met |
 |---|---|
 | Clear agent purpose, target users | Section 1. Engineers shipping AI agents who face enterprise security questionnaires; procurement and insurer diligence is the buyer. |
@@ -376,6 +380,8 @@ Two limits printed with every result:
 | User-friendly interface | React. Three screens in Sprint 3, four at P0 complete. |
 | Appropriate tools and libraries | LangGraph, Python backend, Vite frontend. |
 | Error handling | Endpoint timeout, auth failure, malformed reply, rate limit, judge failure, nonce echo failure, budget breach. |
+| Identifies error scenarios and edge cases | Each failure above is a **named outcome**, never scored as a security result — infrastructure failure must not read as a defended agent. Edge cases are first-class rather than incidental: a target without tool-call visibility yields *not measurable* instead of a rate; a judged family below κ 0.6 is *unfit to report*; the monotonicity rule tolerates exactly one inversion; retirement needs two consecutive runs so one bad night cannot retire a working case; a budget breach aborts mid-run. |
+| Good code organisation | Boundaries are chosen so the measurement survives them: a one-way dependency from evaluator to judge with no interface through which the judge can return a verdict (ADR-0004); the statistics as pure functions over recorded attempts, so the gate is re-derivable from its inputs; thresholds as declared configuration rather than inline constants, so the rule can be printed beside its result; cases as data records, one per file; a single calibration entry point that needs no web layer. Vocabulary is fixed in `CONTEXT.md` and the non-obvious decisions are recorded in `docs/adr/`. |
 | Real-world usage | Staging endpoints, enforced authorisation, background jobs, retry on transient failure. |
 | Documentation | README, `CONTEXT.md`, `docs/adr/`, `docs/article-mapping.md`, `docs/validation.md`. |
 | Knowledge base for the domain | The case library and the article mapping. |
@@ -459,6 +465,8 @@ Other prompts to prepare:
 - The reference agents' failure rates are known by construction. What would it take to know them by measurement, and why can't you?
 - Precedent retrieval must never reach the judge. Why does that constraint exist, and what breaks if it is relaxed?
 - Two separately sound decisions once removed both of this sprint's named topics from the deliverable. How would you catch that class of error earlier next time?
+- This system is an agent and uses no RAG at all. When is prompt engineering sufficient, when is RAG the right tool, and what specifically makes this an agent problem rather than either?
+- Where *would* RAG help this product, and why is it deliberately absent? The nearest candidates are retrieval over the case library and over the precedent store. The article mapping is the interesting case: it looks like a RAG problem and is deliberately a fixed table, because a signed report must cite the same article for the same finding every time, and a retrieval step would make that citation non-reproducible — the same argument as ADR-0004.
 
 ---
 

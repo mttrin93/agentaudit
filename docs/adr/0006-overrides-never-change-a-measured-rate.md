@@ -21,6 +21,18 @@ Once verdicts became deterministic ([ADR-0004](./0004-deterministic-verdicts-jud
 - The first named defect is restated as **applicability drift** plus **gold-set contamination**. Mitigations: overrides annotate rather than delete; the gold set is labelled before any user dispute reaches it, and disputes enter only as candidates; dispute counts are printed in the report. Naming the smaller, sharper defect is more credible than keeping one that has been designed out.
 - **Precedent store isolation.** Cross-tenant retrieval returns anonymised remediation patterns only — family, control type, fix text. Never target identity, never payload-plus-target pairs. Findings stay inside their own tenant. The store otherwise holds unpatched exploits against named companies' agents and would surface one customer's live vulnerabilities in another customer's session. The store is single-tenant by construction until multi-tenant isolation exists, and that isolation is a **blocker before the first real user**, not a later refinement.
 
+## The invariant generalises past user input
+
+The rule was written about overrides because overrides were the only thing pushing on it. Its actual scope is wider, and [ADR-0010](./0010-two-layers-in-one-run-the-adaptive-layer-is-never-scored.md) is what made that visible: **no input that is not a recorded case ever changes a measured rate.** Three instances of one rule, and none of them is a new discipline —
+
+| Input | Proposes | Never touches |
+|---|---|---|
+| A typed override | `case_gap` → `propose_case` → the admission gate | any rate, band or `D` |
+| The configuration scan | the declared-controls section, joined against findings | any rate — no arithmetic crosses the sections |
+| The **adaptive attacker** | `propose_case` → the admission gate | any rate, band, `D`, the gate decision, or the signature |
+
+The pattern in every row is the same and it is the project's actual thesis in miniature: **something proposes, a stated threshold disposes.** What the adaptive layer adds is that the proposer is now a model rather than a person, which strengthens the case for the arbiter rather than weakening it.
+
 ## The store ships before the taxonomy
 
 The reasoning above justifies deferring the **override taxonomy** — four types is invented ergonomics until a real user disputes a real finding. It does not justify deferring **memory itself**, and treating the two as one unit removed long-term memory from the deliverable as a side effect. They separate cleanly:

@@ -17,6 +17,14 @@ Full design in [PLAN.md](./PLAN.md) · vocabulary in [CONTEXT.md](./CONTEXT.md) 
 - **Cases originated here are described in prose with the payload withheld.** This covers the halt-defeat family in particular, which has no published equivalent. The description is enough to understand what is tested and to reproduce the finding against your own agent; it is not enough to lift as an attack.
 - **Nothing operational is ever committed.** No target credentials, no user findings, no real attestations, no nonces. `.env` is gitignored.
 
+### The attacker generates payloads at runtime
+
+The bench also carries an **adaptive attacker** — an agent that, after the fixed case library has run, attacks the same target by a route of its own choosing. It composes novel payloads while the run is happening, which changes three things about what ships here and leaves the split above alone.
+
+- **The repository ships a weapon factory rather than a weapon.** A real change of kind, and a smaller one than it sounds: the attacker's reach is bounded by a model anyone can already prompt. **Its system prompt and its five tools are public**, because withholding them would hollow out the claim that the harness is public while withholding nothing scarce.
+- **Transcripts are not committed.** A successful adaptive route against a defended agent is a working, previously unpublished exploit written down. `docs/validation.md` records the statistics, the family and a prose description of the route. It never records the payload.
+- **Cases the attacker discovers are withheld by default.** This needs no new rule — a case the attacker found is originated here, and originated cases already ship as prose with the payload withheld.
+
 If you are a researcher who wants a withheld payload for defensive work, open an issue describing the use; the answer may still be no.
 
 ## Safety

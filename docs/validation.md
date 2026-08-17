@@ -3,6 +3,16 @@
 Gate results, discrimination per family per run, and κ per judged family live here.
 The gate itself is #13; nothing below is a gate result.
 
+The adaptive layer is recorded in its **own section**, never in the tables above it:
+`A_break`, `A_effort` with censored counts, the sign-test result, the fraction of the
+live library that is `discovered_by = adaptive`, the retirement rate by provenance,
+and a **prose** description of each route the attacker found. Never payload text —
+a successful route against the hardened agent is a working unpublished exploit, and
+this file is public ([ADR-0008](./adr/0008-repo-disclosure-posture.md)). The two
+kinds of number are measured on different denominators and are kept apart on the
+page for the same reason they are kept apart in the code
+([ADR-0010](./adr/0010-two-layers-in-one-run-the-adaptive-layer-is-never-scored.md)).
+
 ---
 
 ## Pre-gate observations

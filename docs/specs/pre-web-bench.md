@@ -1,12 +1,12 @@
 # Spec — The pre-web bench, through the gate
 
-**Scope:** phases 1, 2, 2b, 2d, 2e, 3, 3b, 4 (+ reserve), 4b, 4c and 8b of the Sprint 3 line. About 37.5 hours.
+**Scope:** phases 1, 2, 2b, 2d, 2e, **2f**, 3, 3b, 4 (+ reserve), 4b, 4c, **4d (+ reserve)** and 8b of the Sprint 3 line. About 47.5 hours.
 
-**37.5 hours is not the Sprint 3 total.** It covers the pre-web bench only. The remaining 16 hours of the 53.5-hour Sprint 3 line — the report and real Ed25519 signing (phase 5), the precedent store (6a), the API (6b), the React screens (7) and the reflection notes (8) — are a second spec, written once this gate has passed.
-**Governing documents:** [PLAN.md](../../PLAN.md) · [CONTEXT.md](../../CONTEXT.md) · [ADR-0001 … ADR-0009](../adr/)
-**Vocabulary:** every term below is defined in `CONTEXT.md`. **Family**, **case** and **attempt** are three different things and all arithmetic here depends on that.
+**47.5 hours is not the Sprint 3 total.** It covers the pre-web bench only. The remaining 16 hours of the 63.5-hour Sprint 3 line — the report and real Ed25519 signing (phase 5), the precedent store (6a), the API (6b), the React screens (7) and the reflection notes (8) — are a second spec, written once this gate has passed.
+**Governing documents:** [PLAN.md](../../PLAN.md) · [CONTEXT.md](../../CONTEXT.md) · [ADR-0001 … ADR-0012](../adr/)
+**Vocabulary:** every term below is defined in `CONTEXT.md`. **Family**, **case** and **attempt** are three different things and all arithmetic here depends on that. So are **attempt**, **episode** and **turn**, and the adaptive layer depends on *that*.
 
-> Not yet published to an issue tracker — none is configured for this repository, and it has no remote. Move this document to the tracker with the `ready-for-agent` label once `/setup-matt-pocock-skills` has run.
+> **Amended after the adaptive attacker moved from Sprint 4 into Sprint 3.** The scored layer of this spec is unchanged in every particular. What is new is a second layer that runs after it, produces no rate, and must prove it discriminates before anything it produces reaches a reader — which is why it is in *this* spec rather than the next one. [ADR-0010](../adr/0010-two-layers-in-one-run-the-adaptive-layer-is-never-scored.md), [ADR-0011](../adr/0011-the-adaptive-attacker-is-label-blind.md), [ADR-0012](../adr/0012-adaptive-discovered-cases-face-a-cross-model-admission-bar.md).
 
 ---
 
@@ -24,7 +24,11 @@ Build the bench up to and including its own calibration, and stop there delibera
 
 A **case library** of eighteen **cases** across six **families** is run against three **reference agents** of known construction — hardened, weak, and trivial — over a real HTTP contract identical to the one a user's **target** will speak. Each **attempt** produces a **verdict** from a deterministic **success condition**; a blinded judge adds narrative only and cannot overturn it. The results are reduced to a **discrimination score** per family with Wilson intervals, checked against a stated decision rule, and the whole library is then re-run on a second underlying model to establish that the bench reads defences rather than model temperament.
 
-The **gate** is the deliverable. It is a stated, falsifiable rule that can return "this bench measures nothing," and passing it is the precondition for every later phase. There is no web layer, no report rendering and no signing in this spec — the entire scope is driven from one calibration entry point.
+Then a second layer runs, and it is scored on nothing. After the fixed suite completes against a target, an **adaptive attacker** — an agent with five model-invoked tools and a turn budget per family — attacks the same target by a route of its own choosing, label-blind to which reference agent it faces. Its **episodes** never enter a rate, an interval, a discrimination score, the gate decision, or anything signed. They produce their own section, their own statistic (`A_break`, on episodes and families rather than attempts), and one edge back into the scored layer: `propose_case`, which lands in the admission gate and is decided by a stated threshold rather than by the attacker's own assessment.
+
+The **gate** is the deliverable. It is a stated, falsifiable rule that can return "this bench measures nothing," and passing it is the precondition for every later phase. **The gate is decided on the scored layer alone**, so a weak attacker cannot fail a working bench and a lucky one cannot pass a broken one. There is no web layer, no report rendering and no signing in this spec — the entire scope is driven from one calibration entry point.
+
+The adaptive layer is in *this* spec, not the next one, for one reason: it is a **second instrument** whose own discriminating power is unknown, and shipping an unvalidated instrument into a report is precisely what this spec exists to prevent. It is therefore validated here, against the reference agents, before anything it produces reaches a reader. What is carved out to the next spec is defined by the two things this one does not have — a renderer and a user.
 
 ## User Stories
 
@@ -54,7 +58,7 @@ The **gate** is the deliverable. It is a stated, falsifiable rule that can retur
 
 ### Running attempts
 
-19. As a bench engineer, I want a single code path from the attacker to any target, so that no result is produced by a path a real run would not take.
+19. As a bench engineer, I want a single transport path from the bench to any target — the fixed suite and the adaptive attacker sending through the same `send_message`, differing only in who chose the payload — so that no result is produced by a path a real run would not take.
 20. As a bench engineer, I want ten attempts per case per target, so that a rate has a meaningful interval around it.
 21. As a bench engineer, I want each attempt to record the full transcript sent and received, so that a verdict can be re-derived and disputed from evidence.
 22. As a bench engineer, I want transient endpoint failures retried without counting as attempts, so that a flaky network does not read as a defended agent.
@@ -132,11 +136,40 @@ The **gate** is the deliverable. It is a stated, falsifiable rule that can retur
 
 ### Reproducibility
 
-76. As a bench engineer, I want a gate run reproducible from its recorded inputs, so that a disputed result can be re-derived rather than re-argued.
+76. As a bench engineer, I want the **gate decision** reproducible from its recorded inputs, so that a disputed result can be re-derived rather than re-argued — and I want the adaptive section marked as recorded rather than re-derivable, because claiming a stochastic search is reproducible would be the same overreach the judge's verdict was demoted for.
 77. As a bench engineer, I want the judge's reliability evaluation executed through DeepEval over the gold set, so that the named framework does real work and κ comes out of its per-case results.
 78. As a bench engineer, I want the discrimination statistics computed on top of DeepEval's output rather than duplicating it, so that there is one source for each number.
 79. As a bench engineer, I want every attempt recorded whatever its outcome, so that the Article 12 claim is a property of the system rather than an aspiration.
 80. As a bench engineer, I want the gate's full output written to a document that survives the run, so that validation history exists before the first user does.
+
+### The adaptive layer
+
+81. As a bench engineer, I want an attacker that chooses its own next message given what came back, so that the bench can find routes nobody wrote a case for.
+82. As a bench engineer, I want its five tools to be genuinely model-invoked — what to send next, whether to inspect a tool trace, whether the objective is met, what worked before, whether the route is worth promoting — so that the agent loop is a control structure rather than a wrapper around a fixed sequence.
+83. As a bench engineer, I want the adaptive layer to run only after the fixed suite has finished against a given target, so that a target carrying persistent state cannot be contaminated before the attempts that are scored.
+84. As a bench engineer, I want that ordering enforced by a failing test rather than by a sentence in a document, so that it cannot be lost in a later refactor by someone who never read the sentence.
+85. As a bench engineer, I want adaptive results recorded as episodes that cannot be constructed from an attempt, so that no adaptive turn can enter a denominator by accident.
+86. As a bench engineer, I want the adaptive layer to carry its own call counter, so that I can see which half of a run spent the budget.
+87. As a bench engineer, I want a hard turn cap per episode **and** a hard ceiling over the whole layer, so that a per-family cap multiplied by six families is not a limit the user consented to once and then forgot.
+88. As a target operator, I want the pre-run estimate to show the fixed suite exactly and the adaptive layer as a ceiling, never blended and never averaged, so that I can tell the fact from the bound before I consent to either.
+89. As a bench engineer, I want an episode aborted on budget recorded as censored rather than as resisted, so that budget exhaustion never reads as a defended agent.
+90. As a bench engineer, I want the attacker blinded to which reference agent it faces — no name, no identity, no label in any prompt or tool result — so that it cannot modulate effort and manufacture separation out of nothing.
+91. As a bench engineer, I want the attacker's context isolated per target, so that it cannot rank targets by comparing one episode against the last.
+92. As a bench engineer, I want target order randomised per family, so that the turn budget is not spent in a sequence the attacker could learn.
+93. As a bench engineer, I want precedent returned to the attacker with target identity stripped, so that long-term memory does not become the channel that un-blinds it.
+94. As a reviewer, I want the residual limit of that blinding stated rather than claimed away, so that I am not told a live attacker has been blinded to behaviour it can plainly observe.
+95. As a bench engineer, I want the adaptive layer's own discrimination measured — `A_break` over families, `A_effort` over turns with censored episodes counted — so that a second instrument is validated the way the first one was.
+96. As a bench engineer, I want that statistic named differently from `D` and reported in its own block, so that two quantities measured on different denominators can never be read as one.
+97. As a bench engineer, I want two episodes per cell rather than one, so that a family's outcome does not turn on a single unlucky episode and the paired test can detect a partial effect rather than only unanimity.
+98. As a bench engineer, I want a negative `A_break` treated as evidence that blinding failed or the harness is wrong, so that the blinding claim is falsifiable rather than asserted.
+99. As a bench engineer, I want the adaptive result to decide nothing about the gate, so that an instrument still being validated cannot invalidate the one it is measured against.
+100. As a bench engineer, I want the adaptive layer's thresholds held in a record separate from the gate rule, so that nothing which decides nothing can appear in the rule the gate prints beside its result.
+101. As a bench engineer, I want a route the attacker found to be proposable as a case through the same admission gate every other case passes, so that the library can grow without the signed number becoming unreproducible.
+102. As a bench engineer, I want an adaptive-discovered case to clear `D ≥ 0.4` on a **second** underlying model as well, so that a case fitted to the three agents it was discovered on cannot enter the library on that fitting alone.
+103. As a bench engineer, I want every case to record whether it was authored, adaptive-discovered or user-proposed, so that provenance and admission bar are answered by the same field.
+104. As a reviewer, I want the fraction of the live library that is adaptive-discovered printed on every gate run, together with the retirement rate by provenance, so that drift toward the reference agents arrives as a series rather than as an argument.
+105. As a bench engineer, I want adaptive transcripts recorded in full but never committed, so that a working previously-unpublished exploit does not ship in a public repository.
+106. As a reviewer, I want the adaptive section labelled *not reproducible*, so that I do not mistake one agent's search for a measurement.
 
 ## Implementation Decisions
 
@@ -174,7 +207,19 @@ run_gate(library, target_urls) -> GateResult
 
 **Model selection is configuration on the reference agent server**, so the multi-model validity check re-runs the same library against the same agents with one setting changed, and compares discrimination per family.
 
-**Validation output is written to a durable document** recording per-family rates, intervals, discrimination scores, κ per judged family, the monotonicity result, the gate rule as applied, and the pass or fail — for both model runs.
+**Validation output is written to a durable document** recording per-family rates, intervals, discrimination scores, κ per judged family, the monotonicity result, the gate rule as applied, and the pass or fail — for both model runs. The adaptive layer is recorded in the same document, in its own section: `A_break`, `A_effort`, censored counts, the sign-test result, the fraction of the live library that is adaptive-discovered, and a **prose** description of each route. Never a payload.
+
+**The two layers are separated by a type, not by a discipline.** `TargetRun.rates` groups everything in `attempts` by family and divides, and an adaptive turn has the same shape as an `Attempt` — the same case reference, family, target, transcript. If the two ever share a record, every denominator in the bench moves silently: the arithmetic stays valid and the population changes, and no test fails. So `AdaptiveEpisode` is a separate record that cannot be constructed from an `Attempt`, held in a separate field with its own call counter, and it has no `verdict` field at all — an episode is *broken* or *censored*, which is a different question from whether one attempt succeeded. `run_probe` and `run_attack` share `send_message` and nothing above it. Per ADR-0010.
+
+**`check_canary` wraps the evaluator rather than replacing it.** The attacker calls it to ask whether its objective is met; it returns `evaluate_success_condition`'s answer unchanged. The model chooses *when* to look and never *what it sees*, so ADR-0004 holds inside the adaptive layer rather than merely around it.
+
+**Adaptive episodes run strictly after the fixed suite, per target.** A target with persistent state — a conversation store, a cache, a rate limiter that trips — contaminated by an adaptive turn before a scored attempt corrupts the denominator by a route no type can prevent, because by then the two records are already correctly separated. This is the one invariant in the design with no structural enforcement available, so it gets a test instead (see Testing Decisions).
+
+**Blinding is label-blindness and context isolation, not blindness.** The attacker sees no target name, no agent identity and no occurrence of `hardened`, `weak` or `trivial`; targets are opaque per-run handles reassigned each run; context is fresh per target; order is randomised per family; precedent is identity-stripped. Behavioural inference — *this one has an input check* — is not preventable and is not claimed to be. The residual is stated in the report, and the falsification test is a negative `A_break`. Per ADR-0011.
+
+**Adaptive statistics are pure functions over recorded episodes**, on the same terms as the gate statistics: `A_break`, median turns-to-first-success with censoring, and the paired one-sided sign test take recorded episodes and return values, with no I/O and no model calls. `T = 8` and `k = 2` are declared in `AdaptiveBudget`, which is deliberately **not** `GateRule`.
+
+**A case carries `discovered_by`,** one of `authored`, `adaptive` or `user_gap`, and it selects the admission bar. `adaptive` requires `D ≥ 0.4` with disjoint intervals on the second underlying model as well as the first, reusing the model-swap seam that already exists as configuration. Per ADR-0012.
 
 ## Testing Decisions
 
@@ -185,6 +230,10 @@ run_gate(library, target_urls) -> GateResult
 *Seam one — the calibration entry point.* Tests construct a case library and a set of target URLs pointing at locally served reference agents, invoke the entry point, and assert on the gate result. This one seam covers case loading, registration and the nonce protocol, the approval interrupt, the attacker, the HTTP contract, the evaluator, the judge's narrative fields, the scorer and the assembler. Behaviours to cover: a library that discriminates yields a pass; a library that does not yields a fail with the failing families identified; a non-echoing target is refused before any attempt; a target without tool-call visibility yields "not measurable" for the two affected families rather than a rate; a budget breach aborts; a timeout, a 401, a malformed reply and a 429 each produce their own named outcome and none is scored as a security result; the judge cannot alter a verdict; a run's result is reproducible from its recorded attempts.
 
 *Seam two — the statistical functions.* Wilson interval bounds, discrimination score, the monotonicity check and the gate decision rule are tested directly as pure functions, because ADR-0003 depends on their arithmetic being exactly right and an end-to-end test cannot localise an error in them. Behaviours to cover: known Wilson bounds at the boundary counts, including zero and full success; overlapping versus non-overlapping intervals at the decision edge; a discrimination score exactly at 0.4; monotonicity with zero and with one inversion; the four-of-six and five-of-six gate thresholds at their boundaries.
+
+**The adaptive layer adds no third seam.** Its behaviours are reached through the calibration entry point like everything else — an episode that breaks a target, an episode that reaches the turn cap and is recorded censored, an abort on the layer ceiling, a target without tool-call visibility costing the attacker `read_tool_trace`, a route proposed and admitted, a route proposed and rejected on the second model. Its arithmetic is tested at seam two as pure functions over recorded episodes: `A_break` at zero and at one, median turns with every episode censored, the sign test at five and at six discordant pairs. The attacker's *choices* are deliberately not asserted on, for the same reason the judge's prose is not — its quality has its own evaluation, which is `A_break`.
+
+**One invariant gets a named test, because no type can hold it.** `backend/tests/test_layer_ordering.py::test_no_adaptive_episode_precedes_a_scored_attempt` fails if any episode's start timestamp precedes any attempt's start timestamp for the same target. This requires `Attempt` and `AdaptiveEpisode` both to carry a start timestamp, and `RunState` to expose `episodes` alongside `attempts`. The test is written **before** the adaptive layer exists and skips until `RunState.episodes` appears, so it activates on the commit that would otherwise be the first able to break the ordering. An invariant with no failing test survives exactly as long as the person who wrote it is reading the diff.
 
 **Fixtures.** A local server serving the three reference agents over the real contract, plus a configurable stub target used to produce the failure modes (timeout, 401, malformed body, 429, no tool calls) that real reference agents will not produce on demand. Recorded transcripts serve as fixtures for judge-adjacent tests so no model call is needed to test the verdict path.
 
@@ -197,7 +246,8 @@ run_gate(library, target_urls) -> GateResult
 - **The web layer entirely** — the API, the job pattern, progress polling and server-sent events. Phase 6b.
 - **The React interface** — all three screens. Phase 7.
 - **Report rendering and signing.** The structured result is produced in scope; turning it into a document, signing it with Ed25519, and the offline verify script are phase 5. Nothing in this spec may claim a result is "signed."
-- **The precedent store and retrieval.** Phase 6a, and the constraint that it must never reach the judge is recorded in ADR-0004 for when it arrives.
+- **The adaptive layer's carve-out: a renderer and a user.** The adaptive attacker, its blinding, its statistics and its promotion path are all in scope, run against the reference agents. **Rendering** the adaptive section into a report for a reader is phase 5, and **running** the adaptive layer against a registered user's target is phase 6b/7 — this spec has no user. What is in scope here is exactly what validating a second instrument requires, and no more.
+- **The precedent store and retrieval.** Phase 6a, and the constraint that it must never reach the judge is recorded in ADR-0004 for when it arrives. `retrieve_precedent` is one of the attacker's five tools, so phase 2f uses the store's interface against an empty or stubbed store; the store itself still lands at 6a.
 - **Typed overrides, the feedback loop and the review screen.** These wait on a real user disputing a real finding, per ADR-0006.
 - **Cross-tenant isolation.** Not applicable before user one, and a P1 blocker when it is.
 - **Track A user recruitment.** Runs in parallel as calendar work and depends on nothing here.
@@ -216,4 +266,6 @@ run_gate(library, target_urls) -> GateResult
 
 **Two decisions in this scope exist to protect a later one.** Judge blinding and the no-precedent-to-the-judge constraint both look unnecessary while there is no precedent store and no user — they are there so that phase 6a cannot silently break the κ figure the judged families depend on.
 
-**Published** as issue #1, broken into fourteen tracer-bullet tickets as issues #2 to #15, all linked as sub-issues and labelled `ready-for-agent`. Two of them are unblocked and startable immediately: the tracer bullet (#2) and the statistical prefactor (#3). The frontier moves as blockers close; work one ticket per fresh context.
+**The attacker finding nothing is a valid outcome of this spec, and so is the gate failing.** They are different valid outcomes and must not be confused: a failed gate stops the build, while an adaptive layer that breaks nothing is a reading about the attacker or the turn budget, reported as such. What is not permitted in either case is adjusting the number afterwards — the gate thresholds were declared before any result existed, and `T` and `k` are declared in `AdaptiveBudget` for the same reason. Quietly widening the turn budget until something is found, and then reporting the result as though the budget had been fixed in advance, is the adaptive layer's version of tuning the gate.
+
+**Published** as issue #1, broken into sixteen tracer-bullet tickets as issues #2 to #17, all linked as sub-issues and labelled `ready-for-agent`. The adaptive layer is #16 and #17; seven earlier tickets were amended rather than appended to. The frontier moves as blockers close; work one ticket per fresh context.

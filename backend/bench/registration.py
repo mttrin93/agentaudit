@@ -58,6 +58,6 @@ class Registration:
 def register(target: TargetConfig, nonce: str, run_state: RunState) -> Registration:
     """Ask the target to echo its planted nonce. No run starts until it does."""
     probe = send_message(target, ECHO_PROBE, session_id=f"registration-{uuid.uuid4()}")
-    run_state.record_call()
+    run_state.record_call(probe.sends)
     echoed = bool(nonce) and nonce in probe.reply_text
     return Registration(target=target, nonce=nonce, complete=echoed, probe=probe)

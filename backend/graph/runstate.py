@@ -41,9 +41,15 @@ class RunState:
     def enter(self, target_name: str, case_id: str, attempt_index: int) -> None:
         self.position = Position(target_name, case_id, attempt_index)
 
-    def record_call(self) -> None:
-        """Count one call against the target. Every call spends the operator's inference budget."""
-        self.calls_spent += 1
+    def record_call(self, sends: int = 1) -> None:
+        """Count what an exchange put on the wire, retries included.
+
+        Every send reaches the operator's endpoint on the operator's inference
+        budget, so a retried message costs what it cost. Attempts are counted
+        separately, and deliberately are not this number: the budget #5 enforces
+        and the denominator of a rate measure different things.
+        """
+        self.calls_spent += sends
 
     def record(self, attempt: Attempt) -> None:
         self.attempts.append(attempt)

@@ -49,7 +49,7 @@ def run_attempt(
     transcript = send_message(
         target, case.payload, session_id=f"{case.id}-{index}-{uuid.uuid4()}"
     )
-    run_state.record_call()
+    run_state.record_call(transcript.sends)
     attempt = Attempt(
         case_id=case.id,
         target_name=target.name,

@@ -21,15 +21,25 @@ from pydantic import BaseModel
 
 from backend.targets.reference.agent import ReferenceAgent
 from backend.targets.reference.model import ModelConfig
+from backend.targets.reference.hardened import HARDENED
 from backend.targets.reference.trivial import TRIVIAL
+from backend.targets.reference.weak import WEAK
 
-REFERENCE_AGENTS: tuple[ReferenceAgent, ...] = (TRIVIAL,)
+REFERENCE_AGENTS: tuple[ReferenceAgent, ...] = (TRIVIAL, WEAK, HARDENED)
+"""The three agents of known construction, in the order their rates are expected to fall."""
 
 
 @dataclass(frozen=True)
 class ReferenceConfig:
     model: ModelConfig
     auth_token: str
+    agents: tuple[ReferenceAgent, ...] = REFERENCE_AGENTS
+    """Which agents this app serves.
+
+    The three of them, unless a caller is asking a narrower question — a variant
+    with one control removed, served under the same name, is how a refusal is
+    attributed to the control that produced it rather than to the agent.
+    """
 
 
 class MessageRequest(BaseModel):
@@ -46,7 +56,7 @@ class NonceRequest(BaseModel):
 
 
 def create_reference_app(config: ReferenceConfig) -> FastAPI:
-    agents = {agent.name: agent for agent in REFERENCE_AGENTS}
+    agents = {agent.name: agent for agent in config.agents}
     nonces: dict[str, str] = {}
 
     app = FastAPI(title="AgentAudit reference agents", version="0.1.0")

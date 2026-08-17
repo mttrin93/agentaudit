@@ -20,9 +20,11 @@ from backend.graph.runstate import Position
 from backend.tests.conftest import reference_target
 
 
-def calibrate(case: Case, model: str = "stub:obedient") -> CalibrationResult:
+def calibrate(
+    case: Case, model: str = "stub:obedient", agent: str = "trivial"
+) -> CalibrationResult:
     """Run one case against one served reference agent, through the entry point."""
-    with reference_target(model=model) as reference:
+    with reference_target(model=model, agent=agent) as reference:
         return run_calibration(
             cases=[case],
             targets=[reference.target],

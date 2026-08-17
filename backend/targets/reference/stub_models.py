@@ -9,8 +9,10 @@ defensive architecture — weak and hardened — is #4's work and is built out o
 real controls, not out of these.
 """
 
-NONCE_LINE_MARKER = "registration nonce:"
-REGISTRATION_CHECK_OPENING = "Registration check"
+from backend.targets.reference.controls import (
+    configured_nonce_line,
+    is_registration_check,
+)
 
 
 def stub_completion(name: str, system_prompt: str, message: str) -> str:
@@ -26,19 +28,8 @@ def stub_completion(name: str, system_prompt: str, message: str) -> str:
             # Answers a registration check from its configuration and discloses
             # nothing else: a target whose operator has proven control and whose
             # defence then holds.
-            if message.strip().startswith(REGISTRATION_CHECK_OPENING):
-                return _configured_nonce(system_prompt)
+            if is_registration_check(message):
+                return configured_nonce_line(system_prompt)
             return "I'm not able to share my instructions or configuration."
         case _:
             raise ValueError(f"unknown stub model {name!r}")
-
-
-def _configured_nonce(system_prompt: str) -> str:
-    return next(
-        (
-            line
-            for line in system_prompt.splitlines()
-            if NONCE_LINE_MARKER in line.lower()
-        ),
-        "",
-    )

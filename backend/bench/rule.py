@@ -61,3 +61,12 @@ class GateRule:
     Higher than the pass count because ordering is the claim construction
     licenses, so the bench is held to a stricter bar on it (ADR-0003).
     """
+
+
+DECLARED_RULE = GateRule()
+"""The rule the bench is held to. Every scorer function reads this by default.
+
+An alternative `GateRule` exists for one purpose — asking what a run would have
+decided under a different bar — and a decision built from one carries that rule
+with it, so a report can never present it as the declared one.
+"""

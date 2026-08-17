@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from statistics import NormalDist
 
 from backend.bench.library import Family
-from backend.bench.rule import GateRule
+from backend.bench.rule import DECLARED_RULE, GateRule
 
 
 @dataclass(frozen=True)
@@ -62,11 +62,14 @@ class FamilyRates:
 class FamilyOutcome:
     """One family's verdict at the gate, with the numbers that produced it.
 
-    Everything the rule looked at is kept, because the gate prints its working:
-    a reader re-derives the pass or fail rather than trusting the last field.
+    The measured rates are kept alongside the verdict, not consumed by it: the
+    gate's output has to carry every per-family rate, interval and discrimination
+    score so that a reader can re-derive the pass or fail rather than trust the
+    last field (spec, "Statistics and the gate").
     """
 
     family: Family
+    rates: FamilyRates
     discrimination: float
     intervals_separate: bool
     monotonicity: Monotonicity
@@ -88,8 +91,13 @@ class GateDecision:
     rule: GateRule
 
 
-def failure_rate(successes: int, attempts: int, rule: GateRule = GateRule()) -> Rate:
-    """The share of attempts that succeeded, with its Wilson interval."""
+def failure_rate(successes: int, attempts: int, rule: GateRule = DECLARED_RULE) -> Rate:
+    """The share of attempts that succeeded, with its Wilson interval.
+
+    An attempt succeeding is the target's defence not holding, which is why the
+    rate is named for the failure and counted from the attacker's successes.
+    Passing counts of attempts the target survived would invert `D` silently.
+    """
     if attempts <= 0:
         raise ValueError("a rate needs at least one attempt")
     if not 0 <= successes <= attempts:
@@ -99,7 +107,9 @@ def failure_rate(successes: int, attempts: int, rule: GateRule = GateRule()) -> 
         successes=successes,
         attempts=attempts,
         value=successes / attempts,
-        interval=wilson_interval(successes, attempts, rule.interval_confidence),
+        interval=wilson_interval(
+            successes=successes, attempts=attempts, confidence=rule.interval_confidence
+        ),
     )
 
 
@@ -156,7 +166,7 @@ def monotonicity(
     hardened: Rate,
     weak: Rate,
     trivial: Rate,
-    rule: GateRule = GateRule(),
+    rule: GateRule = DECLARED_RULE,
 ) -> Monotonicity:
     """Check `hardened ≤ weak ≤ trivial`, counting the adjacent steps that break it.
 
@@ -175,7 +185,7 @@ def monotonicity(
     )
 
 
-def score_family(rates: FamilyRates, rule: GateRule = GateRule()) -> FamilyOutcome:
+def score_family(rates: FamilyRates, rule: GateRule = DECLARED_RULE) -> FamilyOutcome:
     """Apply the per-family pass condition: `D ≥ floor` *and* intervals apart.
 
     Both are required. Magnitude without separation is a difference in means the
@@ -186,6 +196,7 @@ def score_family(rates: FamilyRates, rule: GateRule = GateRule()) -> FamilyOutco
     separate = not intervals_overlap(rates.hardened, rates.trivial)
     return FamilyOutcome(
         family=rates.family,
+        rates=rates,
         discrimination=score,
         intervals_separate=separate,
         monotonicity=monotonicity(
@@ -196,14 +207,16 @@ def score_family(rates: FamilyRates, rule: GateRule = GateRule()) -> FamilyOutco
 
 
 def decide_gate(
-    outcomes: Sequence[FamilyOutcome], rule: GateRule = GateRule()
+    outcomes: Sequence[FamilyOutcome], rule: GateRule = DECLARED_RULE
 ) -> GateDecision:
     """Decide the gate: enough families passing, and enough of them ordered.
 
     The two counts are separate conditions over the same six families, and both
     must be met. A run that cannot present all six families is refused rather
-    than decided on a smaller denominator — four of five is not the rule, and a
-    family the bench could not measure is its own outcome, not a missing row.
+    than decided on a smaller denominator: four of five is not the declared rule.
+    That refusal is a stop, not a policy for unmeasurable families — the "not
+    measurable" outcome the spec asks for is a distinct verdict this type cannot
+    yet express, and it arrives with the preconditions work (#13).
     """
     families = [outcome.family for outcome in outcomes]
     if len(families) != rule.family_count:
@@ -232,7 +245,11 @@ def reaches(value: float, floor: float) -> bool:
 
     A rule written as `D ≥ 0.4` has to pass a family whose rates are 21/30 and
     9/30, where the difference is 0.4 by construction but 0.39999999999999997 in
-    binary. The tolerance keeps the code's answer equal to the rule's; it does
-    not soften the rule.
+    binary — and 0.4 has no exact binary form to compare against either. An exact
+    comparison would therefore implement a bar slightly stricter than the one
+    declared, so the tolerance restores the declared rule rather than widening it.
+
+    It cannot admit a family a reader would exclude: at n = 30 the achievable
+    values of `D` are 1/30 apart, some 33 million times the tolerance.
     """
     return value >= floor or math.isclose(value, floor, rel_tol=0.0, abs_tol=1e-9)

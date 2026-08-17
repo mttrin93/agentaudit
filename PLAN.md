@@ -281,7 +281,7 @@ agentaudit/
 │   │   ├── evaluator.py     # applies success_condition — the verdict
 │   │   ├── judge.py         # narrative fields only, blinded
 │   │   ├── rule.py          # the gate rule as declared thresholds
-│   │   ├── scorer.py        # discrimination, intervals, bands
+│   │   ├── scorer.py        # discrimination, intervals, the gate decision, bands
 │   │   ├── assembler.py     # declared-vs-defeated join, coverage gaps
 │   │   └── report.py        # render and sign
 │   ├── cases/               # the case library, one record per file

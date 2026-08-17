@@ -1,0 +1,7 @@
+[project]
+name = "agentaudit"
+version = "0.1.0"
+description = "An adversarial test bench for AI agents, with a signed evidence report mapped to the EU AI Act."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = []

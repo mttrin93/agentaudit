@@ -402,22 +402,28 @@ The bar clears inside the Sprint 3 line with margin on the medium tasks, and exa
 
 No fixed count. The list follows the architecture; it does not target a number.
 
-| Tool | Function | When |
-|---|---|---|
-| `verify_authorization` | Issues the nonce, checks the echo, records the attestation | Sprint 3 |
-| `scan_config` | Checks which controls the target declares | Sprint 3 |
-| `run_attack` | Sends one attempt to the target, against the budget | Sprint 3 |
-| `evaluate_success_condition` | Applies the case's deterministic check. **Produces the verdict** | Sprint 3 |
-| `assess_finding` | Narrative fields for one transcript, blinded. Cannot overturn a verdict | Sprint 3 |
-| `suggest_remediation` | Gives the fix for one finding | Sprint 3 |
-| `map_to_article` | Connects a finding to 15, 14, 12 or 50, and to its OWASP identifier | Sprint 3 |
-| `compute_discrimination` | `D` and Wilson intervals per family | Sprint 3 |
-| `check_coverage` | Which published categories are not tested | Sprint 3 |
-| `assemble_result` | Per-family bands and the declared-vs-defeated join | Sprint 3 |
-| `propose_case` | Drafts a case from a trigger and sends it to the admission gate | Sprint 3 |
-| `sign_report` | Ed25519 detached signature over the canonical payload | Sprint 3 |
-| `retrieve_precedent` | Finds similar past deterministic findings. Feeds `suggest_remediation` only — **never `assess_finding`**, which would un-blind the judge | Sprint 3, single-tenant |
-| Cross-tenant anonymised retrieval | Family, control type and fix text only. Never target identity, never payload-plus-target pairs | Sprint 4 — blocker before user one |
+**`Invoked by` is the load-bearing column.** `harness` means deterministic code decides to call it and no model is involved in the decision; `model` means the work is an LLM call. Three of fourteen are model work, and that is a design position rather than an omission — every number this project signs is produced by the `harness` rows, which is what makes a gate run re-derivable from its recorded inputs.
+
+| Tool | Function | Invoked by | When |
+|---|---|---|---|
+| `verify_authorization` | Issues the nonce, checks the echo, records the attestation | harness | Sprint 3 |
+| `scan_config` | Checks which controls the target declares | harness | Sprint 3 |
+| `run_attack` | Sends one attempt to the target, against the budget | harness — **never reachable from `assess_finding`** | Sprint 3 |
+| `evaluate_success_condition` | Applies the case's deterministic check. **Produces the verdict** | harness, deliberately — ADR-0004 | Sprint 3 |
+| `assess_finding` | Narrative fields for one transcript, blinded. Cannot overturn a verdict | model | Sprint 3 |
+| `suggest_remediation` | Gives the fix for one finding | model | Sprint 3 |
+| `map_to_article` | Connects a finding to 15, 14, 12 or 50, and to its OWASP identifier | harness, deliberately — a fixed table, see §13 | Sprint 3 |
+| `compute_discrimination` | `D` and Wilson intervals per family | harness | Sprint 3 |
+| `check_coverage` | Which published categories are not tested | harness | Sprint 3 |
+| `assemble_result` | Per-family bands and the declared-vs-defeated join | harness | Sprint 3 |
+| `propose_case` | Drafts a case from a trigger and sends it to the admission gate | model to draft, harness to admit | Sprint 3 |
+| `sign_report` | Ed25519 detached signature over the canonical payload | harness | Sprint 3 |
+| `retrieve_precedent` | Finds similar past deterministic findings. Feeds `suggest_remediation` only — **never `assess_finding`**, which would un-blind the judge | harness (a retrieval node); becomes model-invoked only if 6a gives the remediation step the choice | Sprint 3, single-tenant |
+| Cross-tenant anonymised retrieval | Family, control type and fix text only. Never target identity, never payload-plus-target pairs | harness | Sprint 4 — blocker before user one |
+
+**Two rows are deliberately not model work, and the reasons are the same reason.** `evaluate_success_condition` is harness because a signature over an LLM verdict certifies that I held the number, not that the number is right (ADR-0004). `map_to_article` is a fixed table because a retrieval step would let the same finding cite different articles on different days, and a signed report has to cite the same one every time (§13). Both are cases where the sophisticated choice is to *not* call a model.
+
+**`run_attack` is harness for a third reason: the judge must never be able to send a message to a target.** A judge holding it would not return a verdict — it would manufacture the transcript the evaluator scores, which is ADR-0004's coupling reopened where no type signature shows it. It would also defeat blinding (a judge that can probe can identify which agent it is grading, and κ is measured on blinded output), move the denominator that n = 30 per family per agent depends on, and make the pre-run cost estimate — the consent mechanism of ADR-0007 — an unbounded guess.
 
 ---
 

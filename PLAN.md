@@ -280,6 +280,7 @@ agentaudit/
 │   │   ├── attacker.py      # runs cases against a target endpoint, under budget
 │   │   ├── evaluator.py     # applies success_condition — the verdict
 │   │   ├── judge.py         # narrative fields only, blinded
+│   │   ├── rule.py          # the gate rule as declared thresholds
 │   │   ├── scorer.py        # discrimination, intervals, bands
 │   │   ├── assembler.py     # declared-vs-defeated join, coverage gaps
 │   │   └── report.py        # render and sign

@@ -14,10 +14,13 @@ route for it, so the nonce protocol is exercised on every gate run.
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 
-from backend.bench.attacker import run_attempt
+from backend.bench.attacker import run_case
 from backend.bench.contract import TargetConfig
 from backend.bench.library import Case
 from backend.bench.registration import Registration, issue_nonce, register
+from backend.bench.evaluator import Verdict
+from backend.bench.rule import DECLARED_RULE, GateRule
+from backend.bench.scorer import Rate, failure_rate
 from backend.graph.runstate import Attempt, RunState
 
 PlantNonce = Callable[[TargetConfig, str], None]
@@ -30,6 +33,23 @@ class TargetRun:
     target: TargetConfig
     registration: Registration
     attempts: tuple[Attempt, ...]
+    rule: GateRule
+    """The rule the attempts were run under, so the rate carries the confidence it was measured at."""
+
+    @property
+    def rate(self) -> Rate | None:
+        """The share of this target's attempts that succeeded, with its interval.
+
+        `None` where nothing was attempted, because no attempts is not a failure
+        rate of zero: a target the bench never measured has to stay
+        distinguishable from one that resisted everything.
+        """
+        if not self.attempts:
+            return None
+        succeeded = sum(
+            1 for attempt in self.attempts if attempt.verdict is Verdict.SUCCEEDED
+        )
+        return failure_rate(succeeded, len(self.attempts), self.rule)
 
 
 @dataclass(frozen=True)
@@ -42,6 +62,7 @@ def run_calibration(
     cases: Sequence[Case],
     targets: Sequence[TargetConfig],
     plant_nonce: PlantNonce | None = None,
+    rule: GateRule = DECLARED_RULE,
 ) -> CalibrationResult:
     """Run the given cases against the given targets and return what was measured."""
     run_state = RunState()
@@ -58,12 +79,20 @@ def run_calibration(
             # The nonce that proved control is the canary under the leakage case:
             # one planted value, two roles (ADR-0007).
             attempts = tuple(
-                run_attempt(target, case, canary=nonce, run_state=run_state, index=0)
+                attempt
                 for case in cases
+                for attempt in run_case(
+                    target, case, canary=nonce, run_state=run_state, rule=rule
+                )
             )
 
         target_runs.append(
-            TargetRun(target=target, registration=registration, attempts=attempts)
+            TargetRun(
+                target=target,
+                registration=registration,
+                attempts=attempts,
+                rule=rule,
+            )
         )
 
     return CalibrationResult(run_state=run_state, target_runs=tuple(target_runs))

@@ -10,9 +10,12 @@ model, given as a configuration string — which is also what the multi-model
 validity check (#15) will change.
 """
 
+import pytest
+
 from backend.bench.calibration import CalibrationResult, run_calibration
 from backend.bench.evaluator import Verdict
 from backend.bench.library import Case
+from backend.bench.rule import DECLARED_RULE
 from backend.graph.runstate import Position
 from backend.tests.conftest import reference_target
 
@@ -32,9 +35,26 @@ def test_trivial_agent_leaks_the_canary_and_the_success_condition_says_so(
 ) -> None:
     result = calibrate(leakage_case)
 
-    assert [attempt.verdict for attempt in result.run_state.attempts] == [
+    assert {attempt.verdict for attempt in result.run_state.attempts} == {
         Verdict.SUCCEEDED
-    ]
+    }
+
+
+def test_a_case_is_run_the_declared_number_of_times_independently(
+    leakage_case: Case,
+) -> None:
+    # Ten attempts per case is half of ADR-0003's n = 30 per family per agent,
+    # and each carries its own session so a rate is a rate rather than a
+    # trajectory.
+    result = calibrate(leakage_case)
+
+    [target_run] = result.target_runs
+    assert len(target_run.attempts) == DECLARED_RULE.attempts_per_case
+    assert [a.index for a in target_run.attempts] == list(
+        range(DECLARED_RULE.attempts_per_case)
+    )
+    sessions = {a.transcript.sent["session_id"] for a in target_run.attempts}
+    assert len(sessions) == DECLARED_RULE.attempts_per_case
 
 
 def test_a_target_that_does_not_echo_the_nonce_is_refused_before_any_attempt(
@@ -59,14 +79,45 @@ def test_a_target_that_registers_but_does_not_leak_is_resisted(
 
     [target_run] = result.target_runs
     assert target_run.registration.complete
-    assert [attempt.verdict for attempt in target_run.attempts] == [Verdict.RESISTED]
+    assert {attempt.verdict for attempt in target_run.attempts} == {Verdict.RESISTED}
+
+
+def test_a_target_run_reports_the_failure_rate_of_its_own_attempts(
+    leakage_case: Case,
+) -> None:
+    # The rate is counted from the recorded verdicts, not reported alongside
+    # them, so a reader with the attempts can re-derive it.
+    result = calibrate(leakage_case)
+
+    [target_run] = result.target_runs
+    succeeded = [a for a in target_run.attempts if a.verdict is Verdict.SUCCEEDED]
+    rate = target_run.rate
+    assert rate is not None
+    assert (rate.successes, rate.attempts) == (len(succeeded), len(target_run.attempts))
+    assert rate.value == 1.0
+
+    # The Wilson 90% bounds of 10 of 10, from statsmodels rather than from the
+    # formula the code uses (see test_scorer.py).
+    assert rate.interval.lower == pytest.approx(0.787058029917)
+    assert rate.interval.upper == 1.0
+
+
+def test_a_target_that_never_registered_reports_no_rate_at_all(
+    leakage_case: Case,
+) -> None:
+    # No attempts is not a failure rate of zero. A target the bench never
+    # measured has to be distinguishable from one that resisted everything.
+    result = calibrate(leakage_case, model="stub:parrot")
+
+    [target_run] = result.target_runs
+    assert target_run.rate is None
 
 
 def test_the_full_transcript_sent_and_received_is_recorded(leakage_case: Case) -> None:
     result = calibrate(leakage_case)
 
     [target_run] = result.target_runs
-    [attempt] = target_run.attempts
+    attempt = target_run.attempts[0]
     assert attempt.transcript.sent["message"] == leakage_case.payload
     assert attempt.transcript.status_code == 200
     assert target_run.registration.nonce in attempt.transcript.reply_text
@@ -87,8 +138,10 @@ def test_the_run_state_records_position_successes_and_calls_spent(
     result = calibrate(leakage_case)
 
     run_state = result.run_state
+    attempts = DECLARED_RULE.attempts_per_case
     assert run_state.position == Position(
-        target_name="trivial", case_id=leakage_case.id, attempt_index=0
+        target_name="trivial", case_id=leakage_case.id, attempt_index=attempts - 1
     )
-    assert [a.case_id for a in run_state.succeeded_attempts] == [leakage_case.id]
-    assert run_state.calls_spent == 2  # the registration probe, then one attempt
+    assert [a.case_id for a in run_state.succeeded_attempts] == [leakage_case.id] * attempts
+    # The registration probe spends a call against the endpoint too.
+    assert run_state.calls_spent == attempts + 1

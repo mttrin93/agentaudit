@@ -20,6 +20,15 @@ class GateRule:
     interval_confidence: float = 0.90
     """The confidence of the Wilson interval carried by every rate."""
 
+    attempts_per_case: int = 10
+    """How many times one case is run against one target.
+
+    Three cases per family at ten attempts is ADR-0003's n = 30 per family per
+    agent — the sample size chosen so that the retirement rule can operate, not
+    merely so the gate can pass. It sits with the thresholds because moving it
+    moves every interval the gate is decided on.
+    """
+
     discrimination_floor: float = 0.4
     """What `D` must reach for a family to pass, and for a case to be admitted.
 

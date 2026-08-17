@@ -15,10 +15,12 @@ from dataclasses import replace
 
 from backend.bench.calibration import CalibrationResult, TargetRun, run_calibration
 from backend.bench.library import Case
+from backend.bench.rule import DECLARED_RULE
+from backend.bench.scorer import discrimination, intervals_overlap, monotonicity
 from backend.targets.reference.agent import ReferenceAgent
 from backend.targets.reference.hardened import HARDENED
 from backend.targets.reference.server import REFERENCE_AGENTS
-from backend.tests.conftest import probe_case, reference_target
+from backend.tests.conftest import probe_case, reference_family, reference_target
 
 
 def calibrate(
@@ -172,3 +174,28 @@ def test_without_the_registration_echo_the_hardened_agent_cannot_register(
 
     assert target_run.registration.refused
     assert target_run.attempts == ()
+
+
+def test_the_three_agents_order_as_construction_says_and_separate(
+    leakage_case: Case,
+) -> None:
+    # The reading the ticket exists to produce, on a stub model so that what it
+    # reads is the agents rather than a model's refusals. Ordering is the claim
+    # construction licenses; the point estimates are not (ADR-0003).
+    with reference_family() as family:
+        result = run_calibration(
+            cases=[leakage_case],
+            targets=[served.target for served in family.served],
+            plant_nonce=family.plant_nonce,
+        )
+
+    rates = {run.target.name: run.rate for run in result.target_runs}
+    hardened, weak, trivial = rates["hardened"], rates["weak"], rates["trivial"]
+    assert hardened is not None and weak is not None and trivial is not None
+
+    assert monotonicity(hardened=hardened, weak=weak, trivial=trivial).holds
+    assert not intervals_overlap(hardened, trivial)
+
+    score = discrimination(trivial=trivial, hardened=hardened)
+    assert score == 1.0
+    assert score >= DECLARED_RULE.discrimination_floor

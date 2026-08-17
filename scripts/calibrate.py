@@ -2,12 +2,18 @@
 
     uv run python -m scripts.calibrate
     uv run python -m scripts.calibrate --model stub:obedient
+    uv run python -m scripts.calibrate --agents trivial hardened
 
 The reference agents are served locally over real HTTP for the duration of the
-run, and the script plants the registration nonce in the target's system prompt
-the way an operator would by hand. The gate decision itself — the rule, the
-intervals, the pass or fail — arrives in #13; this prints what one attempt
-measured and how it was measured.
+run, and the script plants the registration nonce in each target's system prompt
+the way an operator would by hand. It prints what was measured: a failure rate
+with its Wilson interval per agent, and the discrimination score between the
+trivial and hardened ends of the family.
+
+That reading is not a gate result. The gate is decided over six families at
+n = 30 each, against a stated rule, and arrives in #13; what prints here is one
+family's worth of evidence — often one case's — which is why nothing below says
+pass or fail.
 """
 
 import argparse
@@ -19,19 +25,27 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-from backend.bench.calibration import CalibrationResult, run_calibration
+from backend.bench.calibration import CalibrationResult, TargetRun, run_calibration
 from backend.bench.contract import TargetConfig
 from backend.bench.library import load_library
+from backend.bench.rule import DECLARED_RULE
+from backend.bench.scorer import Rate, discrimination
 from backend.targets.reference.model import ModelConfig
 from backend.targets.reference.operator import nonce_planter
-from backend.targets.reference.server import ReferenceConfig, create_reference_app
+from backend.targets.reference.server import (
+    REFERENCE_AGENTS,
+    ReferenceConfig,
+    create_reference_app,
+)
 from backend.targets.reference.serving import serve
 
 CASES_DIR = Path(__file__).resolve().parents[1] / "backend" / "cases"
-# The trivial agent needs a model that will actually obey it, or the floor is the
-# model's refusal rather than the agent's absent defences. See docs/validation.md.
+# The reference agents need a model that will actually run them as built. A model
+# that refuses the trivial agent's payloads is reporting its own defences, not the
+# agent's absent ones — the confound #15 exists to measure. See docs/validation.md.
 DEFAULT_MODEL = "openrouter:openai/gpt-4.1-nano"
 REPLY_EXCERPT = 400
+TRIVIAL, HARDENED = "trivial", "hardened"
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -43,9 +57,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="the reference agents' underlying model, as '<provider>:<model>'",
     )
     parser.add_argument(
-        "--agent",
-        default="trivial",
-        help="which reference agent to calibrate against",
+        "--agents",
+        nargs="+",
+        default=[agent.name for agent in REFERENCE_AGENTS],
+        help="which reference agents to calibrate against",
     )
     args = parser.parse_args(argv)
 
@@ -55,14 +70,17 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     app = create_reference_app(ReferenceConfig(model=model, auth_token=auth_token))
     with serve(app) as base_url:
-        target = TargetConfig(
-            name=args.agent,
-            url=f"{base_url}/reference/{args.agent}/messages",
-            auth_token=auth_token,
-            agent_type="assistant",
-        )
+        targets = [
+            TargetConfig(
+                name=name,
+                url=f"{base_url}/reference/{name}/messages",
+                auth_token=auth_token,
+                agent_type="assistant",
+            )
+            for name in args.agents
+        ]
         result = run_calibration(
-            cases=cases, targets=[target], plant_nonce=nonce_planter(base_url)
+            cases=cases, targets=targets, plant_nonce=nonce_planter(base_url)
         )
 
     _print_result(result, model, len(cases))
@@ -75,6 +93,7 @@ def _print_result(
 ) -> None:
     print(f"reference agent model: {model}")
     print(f"cases loaded:          {case_count}")
+    print(f"attempts per case:     {DECLARED_RULE.attempts_per_case}")
 
     for target_run in result.target_runs:
         registration = target_run.registration
@@ -83,17 +102,50 @@ def _print_result(
         print(f"  registration: {status}")
         print(f"  nonce:        {registration.nonce}")
         print(f"  echo reply:   {_excerpt(registration.probe.reply_text)}")
+        print(f"  failure rate: {_rate(target_run.rate)}")
 
         for attempt in target_run.attempts:
             print(f"  attempt {attempt.case_id} #{attempt.index}")
             print(f"    verdict: {attempt.verdict}  (from the success condition)")
             print(f"    reply:   {_excerpt(attempt.transcript.reply_text)}")
 
+    print(f"\ndiscrimination: {_discrimination(result.target_runs)}")
+
     run_state = result.run_state
     print(
-        f"\nrun state: position={run_state.position} "
+        f"run state: position={run_state.position} "
         f"succeeded={len(run_state.succeeded_attempts)} "
         f"calls_spent={run_state.calls_spent}"
+    )
+
+
+def _rate(rate: Rate | None) -> str:
+    if rate is None:
+        return "not measured — no attempt was made"
+    interval = rate.interval
+    return (
+        f"{rate.value:.2f} ({rate.successes}/{rate.attempts}), "
+        f"Wilson {DECLARED_RULE.interval_confidence:.0%} "
+        f"[{interval.lower:.3f}, {interval.upper:.3f}]"
+    )
+
+
+def _discrimination(target_runs: Sequence[TargetRun]) -> str:
+    """D for what was run, or why it could not be read.
+
+    Named by its two ends rather than by position, because `D` is not symmetric:
+    a run that measured only one end has no score, and saying so is the honest
+    answer rather than reporting the one rate it has.
+    """
+    rates = {run.target.name: run.rate for run in target_runs}
+    trivial, hardened = rates.get(TRIVIAL), rates.get(HARDENED)
+    if trivial is None or hardened is None:
+        return f"not read — D needs both {TRIVIAL} and {HARDENED} measured"
+    score = discrimination(trivial=trivial, hardened=hardened)
+    return (
+        f"D = {score:.2f} ({TRIVIAL} {trivial.value:.2f} − "
+        f"{HARDENED} {hardened.value:.2f}), "
+        f"on one family — not a gate result"
     )
 
 

@@ -85,6 +85,14 @@ class ServedReference:
     plant_nonce: PlantNonce
 
 
+@dataclass(frozen=True)
+class ServedFamily:
+    """The three reference agents behind one server, as a run would meet them."""
+
+    served: tuple[ServedReference, ...]
+    plant_nonce: PlantNonce
+
+
 @contextmanager
 def reference_target(
     model: str = "stub:obedient",
@@ -92,18 +100,37 @@ def reference_target(
     agents: tuple[ReferenceAgent, ...] = REFERENCE_AGENTS,
 ) -> Iterator[ServedReference]:
     """Serve one reference agent, with the operator glue that plants its nonce."""
+    with reference_family(model=model, agents=agents) as family:
+        yield next(
+            served for served in family.served if served.target.name == agent
+        )
+
+
+@contextmanager
+def reference_family(
+    model: str = "stub:obedient",
+    agents: tuple[ReferenceAgent, ...] = REFERENCE_AGENTS,
+) -> Iterator[ServedFamily]:
+    """Serve every given reference agent from one app, each as its own target."""
     app = create_reference_app(
         ReferenceConfig(
             model=ModelConfig.parse(model), auth_token=AUTH_TOKEN, agents=agents
         )
     )
     with serve(app) as base_url:
-        yield ServedReference(
-            target=TargetConfig(
-                name=agent,
-                url=f"{base_url}/reference/{agent}/messages",
-                auth_token=AUTH_TOKEN,
-                agent_type="assistant",
+        plant = nonce_planter(base_url)
+        yield ServedFamily(
+            served=tuple(
+                ServedReference(
+                    target=TargetConfig(
+                        name=agent.name,
+                        url=f"{base_url}/reference/{agent.name}/messages",
+                        auth_token=AUTH_TOKEN,
+                        agent_type="assistant",
+                    ),
+                    plant_nonce=plant,
+                )
+                for agent in agents
             ),
-            plant_nonce=nonce_planter(base_url),
+            plant_nonce=plant,
         )

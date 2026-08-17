@@ -1,0 +1,30 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      # The lockfile decides the versions, so a green run here means the same
+      # versions a local run used.
+      - name: Install the project
+        run: uv sync --all-groups --locked
+
+      - name: Typecheck
+        run: uv run mypy
+
+      # The suite serves the reference agents over real HTTP on an ephemeral
+      # port; nothing here reaches the network or a model provider.
+      - name: Test
+        run: uv run pytest -q

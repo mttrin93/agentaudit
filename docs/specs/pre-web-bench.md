@@ -1,6 +1,8 @@
 # Spec — The pre-web bench, through the gate
 
 **Scope:** phases 1, 2, 2b, 2d, 2e, 3, 3b, 4 (+ reserve), 4b, 4c and 8b of the Sprint 3 line. About 37.5 hours.
+
+**37.5 hours is not the Sprint 3 total.** It covers the pre-web bench only. The remaining 16 hours of the 53.5-hour Sprint 3 line — the report and real Ed25519 signing (phase 5), the precedent store (6a), the API (6b), the React screens (7) and the reflection notes (8) — are a second spec, written once this gate has passed.
 **Governing documents:** [PLAN.md](../../PLAN.md) · [CONTEXT.md](../../CONTEXT.md) · [ADR-0001 … ADR-0009](../adr/)
 **Vocabulary:** every term below is defined in `CONTEXT.md`. **Family**, **case** and **attempt** are three different things and all arithmetic here depends on that.
 
@@ -214,4 +216,4 @@ run_gate(library, target_urls) -> GateResult
 
 **Two decisions in this scope exist to protect a later one.** Judge blinding and the no-precedent-to-the-judge constraint both look unnecessary while there is no precedent store and no user — they are there so that phase 6a cannot silently break the κ figure the judged families depend on.
 
-**Publishing.** This document belongs in the issue tracker with the `ready-for-agent` label. No tracker is configured and the repository has no remote, so it lives here until `/setup-matt-pocock-skills` has run.
+**Published** as issue #1, broken into fourteen tracer-bullet tickets as issues #2 to #15, all linked as sub-issues and labelled `ready-for-agent`. Two of them are unblocked and startable immediately: the tracer bullet (#2) and the statistical prefactor (#3). The frontier moves as blockers close; work one ticket per fresh context.

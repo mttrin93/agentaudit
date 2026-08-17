@@ -52,6 +52,7 @@ def run_attempt(
     run_state.record_call(transcript.sends)
     attempt = Attempt(
         case_id=case.id,
+        family=case.family,
         target_name=target.name,
         index=index,
         transcript=transcript,

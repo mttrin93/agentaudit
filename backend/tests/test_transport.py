@@ -29,12 +29,12 @@ def test_transient_failures_are_retried_and_do_not_count_as_attempts(
 
     [target_run] = result.target_runs
     assert target_run.registration.complete
-    assert target_run.rate is not None
+    rate = target_run.rates[leakage_case.family]
 
     # The denominator is the declared sample size, not the number of round trips
     # it took to get there.
-    assert target_run.rate.attempts == DECLARED_RULE.attempts_per_case
-    assert target_run.rate.value == 1.0
+    assert rate.attempts == DECLARED_RULE.attempts_per_case
+    assert rate.value == 1.0
     assert {a.verdict for a in target_run.attempts} == {Verdict.SUCCEEDED}
 
     # Every reply cost the same number of sends, and each is recorded, because a

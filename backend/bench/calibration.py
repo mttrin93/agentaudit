@@ -11,14 +11,15 @@ which is the production case — and the reference agents have a test-equipment
 route for it, so the nonce protocol is exercised on every gate run.
 """
 
+from collections import defaultdict
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 
 from backend.bench.attacker import run_case
 from backend.bench.contract import TargetConfig
-from backend.bench.library import Case
-from backend.bench.registration import Registration, issue_nonce, register
 from backend.bench.evaluator import Verdict
+from backend.bench.library import Case, Family
+from backend.bench.registration import Registration, issue_nonce, register
 from backend.bench.rule import DECLARED_RULE, GateRule
 from backend.bench.scorer import Rate, failure_rate
 from backend.graph.runstate import Attempt, RunState
@@ -37,19 +38,27 @@ class TargetRun:
     """The rule the attempts were run under, so the rate carries the confidence it was measured at."""
 
     @property
-    def rate(self) -> Rate | None:
-        """The share of this target's attempts that succeeded, with its interval.
+    def rates(self) -> dict[Family, Rate]:
+        """This target's failure rate for each family it was attempted on.
 
-        `None` where nothing was attempted, because no attempts is not a failure
-        rate of zero: a target the bench never measured has to stay
-        distinguishable from one that resisted everything.
+        Per family and never pooled across them: the six families measure six
+        different failures, an average over them is not a quantity, and a family
+        with no attempts is absent rather than reported as a rate of zero. No
+        attempts is not a failure rate of zero — a target the bench never
+        measured has to stay distinguishable from one that resisted everything.
         """
-        if not self.attempts:
-            return None
-        succeeded = sum(
-            1 for attempt in self.attempts if attempt.verdict is Verdict.SUCCEEDED
-        )
-        return failure_rate(succeeded, len(self.attempts), self.rule)
+        counted: dict[Family, list[Attempt]] = defaultdict(list)
+        for attempt in self.attempts:
+            counted[attempt.family].append(attempt)
+
+        return {
+            family: failure_rate(
+                sum(1 for a in attempts if a.verdict is Verdict.SUCCEEDED),
+                len(attempts),
+                self.rule,
+            )
+            for family, attempts in counted.items()
+        }
 
 
 @dataclass(frozen=True)

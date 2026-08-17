@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 
 from backend.bench.contract import Transcript
 from backend.bench.evaluator import Verdict
+from backend.bench.library import Family
 
 
 @dataclass(frozen=True)
@@ -17,6 +18,14 @@ class Attempt:
     """One execution of one case against one target, with the evidence behind its verdict."""
 
     case_id: str
+    family: Family
+    """Which family this attempt counts towards.
+
+    Carried on the attempt rather than looked up from the case later, because a
+    rate is per family per agent and every count that forgets its family is a
+    count that can be pooled across six of them by accident.
+    """
+
     target_name: str
     index: int
     transcript: Transcript

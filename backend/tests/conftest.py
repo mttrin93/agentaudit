@@ -13,7 +13,12 @@ from pathlib import Path
 
 import pytest
 
-from backend.bench.calibration import PlantNonce
+from backend.bench.calibration import (
+    CalibrationResult,
+    PlantNonce,
+    TargetRun,
+    run_calibration,
+)
 from backend.bench.contract import TargetConfig
 from backend.bench.library import (
     Case,
@@ -50,7 +55,7 @@ def leakage_case(library: list[Case]) -> Case:
     return next(case for case in library if case.family is Family.DATA_LEAKAGE)
 
 
-def probe_case(payload: str, case_id: str) -> Case:
+def unlisted_case(payload: str, case_id: str) -> Case:
     """A case built inside a test, to reach a control no library case reaches yet.
 
     Not a library case and deliberately not written to `backend/cases/`: a case
@@ -64,7 +69,7 @@ def probe_case(payload: str, case_id: str) -> Case:
         family=Family.DATA_LEAKAGE,
         external_id=ExternalId(
             identifier="LLM02:2026",
-            not_tested="A test probe. It makes no coverage claim of any kind.",
+            not_tested="A case built inside a test. It makes no coverage claim.",
         ),
         payload=payload,
         success_condition=SuccessCondition(kind=SuccessConditionKind.CANARY_IN_REPLY),
@@ -86,7 +91,7 @@ class ServedReference:
 
 
 @dataclass(frozen=True)
-class ServedFamily:
+class ServedReferences:
     """The three reference agents behind one server, as a run would meet them."""
 
     served: tuple[ServedReference, ...]
@@ -96,21 +101,47 @@ class ServedFamily:
 @contextmanager
 def reference_target(
     model: str = "stub:obedient",
-    agent: str = "trivial",
+    name: str = "trivial",
     agents: tuple[ReferenceAgent, ...] = REFERENCE_AGENTS,
 ) -> Iterator[ServedReference]:
-    """Serve one reference agent, with the operator glue that plants its nonce."""
-    with reference_family(model=model, agents=agents) as family:
+    """Serve reference agents and hand back the one named, ready to be attacked."""
+    with served_references(model=model, agents=agents) as references:
         yield next(
-            served for served in family.served if served.target.name == agent
+            served for served in references.served if served.target.name == name
         )
 
 
-@contextmanager
-def reference_family(
+def calibrate(
+    case: Case,
+    name: str = "trivial",
     model: str = "stub:obedient",
     agents: tuple[ReferenceAgent, ...] = REFERENCE_AGENTS,
-) -> Iterator[ServedFamily]:
+) -> CalibrationResult:
+    """Run one case against one served reference agent, through the entry point."""
+    with reference_target(model=model, name=name, agents=agents) as reference:
+        return run_calibration(
+            cases=[case],
+            targets=[reference.target],
+            plant_nonce=reference.plant_nonce,
+        )
+
+
+def target_run_for(
+    case: Case,
+    name: str = "trivial",
+    model: str = "stub:obedient",
+    agents: tuple[ReferenceAgent, ...] = REFERENCE_AGENTS,
+) -> TargetRun:
+    """The one target run a single-target calibration produced."""
+    [target_run] = calibrate(case, name=name, model=model, agents=agents).target_runs
+    return target_run
+
+
+@contextmanager
+def served_references(
+    model: str = "stub:obedient",
+    agents: tuple[ReferenceAgent, ...] = REFERENCE_AGENTS,
+) -> Iterator[ServedReferences]:
     """Serve every given reference agent from one app, each as its own target."""
     app = create_reference_app(
         ReferenceConfig(
@@ -119,7 +150,7 @@ def reference_family(
     )
     with serve(app) as base_url:
         plant = nonce_planter(base_url)
-        yield ServedFamily(
+        yield ServedReferences(
             served=tuple(
                 ServedReference(
                     target=TargetConfig(

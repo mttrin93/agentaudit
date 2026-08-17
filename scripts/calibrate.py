@@ -27,9 +27,10 @@ from dotenv import load_dotenv
 
 from backend.bench.calibration import CalibrationResult, TargetRun, run_calibration
 from backend.bench.contract import TargetConfig
-from backend.bench.library import load_library
+from backend.bench.library import Family, load_library
 from backend.bench.rule import DECLARED_RULE
 from backend.bench.scorer import Rate, discrimination
+from backend.targets.reference.hardened import HARDENED
 from backend.targets.reference.model import ModelConfig
 from backend.targets.reference.operator import nonce_planter
 from backend.targets.reference.server import (
@@ -38,6 +39,7 @@ from backend.targets.reference.server import (
     create_reference_app,
 )
 from backend.targets.reference.serving import serve
+from backend.targets.reference.trivial import TRIVIAL
 
 CASES_DIR = Path(__file__).resolve().parents[1] / "backend" / "cases"
 # The reference agents need a model that will actually run them as built. A model
@@ -45,7 +47,6 @@ CASES_DIR = Path(__file__).resolve().parents[1] / "backend" / "cases"
 # agent's absent ones — the confound #15 exists to measure. See docs/validation.md.
 DEFAULT_MODEL = "openrouter:openai/gpt-4.1-nano"
 REPLY_EXCERPT = 400
-TRIVIAL, HARDENED = "trivial", "hardened"
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -102,14 +103,19 @@ def _print_result(
         print(f"  registration: {status}")
         print(f"  nonce:        {registration.nonce}")
         print(f"  echo reply:   {_excerpt(registration.probe.reply_text)}")
-        print(f"  failure rate: {_rate(target_run.rate)}")
+        for family, rate in target_run.rates.items():
+            print(f"  failure rate, {family}: {_rate(rate)}")
+        if not target_run.rates:
+            print("  failure rate: not measured — no attempt was made")
 
         for attempt in target_run.attempts:
             print(f"  attempt {attempt.case_id} #{attempt.index}")
             print(f"    verdict: {attempt.verdict}  (from the success condition)")
             print(f"    reply:   {_excerpt(attempt.transcript.reply_text)}")
 
-    print(f"\ndiscrimination: {_discrimination(result.target_runs)}")
+    print()
+    for family in _families_run(result.target_runs):
+        print(f"discrimination, {family}: {_discrimination(result.target_runs, family)}")
 
     run_state = result.run_state
     print(
@@ -119,9 +125,7 @@ def _print_result(
     )
 
 
-def _rate(rate: Rate | None) -> str:
-    if rate is None:
-        return "not measured — no attempt was made"
+def _rate(rate: Rate) -> str:
     interval = rate.interval
     return (
         f"{rate.value:.2f} ({rate.successes}/{rate.attempts}), "
@@ -130,22 +134,30 @@ def _rate(rate: Rate | None) -> str:
     )
 
 
-def _discrimination(target_runs: Sequence[TargetRun]) -> str:
-    """D for what was run, or why it could not be read.
+def _families_run(target_runs: Sequence[TargetRun]) -> list[Family]:
+    """Every family some target was attempted on, in the order families are declared."""
+    measured = {family for run in target_runs for family in run.rates}
+    return [family for family in Family if family in measured]
+
+
+def _discrimination(target_runs: Sequence[TargetRun], family: Family) -> str:
+    """D for one family, or why it could not be read.
+
+    Per family, because that is what `D` is: the six families measure six
+    different failures and a score pooled across them is not a quantity.
 
     Named by its two ends rather than by position, because `D` is not symmetric:
     a run that measured only one end has no score, and saying so is the honest
     answer rather than reporting the one rate it has.
     """
-    rates = {run.target.name: run.rate for run in target_runs}
-    trivial, hardened = rates.get(TRIVIAL), rates.get(HARDENED)
+    rates = {run.target.name: run.rates.get(family) for run in target_runs}
+    trivial, hardened = rates.get(TRIVIAL.name), rates.get(HARDENED.name)
     if trivial is None or hardened is None:
-        return f"not read — D needs both {TRIVIAL} and {HARDENED} measured"
+        return f"not read — D needs both {TRIVIAL.name} and {HARDENED.name} measured"
     score = discrimination(trivial=trivial, hardened=hardened)
     return (
-        f"D = {score:.2f} ({TRIVIAL} {trivial.value:.2f} − "
-        f"{HARDENED} {hardened.value:.2f}), "
-        f"on one family — not a gate result"
+        f"D = {score:.2f} ({TRIVIAL.name} {trivial.value:.2f} − "
+        f"{HARDENED.name} {hardened.value:.2f}) — not a gate result"
     )
 
 

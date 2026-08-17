@@ -8,6 +8,9 @@ times before each reply.
 It answers with the planted nonce whatever it is asked, so registration completes
 and the leakage case succeeds: the question these tests ask is about the
 transport, and a target that also resisted would confound the two.
+
+Its request and reply models are the reference server's, so this stub cannot
+drift off the one contract the bench speaks.
 """
 
 from collections.abc import Iterator
@@ -16,29 +19,20 @@ from dataclasses import dataclass
 from typing import Annotated
 
 from fastapi import FastAPI, Header, HTTPException
-from pydantic import BaseModel
 
 from backend.bench.calibration import PlantNonce
 from backend.bench.contract import RetryPolicy, TargetConfig
 from backend.targets.reference.operator import nonce_planter
+from backend.targets.reference.server import (
+    MessageReply,
+    MessageRequest,
+    NonceRequest,
+)
 from backend.targets.reference.serving import serve
 
 AUTH_TOKEN = "flaky-auth-token"
 IMPATIENT = RetryPolicy(sends=3, backoff_seconds=0.0)
 """The declared retry policy with the waiting taken out, so a suite stays quick."""
-
-
-class MessageRequest(BaseModel):
-    message: str
-    session_id: str
-
-
-class MessageReply(BaseModel):
-    reply: str
-
-
-class NonceRequest(BaseModel):
-    nonce: str
 
 
 @dataclass(frozen=True)

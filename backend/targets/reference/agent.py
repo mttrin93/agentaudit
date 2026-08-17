@@ -12,11 +12,7 @@ have, and a control that is absent is absent rather than skipped.
 
 from dataclasses import dataclass
 
-from backend.targets.reference.controls import (
-    NO_CONTROLS,
-    Controls,
-    is_registration_check,
-)
+from backend.targets.reference.controls import NO_CONTROLS, Controls
 from backend.targets.reference.model import ModelConfig, complete
 
 NO_NONCE = "(no registration nonce configured)"
@@ -33,36 +29,14 @@ class ReferenceAgent:
 
     def reply(self, message: str, nonce: str, model: ModelConfig) -> str:
         """One turn: the controls that hold get to stop it, and the model does the rest."""
-        controls = self.controls
         configuration = self.system_prompt(nonce)
 
-        # First, and before the registration path: a stop control that can be
-        # reached only by getting past the other checks is not a stop control.
-        if controls.stop_control is not None:
-            if halt := controls.stop_control.stops(message):
-                return halt
-
-        # The one exemption, and it is a named piece rather than a condition
-        # hidden here. An agent that refuses the echo probe never registers, and
-        # an agent that never registers cannot be measured.
-        if controls.registration_echo is not None and is_registration_check(message):
-            return controls.registration_echo.answer(configuration)
-
-        if controls.input_check is not None:
-            if refusal := controls.input_check.stops(message):
-                return refusal
-
-        if controls.scope_limit is not None:
-            if refusal := controls.scope_limit.stops(message):
-                return refusal
+        if instead := self.controls.before_model(message, configuration):
+            return instead
 
         reply = complete(model, configuration, message)
 
-        if controls.output_filter is not None:
-            withheld = controls.output_filter.stops(
-                reply, protected=(nonce,), configuration=configuration
-            )
-            if withheld:
-                return withheld
-
-        return reply
+        withheld = self.controls.after_model(
+            reply, protected=(nonce,), configuration=configuration
+        )
+        return withheld if withheld else reply

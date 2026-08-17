@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 
 from backend.bench.contract import Transcript
 from backend.bench.evaluator import Verdict
+from backend.bench.library import Family
 
 
 @dataclass(frozen=True)
@@ -17,6 +18,14 @@ class Attempt:
     """One execution of one case against one target, with the evidence behind its verdict."""
 
     case_id: str
+    family: Family
+    """Which family this attempt counts towards.
+
+    Carried on the attempt rather than looked up from the case later, because a
+    rate is per family per agent and every count that forgets its family is a
+    count that can be pooled across six of them by accident.
+    """
+
     target_name: str
     index: int
     transcript: Transcript
@@ -41,9 +50,15 @@ class RunState:
     def enter(self, target_name: str, case_id: str, attempt_index: int) -> None:
         self.position = Position(target_name, case_id, attempt_index)
 
-    def record_call(self) -> None:
-        """Count one call against the target. Every call spends the operator's inference budget."""
-        self.calls_spent += 1
+    def record_call(self, sends: int = 1) -> None:
+        """Count what an exchange put on the wire, retries included.
+
+        Every send reaches the operator's endpoint on the operator's inference
+        budget, so a retried message costs what it cost. Attempts are counted
+        separately, and deliberately are not this number: the budget #5 enforces
+        and the denominator of a rate measure different things.
+        """
+        self.calls_spent += sends
 
     def record(self, attempt: Attempt) -> None:
         self.attempts.append(attempt)

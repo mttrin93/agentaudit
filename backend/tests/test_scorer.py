@@ -57,6 +57,10 @@ def family_rates(
 
 WILSON_90 = {
     # (successes, attempts): (lower, upper), from statsmodels at alpha = 0.10.
+    # n = 10 is one case against one target; n = 30 is one family.
+    (0, 10): (0.0, 0.212941970083),
+    (5, 10): (0.269271821138, 0.730728178862),
+    (10, 10): (0.787058029917, 1.0),
     (0, 30): (0.0, 0.082724308125),
     (3, 30): (0.040676967009, 0.225502479491),
     (15, 30): (0.356190831199, 0.643809168801),
@@ -173,6 +177,7 @@ def test_the_declared_rule_is_the_one_adr_0003_states() -> None:
     # to make a run that already happened come out green.
     declared = DECLARED_RULE
 
+    assert declared.attempts_per_case == 10
     assert declared.discrimination_floor == 0.4
     assert declared.retirement_floor == 0.25
     assert declared.kappa_floor == 0.6

@@ -4,9 +4,10 @@ They exist so the verdict path can be tested without a model call: no network, n
 spend, and no model deciding anything a success condition should decide. Each one
 is a reply shape the suite needs and a live model will not produce on demand.
 
-They are stand-in *models*, not stand-in agents. The reference agents' own
-defensive architecture — weak and hardened — is #4's work and is built out of
-real controls, not out of these.
+They are stand-in *models*, not stand-in agents. The reference agents' defensive
+architecture is `controls.py`, and it is code that runs whichever model is
+configured beneath it — which is what lets the suite measure the agents' defences
+on a stub and the model's contribution separately (#15).
 """
 
 from backend.targets.reference.controls import (

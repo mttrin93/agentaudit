@@ -51,7 +51,7 @@ from backend.bench.applicability import SkippedCase, applicable, skipped_cases
 from backend.bench.attacker import run_case
 from backend.bench.contract import TargetConfig
 from backend.bench.evaluator import Verdict
-from backend.bench.library import Case, Family, VerdictClass, library_version
+from backend.bench.library import Case, Family, LibraryVersion, VerdictClass
 from backend.bench.measurability import (
     NotMeasurable,
     not_measurable_families,
@@ -261,7 +261,7 @@ def run_calibration(
     declared = budget or RunBudget.declare(
         cases=cases, targets=targets, rule=rule, adaptive=adaptive
     )
-    run_state = RunState(budget=declared, library=library_version(cases))
+    run_state = RunState(budget=declared, library=LibraryVersion.of(cases))
     target_runs: list[TargetRun] = []
 
     def run_suite() -> None:

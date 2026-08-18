@@ -12,6 +12,7 @@ The invariant these tests exist for is the one that has no natural home in eithe
 to fail a working bench, and a lucky one must not pass a broken one.
 """
 
+import argparse
 import ast
 import itertools
 from collections.abc import Iterator, Mapping, Sequence
@@ -20,7 +21,7 @@ from pathlib import Path
 
 import pytest
 
-from backend.bench.calibration import TargetRun, run_calibration
+from backend.bench.calibration import CalibrationResult, TargetRun, run_calibration
 from backend.bench.evaluator import Verdict
 from backend.bench.gate import GateResult, NotAGateRun, read_gate
 from backend.bench.library import Case, Family, LibraryVersion, load_library
@@ -51,6 +52,7 @@ from scripts.gate import (
     EXIT_NOT_DECIDED,
     exit_code,
     main,
+    record_run,
     reference_targets,
 )
 
@@ -116,7 +118,7 @@ def test_an_unfit_judged_family_is_excluded_rather_than_scored_a_fail() -> None:
     # exclusion prints with the reading that caused it (ADR-0015).
     decision = decide_gate(
         outcomes_for(SEPARATES, SEPARATES, TOO_CLOSE, SEPARATES, SEPARATES, TOO_CLOSE),
-        judged(),
+        reliability=judged(),
     )
 
     assert len(decision.excluded) == 1
@@ -144,7 +146,7 @@ def test_a_judged_family_with_no_kappa_is_excluded_on_the_same_terms() -> None:
     # there is no statable strength for the rate, so the gate may not rest on it.
     decision = decide_gate(
         outcomes_for(SEPARATES, SEPARATES, TOO_CLOSE, SEPARATES, SEPARATES, SEPARATES),
-        judged(wrongful=None),
+        reliability=judged(wrongful=None),
     )
 
     assert len(decision.excluded) == 1
@@ -159,7 +161,9 @@ def test_a_gate_with_four_fit_families_is_not_decided_and_never_failed() -> None
     # measured that (ADR-0015).
     decision = decide_gate(
         outcomes_for(SEPARATES, SEPARATES, TOO_CLOSE, SEPARATES, SEPARATES, TOO_CLOSE),
-        judged(disclosure=Reliability(Family.DISCLOSURE_DENIAL, 0.4, 10, 15)),
+        reliability=judged(
+            disclosure=Reliability(Family.DISCLOSURE_DENIAL, 0.4, 10, 15)
+        ),
     )
 
     assert decision.fit_families == DECLARED_RULE.minimum_fit_families - 1
@@ -174,7 +178,7 @@ def test_the_thresholds_stay_counts_when_the_denominator_shrinks() -> None:
     # denominator, so it fails (ADR-0015).
     decision = decide_gate(
         outcomes_for(SEPARATES, SEPARATES, TOO_CLOSE, SEPARATES, SEPARATES, INVERTED),
-        judged(),
+        reliability=judged(),
     )
 
     assert (decision.fit_families, decision.families_passing) == (5, 4)
@@ -230,8 +234,8 @@ def test_a_family_the_target_could_not_answer_is_excluded_with_its_reason() -> N
                 Family.DISCLOSURE_DENIAL,
             ],
         ),
-        judged(wrongful=None, disclosure=FIT),
-        {Family.HALT_DEFEAT: NotMeasurable.NO_TOOL_CALL_VISIBILITY},
+        reliability=judged(wrongful=None, disclosure=FIT),
+        not_measurable={Family.HALT_DEFEAT: NotMeasurable.NO_TOOL_CALL_VISIBILITY},
     )
 
     reasons = {excluded.family: excluded.reason for excluded in decision.excluded}
@@ -239,6 +243,17 @@ def test_a_family_the_target_could_not_answer_is_excluded_with_its_reason() -> N
         Family.HALT_DEFEAT: ExclusionReason.NOT_MEASURABLE,
         Family.WRONGFUL_COMMITMENT: ExclusionReason.UNFIT_TO_REPORT,
     }
+
+    # Each exclusion names the family, the reason *and* the reading that caused it
+    # (ADR-0015). The two readings are not interchangeable: a missing capability has
+    # no κ, and a κ is not a missing capability.
+    [unmeasurable] = [
+        excluded
+        for excluded in decision.excluded
+        if excluded.reason is ExclusionReason.NOT_MEASURABLE
+    ]
+    assert NotMeasurable.NO_TOOL_CALL_VISIBILITY.stated() in unmeasurable.stated()
+    assert unmeasurable.stated() in decision.stated()
     assert decision.fit_families == 4
     assert decision.outcome is GateOutcome.NOT_DECIDED
 
@@ -253,7 +268,9 @@ def test_the_gate_still_receives_every_family_and_excludes_them_itself() -> None
 def test_a_failing_gate_names_the_families_that_did_not_pass() -> None:
     decision = decide_gate(
         outcomes_for(SEPARATES, SEPARATES, SEPARATES, TOO_CLOSE, TOO_CLOSE, INVERTED),
-        judged(wrongful=Reliability(Family.WRONGFUL_COMMITMENT, 0.9, 14, 15)),
+        reliability=judged(
+            wrongful=Reliability(Family.WRONGFUL_COMMITMENT, 0.9, 14, 15)
+        ),
     )
 
     assert decision.outcome is GateOutcome.FAILED
@@ -272,7 +289,7 @@ def test_an_excluded_family_is_never_named_as_a_reason_the_gate_stopped() -> Non
     # be the half-exclusion ADR-0015 refuses, printed.
     decision = decide_gate(
         outcomes_for(SEPARATES, SEPARATES, TOO_CLOSE, SEPARATES, TOO_CLOSE, TOO_CLOSE),
-        judged(),
+        reliability=judged(),
     )
 
     assert decision.outcome is GateOutcome.FAILED
@@ -338,7 +355,7 @@ def test_a_target_run_carries_no_episode_for_the_gate_to_read() -> None:
 
 
 @pytest.fixture(scope="module")
-def gate_run() -> Iterator[tuple[list[TargetRun], int, int]]:
+def gate_run() -> Iterator[CalibrationResult]:
     """The whole library against all three reference agents, ten attempts per case.
 
     Module-scoped because it is the expensive fixture in the suite — 540 attempts
@@ -359,17 +376,13 @@ def gate_run() -> Iterator[tuple[list[TargetRun], int, int]]:
             approve=CONFIRMING,
             adjudicator=adjudicating(Verdict.SUCCEEDED),
         )
-    yield (
-        list(result.target_runs),
-        len(result.run_state.episodes),
-        result.run_state.library.cases,
-    )
+    yield result
 
 
 def test_the_full_library_runs_against_three_agents_at_ten_attempts_a_case(
-    gate_run: tuple[list[TargetRun], int, int], library: list[Case]
+    gate_run: CalibrationResult, library: list[Case]
 ) -> None:
-    target_runs, _, versioned = gate_run
+    target_runs = gate_run.target_runs
 
     assert {run.target.name for run in target_runs} == {"trivial", "weak", "hardened"}
     assert sum(len(run.attempts) for run in target_runs) == (
@@ -379,13 +392,13 @@ def test_the_full_library_runs_against_three_agents_at_ten_attempts_a_case(
     # the count above is not one outcome counted 540 times (spec story 79).
     verdicts = {attempt.verdict for run in target_runs for attempt in run.attempts}
     assert verdicts == {Verdict.SUCCEEDED, Verdict.RESISTED}
-    assert versioned == len(library)
+    assert gate_run.run_state.library.cases == len(library)
 
 
 def test_the_gate_result_carries_the_library_version_the_attempts_were_made_against(
-    gate_run: tuple[list[TargetRun], int, int], library: list[Case]
+    gate_run: CalibrationResult, library: list[Case]
 ) -> None:
-    target_runs, _, _ = gate_run
+    target_runs = gate_run.target_runs
 
     result = _gate(target_runs, library=LibraryVersion.of(library))
 
@@ -401,12 +414,12 @@ def test_the_gate_result_carries_the_library_version_the_attempts_were_made_agai
 
 
 def test_the_gate_decision_counts_no_episode_although_the_layer_ran(
-    gate_run: tuple[list[TargetRun], int, int], library: list[Case]
+    gate_run: CalibrationResult, library: list[Case]
 ) -> None:
     # The adaptive layer really ran in the same run, and not one turn of it reached
     # a denominator: 540 attempts, and the episodes are somewhere else entirely.
-    target_runs, episodes, _ = gate_run
-    assert episodes
+    target_runs = gate_run.target_runs
+    assert gate_run.run_state.episodes
 
     result = _gate(target_runs)
 
@@ -416,13 +429,11 @@ def test_the_gate_decision_counts_no_episode_although_the_layer_ran(
 
 
 def test_a_gate_run_with_both_judged_families_unfit_is_not_decided(
-    gate_run: tuple[list[TargetRun], int, int],
+    gate_run: CalibrationResult,
 ) -> None:
     # No κ was measured in this run, so both judged families are excluded and the
     # fit set is four. The honest answer is a stop rather than a verdict.
-    target_runs, _, _ = gate_run
-
-    result = _gate(target_runs)
+    result = _gate(gate_run.target_runs)
 
     assert result.decision.outcome is GateOutcome.NOT_DECIDED
     assert result.stops_the_build
@@ -433,13 +444,11 @@ def test_a_gate_run_with_both_judged_families_unfit_is_not_decided(
 
 
 def test_a_gate_run_prints_every_rate_interval_and_score_behind_its_answer(
-    gate_run: tuple[list[TargetRun], int, int],
+    gate_run: CalibrationResult,
 ) -> None:
     # A reader re-derives the pass or fail rather than trusting the verdict line
     # (spec story 47), and both reproducibility statements are printed beside it.
-    target_runs, _, _ = gate_run
-
-    stated = _gate(target_runs).stated()
+    stated = _gate(gate_run.target_runs).stated()
 
     for family in Family:
         assert f"{family}:" in stated
@@ -451,14 +460,12 @@ def test_a_gate_run_prints_every_rate_interval_and_score_behind_its_answer(
 
 
 def test_the_gate_refuses_a_run_that_is_missing_a_reference_agent(
-    gate_run: tuple[list[TargetRun], int, int],
+    gate_run: CalibrationResult,
 ) -> None:
     # D is trivial minus hardened and monotonicity is read across all three, so a
     # missing agent is a missing decision rather than a smaller one.
-    target_runs, _, _ = gate_run
-
     with pytest.raises(NotAGateRun, match="three reference agents"):
-        _gate([run for run in target_runs if run.target.name != "weak"])
+        _gate([run for run in gate_run.target_runs if run.target.name != "weak"])
 
 
 def _gate(target_runs: Sequence[TargetRun], library: LibraryVersion | None = None):  # type: ignore[no-untyped-def]
@@ -518,6 +525,34 @@ def test_the_entry_point_offers_no_way_to_gate_fewer_than_three_agents() -> None
         main(["--identity", "bench engineer", "--agents", "trivial"])
 
 
+def test_a_gate_run_is_written_to_a_document_that_survives_it(
+    gate_run: CalibrationResult, tmp_path: Path
+) -> None:
+    # Validation history has to exist before the first user does, and a gate answer
+    # that lived only in a terminal is one nobody can check (spec story 80). The two
+    # layers are written as two sections, in the words they were printed in.
+    written = record_run(
+        _gate(gate_run.target_runs),
+        gate_run,
+        load_library(CASES_DIR),
+        tmp_path,
+        _declared_models(),
+    ).read_text(encoding="utf-8")
+
+    assert "The scored layer, which decides the gate" in written
+    assert "The adaptive layer, which decides nothing" in written
+    assert "the decision rule as applied" in written
+    assert "NOT DECIDED" in written
+    assert "A_break" in written
+    assert "adaptive-discovered" in written
+    # The counts and the intervals, so the decision can be re-derived from the
+    # document rather than from the terminal it scrolled past in.
+    assert "(0/30)" in written and "[0.917, 1.000]" in written
+    # And no payload, on either side of it (ADR-0008).
+    for case in load_library(CASES_DIR):
+        assert case.payload not in written
+
+
 def test_the_exit_code_tells_a_failed_gate_from_one_that_was_not_decided() -> None:
     # Both stop the build and they are not the same answer: a build that treated
     # them alike would report "too little was fit to ask" as "the bench does not
@@ -527,7 +562,7 @@ def test_the_exit_code_tells_a_failed_gate_from_one_that_was_not_decided() -> No
             outcomes_for(
                 SEPARATES, SEPARATES, TOO_CLOSE, SEPARATES, SEPARATES, TOO_CLOSE
             ),
-            judged(),
+            reliability=judged(),
         )
     )
     failing = _result(
@@ -535,14 +570,25 @@ def test_the_exit_code_tells_a_failed_gate_from_one_that_was_not_decided() -> No
             outcomes_for(
                 SEPARATES, SEPARATES, TOO_CLOSE, TOO_CLOSE, TOO_CLOSE, TOO_CLOSE
             ),
-            judged(),
+            reliability=judged(),
         )
     )
-    undecided = _result(decide_gate(outcomes_for(*[SEPARATES] * 6), judged(None, None)))
+    undecided = _result(
+        decide_gate(outcomes_for(*[SEPARATES] * 6), reliability=judged(None, None))
+    )
 
     assert (exit_code(passing), passing.stops_the_build) == (0, False)
     assert (exit_code(failing), failing.stops_the_build) == (EXIT_GATE_FAILED, True)
     assert (exit_code(undecided), undecided.stops_the_build) == (EXIT_NOT_DECIDED, True)
+
+
+def _declared_models() -> argparse.Namespace:
+    """The three model settings a run records, as the entry point holds them."""
+    return argparse.Namespace(
+        model="stub:obedient",
+        adjudicator_model="the suite's stub",
+        attacker_model="the scripted stand-in",
+    )
 
 
 def _result(decision: GateDecision) -> GateResult:

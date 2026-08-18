@@ -16,7 +16,7 @@ a consumer reads the class off the record and never infers it from the family na
 
 import hashlib
 import tomllib
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import date
 from enum import StrEnum
@@ -484,13 +484,13 @@ class LibraryVersion:
         )
 
 
-EMPTY_LIBRARY = LibraryVersion(cases=0, digest="")
-"""The version of a run that has no library. Never the digest of one that does."""
+EMPTY_LIBRARY = LibraryVersion.of(())
+"""The version of a run that has no library.
 
-
-def library_version(cases: Sequence[Case]) -> LibraryVersion:
-    """The version of this library. A function, so call sites read as one line."""
-    return LibraryVersion.of(cases)
+Built through `of` rather than by hand, so that the run state's default and a
+version computed from an empty sequence are the same value. Two constructors that
+disagreed about the empty case would put two different digests on the same fact.
+"""
 
 
 def load_library(directory: Path) -> list[Case]:

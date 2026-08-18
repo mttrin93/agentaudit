@@ -58,7 +58,7 @@ RATE_LIMITED_STATUS = 429
 AUTH_STATUSES = frozenset({401, 403})
 """A rejected credential. Never retried, and never a verdict."""
 
-TRANSIENT_STATUSES = frozenset({429, 500, 502, 503, 504})
+TRANSIENT_STATUSES = frozenset({RATE_LIMITED_STATUS, 500, 502, 503, 504})
 """Replies that say "not now" rather than "no".
 
 Listed rather than derived from the 5xx range, so that adding one is a decision.

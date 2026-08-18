@@ -33,7 +33,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
 from backend.bench.calibration import TargetRun
-from backend.bench.library import Family, LibraryVersion
+from backend.bench.library import EMPTY_LIBRARY, Family, LibraryVersion
 from backend.bench.measurability import NotMeasurable
 from backend.bench.reproducibility import Reproducibility
 from backend.bench.rule import DECLARED_RULE, GateRule
@@ -90,6 +90,7 @@ class GateResult:
     """Every attempt recorded, whatever its outcome (spec story 79)."""
 
     agents: tuple[str, ...]
+    """The reference agents this gate was decided over, in the order they ran."""
 
     @property
     def passed(self) -> bool:
@@ -213,10 +214,12 @@ def family_rates(
         if present or reason is None:
             raise NotAGateRun(
                 f"{family} was measured against {sorted(present)} and not against "
-                f"{sorted(set(rates) - set(present))}, with no stated reason. A "
-                "family that ran against some of the reference agents and not "
-                "others has no D and no ordering, and a gate decided without it "
-                "would be decided on a denominator nobody declared"
+                f"{sorted(set(rates) - set(present))}, and no target reported it "
+                "not measurable. A family that ran against some of the reference "
+                "agents and not others has no D and no ordering, and so has one "
+                "whose every case was skipped as written for another agent type — "
+                "a gate decided without either would be decided on a denominator "
+                "nobody declared"
             )
         unmeasured[family] = reason
     return tuple(measured), unmeasured
@@ -258,8 +261,10 @@ def read_gate(
     }
     outcomes = [score_family(rates, rule) for rates in measured]
     return GateResult(
-        decision=decide_gate(outcomes, readings, unmeasured, rule),
-        library=library or LibraryVersion.of([]),
+        decision=decide_gate(
+            outcomes, reliability=readings, not_measurable=unmeasured, rule=rule
+        ),
+        library=library or EMPTY_LIBRARY,
         reliability=readings,
         attempts=sum(len(run.attempts) for run in target_runs),
         agents=tuple(run.target.name for run in target_runs),

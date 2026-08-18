@@ -671,8 +671,7 @@ def assemble(
     there is no line below that reads a figure out of one section and into another.
 
     `gate` supplies `D` per family from the last gate run (`gate.py`). Without one,
-    every
-    entry says so rather than showing a zero.
+    every entry says so rather than showing a zero.
 
     `episodes` are the adaptive layer's, and they arrive as an argument rather than
     off the run state because #16 records them and #17 measures them; this ticket

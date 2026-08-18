@@ -16,7 +16,7 @@ drift off the one contract the bench speaks.
 import time
 from collections.abc import Iterator
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Annotated
 
 from fastapi import FastAPI, Header, HTTPException
@@ -107,7 +107,12 @@ def flaky_target(
 ) -> Iterator[ServedFlakyTarget]:
     """Serve a flaky target, described the way any target is described."""
     with serve(
-        create_flaky_app(failures_before_reply, status_code, malformed, sleep_seconds)
+        create_flaky_app(
+            failures_before_reply,
+            status_code=status_code,
+            malformed=malformed,
+            sleep_seconds=sleep_seconds,
+        )
     ) as base_url:
         yield ServedFlakyTarget(
             target=TargetConfig(
@@ -115,11 +120,7 @@ def flaky_target(
                 url=f"{base_url}/reference/flaky/messages",
                 auth_token=auth_token,
                 agent_type="assistant",
-                retry=RetryPolicy(
-                    sends=IMPATIENT.sends,
-                    backoff_seconds=IMPATIENT.backoff_seconds,
-                    timeout_seconds=timeout_seconds,
-                ),
+                retry=replace(IMPATIENT, timeout_seconds=timeout_seconds),
             ),
             plant_nonce=nonce_planter(base_url),
         )

@@ -9,6 +9,15 @@ mechanism with a flag to skip it is a convenience feature after all.
 Nothing here decides anything. It asks, it formats, and it hands back what the
 human said, so that the difference between the two scripts is which target they
 point at rather than what they ask before pointing.
+
+**The scored and adaptive blocks are both built here and never in one block.** They
+are two sections with two `_section` builders and no function that returns them
+joined, because they are measured on different denominators and a reader who met
+`A_break` inside a table of rates would have met a number that decides nothing in
+the place where everything decides something (ADR-0010, ADR-0011). Each builder
+returns text so that the terminal and the durable record print the same words —
+a run whose recorded document differed from what the operator saw would be two
+records of one run.
 """
 
 import sys
@@ -143,6 +152,11 @@ def excerpt(text: str) -> str:
 
 
 def print_episodes(result: CalibrationResult, trivial: str, hardened: str) -> None:
+    """The adaptive section, printed."""
+    print(episodes_section(result, trivial=trivial, hardened=hardened))
+
+
+def episodes_section(result: CalibrationResult, trivial: str, hardened: str) -> str:
     """The adaptive section, in its own block and carrying no rate.
 
     Printed apart from the rates and never beside them: an episode has no
@@ -152,14 +166,13 @@ def print_episodes(result: CalibrationResult, trivial: str, hardened: str) -> No
     reproducible would be the overreach the judge's narrative was demoted for.
     """
     episodes = result.run_state.episodes
-    print("\nadaptive layer — recorded, not reproducible, and scored on nothing")
+    lines = ["", "adaptive layer — recorded, not reproducible, and scored on nothing"]
     if not episodes:
-        print("  no episode ran")
-        return
+        return "\n".join((*lines, "  no episode ran"))
     for episode in episodes:
         # The target is named here because this is the bench's own record, read by
         # the engineer who ran it. What the attacker saw was an opaque handle.
-        print(
+        lines.append(
             f"  {episode.target_name} / {episode.family}: {episode.stated()} "
             f"after {episode.turns} turns"
         )
@@ -168,17 +181,27 @@ def print_episodes(result: CalibrationResult, trivial: str, hardened: str) -> No
             # gate decides, and an adaptive-discovered case faces the cross-model
             # bar — which needs a second underlying model and so a second run
             # (ADR-0012, `scripts/admit.py --second-model`).
-            print(
+            lines.append(
                 f"    proposed {proposal.case.id}: {proposal.description} "
                 f"— faces the {bar_for(proposal.case.discovered_by)} bar, "
                 "not admitted by having been proposed"
             )
-    print_adaptive_discrimination(episodes, trivial=trivial, hardened=hardened)
+    lines.append(
+        adaptive_discrimination_section(episodes, trivial=trivial, hardened=hardened)
+    )
+    return "\n".join(lines)
 
 
 def print_adaptive_discrimination(
     episodes: Sequence[AdaptiveEpisode], trivial: str, hardened: str
 ) -> None:
+    """The adaptive block, printed."""
+    print(adaptive_discrimination_section(episodes, trivial=trivial, hardened=hardened))
+
+
+def adaptive_discrimination_section(
+    episodes: Sequence[AdaptiveEpisode], trivial: str, hardened: str
+) -> str:
     """`A_break`, `A_effort` and the sign test, in their own block.
 
     Never in a `D` table and never named `D`: these are measured on episodes and
@@ -187,14 +210,19 @@ def print_adaptive_discrimination(
     so a reader sees what each of the four possible answers would have meant.
     """
     try:
-        print(measure(episodes, trivial=trivial, hardened=hardened).stated())
+        return measure(episodes, trivial=trivial, hardened=hardened).stated()
     except NoFamiliesInScope as unmeasured:
         # A stated refusal rather than a zero. "No separation" and "nothing was
         # measured" are the two readings that must never collapse into one number.
-        print(f"adaptive discrimination: not read — {unmeasured}")
+        return f"adaptive discrimination: not read — {unmeasured}"
 
 
 def print_provenance(cases: Sequence[Case]) -> None:
+    """The provenance block, printed."""
+    print(provenance_section(cases))
+
+
+def provenance_section(cases: Sequence[Case]) -> str:
     """Who found this library, and the bar each case entered under.
 
     Printed on every run, because ADR-0012 asks for the adaptive-discovered
@@ -210,9 +238,14 @@ def print_provenance(cases: Sequence[Case]) -> None:
     # asks for on every gate run: how far the library has drifted towards routes
     # fitted to these three agents, and whether the drift is doing the damage the
     # cross-model bar exists to prevent.
-    for line in library_provenance(cases).stated().splitlines():
-        print(f"{'' if line.startswith(' ') else '  '}{line}")
-    for case in cases:
-        # The bar beside the case, so an adaptive-discovered case is distinguishable
-        # from an authored one by reading the report (ADR-0012).
-        print(f"  {outcome_for(case).stated()}")
+    return "\n".join(
+        (
+            *(
+                f"{'' if line.startswith(' ') else '  '}{line}"
+                for line in library_provenance(cases).stated().splitlines()
+            ),
+            # The bar beside the case, so an adaptive-discovered case is
+            # distinguishable from an authored one by reading the report (ADR-0012).
+            *(f"  {outcome_for(case).stated()}" for case in cases),
+        )
+    )

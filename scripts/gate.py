@@ -3,6 +3,7 @@
     uv run python -m scripts.gate --identity "your name"
     uv run python -m scripts.gate --identity "your name" --price-per-call 0.0005
     uv run python -m scripts.gate --identity "your name" --model stub:obedient
+    uv run python -m scripts.gate --identity "your name" --record docs/gate-runs
     uv run python -m scripts.gate --identity "your name" \\
         --adjudicator-model openrouter:openai/gpt-4o-mini
 
@@ -26,6 +27,12 @@ below the decision, carrying no rate, no interval, no band and no `D` (ADR-0010)
 A weak attacker cannot fail a working bench here and a lucky one cannot pass a
 broken one, because `read_gate` is handed the recorded attempts and nothing else.
 
+**Its output survives the run.** Everything printed is also written to a dated
+document under `--record`, in the two sections it was printed in: validation history
+has to exist before the first user does, and a gate answer that lived only in a
+terminal is a gate answer nobody can check (spec story 80). The curated narrative
+stays in `docs/validation.md`; what is written here is the run itself.
+
 **It asks before it sends anything**, on the same terms as every other entry point:
 the three attestation statements one at a time, then the estimated cost at the
 approval interrupt. Answering no to any of them spends nothing, and nothing here
@@ -41,6 +48,7 @@ import os
 import secrets
 import sys
 from collections.abc import Sequence
+from datetime import UTC, datetime
 from decimal import InvalidOperation
 from pathlib import Path
 
@@ -77,14 +85,17 @@ from scripts.console import (
     EXIT_DECLINED,
     EXIT_WITHHELD,
     attest,
+    episodes_section,
     price,
     print_episodes,
     print_provenance,
+    provenance_section,
     terminal_approval,
 )
 
 CASES_DIR = Path(__file__).resolve().parents[1] / "backend" / "cases"
 GOLDSET_DIR = Path(__file__).resolve().parents[1] / "backend" / "goldset"
+GATE_RUNS_DIR = Path(__file__).resolve().parents[1] / "docs" / "gate-runs"
 
 DEFAULT_MODEL = "openrouter:openai/gpt-4.1-nano"
 """The reference agents' model, chosen as test equipment and recorded as such.
@@ -155,6 +166,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     parser.add_argument(
         "--currency", default="USD", help="the currency --price-per-call is in"
+    )
+    parser.add_argument(
+        "--record",
+        default=str(GATE_RUNS_DIR),
+        help=(
+            "the directory a dated record of this run is written to. The run's own "
+            "document, which is not docs/validation.md: that one is written by hand "
+            "and reads the records"
+        ),
     )
     args = parser.parse_args(argv)
 
@@ -249,6 +269,63 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     print_gate(gate, result)
     return exit_code(gate)
+
+
+def record_run(
+    gate: GateResult,
+    result: CalibrationResult,
+    cases: Sequence[Case],
+    directory: Path,
+    args: argparse.Namespace,
+) -> Path:
+    """Write this run to a dated document, in the sections it was printed in.
+
+    The same text the operator saw, because a recorded document that differed from
+    the terminal would be two records of one run. One file per run and never an
+    append to a single log: a gate run is the unit a reader compares with another
+    gate run, and two of them in one file is a document whose reader has to work out
+    where one ended.
+
+    **No payload text, on either side.** The scored half holds counts, intervals and
+    the rule; the adaptive half holds prose route descriptions and the statistics.
+    A route that beat a target is a working unpublished exploit and stays in the
+    transcripts on the episode (ADR-0008, spec story 105).
+    """
+    directory.mkdir(parents=True, exist_ok=True)
+    stamped = datetime.now(tz=UTC)
+    path = directory / f"gate-{stamped:%Y-%m-%dT%H-%M-%SZ}.md"
+    path.write_text(
+        "\n".join(
+            (
+                f"# Gate run — {stamped:%Y-%m-%d %H:%M:%S} UTC",
+                "",
+                f"- reference agents: `{args.model}`",
+                f"- adjudicating model: `{args.adjudicator_model}` "
+                "(judged families only)",
+                f"- attacking model: `{args.attacker_model}` (adaptive layer only)",
+                f"- confirmed by: {result.approval.identity}",
+                "",
+                "## The scored layer, which decides the gate",
+                "",
+                "```",
+                gate.stated(),
+                "```",
+                "",
+                "## The adaptive layer, which decides nothing",
+                "",
+                "```",
+                episodes_section(
+                    result, trivial=TRIVIAL.name, hardened=HARDENED.name
+                ).strip(),
+                "",
+                provenance_section(cases),
+                "```",
+                "",
+            )
+        ),
+        encoding="utf-8",
+    )
+    return path
 
 
 def exit_code(gate: GateResult) -> int:

@@ -367,25 +367,43 @@ class Excluded:
     family: Family
     reason: ExclusionReason
     kappa: float | None = None
-    """The reading that caused the exclusion, where there was one to read."""
+    """The κ reading that barred the family, where the reason is reliability."""
+
+    unmeasured: NotMeasurable | None = None
+    """Why the target could not answer, where the reason is measurability.
+
+    Two fields rather than one, because each reason has its own reading and neither
+    reading means anything under the other: a κ is not a missing capability, and a
+    missing capability has no κ. Both print, and the printing is the point —
+    ADR-0015 asks the exclusion to name the family, the reason *and* the reading
+    that caused it, which is the discipline `NotMeasurable.stated()` already
+    follows.
+    """
 
     def stated(self) -> str:
         """The exclusion as the gate prints it, naming the family and the cause."""
-        measured = (
-            f"κ = {self.kappa:.2f}" if self.kappa is not None else "no κ was measured"
-        )
         match self.reason:
             case ExclusionReason.UNFIT_TO_REPORT:
+                measured = (
+                    f"κ = {self.kappa:.2f}"
+                    if self.kappa is not None
+                    else "no κ was measured"
+                )
                 return (
                     f"{self.family} excluded — {UNFIT_TO_REPORT}: {measured}. Its "
                     "rates are measured and recorded and they decide nothing here, "
                     "in either count (ADR-0015)"
                 )
             case ExclusionReason.NOT_MEASURABLE:
+                why = (
+                    self.unmeasured.stated()
+                    if self.unmeasured is not None
+                    else "no reason was recorded"
+                )
                 return (
-                    f"{self.family} excluded — not measurable against every "
-                    "reference agent, so there is no D to weigh. Not a rate of "
-                    "zero and not a family that failed"
+                    f"{self.family} excluded — {why}. There is no D to weigh, and "
+                    "this is a rate of zero in neither direction and not a family "
+                    "that failed"
                 )
 
 
@@ -644,6 +662,7 @@ def score_family(rates: FamilyRates, rule: GateRule = DECLARED_RULE) -> FamilyOu
 
 def decide_gate(
     outcomes: Sequence[FamilyOutcome],
+    *,
     reliability: Mapping[Family, Reliability | None] | None = None,
     not_measurable: Mapping[Family, NotMeasurable] | None = None,
     rule: GateRule = DECLARED_RULE,
@@ -669,8 +688,16 @@ def decide_gate(
     the bar — which is what keeps exclusion from ever turning a gate that would
     have failed into one that passes.
     """
-    unfit = _unfit(reliability or {})
     unmeasured = dict(not_measurable or {})
+    # A family the target could not answer is excluded on that ground alone, even
+    # where a κ was also handed over for it: there are no attempts for the κ to
+    # vouch for, and one family excluded twice would print two reasons for one
+    # absence and count as two shrinkages of a denominator that lost one.
+    unfit = {
+        family: kappa
+        for family, kappa in _unfit(reliability or {}).items()
+        if family not in unmeasured
+    }
     families = [outcome.family for outcome in outcomes]
     presented = len(families) + len(unmeasured)
     if presented != rule.family_count:
@@ -684,8 +711,8 @@ def decide_gate(
         sorted(
             (
                 *(
-                    Excluded(family, ExclusionReason.NOT_MEASURABLE)
-                    for family in unmeasured
+                    Excluded(family, ExclusionReason.NOT_MEASURABLE, unmeasured=reason)
+                    for family, reason in unmeasured.items()
                 ),
                 *(
                     Excluded(family, ExclusionReason.UNFIT_TO_REPORT, kappa)

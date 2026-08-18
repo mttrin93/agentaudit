@@ -19,6 +19,7 @@ from pathlib import Path
 
 import pytest
 
+from backend.bench.adjudication import Completion
 from backend.bench.calibration import (
     CalibrationResult,
     PlantNonce,
@@ -26,6 +27,7 @@ from backend.bench.calibration import (
     run_calibration,
 )
 from backend.bench.contract import RetryPolicy, TargetConfig
+from backend.bench.evaluator import Verdict
 from backend.bench.library import (
     Case,
     CaseStatus,
@@ -78,6 +80,28 @@ CONFIRMING: Approve = _confirm
 SENDS = 3
 """The retry limit the described targets below declare, and so what a ceiling
 built from them covers."""
+
+
+def adjudicating(verdict: Verdict = Verdict.SUCCEEDED) -> Completion:
+    """An adjudicating model that answers with the verdict it was given.
+
+    Deliberately ignores the brief, for the reason the judge's stub does: what a
+    model would *say* about a transcript is not under test here, and its quality
+    has its own evaluation — κ against the gold set (#11). What is under test is
+    what the code around the answer can and cannot do with it.
+
+    No test in this suite reaches a real adjudicating model, so no judged verdict
+    in the suite depends on a network call or on a model's temperament.
+    """
+    return lambda system_prompt, message: f"verdict: {verdict}"
+
+
+ADJUDICATING: Completion = adjudicating()
+"""The default instrument for the helpers below.
+
+Explicit at the call sites that care which way it answers, because a judged rate
+is only readable next to the verdict the instrument gave.
+"""
 
 
 def a_target(
@@ -134,6 +158,16 @@ def scope_creep_case(library: list[Case]) -> Case:
 @pytest.fixture
 def halt_defeat_case(library: list[Case]) -> Case:
     return case_for(library, Family.HALT_DEFEAT)
+
+
+@pytest.fixture
+def wrongful_commitment_case(library: list[Case]) -> Case:
+    return case_for(library, Family.WRONGFUL_COMMITMENT)
+
+
+@pytest.fixture
+def disclosure_denial_case(library: list[Case]) -> Case:
+    return case_for(library, Family.DISCLOSURE_DENIAL)
 
 
 def case_for(library: list[Case], family: Family) -> Case:
@@ -199,6 +233,7 @@ def calibrate(
     name: str = "trivial",
     model: str = "stub:obedient",
     agents: tuple[ReferenceAgent, ...] = REFERENCE_AGENTS,
+    adjudicator: Completion | None = ADJUDICATING,
 ) -> CalibrationResult:
     """Run one case against one served reference agent, through the entry point."""
     with reference_target(model=model, name=name, agents=agents) as reference:
@@ -208,6 +243,7 @@ def calibrate(
             attestation=BENCH_ATTESTATION,
             plant_nonce=reference.plant_nonce,
             approve=CONFIRMING,
+            adjudicator=adjudicator,
         )
 
 
@@ -216,9 +252,12 @@ def target_run_for(
     name: str = "trivial",
     model: str = "stub:obedient",
     agents: tuple[ReferenceAgent, ...] = REFERENCE_AGENTS,
+    adjudicator: Completion | None = ADJUDICATING,
 ) -> TargetRun:
     """The one target run a single-target calibration produced."""
-    [target_run] = calibrate(case, name=name, model=model, agents=agents).target_runs
+    [target_run] = calibrate(
+        case, name=name, model=model, agents=agents, adjudicator=adjudicator
+    ).target_runs
     return target_run
 
 

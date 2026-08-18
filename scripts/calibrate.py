@@ -5,6 +5,7 @@
     uv run python -m scripts.calibrate --agents trivial hardened
     uv run python -m scripts.calibrate --identity "your name"
     uv run python -m scripts.calibrate --identity "your name" --price-per-call 0.0005
+    uv run python -m scripts.calibrate --adjudicator-model openrouter:openai/gpt-4o-mini
 
 The reference agents are served locally over real HTTP for the duration of the
 run, and the script plants the registration nonce in each target's system prompt
@@ -42,8 +43,9 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 from backend.bench.calibration import CalibrationResult, TargetRun, run_calibration
+from backend.bench.completion import DEFAULT_ADJUDICATOR_MODEL, completion_for
 from backend.bench.contract import TargetConfig
-from backend.bench.library import Family, load_library
+from backend.bench.library import Family, VerdictClass, load_library
 from backend.bench.rule import DECLARED_RULE
 from backend.bench.scorer import discrimination
 from backend.graph.budget import BudgetExceeded, Layer, RunBudget
@@ -89,6 +91,17 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="the reference agents' underlying model, as '<provider>:<model>'",
     )
     parser.add_argument(
+        "--adjudicator-model",
+        default=os.environ.get(
+            "AGENTAUDIT_ADJUDICATOR_MODEL", DEFAULT_ADJUDICATOR_MODEL
+        ),
+        help=(
+            "the bench's own model, which decides the two judged families. Not the "
+            "reference agents' model and deliberately a separate setting: one is "
+            "the instrument and the other is what is being measured"
+        ),
+    )
+    parser.add_argument(
         "--agents",
         nargs="+",
         default=[agent.name for agent in REFERENCE_AGENTS],
@@ -128,6 +141,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     cases = load_library(CASES_DIR)
     auth_token = secrets.token_urlsafe(16)
 
+    try:
+        # Built before the attestation, so a misconfigured instrument is a refusal
+        # rather than a run that stops after spending something.
+        adjudicator = completion_for(args.adjudicator_model)
+    except (KeyError, ValueError) as unusable:
+        print(f"No usable adjudicating model: {unusable}")
+        return EXIT_WITHHELD
+
     attestation = attest(args.identity)
     if attestation is None:
         print("Attestation withheld. Nothing was sent.")
@@ -156,6 +177,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 attestation=attestation,
                 plant_nonce=nonce_planter(base_url),
                 approve=terminal_approval(attestation.identity),
+                adjudicator=adjudicator,
                 budget=RunBudget.declare(
                     cases=cases, targets=targets, price=call_price
                 ),
@@ -169,15 +191,19 @@ def main(argv: Sequence[str] | None = None) -> int:
         print("Nothing was sent, and nothing was spent.")
         return EXIT_DECLINED
 
-    _print_result(result, model, len(cases))
+    _print_result(result, model, args.adjudicator_model, len(cases))
     refused = [run for run in result.target_runs if run.registration.refused]
     return 1 if refused else 0
 
 
 def _print_result(
-    result: CalibrationResult, model: ModelConfig, case_count: int
+    result: CalibrationResult,
+    model: ModelConfig,
+    adjudicator_model: str,
+    case_count: int,
 ) -> None:
     print(f"reference agent model: {model}")
+    print(f"adjudicating model:    {adjudicator_model}  (judged families only)")
     print(f"cases loaded:          {case_count}")
     print(f"attempts per case:     {DECLARED_RULE.attempts_per_case}")
 
@@ -188,8 +214,17 @@ def _print_result(
         print(f"  registration: {status}")
         print(f"  nonce:        {registration.nonce}")
         print(f"  echo reply:   {excerpt(registration.probe.reply_text)}")
-        for family, rate in target_run.rates.items():
-            print(f"  failure rate, {family}: {rate_line(rate)}")
+        # The two classes are printed as two sections and never added: a judged
+        # rate carries a wider stated limit and a κ figure beside it, and the
+        # deterministic families carry the report's weight (ADR-0004).
+        for family, rate in target_run.deterministic_rates.items():
+            print(f"  failure rate, {family}: {rate_line(rate)}  [deterministic]")
+        for family, rate in target_run.judged_rates.items():
+            print(
+                f"  failure rate, {family}: {rate_line(rate)}  [judged — κ not yet "
+                "measured (#11); reported apart from the four above and never "
+                "summed with them]"
+            )
         # Printed beside the rates and never as one of them: a refusal to
         # measure is a third outcome, not a rate of zero (ADR-0004).
         for family, reason in target_run.not_measurable.items():
@@ -198,8 +233,13 @@ def _print_result(
             print("  failure rate: not measured — no attempt was made")
 
         for attempt in target_run.attempts:
+            reached = (
+                "from the success condition"
+                if attempt.verdict_class is VerdictClass.DETERMINISTIC
+                else "adjudicated"
+            )
             print(f"  attempt {attempt.case_id} #{attempt.index}")
-            print(f"    verdict: {attempt.verdict}  (from the success condition)")
+            print(f"    verdict: {attempt.verdict}  ({reached})")
             print(f"    reply:   {excerpt(attempt.transcript.reply_text)}")
 
     print()

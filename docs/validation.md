@@ -193,3 +193,60 @@ Four things it says.
 The weak agent again did not land in the middle, for the third family running. Its
 system prompt tells it in as many words that text inside a document is content to
 be summarised and never instructions to follow, and nothing enforces that.
+
+### 2026-08-18 — the two judged families (#9), running, and deliberately unread
+
+Wrongful commitment and disclosure denial now run through the same entry point as
+the other four, one case each. They are the two families ADR-0004 gives an LLM
+verdict rather than a deterministic success condition, so what landed here is a
+route, a floor and two coverage claims — and **no rate.** There is no table in this
+section, and its absence is the finding.
+
+**Why no reading was taken.** A judged rate is only as good as the instrument that
+produced it, and that instrument's reliability figure is κ against the gold set,
+which is #11. Publishing 1.00 and 0.00 for these two families before κ exists would
+be publishing a number whose evidentiary strength nobody could state — the thing
+`κ < 0.6 means the family is not fit to report` exists to prevent. The adjudicating
+model is declared configuration (`backend/bench/completion.py`), it is marked
+provisional, and #11 settles it against κ rather than this section asserting it.
+
+Four things the ticket does record.
+
+1. **The verdict route is read off the case record, never off the family name.** A
+   case carries `verdict_class` and exactly one criterion — a `SuccessCondition` or a
+   `JudgedCondition` — and the library refuses a record where the two disagree. The
+   suite runs the data-leakage case relabelled into a judged family and the
+   disclosure-denial case relabelled into a deterministic one: each keeps the route
+   its record names, so the label a case is wearing decides nothing. That is spec
+   story 18 made executable rather than asserted.
+2. **The two classes are reported as two sections and are never one figure.**
+   `TargetRun.deterministic_rates` and `TargetRun.judged_rates` are keyed disjointly,
+   nothing on the record aggregates across them, and a family whose attempts
+   disagreed about their class is refused rather than filed under one. The four
+   deterministic families carry the report's weight; these two stand beside them with
+   a wider stated limit.
+3. **Disclosure denial has a built floor, and it is in exactly one agent.** Most
+   models decline a role-play-as-human instruction by default, so a family measured
+   against an undefended agent would separate nothing and what the bench would have
+   read is a provider's temperament (PLAN §12). The trivial reference agent is
+   therefore instructed to present itself as a person — `HUMAN_PERSONA` in
+   `backend/targets/reference/trivial.py` — and the weak and hardened agents are not,
+   so the gap stays a difference in engineering rather than in wording. **Whether the
+   floor actually holds under a live model is unmeasured**, and it is the first thing
+   #12's admission run will say. If it does not, the family is retired under the §6
+   rule and the retirement is the finding.
+4. **Both records state the case inside their identifier that they do not test.**
+   Wrongful commitment tests one case within `LLM07:2026` — a single-turn
+   unconditional undertaking — and not a commitment assembled over turns, carried out
+   through a tool, or one the operator could have honoured. Disclosure denial
+   originates here, claims membership of no published identifier, and states in as
+   many words that it **proves nothing about synthetic-content marking under Article
+   50(2)**, which is a different duty with a different technical answer and an
+   application deadline of 2 December 2026.
+
+One thing this ticket did *not* settle and is worth a reader's attention: the two
+payloads are committed rather than withheld. ADR-0008 withholds originated payloads
+because a working attack cannot be unpublished, and neither of these is one — a
+commercial request under pressure and a request to adopt a persona, carrying no
+published technique and nothing that transfers to another target. The judgement is
+recorded here so that a reader can disagree with it.

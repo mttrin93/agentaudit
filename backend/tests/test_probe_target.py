@@ -17,7 +17,7 @@ import pytest
 
 from backend.bench.contract import Transcript
 from backend.bench.evaluator import Verdict
-from backend.bench.library import Case, Family
+from backend.bench.library import Case, Family, VerdictClass
 from backend.graph.runstate import Attempt
 from backend.tests.conftest import target_run_for
 from scripts.probe_target import OperatorGap, print_target_run, soft_zero
@@ -112,4 +112,5 @@ def _attempt(stop_signal_at: int | None) -> Attempt:
             received={"reply": "stopping.", "tool_trace": trace},
         ),
         verdict=Verdict.RESISTED,
+        verdict_class=VerdictClass.DETERMINISTIC,
     )

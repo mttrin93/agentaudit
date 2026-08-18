@@ -36,7 +36,7 @@ in a shell history file.
 import argparse
 import os
 import sys
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from decimal import InvalidOperation
 from enum import StrEnum
 from pathlib import Path
@@ -44,10 +44,12 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 from backend.bench.calibration import PlantNonce, TargetRun, run_calibration
+from backend.bench.completion import DEFAULT_ADJUDICATOR_MODEL, completion_for
 from backend.bench.contract import TargetConfig
 from backend.bench.library import Case, Family, load_library
 from backend.bench.registration import ECHO_PROBE, NONCE_PREFIX
 from backend.bench.rule import DECLARED_RULE
+from backend.bench.scorer import Rate
 from backend.graph.budget import BudgetExceeded, Layer, RunBudget
 from backend.graph.runstate import Attempt
 from backend.targets.reference.corpus import SUPPLIER_NOTE
@@ -167,6 +169,17 @@ def main(argv: Sequence[str] | None = None) -> int:
             "this list, so the list is the whole of the comparison"
         ),
     )
+    parser.add_argument(
+        "--adjudicator-model",
+        default=os.environ.get(
+            "AGENTAUDIT_ADJUDICATOR_MODEL", DEFAULT_ADJUDICATOR_MODEL
+        ),
+        help=(
+            "the bench's own model, which decides the two judged families. Your "
+            "target's model is not this: one is the instrument and the other is "
+            "what is being measured"
+        ),
+    )
     parser.add_argument("--price-per-call", default=None)
     parser.add_argument("--currency", default="USD")
     args = parser.parse_args(argv)
@@ -179,6 +192,15 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     if not args.token:
         print(f"No token. Pass --token or set {TOKEN_ENV}.")
+        return EXIT_WITHHELD
+
+    try:
+        # Before the attestation: a run that reached its first judged attempt
+        # before discovering it had no instrument would already have spent the
+        # operator's budget on attempts nothing can score.
+        adjudicator = completion_for(args.adjudicator_model)
+    except (KeyError, ValueError) as unusable:
+        print(f"No usable adjudicating model: {unusable}")
         return EXIT_WITHHELD
 
     if args.exposes_tool_calls and not args.declared_tools:
@@ -227,6 +249,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             attestation=attestation,
             plant_nonce=interactive_planter(),
             approve=terminal_approval(attestation.identity),
+            adjudicator=adjudicator,
             budget=RunBudget.declare(cases=cases, targets=[target], price=call_price),
         )
     except BudgetExceeded as abort:
@@ -297,7 +320,8 @@ def note_is_planted(cases: Sequence[Case]) -> bool:
     if injection is None:
         return False
 
-    canary = injection.success_condition.planted_canary
+    condition = injection.success_condition
+    canary = None if condition is None else condition.planted_canary
     if SUPPLIER_NOTE.executed_line != canary:
         print(
             f"\nSkipping {injection.id}: the note in corpus.py produces "
@@ -392,15 +416,28 @@ def print_target_run(target_run: TargetRun, gaps: dict[Family, OperatorGap]) -> 
         )
         return
 
-    rates = target_run.rates
+    # Two sections, never one, and never a figure over both. A judged rate rests
+    # on a semantic decision with a reliability figure of its own, so a reader who
+    # could add it to a deterministic rate would be adding two different kinds of
+    # evidence (ADR-0004, ADR-0005).
+    _print_rates(
+        "verdicts from a success condition — deterministic:",
+        target_run.deterministic_rates,
+        target_run,
+    )
+    _print_rates(
+        "verdicts adjudicated semantically — judged, κ not yet measured (#11). "
+        "Reported apart from the four above and never summed with them:",
+        target_run.judged_rates,
+        target_run,
+    )
+
     for family in Family:
-        if (rate := rates.get(family)) is not None:
-            print(f"\n  failure rate, {family}: {rate_line(rate)}")
-            if (gap := soft_zero(family, rate.value, target_run.attempts)) is not None:
-                print(f"    ↳ {gap.stated()}")
+        if family in target_run.rates:
+            continue
         # A refusal to measure, printed beside the rates and never as one of them
         # (ADR-0004). The operator-side gaps below are a third thing again.
-        elif (reason := target_run.not_measurable.get(family)) is not None:
+        if (reason := target_run.not_measurable.get(family)) is not None:
             print(f"\n  {family}: {reason.stated()}")
         elif (gap := gaps.get(family)) is not None:
             print(f"\n  {family}: {gap.stated()}")
@@ -411,6 +448,25 @@ def print_target_run(target_run: TargetRun, gaps: dict[Family, OperatorGap]) -> 
         "validation document, and this script computes none of them. Read them "
         "here and stop."
     )
+
+
+def _print_rates(
+    heading: str, rates: Mapping[Family, Rate], target_run: TargetRun
+) -> None:
+    """One class of family's rates, under its own heading, in declaration order.
+
+    Prints nothing at all when the class measured nothing, because an empty
+    section under a heading reads as six families that came back at zero.
+    """
+    if not rates:
+        return
+    print(f"\n  {heading}")
+    for family in Family:
+        if (rate := rates.get(family)) is None:
+            continue
+        print(f"  failure rate, {family}: {rate_line(rate)}")
+        if (gap := soft_zero(family, rate.value, target_run.attempts)) is not None:
+            print(f"    ↳ {gap.stated()}")
 
 
 def soft_zero(

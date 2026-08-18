@@ -349,8 +349,10 @@ agentaudit/
 │   │   ├── registration.py  # nonce issue and echo check, attestation record
 │   │   ├── scanner.py       # declared-control checklist
 │   │   ├── attacker.py      # runs cases against a target endpoint, under budget
-│   │   ├── evaluator.py     # applies success_condition — the verdict
+│   │   ├── evaluator.py     # applies success_condition — the four deterministic verdicts
+│   │   ├── adjudication.py  # the two judged verdicts, blinded — not the judge, and named apart
 │   │   ├── judge.py         # narrative fields only, blinded
+│   │   ├── completion.py    # the bench's own model call — the instrument, never the target
 │   │   ├── rule.py          # the gate rule as declared thresholds
 │   │   ├── scorer.py        # discrimination, intervals, the gate decision, bands
 │   │   ├── assembler.py     # declared-vs-defeated join, coverage gaps, the adaptive section

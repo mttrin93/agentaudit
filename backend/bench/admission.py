@@ -27,7 +27,7 @@ gate has and the reason a case's `[admission]` block records counts rather than 
 `D` somebody computed once.
 """
 
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -36,6 +36,7 @@ from backend.bench.library import (
     AdmissionBar,
     AdmissionReading,
     Case,
+    CaseStatus,
     DiscoveredBy,
     bar_for,
     load_library,
@@ -61,6 +62,7 @@ adds is a second model to face it on.
 __all__ = [
     "MODELS_REQUIRED",
     "AdmissionOutcome",
+    "LibraryProvenance",
     "NotAdmitted",
     "ReadingOutcome",
     "UnevenReading",
@@ -68,6 +70,7 @@ __all__ = [
     "bar_for",
     "counted",
     "decide",
+    "library_provenance",
     "outcome_for",
     "provenance_counts",
     "read",
@@ -345,6 +348,109 @@ def provenance_counts(cases: Iterable[Case]) -> dict[DiscoveredBy, int]:
     for case in cases:
         counts[case.discovered_by] += 1
     return counts
+
+
+@dataclass(frozen=True)
+class LibraryProvenance:
+    """Who found this library, how much of it is still live, and what has retired.
+
+    The two series ADR-0012 asks to be printed on every gate run, in one record
+    because they answer one question between them. The **adaptive fraction of the
+    live library** says how far the library has drifted towards routes fitted to
+    the three reference agents; the **retirement rate by provenance** says whether
+    that drift is doing the damage the bar exists to prevent, because
+    adaptive-discovered cases retiring faster than authored ones is the fingerprint
+    of overfitting. Provenance alone makes the drift visible and does nothing about
+    it — the bar is the control, and these are the instruments that watch it.
+
+    Live means `active`. A retired case is kept, never deleted, because it is
+    evidence that the field moved (CONTEXT.md), and a fraction that counted it
+    would report a library the bench no longer runs.
+
+    Every provenance appears whether or not it is used, so that a fraction of zero
+    reads as a count rather than as an absence of the thing.
+    """
+
+    live: Mapping[DiscoveredBy, int]
+    retired: Mapping[DiscoveredBy, int]
+
+    @property
+    def live_total(self) -> int:
+        return sum(self.live.values())
+
+    def adaptive_fraction(self) -> float | None:
+        """What share of the live library the adaptive attacker found.
+
+        `None` over an empty library rather than zero: a library with no case in it
+        has no composition, and reporting 0.00 would say the attacker found none of
+        something that does not exist.
+        """
+        if self.live_total == 0:
+            return None
+        return self.live[DiscoveredBy.ADAPTIVE] / self.live_total
+
+    def retirement_rate(self, discovered_by: DiscoveredBy) -> float | None:
+        """The share of this provenance's cases that have retired.
+
+        `None` where the provenance has no case at all, for the reason above and
+        for the sharper one this number exists to serve: the comparison it is read
+        in is *adaptive against authored*, and a zero standing in for "none written
+        yet" would read as a provenance that never retires anything.
+        """
+        written = self.live[discovered_by] + self.retired[discovered_by]
+        if written == 0:
+            return None
+        return self.retired[discovered_by] / written
+
+    def stated(self) -> str:
+        """The provenance series as a run prints it, on one denominator.
+
+        The live counts, the adaptive-discovered share of them, and the retirement
+        rate per provenance, in that order and in one block. Two provenance figures
+        printed side by side on *different* denominators would invite exactly the
+        misreading this series exists to prevent, so the live count each figure is
+        read on is on the line with it.
+        """
+        fraction = self.adaptive_fraction()
+        share = (
+            "no case is live, so the library has no composition"
+            if fraction is None
+            else f"{fraction:.2f} adaptive-discovered"
+        )
+        lines = [
+            "provenance of the live library: "
+            + ", ".join(f"{member} {self.live[member]}" for member in DiscoveredBy)
+            + f" — {share}"
+        ]
+        for member in DiscoveredBy:
+            rate = self.retirement_rate(member)
+            retired = (
+                "none written"
+                if rate is None
+                else (
+                    f"{rate:.2f} retired ({self.retired[member]} of "
+                    f"{self.live[member] + self.retired[member]} ever written), "
+                    f"{self.live[member]} live"
+                )
+            )
+            lines.append(f"  retirement rate, {member}: {retired}")
+        return "\n".join(lines)
+
+
+def library_provenance(cases: Iterable[Case]) -> LibraryProvenance:
+    """Split a library by provenance and by whether each case is still live.
+
+    A grouping and nothing more, which is what ADR-0012 said it would cost. The
+    `D` per case per run that *decides* a retirement is #14's series; this reads
+    the status the record already carries, so the two figures are available from a
+    library on disk and from no run at all.
+    """
+    live = dict.fromkeys(DiscoveredBy, 0)
+    retired = dict.fromkeys(DiscoveredBy, 0)
+    for case in cases:
+        counted = retired if case.status is CaseStatus.RETIRED else live
+        counted[case.discovered_by] += 1
+    return LibraryProvenance(live=live, retired=retired)
 
 
 def _successes(verdicts: Sequence[Verdict]) -> int:

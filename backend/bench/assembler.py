@@ -635,6 +635,57 @@ def declared_and_defeated(
     )
 
 
+def reported_episodes(
+    episodes: Iterable[AdaptiveEpisode], target_name: str
+) -> tuple[ReportedEpisode, ...]:
+    """Turn one target's recorded episodes into the rows the adaptive section holds.
+
+    The prose is the attacker's own where it wrote any — a proposed route carries
+    the description `propose_case` was given, which is the only part of a route
+    that is ever written down outside a run (ADR-0008; CONTEXT.md, **route**). An
+    episode that proposed nothing gets a line derived from the record and from
+    nothing else, because there is no other source: what an attacker *would* have
+    said about a route it did not think worth promoting is not evidence.
+
+    **Never payload text**, on either path. A route that beat a target is a working
+    unpublished exploit, and the transcripts that hold it stay on the episode and
+    are not committed (spec story 105).
+
+    Per target, because a section belongs to a result and a result belongs to one
+    target. Filtering here rather than at the call site keeps an episode against
+    one agent out of another agent's section, which is the reporting form of the
+    context isolation ADR-0011 requires of the attacker itself.
+    """
+    return tuple(
+        ReportedEpisode(episode=episode, description=_described(episode))
+        for episode in episodes
+        if episode.target_name == target_name
+    )
+
+
+def _described(episode: AdaptiveEpisode) -> str:
+    """What this episode did, in prose, when the attacker supplied none."""
+    proposed = " ".join(
+        proposal.description.strip()
+        for proposal in episode.proposals
+        if proposal.description.strip()
+    )
+    if proposed:
+        return proposed
+    turns = f"{episode.turns} {'turn' if episode.turns == 1 else 'turns'}"
+    if episode.outcome is EpisodeOutcome.BROKEN:
+        return (
+            f"broke the objective in {turns} and proposed no case, so the route "
+            "is recorded and the library does not grow from it"
+        )
+    if episode.turns == 0:
+        return (
+            "sent nothing to the target. The attacker spent its decisions without "
+            "composing a probe, which is a reading about the attacker"
+        )
+    return f"no break in {turns}, and the attacker proposed nothing"
+
+
 def assemble(
     target_run: TargetRun,
     cases: Sequence[Case],

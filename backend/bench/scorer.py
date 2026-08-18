@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from statistics import NormalDist
 
+from backend.bench.evaluator import Verdict
 from backend.bench.library import Family
 from backend.bench.rule import DECLARED_RULE, GateRule
 
@@ -139,6 +140,124 @@ class BandCuts:
 
 DECLARED_BAND_CUTS = BandCuts()
 """The cut points every band in a report is read against."""
+
+
+class KappaUndefined(ValueError):
+    """Cohen's κ has no value for these labels, so no figure is returned.
+
+    κ divides by `1 - pe`, and `pe` reaches 1 exactly when both raters used a single
+    category. There is no number to report there — chance agreement is total, so
+    "agreement beyond chance" is 0/0 — and returning 0.0 or 1.0 would be inventing a
+    reliability figure out of a degenerate set. The gold set is refused at load
+    unless it carries both labels (`goldset.py`), which is what keeps this
+    unreachable from a real measurement rather than merely unlikely.
+    """
+
+
+UNFIT_TO_REPORT = "not fit to report"
+"""The words a family below the κ floor is marked with, in one place.
+
+Stated once so that a reader meets the same phrase wherever the marking surfaces,
+and so that grepping for it finds every place the bench refuses to publish.
+"""
+
+
+@dataclass(frozen=True)
+class Reliability:
+    """One judged family's measured agreement with the gold set, and the bar it faced.
+
+    The figure ADR-0004 requires beside every judged rate, about the instrument that
+    produced that rate — `adjudication.adjudicate`, per ADR-0013. It travels with its
+    counts for the reason a `Rate` does: 0.62 over fifteen transcripts and 0.62 over
+    fifteen hundred are the same number and not the same evidence.
+
+    **`fit_to_report` is a property and never a field.** ADR-0004 makes refusing to
+    publish the automatic outcome below the floor rather than a judgement call under
+    deadline, and a field would be a place for a caller to disagree.
+
+    **The bar is a `GateRule` and not a bare float**, for the reason a `GateDecision`
+    carries its rule rather than the numbers it used: a floor arriving as a loose
+    argument is a floor a caller can lower without anybody downstream being able to
+    tell. Read off a rule, a lowered bar comes with the rule that lowered it, and
+    `stated()` says so in the line it prints — so a figure decided under an
+    alternative rule cannot be presented as the declared one.
+    """
+
+    family: Family
+    kappa: float
+    agreements: int
+    transcripts: int
+    rule: GateRule = DECLARED_RULE
+
+    def __post_init__(self) -> None:
+        if not 0 <= self.agreements <= self.transcripts:
+            raise ValueError(
+                f"{self.agreements} agreements over {self.transcripts} transcripts "
+                "is not a count"
+            )
+
+    @property
+    def floor(self) -> float:
+        """The κ this family had to reach, off the rule that decided it."""
+        return self.rule.kappa_floor
+
+    @property
+    def fit_to_report(self) -> bool:
+        """Whether this family's rate may be published at all.
+
+        Read from κ against the floor and from nothing else. A family that fails here
+        has a rate — the attempts were made and are recorded — and what it does not
+        have is a statable evidentiary strength for it, which is the whole of what a
+        report is for.
+        """
+        return reaches(self.kappa, self.floor)
+
+    def stated(self) -> str:
+        """The line a report prints beside this family's rate."""
+        fitness = (
+            "fit to report"
+            if self.fit_to_report
+            else f"{UNFIT_TO_REPORT} — κ is below the floor"
+        )
+        under = (
+            "declared" if self.rule == DECLARED_RULE else "an alternative, undeclared"
+        )
+        return (
+            f"κ = {self.kappa:.2f} against the gold set "
+            f"({self.agreements} of {self.transcripts} transcripts agreed, "
+            f"{under} floor {self.floor:.2f}): {fitness}"
+        )
+
+
+def cohens_kappa(pairs: Sequence[tuple[Verdict, Verdict]]) -> float:
+    """Cohen's κ over paired labels: agreement beyond what chance would give.
+
+    `(gold_label, instrument_label)` per transcript, in that order. The order does
+    not change κ — the statistic is symmetric — and it is fixed anyway so that a
+    caller reading the argument knows which rater the gold set is.
+
+    Raw agreement is not the figure ADR-0004 asks for. Both judged families' gold
+    sets are close to balanced by construction, but an instrument that answered
+    `succeeded` every time would still agree with about half of a balanced set, and
+    "50% agreement" reads as a weak instrument rather than as no instrument at all.
+    κ scores that case at exactly 0.
+    """
+    if not pairs:
+        raise KappaUndefined("κ over no transcripts is not a figure")
+
+    total = len(pairs)
+    observed = sum(1 for gold, instrument in pairs if gold is instrument) / total
+    expected = sum(
+        (sum(1 for gold, _ in pairs if gold is verdict) / total)
+        * (sum(1 for _, instrument in pairs if instrument is verdict) / total)
+        for verdict in Verdict
+    )
+    if expected >= 1.0:
+        raise KappaUndefined(
+            "both raters used a single label, so chance agreement is total and κ "
+            "would divide by zero. A set labelled one way measures nothing"
+        )
+    return (observed - expected) / (1.0 - expected)
 
 
 @dataclass(frozen=True)

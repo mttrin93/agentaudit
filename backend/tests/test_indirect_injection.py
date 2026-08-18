@@ -35,6 +35,7 @@ from backend.bench.calibration import CalibrationResult, run_calibration
 from backend.bench.library import (
     Case,
     CaseStatus,
+    DiscoveredBy,
     ExternalId,
     Family,
     SuccessCondition,
@@ -92,6 +93,7 @@ def an_injection_case(payload: str, case_id: str) -> Case:
         requires=(),
         added_on=date(2026, 8, 18),
         trigger=Trigger.NEW_AGENT_TYPE,
+        discovered_by=DiscoveredBy.AUTHORED,
         status=CaseStatus.ACTIVE,
     )
 

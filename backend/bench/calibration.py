@@ -2,9 +2,9 @@
 
 Everything in the pre-web scope is reached from here: the case library, the
 attestation, the approval interrupt and its budget, registration and the nonce
-protocol, the precondition check, the attempt, and the verdict. Ten attempts per
-case (#4), the judge (#8) and the gate decision (#13) extend this callable rather
-than adding a second way in.
+protocol, the applicability and precondition checks, the attempt, and the verdict.
+Ten attempts per case (#4), the judge (#8) and the gate decision (#13) extend this
+callable rather than adding a second way in.
 
 The order below is the order ADR-0007 requires and is not an implementation
 detail: attestation, then the estimate, then the halt, and only then anything that
@@ -32,6 +32,7 @@ from dataclasses import dataclass, field
 
 from backend.bench.adaptive.budget import DECLARED_ADAPTIVE_BUDGET, AdaptiveBudget
 from backend.bench.adjudication import Completion, NoAdjudicator
+from backend.bench.applicability import SkippedCase, applicable, skipped_cases
 from backend.bench.attacker import run_case
 from backend.bench.contract import TargetConfig
 from backend.bench.evaluator import Verdict
@@ -76,6 +77,21 @@ class TargetRun:
     that met every precondition its library asked for.
     """
 
+    not_applicable: tuple[SkippedCase, ...] = ()
+    """The cases this target was never sent, because they were not written for it.
+
+    A third field rather than a third value in either of the two above, and the
+    reason is the same reason `not_measurable` is not a rate of zero: these are
+    three different answers. A rate says what was measured, `not_measurable` says
+    the target cannot answer the question, and this says the bench never asked —
+    the library has no case for this agent type, which is the bench's gap and not
+    the target's (`applicability.py`).
+
+    Per case rather than per family, because a family can have some cases that
+    apply and some that do not, and the rate over the ones that ran is a real
+    number that a family-level skip would have to overwrite.
+    """
+
     def __post_init__(self) -> None:
         both = set(self.not_measurable) & {attempt.family for attempt in self.attempts}
         if both:
@@ -83,6 +99,20 @@ class TargetRun:
                 f"{sorted(both)} were reported not measurable and also attempted "
                 "against this target. Not measurable is a distinct outcome from "
                 "pass and from fail, and a family cannot hold two of the three"
+            )
+
+        attempted = {attempt.case_id for attempt in self.attempts}
+        sent_anyway = sorted(
+            skipped.case_id
+            for skipped in self.not_applicable
+            if skipped.case_id in attempted
+        )
+        if sent_anyway:
+            raise ValueError(
+                f"{sent_anyway} were reported as not written for this target and "
+                "were also run against it. A case that does not apply is skipped "
+                "explicitly, and a skip that spent an attempt is a verdict counted "
+                "for a payload the case never claimed would land"
             )
 
         classes: dict[Family, set[VerdictClass]] = defaultdict(set)
@@ -250,22 +280,29 @@ def _run_target(
     adjudicator: Completion | None,
     rule: GateRule,
 ) -> TargetRun:
-    """Register one target, then run every case against it if it registered."""
+    """Register one target, then run the cases that apply to it if it registered."""
     nonce = issue_nonce()
     if plant_nonce is not None:
         plant_nonce(target, nonce)
     registration = register(target, nonce, attestation, run_state)
 
-    # Preconditions gate measurability, never scoring: a case this target cannot
-    # answer is skipped before an attempt is spent on it, and the families left
-    # with nothing to run report not measurable rather than a rate (ADR-0004).
+    # Two filters, in this order, and both ahead of the first attempt.
+    #
+    # Applicability first: a case not written for this target's agent type is not
+    # this target's business at all, so asking what its preconditions are would be
+    # answering a question about a case that is never going to run (spec story 16).
+    # Then preconditions, which gate measurability and never scoring: a case this
+    # target cannot answer is skipped before an attempt is spent on it, and the
+    # families left with nothing to run report not measurable rather than a rate
+    # (ADR-0004).
+    written_for = applicable(cases, target)
     attempts: tuple[Attempt, ...] = ()
     if registration.complete:
         # The nonce that proved control is the canary under the leakage case:
         # one planted value, two roles (ADR-0007).
         attempts = tuple(
             attempt
-            for case in runnable(cases, target)
+            for case in runnable(written_for, target)
             for attempt in run_case(
                 target,
                 case,
@@ -281,5 +318,10 @@ def _run_target(
         registration=registration,
         attempts=attempts,
         rule=rule,
-        not_measurable=not_measurable_families(cases, target),
+        # Read over the cases written for this target, never over the whole
+        # library: a family whose every case was skipped for the agent type has
+        # not been found unmeasurable, and reporting it that way would send the
+        # operator looking for a capability their target is not missing.
+        not_measurable=not_measurable_families(written_for, target),
+        not_applicable=skipped_cases(cases, target),
     )

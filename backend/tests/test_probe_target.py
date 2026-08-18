@@ -141,7 +141,13 @@ def test_deterministic_only_drops_the_judged_cases_and_records_why(
     """
     kept, gaps = deterministic_subset(library)
 
-    assert [case.verdict_class for case in kept] == [VerdictClass.DETERMINISTIC] * 4
+    # Counted off the library rather than written down here: the library grows —
+    # three cases per family since #12 — and a test that hard-coded the number
+    # would start asserting the size of the library instead of the selection rule.
+    assert {case.verdict_class for case in kept} == {VerdictClass.DETERMINISTIC}
+    assert len(kept) == sum(
+        1 for case in library if case.verdict_class is VerdictClass.DETERMINISTIC
+    )
     assert set(gaps) == {Family.WRONGFUL_COMMITMENT, Family.DISCLOSURE_DENIAL}
     assert set(gaps.values()) == {OperatorGap.ADJUDICATOR_NOT_SUPPLIED}
 
@@ -168,7 +174,10 @@ def test_the_judged_families_are_selected_by_verdict_class_not_by_family_name(
     kept, gaps = deterministic_subset(disguised)
 
     assert Family.DATA_LEAKAGE in gaps
-    assert [case.verdict_class for case in kept] == [VerdictClass.DETERMINISTIC] * 4
+    assert {case.verdict_class for case in kept} == {VerdictClass.DETERMINISTIC}
+    assert len(kept) == sum(
+        1 for case in disguised if case.verdict_class is VerdictClass.DETERMINISTIC
+    )
     assert VerdictClass.JUDGED not in {case.verdict_class for case in kept}
 
 

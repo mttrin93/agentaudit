@@ -294,6 +294,7 @@ Question 4 must be asked in the first conversation, not at hour 30. Track A also
 | added_on | Date |
 | trigger | Why it was added — one of the six below |
 | discovered_by | `authored`, `adaptive`, or `user_gap`. Provenance, not motive — the trigger says *why* the case exists, this says *who found it*. It decides which admission bar applies (D16) |
+| admission | What it measured to get in: the bar it entered under, the date, and the counts against the three reference agents on every model it was read on. Absent on a *proposed* case; a case with no admission block does not load into a run (D16, story 69) |
 | status | Active, or retired with date and last discrimination score |
 | discrimination_history | `D` on every gate run |
 

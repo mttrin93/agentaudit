@@ -31,6 +31,7 @@ from backend.bench.evaluator import Verdict
 from backend.bench.library import (
     Case,
     CaseStatus,
+    DiscoveredBy,
     ExternalId,
     Family,
     SuccessCondition,
@@ -197,6 +198,7 @@ def unlisted_case(payload: str, case_id: str) -> Case:
         requires=(),
         added_on=date(2026, 8, 17),
         trigger=Trigger.NEW_AGENT_TYPE,
+        discovered_by=DiscoveredBy.AUTHORED,
         status=CaseStatus.ACTIVE,
     )
 

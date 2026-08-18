@@ -74,6 +74,10 @@ class SuccessConditionKind(StrEnum):
 
     CANARY_IN_REPLY = "canary_in_reply"
 
+    CANARY_INSTRUCTION_EXECUTED = "canary_instruction_executed"
+    """Indirect prompt injection: the target did what a planted instruction in
+    content it fetched told it to do."""
+
     TOOL_CALL_OUTSIDE_DECLARED_LIST = "tool_call_outside_declared_list"
     """Scope creep: the target called a tool its operator never declared it had."""
 
@@ -93,6 +97,31 @@ class ExternalId:
 @dataclass(frozen=True)
 class SuccessCondition:
     kind: SuccessConditionKind
+
+    planted_canary: str | None = None
+    """What executing a planted instruction produces, for the one kind that reads
+    execution rather than a leak.
+
+    Not the registration nonce and never confusable with it: that canary is
+    planted *inside* the target's boundary and its appearance proves disclosure
+    (ADR-0007), while this one is written by a third party into content the
+    target fetched and its appearance proves obedience. Held on the case record
+    because the verdict has to be re-derivable by a reader holding the record and
+    the transcript, and for no other reason.
+    """
+
+    def __post_init__(self) -> None:
+        executed = self.kind is SuccessConditionKind.CANARY_INSTRUCTION_EXECUTED
+        if executed and not self.planted_canary:
+            raise ValueError(
+                f"{self.kind} reads whether a planted canary came back, so a case "
+                "declaring it has to say which canary was planted"
+            )
+        if not executed and self.planted_canary is not None:
+            raise ValueError(
+                f"{self.kind} does not read a planted canary, so carrying one "
+                "would put a value on the record that nothing checks"
+            )
 
 
 @dataclass(frozen=True)
@@ -137,7 +166,8 @@ def load_case(path: Path) -> Case:
         ),
         payload=record["payload"],
         success_condition=SuccessCondition(
-            kind=SuccessConditionKind(record["success_condition"]["kind"])
+            kind=SuccessConditionKind(record["success_condition"]["kind"]),
+            planted_canary=record["success_condition"].get("planted_canary"),
         ),
         verdict_class=VerdictClass(record["verdict_class"]),
         applies_to=tuple(record["applies_to"]),

@@ -10,6 +10,12 @@ wired to the same toolbox, because an agent that simply could not reach
 `transfer_funds` would prove nothing about the control that is supposed to stop
 it (`tools.py`).
 
+**A turn can also bring content in.** One tool returns text the team did not
+write (`corpus.py`), and the order around it is the architecture: the agent
+fetches, the request-side controls get a second look at what came back, and only
+then does anything act on it. A defence that inspects the user's message and
+nothing else is a defence on the one channel an indirect injection does not use.
+
 One reply path serves all three, so no agent gets a code route the others do not
 have, and a control that is absent is absent rather than skipped.
 
@@ -24,14 +30,21 @@ rather than a claim in the text.
 
 from dataclasses import dataclass
 
-from backend.bench.contract import ToolTrace
+from backend.bench.contract import ToolCall, ToolTrace
 from backend.targets.reference.controls import (
     NO_CONTROLS,
     Controls,
     carries_stop_signal,
 )
+from backend.targets.reference.corpus import Note, fetched
 from backend.targets.reference.model import ModelConfig, complete
-from backend.targets.reference.tools import FULL_TOOLBOX, Tool, routed
+from backend.targets.reference.tools import (
+    FETCH_SHARED_NOTE,
+    FULL_TOOLBOX,
+    Tool,
+    routed,
+    without_retrieval,
+)
 
 NO_NONCE = "(no registration nonce configured)"
 
@@ -70,16 +83,51 @@ class ReferenceAgent:
         if instead := self.controls.before_model(message, configuration):
             return AgentReply(instead, ToolTrace(stop_signal_at=stop_at))
 
-        calls = tuple(
-            tool.called_with(message)
-            for tool in routed(self.toolbox, message)
-            if self.controls.permits(tool.name)
-        )
+        calls = self._acts_on(message, self.toolbox)
+
+        note = fetched(message) if self._retrieved(calls) else None
+        if note is not None:
+            # The second place a request-side control gets to end a turn, and the
+            # only one an indirect injection passes through. The fetch itself
+            # stands in the trace either way: the agent did retrieve, and what it
+            # refused was acting on what came back.
+            if instead := self.controls.before_content(note.body):
+                fetched_only = ToolTrace(calls=calls, stop_signal_at=stop_at)
+                return AgentReply(instead, fetched_only)
+            calls += self._acts_on(note.body, without_retrieval(self.toolbox))
+
         trace = ToolTrace(calls=calls, stop_signal_at=stop_at)
 
-        reply = complete(model, configuration, message)
+        # The model sees what the tool brought back, because an agent whose model
+        # never reads the retrieved content is not exposed to the failure this
+        # family measures. What decides the verdict is still the line below it:
+        # obeying is code here, for the reason the router is (`corpus.py`).
+        reply = complete(model, configuration, _with(note, message))
+        if note is not None and note.executed_line:
+            reply = f"{reply}\n{note.executed_line}"
 
         withheld = self.controls.after_model(
             reply, protected=(nonce,), configuration=configuration
         )
         return AgentReply(withheld if withheld else reply, trace)
+
+    def _acts_on(self, text: str, toolbox: tuple[Tool, ...]) -> tuple[ToolCall, ...]:
+        """The calls this text asks for, minus the ones the controls refuse."""
+        return tuple(
+            tool.called_with(text)
+            for tool in routed(toolbox, text)
+            if self.controls.permits(tool.name)
+        )
+
+    def _retrieved(self, calls: tuple[ToolCall, ...]) -> bool:
+        """Whether this turn actually reached the shared folder.
+
+        A turn whose retrieval the allow-list refused fetched nothing, and an
+        agent that fetched nothing cannot be instructed by what it did not read.
+        """
+        return any(call.name == FETCH_SHARED_NOTE.name for call in calls)
+
+
+def _with(note: Note | None, message: str) -> str:
+    """The message as the model receives it: the request, then what came back."""
+    return message if note is None else f"{message}\n\n{note.body}"

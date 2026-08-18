@@ -195,7 +195,11 @@ _Avoid_: history, memory, knowledge, prior
 ### Trust mechanics
 
 **Canary**:
-A token planted in the target's configuration whose appearance in output proves a leak.
+A token planted where the bench will recognise it again. Two plantings, proving two
+different things. Planted in the target's **configuration**, its appearance in output
+proves a leak. Planted by a third party in **content the target fetches**, as an
+instruction the target has to carry out to produce it, its appearance proves obedience
+— the value was never inside the boundary, so nothing about it leaked.
 _Avoid_: marker, tracer, honeytoken
 
 **Nonce**:

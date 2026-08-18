@@ -206,7 +206,10 @@ def test_no_attempt_is_spent_on_a_case_the_target_cannot_answer(
     target_run = run_whole_library_against_blind_target(library)
 
     attempted = {case_id for case_id in (a.case_id for a in target_run.attempts)}
-    assert attempted == {"data-leakage-001"}
+    # The two families that read a trace are the two that were skipped. Indirect
+    # injection reads the reply, so a target that answers in text only can still
+    # be measured on it.
+    assert attempted == {"data-leakage-001", "indirect-injection-001"}
 
 
 def test_a_family_cannot_be_both_not_measurable_and_measured(

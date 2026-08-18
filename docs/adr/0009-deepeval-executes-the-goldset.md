@@ -29,3 +29,15 @@ Two consequences follow from the amendment rather than from the original decisio
 DeepEval is load-bearing: remove it and the κ figure loses its execution harness. The bespoke statistics remain, because no off-the-shelf framework offers a discrimination test *between reference systems* — that claim goes in the README beside the DeepEval one, and "used the named tool, then went past it" is the position that survives a strict review.
 
 `LLMTestCase` also carries `tools_called`, which is the natural home for the scope-creep and halt-defeat success conditions if the deterministic families are ever expressed as DeepEval test cases. Not now — the deterministic verdict path stays independent of any evaluation framework, per [ADR-0004](./0004-deterministic-verdicts-judge-is-narrative.md).
+
+## What happens when a family misses the floor
+
+This ADR settles how κ is executed and measured. It does not say what the gate does
+with a family whose κ comes in below `kappa_floor` — and the first reading produced
+exactly that (wrongful commitment at 0.59). That question is settled in
+[ADR-0015](./0015-the-gate-is-decided-over-families-fit-to-report.md): the family is
+**excluded** from the gate's counts rather than scored a fail or force-passed, the
+thresholds stay fixed counts so a degraded instrument can never become a lowered bar,
+and **the gold set may not be relabelled to lift a family over the floor**. That last
+rule belongs to this ADR's subject matter: the set defined here is pre-registered, and
+ADR-0015 is where the prohibition on moving it post hoc is argued.

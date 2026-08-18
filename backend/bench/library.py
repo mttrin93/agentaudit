@@ -57,6 +57,53 @@ class CaseStatus(StrEnum):
     RETIRED = "retired"
 
 
+class DiscoveredBy(StrEnum):
+    """Who found a case. Provenance, and the field that selects its admission bar.
+
+    Distinct from `Trigger`, which says *why* the case exists — a case can be
+    triggered by a published technique and still have been found by the adaptive
+    attacker, and the two answers are not interchangeable. Kept as its own closed
+    set for the reason every other enumeration here is closed: a library whose
+    provenance is free text cannot report what fraction of itself the attacker
+    wrote (ADR-0012).
+
+    The member is not decoration. `AUTHORED` and `USER_GAP` face the single-model
+    bar of ADR-0003; `ADAPTIVE` faces the cross-model bar of ADR-0012, because the
+    attacker discovers on the same three agents the gate admits against and a route
+    fitted to that set has to prove itself on a model it was not fitted to. The
+    mapping lives in `backend/bench/admission.py` and is applied to the record here
+    by `Case.__post_init__`.
+    """
+
+    AUTHORED = "authored"
+    """Written by hand, against no measurement of these three agents."""
+
+    ADAPTIVE = "adaptive"
+    """Found by the adaptive attacker and promoted through `propose_case`. Faces
+    the second bar."""
+
+    USER_GAP = "user_gap"
+    """Written because a user reported an exposure the library did not cover. Not
+    fitted to the reference agents either, so it keeps the single-model rule."""
+
+
+class AdmissionBar(StrEnum):
+    """The bar a case actually entered the library under, recorded on the record.
+
+    Recorded rather than derived at read time, and printed beside the case, because
+    ADR-0012 requires a reader to be able to tell an adaptive-discovered case from
+    an authored one *in the report*. A bar recomputed from `discovered_by` whenever
+    someone asked would say what the rule is, not what happened.
+    """
+
+    SINGLE_MODEL = "single_model"
+    """`D >= 0.4` with disjoint Wilson intervals against the three reference agents
+    on one underlying model. ADR-0003."""
+
+    CROSS_MODEL = "cross_model"
+    """The same, on the second underlying model as well as the first. ADR-0012."""
+
+
 class Precondition(StrEnum):
     """What a target must be able to do before a case can be run against it.
 
@@ -186,6 +233,86 @@ class JudgedCondition:
 
 
 @dataclass(frozen=True)
+class AdmissionReading:
+    """What one case scored against the three reference agents on one model.
+
+    Counts and not a rate, and certainly not a stored `D`. A rate is
+    `successes / attempts` and an interval is a function of both, so recording the
+    derived numbers would let a record carry a `D` that its own counts contradict —
+    and admission is the one place in the bench where the number decides whether a
+    case may ever reach a user. The arithmetic is `backend/bench/admission.py`,
+    reading these counts through the same scorer functions the gate uses.
+
+    The weak agent's count is recorded and is not part of the bar: admission is
+    `D` plus interval separation between the two ends (spec story 70), while the
+    ordering across all three is the gate's check. It is here because a reading
+    that threw it away could not answer the retirement question later.
+    """
+
+    model: str
+    """The reference agents' underlying model, as `<provider>:<model>`."""
+
+    attempts: int
+    """Attempts per agent behind each count below."""
+
+    hardened: int
+    weak: int
+    trivial: int
+    adjudicator: str | None = None
+    """The model that decided the verdicts, for a judged case. `None` for a case
+    a success condition decided, where no instrument stood between the reply and
+    the verdict."""
+
+    def __post_init__(self) -> None:
+        if self.attempts <= 0:
+            raise ValueError(
+                f"an admission reading on {self.model!r} over {self.attempts} "
+                "attempts is not a measurement"
+            )
+        for agent, successes in (
+            ("hardened", self.hardened),
+            ("weak", self.weak),
+            ("trivial", self.trivial),
+        ):
+            if not 0 <= successes <= self.attempts:
+                raise ValueError(
+                    f"{successes} successes for the {agent} agent in "
+                    f"{self.attempts} attempts is not a count"
+                )
+
+
+@dataclass(frozen=True)
+class AdmissionRecord:
+    """The measurement a case entered the library on, and the bar it entered under.
+
+    Held on the record so that admission is evidence rather than an assertion: a
+    reader with this block and `backend/bench/admission.py` can re-derive the
+    decision that let the case in, which is the same property ADR-0003 requires of
+    the gate. A case whose recorded reading does not clear its own bar does not
+    load into the library at all (`admission.admitted_library`), so a rejected case
+    cannot be parked on disk in a state that reads as admitted.
+    """
+
+    bar: AdmissionBar
+    admitted_on: date
+    readings: tuple[AdmissionReading, ...]
+
+    def __post_init__(self) -> None:
+        if not self.readings:
+            raise ValueError(
+                f"an admission under the {self.bar} bar with no reading behind it "
+                "is an assertion, not a measurement"
+            )
+        models = {reading.model for reading in self.readings}
+        if self.bar is AdmissionBar.CROSS_MODEL and len(models) < 2:
+            raise ValueError(
+                f"the {self.bar} bar is separation on a second underlying model as "
+                f"well as the first, and these readings are all on {sorted(models)} "
+                "(ADR-0012)"
+            )
+
+
+@dataclass(frozen=True)
 class Case:
     id: str
     family: Family
@@ -210,6 +337,14 @@ class Case:
     """
     added_on: date
     trigger: Trigger
+    discovered_by: DiscoveredBy
+    """Who found this case, from a closed set of three.
+
+    Required rather than defaulted, and deliberately not defaulted to `authored`:
+    a default would make the safest answer the one a record acquires by silence,
+    and the safest answer is the one that selects the *weaker* bar (ADR-0012).
+    """
+
     status: CaseStatus
     citation: str | None = None
     """Where a published technique came from. Not the trigger, which says why
@@ -221,6 +356,16 @@ class Case:
     Last in the field list rather than beside `success_condition` only because a
     field with a default cannot precede one without: the pairing that matters is
     enforced below, not by the order these are written in.
+    """
+
+    admission: AdmissionRecord | None = None
+    """What this case measured against the three reference agents to get in.
+
+    `None` on a *proposed* case — one that has been written but not yet run — which
+    is the state `scripts/admit.py` reads and the state `propose_case` produces
+    (#17). It is not a state the library tolerates: `admission.admitted_library`
+    refuses a case with no admission record, so a case that has not earned its place
+    cannot be loaded into a run and cannot reach a user (spec story 69).
     """
 
     def __post_init__(self) -> None:
@@ -235,7 +380,29 @@ class Case:
 
         The match has no fallback branch on purpose: a third verdict class must
         fail the type check rather than load with no criterion at all.
+
+        Two further refusals sit beside it, and both are about a case being run
+        against something it was never written for. A record that applies to no
+        agent type can never be run at all, and one whose provenance demands the
+        cross-model bar may not record having entered under the single-model one —
+        the bar is selected by `discovered_by` (ADR-0012), so a record that
+        disagrees with its own provenance is a case that got in on the wrong test.
         """
+        if not self.applies_to:
+            raise ValueError(
+                f"{self.id} applies to no agent type, so there is no target it "
+                "could ever be run against"
+            )
+
+        required = bar_for(self.discovered_by)
+        if self.admission is not None and self.admission.bar is not required:
+            raise ValueError(
+                f"{self.id} is {self.discovered_by} and records entering under the "
+                f"{self.admission.bar} bar, where that provenance requires "
+                f"{required}. An adaptive-discovered case is graded on a model it "
+                "was not discovered on (ADR-0012)"
+            )
+
         match self.verdict_class:
             case VerdictClass.DETERMINISTIC:
                 if self.success_condition is None:
@@ -304,6 +471,51 @@ def load_case(path: Path) -> Case:
         requires=tuple(Precondition(name) for name in record["requires"]),
         added_on=record["added_on"],
         trigger=Trigger(record["trigger"]),
+        discovered_by=DiscoveredBy(record["discovered_by"]),
         status=CaseStatus(record["status"]),
         citation=record.get("citation"),
+        admission=_admission(record.get("admission")),
     )
+
+
+def _admission(block: dict[str, Any] | None) -> AdmissionRecord | None:
+    """The admission block of a record, or `None` for a case not yet admitted."""
+    if block is None:
+        return None
+    return AdmissionRecord(
+        bar=AdmissionBar(block["bar"]),
+        admitted_on=block["admitted_on"],
+        readings=tuple(
+            AdmissionReading(
+                model=reading["model"],
+                attempts=reading["attempts"],
+                hardened=reading["hardened"],
+                weak=reading["weak"],
+                trivial=reading["trivial"],
+                adjudicator=reading.get("adjudicator"),
+            )
+            for reading in block["readings"]
+        ),
+    )
+
+
+def bar_for(discovered_by: DiscoveredBy) -> AdmissionBar:
+    """Which bar this provenance has to clear.
+
+    The mapping ADR-0012 states, held here rather than in
+    `backend/bench/admission.py` for one reason: the record enforces it at load
+    (`Case.__post_init__`), and the arithmetic that *applies* a bar reads the
+    scorer, which reads this module. `admission.bar_for` is the public name for
+    this function and the only one anything outside this module should call.
+
+    The match has no fallback branch on purpose: a fourth provenance must fail the
+    type check rather than acquire the weaker bar by default.
+    """
+    match discovered_by:
+        case DiscoveredBy.ADAPTIVE:
+            return AdmissionBar.CROSS_MODEL
+        case DiscoveredBy.AUTHORED | DiscoveredBy.USER_GAP:
+            # Neither was fitted to these three agents, so the selection pressure
+            # the second bar exists to counter is not acting on it. Stated as a
+            # single branch because it is one reason, not two.
+            return AdmissionBar.SINGLE_MODEL

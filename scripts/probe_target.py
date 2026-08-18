@@ -53,10 +53,11 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 from backend.bench.adjudication import Completion
+from backend.bench.admission import NotAdmitted, admitted_library
 from backend.bench.calibration import PlantNonce, TargetRun, run_calibration
 from backend.bench.completion import DEFAULT_ADJUDICATOR_MODEL, completion_for
 from backend.bench.contract import TargetConfig
-from backend.bench.library import Case, Family, VerdictClass, load_library
+from backend.bench.library import Case, Family, VerdictClass
 from backend.bench.registration import ECHO_PROBE, NONCE_PREFIX
 from backend.bench.rule import DECLARED_RULE
 from backend.bench.scorer import Rate
@@ -280,7 +281,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         declared_tools=tuple(args.declared_tools),
     )
 
-    cases = load_library(CASES_DIR)
+    try:
+        # The admitted library, never the raw one: a case that has not separated the
+        # three reference agents may not be sent to somebody's production-adjacent
+        # endpoint on the strength of nobody having checked (#12, spec story 69).
+        cases = admitted_library(CASES_DIR)
+    except NotAdmitted as unearned:
+        print(f"The library holds a case that did not earn its place:\n{unearned}")
+        return EXIT_WITHHELD
     gaps: dict[Family, OperatorGap] = {}
     if args.deterministic_only:
         cases, gaps = deterministic_subset(cases)
@@ -354,12 +362,15 @@ def print_header(
         "\nREAD THIS BEFORE ANY NUMBER BELOW\n"
         "The library's cases are written for a document assistant — supplier "
         "notes, August invoices, a shared inbox, settling a balance. This target "
-        f"is registered as '{target.agent_type}'. Nothing filters cases by agent "
-        "type: 'applies_to' is recorded on every case and read by nothing, so "
-        "every case is sent exactly as written. A low rate can therefore mean the "
-        "payload found no referent in this target's domain rather than that the "
-        "target held. These numbers are evidence about payloads that landed and "
-        "say nothing about ones that missed."
+        f"is registered as '{target.agent_type}'. Every case declares the agent "
+        "types it was written for, and one outside this target's type is not sent: "
+        "the skip is printed with the results and counted nowhere, so an "
+        "inapplicable case can never arrive as a pass (spec story 16). What that "
+        "check cannot do is read your agent. The type is your own word for it, so a "
+        "booking agent registered as 'assistant' is sent every case exactly as "
+        "written, and a low rate can then mean the payload found no referent in "
+        "this target's domain rather than that the target held. These numbers are "
+        "evidence about payloads that landed and say nothing about ones that missed."
     )
 
 
@@ -529,6 +540,12 @@ def print_target_run(target_run: TargetRun, gaps: dict[Family, OperatorGap]) -> 
             print(f"\n  {family}: {reason.stated()}")
         elif (gap := gaps.get(family)) is not None:
             print(f"\n  {family}: {gap.stated()}")
+
+    # A fourth answer, and the one that is about the library rather than about this
+    # target: a case not written for this agent type was not sent, no attempt was
+    # spent on it, and it is in no denominator above (`applicability.py`).
+    for skipped in target_run.not_applicable:
+        print(f"\n  {skipped.stated()}")
 
     print(
         "\nNot a gate result, and not calibration. This target is not a reference "

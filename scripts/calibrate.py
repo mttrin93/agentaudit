@@ -42,10 +42,16 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
+from backend.bench.admission import (
+    NotAdmitted,
+    admitted_library,
+    outcome_for,
+    provenance_counts,
+)
 from backend.bench.calibration import CalibrationResult, TargetRun, run_calibration
 from backend.bench.completion import DEFAULT_ADJUDICATOR_MODEL, completion_for
 from backend.bench.contract import TargetConfig
-from backend.bench.library import Family, VerdictClass, load_library
+from backend.bench.library import Case, Family, VerdictClass
 from backend.bench.rule import DECLARED_RULE
 from backend.bench.scorer import discrimination
 from backend.graph.budget import BudgetExceeded, Layer, RunBudget
@@ -138,7 +144,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         return EXIT_WITHHELD
 
     model = ModelConfig.parse(args.model)
-    cases = load_library(CASES_DIR)
+    try:
+        # The admitted library, never the raw one: a case that has not separated the
+        # three reference agents has not earned a place in a run, and the loader is
+        # where that is enforced rather than remembered (#12, spec story 69).
+        cases = admitted_library(CASES_DIR)
+    except NotAdmitted as unearned:
+        print(f"The library holds a case that did not earn its place:\n{unearned}")
+        return EXIT_WITHHELD
     auth_token = secrets.token_urlsafe(16)
 
     try:
@@ -191,7 +204,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         print("Nothing was sent, and nothing was spent.")
         return EXIT_DECLINED
 
-    _print_result(result, model, args.adjudicator_model, len(cases))
+    _print_result(result, model, args.adjudicator_model, cases)
     refused = [run for run in result.target_runs if run.registration.refused]
     return 1 if refused else 0
 
@@ -200,12 +213,13 @@ def _print_result(
     result: CalibrationResult,
     model: ModelConfig,
     adjudicator_model: str,
-    case_count: int,
+    cases: Sequence[Case],
 ) -> None:
     print(f"reference agent model: {model}")
     print(f"adjudicating model:    {adjudicator_model}  (judged families only)")
-    print(f"cases loaded:          {case_count}")
+    print(f"cases loaded:          {len(cases)}")
     print(f"attempts per case:     {DECLARED_RULE.attempts_per_case}")
+    _print_provenance(cases)
 
     for target_run in result.target_runs:
         registration = target_run.registration
@@ -229,6 +243,11 @@ def _print_result(
         # measure is a third outcome, not a rate of zero (ADR-0004).
         for family, reason in target_run.not_measurable.items():
             print(f"  {family}: {reason.stated()}")
+        # And a fourth: a case this target was never sent, because it was not
+        # written for its agent type. Not a rate, not a refusal to measure, and
+        # never counted as a pass (`applicability.py`, spec story 16).
+        for skipped in target_run.not_applicable:
+            print(f"  {skipped.stated()}")
         if not target_run.rates:
             print("  failure rate: not measured — no attempt was made")
 
@@ -289,6 +308,28 @@ def _discrimination(target_runs: Sequence[TargetRun], family: Family) -> str:
         f"D = {score:.2f} ({TRIVIAL.name} {trivial.value:.2f} − "
         f"{HARDENED.name} {hardened.value:.2f}) — not a gate result"
     )
+
+
+def _print_provenance(cases: Sequence[Case]) -> None:
+    """Who found this library, and the bar each case entered under.
+
+    Printed on every run, because ADR-0012 asks for the adaptive-discovered
+    fraction of the *live* library rather than for a number somebody can look up:
+    a library filling with routes fitted to these three agents should arrive as a
+    series across runs and not as a surprise at the end of one.
+
+    Every provenance is printed whether or not it is used, so a fraction of zero
+    reads as a count rather than as an absence of the thing.
+    """
+    counts = provenance_counts(cases)
+    print(
+        "provenance:            "
+        + ", ".join(f"{member} {counts[member]}" for member in counts)
+    )
+    for case in cases:
+        # The bar beside the case, so an adaptive-discovered case is distinguishable
+        # from an authored one by reading the report (ADR-0012).
+        print(f"  {outcome_for(case).stated()}")
 
 
 if __name__ == "__main__":

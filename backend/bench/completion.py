@@ -50,6 +50,23 @@ two settings apart is what lets #15 move one without moving the other.
 """
 
 
+DEFAULT_ATTACKER_MODEL = "openrouter:openai/gpt-4.1-mini"
+"""The model the adaptive attacker runs on, and a third declared setting.
+
+Not the adjudicator's, although the string is the same today, and not the
+reference agents'. Three instruments, three settings, for the reason #15 needs:
+moving the model under the agents must not move the model deciding a judged
+family, and neither of those may move the attacker — an adaptive layer whose
+attacker changed with the target's model would make `A_break` unreadable
+(ADR-0011).
+
+The attacker is a declared input of a run on the same terms as the adjudicator: an
+episode is not readable without knowing which instrument produced it, which is why
+the alternative — a run silently taking the deterministic stand-in of
+`backend/bench/adaptive/scripted.py` — is a thing the entry point never does.
+"""
+
+
 class Provider(StrEnum):
     OPENROUTER = "openrouter"
 

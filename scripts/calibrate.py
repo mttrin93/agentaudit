@@ -6,6 +6,7 @@
     uv run python -m scripts.calibrate --identity "your name"
     uv run python -m scripts.calibrate --identity "your name" --price-per-call 0.0005
     uv run python -m scripts.calibrate --adjudicator-model openrouter:openai/gpt-4o-mini
+    uv run python -m scripts.calibrate --attacker-model openrouter:openai/gpt-4o-mini
 
 The reference agents are served locally over real HTTP for the duration of the
 run, and the script plants the registration nonce in each target's system prompt
@@ -49,7 +50,11 @@ from backend.bench.admission import (
     provenance_counts,
 )
 from backend.bench.calibration import CalibrationResult, TargetRun, run_calibration
-from backend.bench.completion import DEFAULT_ADJUDICATOR_MODEL, completion_for
+from backend.bench.completion import (
+    DEFAULT_ADJUDICATOR_MODEL,
+    DEFAULT_ATTACKER_MODEL,
+    completion_for,
+)
 from backend.bench.contract import TargetConfig
 from backend.bench.library import Case, Family, VerdictClass
 from backend.bench.rule import DECLARED_RULE
@@ -108,6 +113,16 @@ def main(argv: Sequence[str] | None = None) -> int:
         ),
     )
     parser.add_argument(
+        "--attacker-model",
+        default=os.environ.get("AGENTAUDIT_ATTACKER_MODEL", DEFAULT_ATTACKER_MODEL),
+        help=(
+            "the model the adaptive attacker runs on. A third setting, separate "
+            "from the agents' and from the adjudicator's, and named here rather "
+            "than defaulted inside the run: a run that quietly took the "
+            "deterministic stand-in would report an agent's search it never made"
+        ),
+    )
+    parser.add_argument(
         "--agents",
         nargs="+",
         default=[agent.name for agent in REFERENCE_AGENTS],
@@ -155,11 +170,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     auth_token = secrets.token_urlsafe(16)
 
     try:
-        # Built before the attestation, so a misconfigured instrument is a refusal
-        # rather than a run that stops after spending something.
+        # Both built before the attestation, so a misconfigured instrument is a
+        # refusal rather than a run that stops after spending something.
         adjudicator = completion_for(args.adjudicator_model)
+        attacker = completion_for(args.attacker_model)
     except (KeyError, ValueError) as unusable:
-        print(f"No usable adjudicating model: {unusable}")
+        print(f"No usable bench model: {unusable}")
         return EXIT_WITHHELD
 
     attestation = attest(args.identity)
@@ -191,6 +207,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 plant_nonce=nonce_planter(base_url),
                 approve=terminal_approval(attestation.identity),
                 adjudicator=adjudicator,
+                attacker=attacker,
                 budget=RunBudget.declare(
                     cases=cases, targets=targets, price=call_price
                 ),
@@ -204,7 +221,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         print("Nothing was sent, and nothing was spent.")
         return EXIT_DECLINED
 
-    _print_result(result, model, args.adjudicator_model, cases)
+    _print_result(result, model, args.adjudicator_model, args.attacker_model, cases)
     refused = [run for run in result.target_runs if run.registration.refused]
     return 1 if refused else 0
 
@@ -213,10 +230,12 @@ def _print_result(
     result: CalibrationResult,
     model: ModelConfig,
     adjudicator_model: str,
+    attacker_model: str,
     cases: Sequence[Case],
 ) -> None:
     print(f"reference agent model: {model}")
     print(f"adjudicating model:    {adjudicator_model}  (judged families only)")
+    print(f"attacking model:       {attacker_model}  (adaptive layer only)")
     print(f"cases loaded:          {len(cases)}")
     print(f"attempts per case:     {DECLARED_RULE.attempts_per_case}")
     _print_provenance(cases)
@@ -261,6 +280,8 @@ def _print_result(
             print(f"    verdict: {attempt.verdict}  ({reached})")
             print(f"    reply:   {excerpt(attempt.transcript.reply_text)}")
 
+    _print_episodes(result)
+
     print()
     for family in _families_run(result.target_runs):
         print(
@@ -281,6 +302,31 @@ def _print_result(
             f"of a declared ceiling of {budget.ceiling(layer)}"
         )
     print(f"confirmed by: {result.approval.identity}")
+
+
+def _print_episodes(result: CalibrationResult) -> None:
+    """The adaptive section, in its own block and carrying no number.
+
+    Printed apart from the rates and never beside them: an episode has no
+    denominator, `A_break` and `A_effort` belong to #17, and nothing here decides
+    anything about the gate (ADR-0010, ADR-0011). Labelled *not reproducible*,
+    because claiming a stochastic search is reproducible would be the overreach
+    the judge's narrative was demoted for.
+    """
+    episodes = result.run_state.episodes
+    print("\nadaptive layer — recorded, not reproducible, and scored on nothing")
+    if not episodes:
+        print("  no episode ran")
+        return
+    for episode in episodes:
+        # The target is named here because this is the bench's own record, read by
+        # the engineer who ran it. What the attacker saw was an opaque handle.
+        print(
+            f"  {episode.target_name} / {episode.family}: {episode.stated()} "
+            f"after {episode.turns} turns"
+        )
+        for proposal in episode.proposals:
+            print(f"    proposed {proposal.case.id}: {proposal.description}")
 
 
 def _families_run(target_runs: Sequence[TargetRun]) -> list[Family]:

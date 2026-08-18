@@ -13,14 +13,25 @@ these: an unplanted note and an endpoint that never reports where a stop signal
 landed are both outside the library, and both produce a clean 0.00.
 """
 
+from dataclasses import replace
+
 import pytest
 
+from backend.bench.completion import _client
 from backend.bench.contract import Transcript
 from backend.bench.evaluator import Verdict
 from backend.bench.library import Case, Family, VerdictClass
 from backend.graph.runstate import Attempt
 from backend.tests.conftest import target_run_for
-from scripts.probe_target import OperatorGap, print_target_run, soft_zero
+from scripts.console import EXIT_WITHHELD
+from scripts.probe_target import (
+    ADJUDICATOR_ENV,
+    OperatorGap,
+    deterministic_subset,
+    main,
+    print_target_run,
+    soft_zero,
+)
 
 
 def test_a_refused_registration_prints_no_rate_and_says_no_attempt_was_made(
@@ -114,3 +125,130 @@ def _attempt(stop_signal_at: int | None) -> Attempt:
         verdict=Verdict.RESISTED,
         verdict_class=VerdictClass.DETERMINISTIC,
     )
+
+
+# --- Which instrument decides the judged families, and refusing to guess ------
+
+
+def test_deterministic_only_drops_the_judged_cases_and_records_why(
+    library: list[Case],
+) -> None:
+    """The four re-derivable families run; the other two are recorded as not run.
+
+    A first run against a new endpoint should be able to see the wire and the
+    deterministic families without paying for an adjudicating model, and the two it
+    skipped have to be visible as skipped. A family silently absent is a reader
+    deciding for themselves why — and *not measurable*, *not run* and *nothing
+    succeeded* are three different answers.
+    """
+    kept, gaps = deterministic_subset(library)
+
+    assert [case.verdict_class for case in kept] == [VerdictClass.DETERMINISTIC] * 4
+    assert set(gaps) == {Family.WRONGFUL_COMMITMENT, Family.DISCLOSURE_DENIAL}
+    assert set(gaps.values()) == {OperatorGap.ADJUDICATOR_NOT_SUPPLIED}
+
+
+def test_the_judged_families_are_selected_by_verdict_class_not_by_family_name(
+    library: list[Case],
+) -> None:
+    # The class is a field of the record (ADR-0013), so this run's need for an
+    # instrument follows the record rather than a list of family names kept in step
+    # by hand. File a judged case under a deterministic family's name: it is the
+    # class that must decide, so the case still drops and the name still counts for
+    # nothing.
+    #
+    # Relabelled this way round because the record refuses the other one — a case
+    # that claims `judged` and states no criterion does not construct, which is the
+    # library's own guard and not this script's.
+    disguised = [
+        replace(case, family=Family.DATA_LEAKAGE)
+        if case.family is Family.DISCLOSURE_DENIAL
+        else case
+        for case in library
+    ]
+
+    kept, gaps = deterministic_subset(disguised)
+
+    assert Family.DATA_LEAKAGE in gaps
+    assert [case.verdict_class for case in kept] == [VerdictClass.DETERMINISTIC] * 4
+    assert VerdictClass.JUDGED not in {case.verdict_class for case in kept}
+
+
+def test_a_family_not_run_prints_as_not_run_rather_than_as_a_rate(
+    leakage_case: Case,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # The whole point of recording the gap. `print_target_run` already keeps
+    # `NotMeasurable` out of the rates; this is the third outcome, and it must read
+    # as an absence of evidence rather than as evidence of a defence.
+    target_run = target_run_for(leakage_case)
+
+    print_target_run(
+        target_run,
+        gaps={Family.DISCLOSURE_DENIAL: OperatorGap.ADJUDICATOR_NOT_SUPPLIED},
+    )
+    printed = capsys.readouterr().out
+
+    assert "not run" in printed
+    assert "--adjudicator-model" in printed
+    assert f"failure rate, {Family.DISCLOSURE_DENIAL}" not in printed
+
+
+def test_no_adjudicator_and_no_deterministic_only_still_refuses(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The path that must not become a silent drop.
+
+    Without either flag the run needs an instrument it has not got, and the two
+    judged families must not quietly vanish from the output — a run that dropped
+    them and reported four families would look like a complete result. The refusal
+    lands before the attestation and before anything is sent, because a run that
+    discovered this at its first judged attempt would already have spent the
+    operator's budget on attempts nothing can score.
+    """
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    monkeypatch.delenv(ADJUDICATOR_ENV, raising=False)
+    monkeypatch.setattr("scripts.probe_target.load_dotenv", lambda: None)
+    # `completion._client` is lru_cached, so a client another test built while a
+    # credential was present would answer here and this refusal would never fire.
+    # Cleared rather than tolerated: a test that passes alone and fails in the suite
+    # is a test nobody trusts the next time it goes red.
+    _client.cache_clear()
+    monkeypatch.setattr(
+        "scripts.probe_target.attest",
+        lambda identity: pytest.fail("asked for an attestation before refusing"),
+    )
+
+    exit_code = main(
+        ["--url", "https://target.invalid/messages", "--identity", "t", "--token", "x"]
+    )
+    printed = capsys.readouterr().out
+
+    assert exit_code == EXIT_WITHHELD
+    assert "No usable adjudicating model" in printed
+    assert "--deterministic-only" in printed
+
+
+def test_the_two_flags_contradict_each_other_rather_than_one_winning(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # Both answer the same question, differently. A precedence rule would hand half
+    # the people who passed both the run they did not ask for, and one of those
+    # halves pays for a model.
+    exit_code = main(
+        [
+            "--url",
+            "https://target.invalid/messages",
+            "--identity",
+            "t",
+            "--token",
+            "x",
+            "--deterministic-only",
+            "--adjudicator-model",
+            "openrouter:openai/gpt-4.1-mini",
+        ]
+    )
+
+    assert exit_code == EXIT_WITHHELD
+    assert "contradict each other" in capsys.readouterr().out

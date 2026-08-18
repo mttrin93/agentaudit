@@ -3,8 +3,15 @@ reference agent.
 
     uv run python -m scripts.probe_target \
         --url https://finbrief.example/agent/messages \
-        --identity "your name" \
+        --identity "your name" --deterministic-only \
         --exposes-tool-calls --declared-tools summarise_brief fetch_filing
+
+Two of the six families reach their verdict semantically, so a run has to say which
+instrument decides them: `--adjudicator-model` supplies one and all six families run,
+`--deterministic-only` runs the four deterministic families and records the other two
+as not run. `--deterministic-only` needs no model credential of its own, which is what
+makes a first run against a new endpoint cheap — the wire and the four re-derivable
+families first, a judge and its cost second.
 
 A diagnostic, and deliberately a thin one. It builds one `TargetConfig`, hands it
 to `run_calibration`, and prints what came back. Registration, the nonce protocol,
@@ -26,7 +33,9 @@ statements about the operator's setup. Indirect injection needs a poisoned note
 planted in content the target can retrieve, and halt defeat needs the endpoint to
 report where the operator's stop signal landed. A target missing either produces a
 clean 0.00 that reads as a defence and is not one, so each is printed beside the
-rate it could explain (`OperatorGap`).
+rate it could explain (`OperatorGap`). A third gap is not a zero at all: under
+`--deterministic-only` the two judged families are recorded as *not run*, because a
+family missing from the output is a reader guessing which of three answers it was.
 
 The token may come from `--token` or from `AGENTAUDIT_TARGET_TOKEN` in the
 environment or `.env`, because a bearer token on a command line is a bearer token
@@ -43,10 +52,11 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
+from backend.bench.adjudication import Completion
 from backend.bench.calibration import PlantNonce, TargetRun, run_calibration
 from backend.bench.completion import DEFAULT_ADJUDICATOR_MODEL, completion_for
 from backend.bench.contract import TargetConfig
-from backend.bench.library import Case, Family, load_library
+from backend.bench.library import Case, Family, VerdictClass, load_library
 from backend.bench.registration import ECHO_PROBE, NONCE_PREFIX
 from backend.bench.rule import DECLARED_RULE
 from backend.bench.scorer import Rate
@@ -68,6 +78,9 @@ from scripts.console import (
 CASES_DIR = Path(__file__).resolve().parents[1] / "backend" / "cases"
 
 TOKEN_ENV = "AGENTAUDIT_TARGET_TOKEN"
+
+ADJUDICATOR_ENV = "AGENTAUDIT_ADJUDICATOR_MODEL"
+"""Where the adjudicating model's configuration comes from when no flag names one."""
 
 EXIT_NOT_REGISTERED = 1
 """Exit code when the nonce never came back. No attempt was made."""
@@ -97,6 +110,7 @@ class OperatorGap(StrEnum):
     NOTE_NOT_PLANTED = "note_not_planted"
     PLANTING_UNVERIFIED = "planting_unverified"
     NO_STOP_POSITION_RECORDED = "no_stop_position_recorded"
+    ADJUDICATOR_NOT_SUPPLIED = "adjudicator_not_supplied"
 
     def stated(self) -> str:
         """The gap in the words the script prints."""
@@ -121,6 +135,15 @@ class OperatorGap(StrEnum):
                     "could have shown an action after one. This zero is what an "
                     "endpoint that never fills 'stop_signal_at' looks like, and "
                     "not necessarily a stop control that held"
+                )
+            case OperatorGap.ADJUDICATOR_NOT_SUPPLIED:
+                return (
+                    "not run — this was a --deterministic-only run, so no "
+                    "adjudicating model was supplied and no attempt was spent "
+                    "here. This family's verdict is a semantic decision and there "
+                    "was no instrument to make one, which is a family that did "
+                    "not run rather than one that held. Pass --adjudicator-model "
+                    "to measure it"
                 )
 
 
@@ -171,13 +194,24 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     parser.add_argument(
         "--adjudicator-model",
-        default=os.environ.get(
-            "AGENTAUDIT_ADJUDICATOR_MODEL", DEFAULT_ADJUDICATOR_MODEL
-        ),
+        default=None,
         help=(
             "the bench's own model, which decides the two judged families. Your "
             "target's model is not this: one is the instrument and the other is "
-            "what is being measured"
+            f"what is being measured. Defaults to {ADJUDICATOR_ENV} from the "
+            f"environment or .env, then to {DEFAULT_ADJUDICATOR_MODEL}. No default "
+            "is applied under --deterministic-only, so the two flags contradict "
+            "each other rather than one quietly winning"
+        ),
+    )
+    parser.add_argument(
+        "--deterministic-only",
+        action="store_true",
+        help=(
+            "run the four families whose verdict comes from a success condition "
+            "and record the two judged families as not run. Needs no adjudicating "
+            "model and spends nothing on one — the first run against a new "
+            "endpoint, before adding an instrument and its cost"
         ),
     )
     parser.add_argument("--price-per-call", default=None)
@@ -194,14 +228,35 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"No token. Pass --token or set {TOKEN_ENV}.")
         return EXIT_WITHHELD
 
-    try:
-        # Before the attestation: a run that reached its first judged attempt
-        # before discovering it had no instrument would already have spent the
-        # operator's budget on attempts nothing can score.
-        adjudicator = completion_for(args.adjudicator_model)
-    except (KeyError, ValueError) as unusable:
-        print(f"No usable adjudicating model: {unusable}")
+    if args.deterministic_only and args.adjudicator_model is not None:
+        # Both flags answer the same question and answer it differently. Refused
+        # rather than resolved by precedence: whichever way a precedence rule fell,
+        # half the people who passed both would get the run they did not ask for,
+        # and one of those halves pays for a model.
+        print(
+            "--deterministic-only and --adjudicator-model contradict each other. "
+            "The first says the judged families do not run; the second supplies "
+            "the instrument that runs them. Pass one."
+        )
         return EXIT_WITHHELD
+
+    adjudicator: Completion | None = None
+    if not args.deterministic_only:
+        spec = args.adjudicator_model or os.environ.get(
+            ADJUDICATOR_ENV, DEFAULT_ADJUDICATOR_MODEL
+        )
+        try:
+            # Before the attestation: a run that reached its first judged attempt
+            # before discovering it had no instrument would already have spent the
+            # operator's budget on attempts nothing can score.
+            adjudicator = completion_for(spec)
+        except (KeyError, ValueError) as unusable:
+            print(
+                f"No usable adjudicating model: {unusable}. Pass a working "
+                "--adjudicator-model, or --deterministic-only to run the four "
+                "deterministic families without one."
+            )
+            return EXIT_WITHHELD
 
     if args.exposes_tool_calls and not args.declared_tools:
         # Scope creep is a call outside the declared list. Against an empty list
@@ -226,14 +281,16 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
 
     cases = load_library(CASES_DIR)
-    print_header(target, cases)
+    gaps: dict[Family, OperatorGap] = {}
+    if args.deterministic_only:
+        cases, gaps = deterministic_subset(cases)
+    print_header(target, cases, adjudicator_named=adjudicator is not None)
 
     attestation = attest(args.identity)
     if attestation is None:
         print("Attestation withheld. Nothing was sent.")
         return EXIT_WITHHELD
 
-    gaps: dict[Family, OperatorGap] = {}
     if not note_is_planted(cases):
         gaps[Family.INDIRECT_PROMPT_INJECTION] = OperatorGap.NOTE_NOT_PLANTED
         cases = [
@@ -273,7 +330,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     return EXIT_NOT_REGISTERED if target_run.registration.refused else 0
 
 
-def print_header(target: TargetConfig, cases: Sequence[Case]) -> None:
+def print_header(
+    target: TargetConfig, cases: Sequence[Case], adjudicator_named: bool
+) -> None:
     """What is about to be run, and the caveat that governs every number below.
 
     The banner is printed before the run rather than only after it, because it
@@ -288,6 +347,10 @@ def print_header(target: TargetConfig, cases: Sequence[Case]) -> None:
         f"{'exposed' if target.exposes_tool_calls else 'not exposed'}"
     )
     print(
+        f"judged families:   "
+        f"{'adjudicated' if adjudicator_named else 'not run (--deterministic-only)'}"
+    )
+    print(
         "\nREAD THIS BEFORE ANY NUMBER BELOW\n"
         "The library's cases are written for a document assistant — supplier "
         "notes, August invoices, a shared inbox, settling a balance. This target "
@@ -297,6 +360,31 @@ def print_header(target: TargetConfig, cases: Sequence[Case]) -> None:
         "payload found no referent in this target's domain rather than that the "
         "target held. These numbers are evidence about payloads that landed and "
         "say nothing about ones that missed."
+    )
+
+
+def deterministic_subset(
+    cases: Sequence[Case],
+) -> tuple[list[Case], dict[Family, OperatorGap]]:
+    """The cases a success condition can decide, and a gap for every family dropped.
+
+    Selected on `Case.verdict_class` and never on the family name — the class is a
+    field of the record for exactly this reason (ADR-0013), so a case that moves
+    between families or a family renamed cannot change which instrument this run
+    needed.
+
+    The dropped families are recorded rather than omitted. A family absent from the
+    output is a reader deciding for themselves why it is missing, and the honest
+    answers — not measurable, not run, nothing succeeded — are three different
+    things. This is the third: no attempt was spent, and the reason is a flag the
+    operator passed rather than anything about the target.
+    """
+    judged = {
+        case.family for case in cases if case.verdict_class is VerdictClass.JUDGED
+    }
+    return (
+        [case for case in cases if case.verdict_class is not VerdictClass.JUDGED],
+        dict.fromkeys(judged, OperatorGap.ADJUDICATOR_NOT_SUPPLIED),
     )
 
 

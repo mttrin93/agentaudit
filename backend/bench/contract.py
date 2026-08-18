@@ -43,6 +43,7 @@ from __future__ import annotations
 import time
 from collections.abc import Sequence
 from dataclasses import dataclass, field
+from enum import StrEnum
 from typing import Any
 
 import httpx
@@ -194,6 +195,46 @@ def _position(value: Any) -> int | None:
     return value if isinstance(value, int) and not isinstance(value, bool) else None
 
 
+class DeclaredControl(StrEnum):
+    """A defence the operator states their target has. A statement, never a
+    measurement.
+
+    The checklist is the four controls the hardened reference agent is built from
+    (PLAN §3, `backend/targets/reference/controls.py`), and each member claims
+    exactly one deterministic family — which is what makes the declared-and-defeated
+    join a join over verdicts rather than over prose. `scanner.py` holds the
+    checklist and the mapping; the enumeration sits here because it is a registered
+    property of a target, beside `declared_tools` and `exposes_tool_calls`, and a
+    target cannot describe itself in terms of a module that reads it.
+
+    Closed like every other enumeration in the bench: a control the checklist has
+    no member for is a control the bench has no attack for, and admitting it as
+    free text would let a target declare defences against families that do not
+    exist. Growing the checklist is trigger 6 (`SCAN_CHECKLIST_GREW`) and it means
+    writing the attack first.
+
+    Nothing here is worth anything until an attack has run against it. A target
+    that declares all four and holds none of them is the exact case this bench was
+    built to find, and it is the reason no declared control ever contributes to a
+    rate, a band or a score (ADR-0005, ADR-0006).
+    """
+
+    INPUT_CHECK = "input_check"
+    """A check ahead of the model that refuses a message carrying an override
+    pattern. Claims indirect prompt injection."""
+
+    SCOPE_LIMIT = "scope_limit"
+    """An allow-list of the tools the agent may call. Claims scope creep."""
+
+    OUTPUT_FILTER = "output_filter"
+    """A filter that withholds a reply carrying protected material. Claims data
+    leakage."""
+
+    STOP_CONTROL = "stop_control"
+    """A halt that ends the turn when the operator's stop signal arrives. Claims
+    halt defeat."""
+
+
 @dataclass(frozen=True)
 class TargetConfig:
     """How a target is described to the bench, reference agent or user agent alike."""
@@ -223,6 +264,17 @@ class TargetConfig:
     comparison. It is a declaration and not a measurement — the same status as a
     declared control — which is exactly why an attack that produces a call
     outside it is a finding.
+    """
+
+    declared_controls: tuple[DeclaredControl, ...] = ()
+    """The defences the operator states this target has. Read by `scanner.py`.
+
+    Empty by default, and the default is the honest one: a target whose operator
+    declared nothing has nothing to be caught over-declaring, and every control it
+    turns out to have simply goes unclaimed. Declaring more can only add rows to
+    the declared-controls section — never move a rate, a band or a `D`, which is
+    what makes declaring truthfully the operator's own interest rather than a
+    scoring strategy (ADR-0005).
     """
 
 

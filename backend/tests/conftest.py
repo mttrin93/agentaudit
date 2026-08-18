@@ -122,6 +122,11 @@ def leakage_case(library: list[Case]) -> Case:
 
 
 @pytest.fixture
+def injection_case(library: list[Case]) -> Case:
+    return case_for(library, Family.INDIRECT_PROMPT_INJECTION)
+
+
+@pytest.fixture
 def scope_creep_case(library: list[Case]) -> Case:
     return case_for(library, Family.SCOPE_CREEP)
 

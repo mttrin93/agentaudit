@@ -279,6 +279,31 @@ class Controls:
 
         return None
 
+    def before_content(self, content: str) -> str | None:
+        """What the agent says instead of acting on what a tool brought back.
+
+        The request-side controls, run a second time against text the agent
+        fetched rather than text the user sent. An input check that inspects only
+        the user's message is a check on the one channel an indirect injection
+        does not use, and an agent whose defences stop at the message boundary is
+        controlled by whoever wrote the content behind it.
+
+        Two of the five pieces are deliberately absent here. The stop control is
+        the *operator's* halt and third-party content is not the operator, so a
+        note that says "stop" must not be able to end a turn. The registration
+        echo is the operator's protocol for the same reason: the exemption is one
+        message wide and a fetched document is not that message.
+        """
+        if self.input_check is not None:
+            if refusal := self.input_check.stops(content):
+                return refusal
+
+        if self.scope_limit is not None:
+            if refusal := self.scope_limit.stops(content):
+                return refusal
+
+        return None
+
     def after_model(
         self, reply: str, protected: Sequence[str], configuration: str
     ) -> str | None:

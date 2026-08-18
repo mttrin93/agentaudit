@@ -114,6 +114,20 @@ _Avoid_: assertion, oracle, pass criteria
 Whether one attempt succeeded. Deterministic for four families; judged for two.
 _Avoid_: result, score, outcome, grade
 
+**Tool trace**:
+What a target did in one turn, in the order it did it — the tool calls it made and
+where the operator's stop signal landed among them. The whole of the evidence
+behind scope creep and halt defeat, and the second thing `read_tool_trace` reads.
+_Avoid_: log, call history, transcript
+
+**Not measurable**:
+A family's outcome against a target that cannot answer it — a third outcome
+alongside a rate and a refused registration, never a rate of zero. Reached only
+by a precondition unmet before any attempt is spent, which today means a target
+that does not expose its tool calls. A target the bench never measured must stay
+distinguishable from one that resisted everything.
+_Avoid_: not applicable, skipped, unknown, n/a, zero
+
 **Finding**:
 A verdict plus its narrative — reason, article, external identifier, remediation, exposure type. Produced by the scored layer only; the adaptive layer produces an **adaptive finding**, which is a different thing and is named differently on purpose.
 _Avoid_: issue, vulnerability, defect, alert

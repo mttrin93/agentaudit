@@ -3,7 +3,11 @@
 Two surfaces, and the distinction is load-bearing:
 
 * ``POST /reference/{agent}/messages`` is the contract a user's target speaks. The
-  bench knows nothing else about a target.
+  bench knows nothing else about a target. The reply carries the turn's tool trace
+  beside its text, because two families reach their verdict from what the agent
+  did (`backend/bench/contract.py`). Every reference agent exposes it; a target
+  that does not is the stub in `backend/tests/blind_target.py`, and the two
+  families report *not measurable* against it.
 * ``PUT /reference/{agent}/nonce`` is test equipment. It stands in for the human
   who edits their target's system prompt when the bench issues a nonce. No user
   target exposes anything like it, and the bench never calls it — the operator
@@ -48,8 +52,28 @@ class MessageRequest(BaseModel):
     session_id: str
 
 
+class ToolCallPayload(BaseModel):
+    name: str
+    arguments: dict[str, str] = {}
+
+
+class ToolTracePayload(BaseModel):
+    """What the agent did this turn, in the order it did it.
+
+    `stop_signal_at` counts the calls already made when the operator's stop
+    signal arrived. It reports that the signal was received and nothing about
+    whether carrying on was allowed — that judgement is the bench's.
+    """
+
+    calls: list[ToolCallPayload] = []
+    stop_signal_at: int | None = None
+
+
 class MessageReply(BaseModel):
     reply: str
+    tool_trace: ToolTracePayload | None = None
+    """Omitted entirely by a target without tool-call visibility, which is a
+    different fact from an empty trace and is read as one."""
 
 
 class NonceRequest(BaseModel):
@@ -83,7 +107,16 @@ def create_reference_app(config: ReferenceConfig) -> FastAPI:
         if authorization != f"Bearer {config.auth_token}":
             raise HTTPException(status_code=401, detail="bad bearer token")
         reference_agent = _agent(agent)
-        reply = reference_agent.reply(body.message, nonces.get(agent, ""), config.model)
-        return MessageReply(reply=reply)
+        turn = reference_agent.reply(body.message, nonces.get(agent, ""), config.model)
+        return MessageReply(
+            reply=turn.text,
+            tool_trace=ToolTracePayload(
+                calls=[
+                    ToolCallPayload(name=call.name, arguments=call.arguments)
+                    for call in turn.trace.calls
+                ],
+                stop_signal_at=turn.trace.stop_signal_at,
+            ),
+        )
 
     return app

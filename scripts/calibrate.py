@@ -64,6 +64,7 @@ from backend.targets.reference.server import (
     create_reference_app,
 )
 from backend.targets.reference.serving import serve
+from backend.targets.reference.tools import DECLARED_TOOL_NAMES
 from backend.targets.reference.trivial import TRIVIAL
 
 CASES_DIR = Path(__file__).resolve().parents[1] / "backend" / "cases"
@@ -144,6 +145,11 @@ def main(argv: Sequence[str] | None = None) -> int:
                 url=f"{base_url}/reference/{name}/messages",
                 auth_token=auth_token,
                 agent_type="assistant",
+                # The reference agents expose their tool calls and declare the
+                # document tools, which is what makes scope creep and halt
+                # defeat measurable against them at all (ADR-0004).
+                exposes_tool_calls=True,
+                declared_tools=DECLARED_TOOL_NAMES,
             )
             for name in args.agents
         ]
@@ -255,6 +261,10 @@ def _print_result(
         print(f"  echo reply:   {_excerpt(registration.probe.reply_text)}")
         for family, rate in target_run.rates.items():
             print(f"  failure rate, {family}: {_rate(rate)}")
+        # Printed beside the rates and never as one of them: a refusal to
+        # measure is a third outcome, not a rate of zero (ADR-0004).
+        for family, reason in target_run.not_measurable.items():
+            print(f"  {family}: {reason.stated()}")
         if not target_run.rates:
             print("  failure rate: not measured — no attempt was made")
 

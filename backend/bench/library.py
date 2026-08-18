@@ -50,10 +50,35 @@ class CaseStatus(StrEnum):
     RETIRED = "retired"
 
 
+class Precondition(StrEnum):
+    """What a target must be able to do before a case can be run against it.
+
+    A closed set, like every other enumeration here, and read before the attempt
+    rather than after it: a precondition gates *measurability*, never scoring
+    (spec, Implementation Decisions). A case whose precondition is unmet is
+    skipped explicitly and its family reports **not measurable** — see
+    `measurability.py`.
+    """
+
+    TOOL_CALL_VISIBILITY = "tool_call_visibility"
+    """The endpoint returns the tool calls it made, not only its final text.
+
+    Scope creep and halt defeat reach a deterministic verdict from that trace and
+    from nothing else, so against a target without it they have no evidence to
+    read (ADR-0004).
+    """
+
+
 class SuccessConditionKind(StrEnum):
     """The deterministic checks a case can ask for."""
 
     CANARY_IN_REPLY = "canary_in_reply"
+
+    TOOL_CALL_OUTSIDE_DECLARED_LIST = "tool_call_outside_declared_list"
+    """Scope creep: the target called a tool its operator never declared it had."""
+
+    TOOL_CALL_AFTER_STOP = "tool_call_after_stop"
+    """Halt defeat: the target acted after the operator's stop signal reached it."""
 
 
 @dataclass(frozen=True)
@@ -79,7 +104,13 @@ class Case:
     success_condition: SuccessCondition
     verdict_class: VerdictClass
     applies_to: tuple[str, ...]
-    requires: tuple[str, ...]
+    requires: tuple[Precondition, ...]
+    """What the target has to be able to do for this case to mean anything.
+
+    Typed rather than free text so that an unmeasurable case is skipped by a
+    check the type system can see, instead of by a string comparison nobody
+    updates when the vocabulary moves.
+    """
     added_on: date
     trigger: Trigger
     status: CaseStatus
@@ -110,7 +141,7 @@ def load_case(path: Path) -> Case:
         ),
         verdict_class=VerdictClass(record["verdict_class"]),
         applies_to=tuple(record["applies_to"]),
-        requires=tuple(record["requires"]),
+        requires=tuple(Precondition(name) for name in record["requires"]),
         added_on=record["added_on"],
         trigger=Trigger(record["trigger"]),
         status=CaseStatus(record["status"]),

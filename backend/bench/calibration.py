@@ -2,9 +2,9 @@
 
 Everything in the pre-web scope is reached from here: the case library, the
 attestation, the approval interrupt and its budget, registration and the nonce
-protocol, the attempt, and the verdict. Ten attempts per case (#4), the judge (#8)
-and the gate decision (#13) extend this callable rather than adding a second way
-in.
+protocol, the precondition check, the attempt, and the verdict. Ten attempts per
+case (#4), the judge (#8) and the gate decision (#13) extend this callable rather
+than adding a second way in.
 
 The order below is the order ADR-0007 requires and is not an implementation
 detail: attestation, then the estimate, then the halt, and only then anything that
@@ -20,14 +20,19 @@ route for it, so the nonce protocol is exercised on every gate run.
 """
 
 from collections import defaultdict
-from collections.abc import Callable, Sequence
-from dataclasses import dataclass
+from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass, field
 
 from backend.bench.adaptive.budget import DECLARED_ADAPTIVE_BUDGET, AdaptiveBudget
 from backend.bench.attacker import run_case
 from backend.bench.contract import TargetConfig
 from backend.bench.evaluator import Verdict
 from backend.bench.library import Case, Family
+from backend.bench.measurability import (
+    NotMeasurable,
+    not_measurable_families,
+    runnable,
+)
 from backend.bench.registration import (
     Attestation,
     Registration,
@@ -54,6 +59,23 @@ class TargetRun:
     rule: GateRule
     """The rule the attempts were run under, so the rate carries the confidence
     it was measured at."""
+
+    not_measurable: Mapping[Family, NotMeasurable] = field(default_factory=dict)
+    """The families this target could not be measured on, and why.
+
+    A separate field from `rates` rather than a third value inside it, so that a
+    consumer reading rates cannot read a refusal as a number. Empty for a target
+    that met every precondition its library asked for.
+    """
+
+    def __post_init__(self) -> None:
+        both = set(self.not_measurable) & {attempt.family for attempt in self.attempts}
+        if both:
+            raise ValueError(
+                f"{sorted(both)} were reported not measurable and also attempted "
+                "against this target. Not measurable is a distinct outcome from "
+                "pass and from fail, and a family cannot hold two of the three"
+            )
 
     @property
     def rates(self) -> dict[Family, Rate]:
@@ -157,13 +179,16 @@ def _run_target(
         plant_nonce(target, nonce)
     registration = register(target, nonce, attestation, run_state)
 
+    # Preconditions gate measurability, never scoring: a case this target cannot
+    # answer is skipped before an attempt is spent on it, and the families left
+    # with nothing to run report not measurable rather than a rate (ADR-0004).
     attempts: tuple[Attempt, ...] = ()
     if registration.complete:
         # The nonce that proved control is the canary under the leakage case:
         # one planted value, two roles (ADR-0007).
         attempts = tuple(
             attempt
-            for case in cases
+            for case in runnable(cases, target)
             for attempt in run_case(
                 target, case, canary=nonce, run_state=run_state, rule=rule
             )
@@ -174,4 +199,5 @@ def _run_target(
         registration=registration,
         attempts=attempts,
         rule=rule,
+        not_measurable=not_measurable_families(cases, target),
     )

@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 
 from backend.bench.contract import Transcript
 from backend.bench.evaluator import Verdict
-from backend.bench.library import Family
+from backend.bench.library import Family, VerdictClass
 from backend.graph.budget import BudgetExceeded, Layer, RunBudget
 
 
@@ -37,6 +37,17 @@ class Attempt:
     index: int
     transcript: Transcript
     verdict: Verdict
+    verdict_class: VerdictClass
+    """How this attempt's verdict was reached, copied off the case record.
+
+    Carried here for the same reason `family` is, and against a sharper hazard.
+    Judged rates are reported apart from deterministic ones and carry a wider
+    stated limit and a κ figure (ADR-0004), so a consumer grouping attempts has to
+    be able to tell the two apart — and the one thing it may not do is work it out
+    from the family name, which is the inference spec story 18 exists to forbid.
+    Reading it off the record at the moment the attempt is made is the only place
+    that inference is impossible.
+    """
 
 
 @dataclass(frozen=True)

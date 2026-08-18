@@ -17,17 +17,25 @@ would be asking about a decision it had partly taken.
 the bench issues a nonce. A user does that by hand — hence the default of `None`,
 which is the production case — and the reference agents have a test-equipment
 route for it, so the nonce protocol is exercised on every gate run.
+
+`adjudicator` is the model that decides the two judged families (#9). It defaults
+to `None` because a library of deterministic cases needs none, and a run given judged
+cases without one is refused before the estimate and before anything reaches an
+endpoint, rather than partway through: an attempt nothing can score is the operator's
+money spent with no measurement behind it, and a partial suite is void rather than
+smaller (ADR-0007).
 """
 
 from collections import defaultdict
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 
 from backend.bench.adaptive.budget import DECLARED_ADAPTIVE_BUDGET, AdaptiveBudget
+from backend.bench.adjudication import Completion, NoAdjudicator
 from backend.bench.attacker import run_case
 from backend.bench.contract import TargetConfig
 from backend.bench.evaluator import Verdict
-from backend.bench.library import Case, Family
+from backend.bench.library import Case, Family, VerdictClass
 from backend.bench.measurability import (
     NotMeasurable,
     not_measurable_families,
@@ -77,6 +85,18 @@ class TargetRun:
                 "pass and from fail, and a family cannot hold two of the three"
             )
 
+        classes: dict[Family, set[VerdictClass]] = defaultdict(set)
+        for attempt in self.attempts:
+            classes[attempt.family].add(attempt.verdict_class)
+        mixed = sorted(family for family, seen in classes.items() if len(seen) > 1)
+        if mixed:
+            raise ValueError(
+                f"{mixed} were attempted under both verdict classes. A family is "
+                "deterministic or judged, and one whose cases disagree would put a "
+                "judged rate in the deterministic section — which is the one place "
+                "the two must never meet (ADR-0004)"
+            )
+
     @property
     def rates(self) -> dict[Family, Rate]:
         """This target's failure rate for each family it was attempted on.
@@ -86,18 +106,64 @@ class TargetRun:
         with no attempts is absent rather than reported as a rate of zero. No
         attempts is not a failure rate of zero — a target the bench never
         measured has to stay distinguishable from one that resisted everything.
+
+        Both classes appear here, because `D` and monotonicity are read per family
+        and are read the same way whichever route the verdict took. What is
+        reported to a reader is the two sections below, never this mapping: they
+        carry different evidentiary strength, and the deterministic families carry
+        the report's weight (ADR-0004).
         """
+        return self._rates(self.attempts)
+
+    @property
+    def deterministic_rates(self) -> dict[Family, Rate]:
+        """The families whose verdicts came from a success condition.
+
+        The report's own section, and the one that carries its weight: every
+        verdict behind these rates is re-derivable by a reader holding the case
+        record and the transcript (ADR-0004).
+        """
+        return self._rates_under(VerdictClass.DETERMINISTIC)
+
+    @property
+    def judged_rates(self) -> dict[Family, Rate]:
+        """The families whose verdicts came from adjudication.
+
+        Reported apart from the deterministic families and never added to them.
+        There is deliberately no property here that returns the two together as one
+        collection, and none that totals either: a judged rate carries a wider
+        stated limit and a κ figure beside it (#11), and a figure combining one with
+        a deterministic rate would be a number whose evidentiary strength nobody
+        could state. That is the same prohibition ADR-0005 puts on a composite
+        score, applied one level down.
+        """
+        return self._rates_under(VerdictClass.JUDGED)
+
+    def _rates_under(self, verdict_class: VerdictClass) -> dict[Family, Rate]:
+        """The rates of the families decided by one route.
+
+        Selected on `Attempt.verdict_class`, which was copied off the case record
+        when the attempt was made — never on the family name (spec story 18).
+        """
+        return self._rates(
+            attempt
+            for attempt in self.attempts
+            if attempt.verdict_class is verdict_class
+        )
+
+    def _rates(self, attempts: Iterable[Attempt]) -> dict[Family, Rate]:
+        """Group attempts by family and divide. The one place a rate is computed."""
         counted: dict[Family, list[Attempt]] = defaultdict(list)
-        for attempt in self.attempts:
+        for attempt in attempts:
             counted[attempt.family].append(attempt)
 
         return {
             family: failure_rate(
-                sum(1 for a in attempts if a.verdict is Verdict.SUCCEEDED),
-                len(attempts),
+                sum(1 for a in grouped if a.verdict is Verdict.SUCCEEDED),
+                len(grouped),
                 self.rule,
             )
-            for family, attempts in counted.items()
+            for family, grouped in counted.items()
         }
 
 
@@ -119,6 +185,7 @@ def run_calibration(
     attestation: Attestation,
     plant_nonce: PlantNonce | None = None,
     approve: Approve | None = None,
+    adjudicator: Completion | None = None,
     rule: GateRule = DECLARED_RULE,
     adaptive: AdaptiveBudget = DECLARED_ADAPTIVE_BUDGET,
     budget: RunBudget | None = None,
@@ -136,6 +203,14 @@ def run_calibration(
     being declared from these inputs, which is the case where the two cannot
     differ.
     """
+    unscorable = [
+        case.id for case in cases if case.verdict_class is VerdictClass.JUDGED
+    ]
+    if unscorable and adjudicator is None:
+        # Before the estimate and before the attestation, because this is the one
+        # failure the operator should never pay to discover.
+        raise NoAdjudicator(unscorable)
+
     declared = budget or RunBudget.declare(
         cases=cases, targets=targets, rule=rule, adaptive=adaptive
     )
@@ -151,6 +226,7 @@ def run_calibration(
                     attestation=attestation,
                     run_state=run_state,
                     plant_nonce=plant_nonce,
+                    adjudicator=adjudicator,
                     rule=rule,
                 )
             )
@@ -171,6 +247,7 @@ def _run_target(
     attestation: Attestation,
     run_state: RunState,
     plant_nonce: PlantNonce | None,
+    adjudicator: Completion | None,
     rule: GateRule,
 ) -> TargetRun:
     """Register one target, then run every case against it if it registered."""
@@ -190,7 +267,12 @@ def _run_target(
             attempt
             for case in runnable(cases, target)
             for attempt in run_case(
-                target, case, canary=nonce, run_state=run_state, rule=rule
+                target,
+                case,
+                canary=nonce,
+                run_state=run_state,
+                rule=rule,
+                adjudicator=adjudicator,
             )
         )
 

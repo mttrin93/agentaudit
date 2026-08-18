@@ -1,10 +1,17 @@
 """The case library as data — one record per file, never inline in code.
 
-A case is one executable test belonging to a family: a payload plus a success
-condition. Adding, retiring and diffing cases is therefore a data operation.
-The enumerations here are closed sets on purpose: a case that cannot name its
-family, its verdict class or the trigger that caused it to be written does not
-load.
+A case is one executable test belonging to a family: a payload plus the criterion
+that decides its verdict. Adding, retiring and diffing cases is therefore a data
+operation. The enumerations here are closed sets on purpose: a case that cannot
+name its family, its verdict class or the trigger that caused it to be written
+does not load.
+
+Four families reach the verdict from a deterministic `SuccessCondition`; two — the
+judged ones — reach it from a `JudgedCondition`, which is prose rather than a
+check. A record carries exactly one of the two, and which one is fixed by the
+`verdict_class` on the record itself. That is the mechanism behind spec story 18:
+a consumer reads the class off the record and never infers it from the family name
+(ADR-0004).
 """
 
 import tomllib
@@ -70,7 +77,14 @@ class Precondition(StrEnum):
 
 
 class SuccessConditionKind(StrEnum):
-    """The deterministic checks a case can ask for."""
+    """The deterministic checks a case can ask for.
+
+    Deterministic, all of them, because that is what a success condition is
+    (CONTEXT.md). The two judged families have no member here and cannot acquire
+    one: their verdict is reached by `JudgedCondition` below, and a semantic
+    question sitting in this enumeration would let a judged verdict arrive
+    through the function ADR-0004 makes authoritative.
+    """
 
     CANARY_IN_REPLY = "canary_in_reply"
 
@@ -125,12 +139,62 @@ class SuccessCondition:
 
 
 @dataclass(frozen=True)
+class JudgedCondition:
+    """The semantic question a judged family's verdict answers, held on the record.
+
+    Wrongful commitment and disclosure denial are irreducibly semantic: whether a
+    reply bound its operator to something it cannot honour, and whether it
+    presented itself as a person, are questions about meaning and no string
+    comparison answers them (ADR-0004). So the criterion is prose — and it is
+    prose *on the case record*, not prose inside a prompt, for the same reason
+    every threshold is declared in `GateRule`: a reader holding the record and the
+    transcript has to be able to see what was asked before they are told what the
+    answer was.
+
+    Deliberately carries no `kind` enumeration, unlike everything else in this
+    module. A kind would be a name for a branch, and there is no branch: nothing
+    dispatches on which judged question this is, because the question itself is
+    what the adjudicating model is handed (`backend/bench/adjudication.py`).
+
+    The two sides are stated separately rather than left as the negation of each
+    other, because the boundary between them is where a judged verdict is won or
+    lost — and it is the figure κ measures against the gold set (#11).
+    """
+
+    question: str
+    """The question put to the adjudicator, phrased so that the attack succeeding
+    is the answer *yes*."""
+
+    succeeded_when: str
+    """What a reply that failed the target's defence looks like."""
+
+    resisted_when: str
+    """What a reply that held looks like."""
+
+    def __post_init__(self) -> None:
+        stated = (self.question, self.succeeded_when, self.resisted_when)
+        if not all(part.strip() for part in stated):
+            raise ValueError(
+                "a judged condition is the whole of what decides a judged "
+                "verdict, so a case declaring one has to state the question and "
+                "both sides of the answer"
+            )
+
+
+@dataclass(frozen=True)
 class Case:
     id: str
     family: Family
     external_id: ExternalId
     payload: str
-    success_condition: SuccessCondition
+    success_condition: SuccessCondition | None
+    """The deterministic check, for a case whose verdict class is deterministic.
+
+    `None` on a judged case, where `judged_condition` carries the criterion
+    instead. Exactly one of the two is present on every case, and which one is
+    fixed by `verdict_class` — see `__post_init__`.
+    """
+
     verdict_class: VerdictClass
     applies_to: tuple[str, ...]
     requires: tuple[Precondition, ...]
@@ -147,6 +211,57 @@ class Case:
     """Where a published technique came from. Not the trigger, which says why
     the case exists."""
 
+    judged_condition: JudgedCondition | None = None
+    """The semantic criterion, for a case whose verdict class is judged.
+
+    Last in the field list rather than beside `success_condition` only because a
+    field with a default cannot precede one without: the pairing that matters is
+    enforced below, not by the order these are written in.
+    """
+
+    def __post_init__(self) -> None:
+        """A case declares one route to its verdict, and the one its class names.
+
+        This is what makes "verdict class is read from the case record, never
+        inferred from the family name" (spec story 18) a property of the data
+        rather than a habit of the caller. A record cannot express a judged case
+        with a deterministic check, or a deterministic case with a semantic
+        question, so nothing downstream has to guess which one to trust — and
+        nothing has to consult the family name to find out.
+
+        The match has no fallback branch on purpose: a third verdict class must
+        fail the type check rather than load with no criterion at all.
+        """
+        match self.verdict_class:
+            case VerdictClass.DETERMINISTIC:
+                if self.success_condition is None:
+                    raise ValueError(
+                        f"{self.id} is deterministic and carries no success "
+                        "condition. The success condition is what makes the "
+                        "verdict re-derivable by a reader holding the record and "
+                        "the transcript (ADR-0004)"
+                    )
+                if self.judged_condition is not None:
+                    raise ValueError(
+                        f"{self.id} is deterministic and carries a judged "
+                        "condition. Two criteria on one record is a case whose "
+                        "verdict depends on which one a caller read"
+                    )
+            case VerdictClass.JUDGED:
+                if self.judged_condition is None:
+                    raise ValueError(
+                        f"{self.id} is judged and states no question. A judged "
+                        "verdict a reader cannot see the criterion for is a "
+                        "number with nothing behind it"
+                    )
+                if self.success_condition is not None:
+                    raise ValueError(
+                        f"{self.id} is judged and carries a success condition. A "
+                        "success condition is deterministic and authoritative "
+                        "(ADR-0004), so a judged case holding one would have its "
+                        "verdict decided by the deterministic path after all"
+                    )
+
 
 def load_library(directory: Path) -> list[Case]:
     """Load every case record in a directory, ordered by file name for a
@@ -157,6 +272,8 @@ def load_library(directory: Path) -> list[Case]:
 def load_case(path: Path) -> Case:
     record: dict[str, Any] = tomllib.loads(path.read_text(encoding="utf-8"))
     external_id = record["external_id"]
+    success = record.get("success_condition")
+    judged = record.get("judged_condition")
     return Case(
         id=record["id"],
         family=Family(record["family"]),
@@ -165,9 +282,18 @@ def load_case(path: Path) -> Case:
             not_tested=external_id["not_tested"],
         ),
         payload=record["payload"],
-        success_condition=SuccessCondition(
-            kind=SuccessConditionKind(record["success_condition"]["kind"]),
-            planted_canary=record["success_condition"].get("planted_canary"),
+        success_condition=None
+        if success is None
+        else SuccessCondition(
+            kind=SuccessConditionKind(success["kind"]),
+            planted_canary=success.get("planted_canary"),
+        ),
+        judged_condition=None
+        if judged is None
+        else JudgedCondition(
+            question=judged["question"],
+            succeeded_when=judged["succeeded_when"],
+            resisted_when=judged["resisted_when"],
         ),
         verdict_class=VerdictClass(record["verdict_class"]),
         applies_to=tuple(record["applies_to"]),

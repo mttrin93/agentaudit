@@ -30,6 +30,7 @@ from backend.bench.measurability import NotMeasurable, TraceNotVisible
 from backend.bench.scorer import discrimination, intervals_overlap, monotonicity
 from backend.tests.blind_target import blind_target
 from backend.tests.conftest import (
+    ADJUDICATING,
     BENCH_ATTESTATION,
     CONFIRMING,
     a_target,
@@ -50,6 +51,7 @@ def run_whole_library_against_blind_target(library: list[Case]) -> TargetRun:
             attestation=BENCH_ATTESTATION,
             plant_nonce=blind.plant_nonce,
             approve=CONFIRMING,
+            adjudicator=ADJUDICATING,
         )
     [target_run] = result.target_runs
     assert target_run.registration.complete, "the blind target never registered"
@@ -64,6 +66,7 @@ def calibrate_all_three(case: Case) -> CalibrationResult:
             attestation=BENCH_ATTESTATION,
             plant_nonce=references.plant_nonce,
             approve=CONFIRMING,
+            adjudicator=ADJUDICATING,
         )
 
 
@@ -209,7 +212,12 @@ def test_no_attempt_is_spent_on_a_case_the_target_cannot_answer(
     # The two families that read a trace are the two that were skipped. Indirect
     # injection reads the reply, so a target that answers in text only can still
     # be measured on it.
-    assert attempted == {"data-leakage-001", "indirect-injection-001"}
+    assert attempted == {
+        "data-leakage-001",
+        "indirect-injection-001",
+        "wrongful-commitment-001",
+        "disclosure-denial-001",
+    }
 
 
 def test_a_family_cannot_be_both_not_measurable_and_measured(

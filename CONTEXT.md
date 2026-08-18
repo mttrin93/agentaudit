@@ -31,7 +31,7 @@ One of six kinds of failure the bench tests for. A category, not a test.
 _Avoid_: category, class, attack type, vector
 
 **Case**:
-One executable test belonging to a family, consisting of a payload and a success condition. Three cases per family.
+One executable test belonging to a family, consisting of a payload and the criterion that decides its verdict — a success condition, or, for a judged family, the semantic question stated on the record. Three cases per family.
 _Avoid_: test, probe, scenario, payload
 
 **Attempt**:
@@ -82,7 +82,7 @@ _Avoid_: attempt, step, iteration, round
 **Probe**:
 One attacker-composed message sent inside a turn. Deliberately promoted to a term
 of its own while remaining on the **case** avoid-list: *probe* must not be used to
-mean *case*, because a case is a recorded payload with a success condition and a
+mean *case*, because a case is a recorded payload with a stated criterion and a
 probe is a message the model invented thirty seconds ago. The tool is `run_probe`
 for exactly that reason — it sends something that is not a case.
 _Avoid_: using it for **case**, payload, attempt
@@ -108,11 +108,23 @@ _Avoid_: failed, timed out, unsuccessful, exhausted
 
 **Success condition**:
 The deterministic check that decides whether an attempt succeeded. Authoritative.
+Four families have one; the two judged families have none and reach a verdict by
+**adjudication** instead.
 _Avoid_: assertion, oracle, pass criteria
 
 **Verdict**:
 Whether one attempt succeeded. Deterministic for four families; judged for two.
 _Avoid_: result, score, outcome, grade
+
+**Adjudication**:
+The semantic decision that produces a **verdict** for a judged family. Not a
+**reading** and not the judge: an adjudication *is* the verdict, a reading is the
+narrative counterpart to one, and they are named apart so that no prose can put
+the judge's opinion where a scored quantity belongs — the same reason **probe** and
+**case** are kept apart. It is the instrument a judged family's reliability figure
+is measured on, and it has no *unclear*: a judged verdict lands in a denominator,
+so uncertainty about a transcript is carried by a reading and counted nowhere.
+_Avoid_: judging, grading, the judge, reading
 
 **Reading**:
 How one transcript looked to the judge — the narrative counterpart to a verdict,

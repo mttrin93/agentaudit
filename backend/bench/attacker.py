@@ -10,13 +10,26 @@ and counted against the scored layer after it comes back, so a suite cannot spen
 past the estimate the operator confirmed (ADR-0007). The layer is named at every
 call site rather than defaulted, because a call counted in the wrong layer is the
 one figure ADR-0007 exists to keep separate, silently merged.
+
+**This is where a verdict class becomes a route.** Four families are decided by
+`evaluator.evaluate` and two by `adjudication.adjudicate`, and which one runs is
+read off `case.verdict_class` — off the record, never worked out from the family
+name (spec story 18). The adjudicator is threaded in from the entry point rather
+than constructed here, so the model that decides a judged family is a run's
+declared input and not a default buried three modules down.
 """
 
 import uuid
 
-from backend.bench.contract import TargetConfig, send_message
-from backend.bench.evaluator import evaluate
-from backend.bench.library import Case
+from backend.bench.adjudication import (
+    AdjudicationBrief,
+    Completion,
+    NoAdjudicator,
+    adjudicate,
+)
+from backend.bench.contract import TargetConfig, Transcript, send_message
+from backend.bench.evaluator import Verdict, evaluate
+from backend.bench.library import Case, VerdictClass
 from backend.bench.rule import DECLARED_RULE, GateRule
 from backend.graph.budget import Layer
 from backend.graph.runstate import Attempt, RunState
@@ -28,6 +41,7 @@ def run_case(
     canary: str,
     run_state: RunState,
     rule: GateRule = DECLARED_RULE,
+    adjudicator: Completion | None = None,
 ) -> tuple[Attempt, ...]:
     """Run one case against one target the declared number of times.
 
@@ -37,7 +51,7 @@ def run_case(
     ten times, which is a different quantity.
     """
     return tuple(
-        run_attempt(target, case, canary, run_state, index)
+        run_attempt(target, case, canary, run_state, index, adjudicator)
         for index in range(rule.attempts_per_case)
     )
 
@@ -48,8 +62,9 @@ def run_attempt(
     canary: str,
     run_state: RunState,
     index: int,
+    adjudicator: Completion | None = None,
 ) -> Attempt:
-    """Send one case to one target, evaluate the reply, and record the attempt."""
+    """Send one case to one target, reach a verdict on the reply, record the attempt."""
     run_state.authorise_call(Layer.SCORED, target.retry.sends)
     run_state.enter(target.name, case.id, index)
     transcript = send_message(
@@ -62,7 +77,44 @@ def run_attempt(
         target_name=target.name,
         index=index,
         transcript=transcript,
-        verdict=evaluate(case, transcript, target, canary),
+        verdict=verdict_of(case, transcript, target, canary, adjudicator),
+        verdict_class=case.verdict_class,
     )
     run_state.record(attempt)
     return attempt
+
+
+def verdict_of(
+    case: Case,
+    transcript: Transcript,
+    target: TargetConfig,
+    canary: str,
+    adjudicator: Completion | None,
+) -> Verdict:
+    """One attempt's verdict, by the route the case record names.
+
+    The class comes off the record. A family name is a label a reader recognises
+    (ADR-0002) and deciding how to reach a verdict from one would be deciding it
+    from a string — which is why nothing here mentions a family, and why the
+    library refuses a record whose class and criterion disagree.
+
+    The match has no fallback branch on purpose: a third verdict class must fail
+    the type check rather than acquire a route by default.
+
+    The adjudicator is handed the reply and the trace rather than the transcript,
+    because a transcript carries the url it was sent to and the url names the
+    agent. Blinding therefore happens on this side of the call (ADR-0003,
+    ADR-0004).
+    """
+    match case.verdict_class:
+        case VerdictClass.DETERMINISTIC:
+            return evaluate(case, transcript, target, canary)
+        case VerdictClass.JUDGED:
+            if adjudicator is None:
+                raise NoAdjudicator([case.id])
+            return adjudicate(
+                AdjudicationBrief.about(
+                    case, transcript.reply_text, transcript.tool_trace
+                ),
+                adjudicator,
+            )

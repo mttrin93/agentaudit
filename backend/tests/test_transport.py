@@ -13,6 +13,7 @@ from backend.bench.calibration import run_calibration
 from backend.bench.evaluator import Verdict
 from backend.bench.library import Case
 from backend.bench.rule import DECLARED_RULE
+from backend.tests.conftest import BENCH_ATTESTATION, CONFIRMING
 from backend.tests.flaky_target import IMPATIENT, flaky_target
 
 
@@ -24,7 +25,9 @@ def test_transient_failures_are_retried_and_do_not_count_as_attempts(
         result = run_calibration(
             cases=[leakage_case],
             targets=[flaky.target],
+            attestation=BENCH_ATTESTATION,
             plant_nonce=flaky.plant_nonce,
+            approve=CONFIRMING,
         )
 
     [target_run] = result.target_runs
@@ -53,7 +56,9 @@ def test_an_endpoint_that_never_recovers_stops_the_run_rather_than_scoring_it(
             run_calibration(
                 cases=[leakage_case],
                 targets=[flaky.target],
+                attestation=BENCH_ATTESTATION,
                 plant_nonce=flaky.plant_nonce,
+                approve=CONFIRMING,
             )
 
 
@@ -64,7 +69,9 @@ def test_a_healthy_endpoint_is_sent_each_message_exactly_once(
         result = run_calibration(
             cases=[leakage_case],
             targets=[flaky.target],
+            attestation=BENCH_ATTESTATION,
             plant_nonce=flaky.plant_nonce,
+            approve=CONFIRMING,
         )
 
     [target_run] = result.target_runs

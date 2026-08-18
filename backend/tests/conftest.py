@@ -3,6 +3,12 @@
 The reference agents are served over real HTTP on an ephemeral port, because the
 gate must exercise the same code path a user's target exercises (spec:
 Implementation Decisions, "Reference agents are reached over real HTTP").
+
+They also satisfy the attestation and the approval interrupt like any other target
+(ADR-0007), so `BENCH_ATTESTATION` and `CONFIRMING` stand in for the engineer who
+attests and confirms the spend. Both are explicit at every call site: a fixture
+that supplied consent by default would make the halt invisible in exactly the
+tests that are supposed to demonstrate it.
 """
 
 from collections.abc import Iterator
@@ -19,7 +25,7 @@ from backend.bench.calibration import (
     TargetRun,
     run_calibration,
 )
-from backend.bench.contract import TargetConfig
+from backend.bench.contract import RetryPolicy, TargetConfig
 from backend.bench.library import (
     Case,
     CaseStatus,
@@ -31,6 +37,9 @@ from backend.bench.library import (
     VerdictClass,
     load_library,
 )
+from backend.bench.registration import Attestation
+from backend.graph.approval import Approval, Approve
+from backend.graph.budget import BudgetPayload, RunBudget
 from backend.targets.reference.agent import ReferenceAgent
 from backend.targets.reference.model import ModelConfig
 from backend.targets.reference.operator import nonce_planter
@@ -43,6 +52,58 @@ from backend.targets.reference.serving import serve
 
 CASES_DIR = Path(__file__).resolve().parents[1] / "cases"
 AUTH_TOKEN = "reference-auth-token"
+
+BENCH_ATTESTATION = Attestation(
+    identity="bench engineer, calibration fixture",
+    authorised_to_test=True,
+    not_production=True,
+    accepts_provider_policy_and_cost=True,
+)
+"""The three statements, made about the bench's own test equipment.
+
+True by construction here — these endpoints are processes the run itself started —
+and written down anyway, because a gate run that skipped the attestation would
+exercise a path no user's run takes.
+"""
+
+
+def _confirm(presented: BudgetPayload) -> Approval:
+    """Answer the approval interrupt with a yes, as the engineer running the gate."""
+    return Approval(confirmed=True, identity=BENCH_ATTESTATION.identity)
+
+
+CONFIRMING: Approve = _confirm
+
+SENDS = 3
+"""The retry limit the described targets below declare, and so what a ceiling
+built from them covers."""
+
+
+def a_target(name: str = "target", sends: int = SENDS) -> TargetConfig:
+    """A target *described*, never served. For arithmetic rather than for calls."""
+    return TargetConfig(
+        name=name,
+        url=f"https://{name}.invalid/messages",
+        auth_token="token",
+        agent_type="assistant",
+        retry=RetryPolicy(sends=sends, backoff_seconds=0.0),
+    )
+
+
+def some_cases(count: int) -> list[Case]:
+    """That many distinct cases. Distinct ids, because a count of cases that
+    shared one id would hide a bug in anything that grouped by it."""
+    return [
+        unlisted_case(payload=f"payload {i}", case_id=f"case-{i}") for i in range(count)
+    ]
+
+
+def a_budget(cases: int = 3, targets: int = 2, sends: int = SENDS) -> RunBudget:
+    """A declared budget over described targets, for the tests that never call one."""
+    return RunBudget.declare(
+        cases=some_cases(cases),
+        targets=[a_target(f"target-{i}", sends=sends) for i in range(targets)],
+    )
 
 
 @pytest.fixture
@@ -120,7 +181,9 @@ def calibrate(
         return run_calibration(
             cases=[case],
             targets=[reference.target],
+            attestation=BENCH_ATTESTATION,
             plant_nonce=reference.plant_nonce,
+            approve=CONFIRMING,
         )
 
 

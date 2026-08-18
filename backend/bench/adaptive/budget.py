@@ -1,0 +1,76 @@
+"""`AdaptiveBudget` — the turn cap, the episode count, and the ceiling over the layer.
+
+Deliberately **not** `GateRule`. `GateRule` holds the numbers the gate is decided
+on; nothing here decides anything, because the adaptive layer is scored on nothing
+(ADR-0010). Keeping them in separate records is what stops `T` being read as a
+sample size: ten attempts per case is a denominator, eight turns per episode is a
+spending limit, and an episode has no denominator at all.
+
+`T` and `k` are declared here for the same reason the gate thresholds are declared
+in `rule.py`: a turn budget widened at hour 30 until the attacker finally found
+something, then reported as though it had been fixed in advance, is the adaptive
+layer's version of tuning the gate (spec: Further Notes).
+
+**Two ceilings, and they are different limits.** `turns_per_episode` caps one
+episode; `turn_ceiling` caps the whole layer. A per-family cap multiplied by six
+families is a multiplication a user consents to once and then forgets, so the
+second is enforced independently of the first, against its own counter
+(ADR-0007). The per-episode cap is the attacker's to enforce as it runs (#16);
+the layer ceiling is enforced by the run budget, which cannot see inside an
+episode and does not need to.
+"""
+
+from dataclasses import dataclass
+
+from backend.bench.library import Family
+
+
+@dataclass(frozen=True)
+class AdaptiveBudget:
+    """What the adaptive layer may spend against one target. The defaults are
+    the declared budget."""
+
+    turns_per_episode: int = 8
+    """`T` — how many exchanges one episode may take before it is capped.
+
+    An episode that reaches this cap without breaking the target is **censored**,
+    never "resisted": the attacker stopped rather than ran out of ideas, and
+    ADR-0011 treats the distinction as the statistically load-bearing one.
+    """
+
+    episodes_per_family: int = 2
+    """`k` — how many episodes are run per family per target.
+
+    Two, so that a single unlucky trajectory is not the whole reading on a
+    family, and no more, because episodes are expensive and buy no precision:
+    they are not samples of a rate and averaging them would not make one.
+    """
+
+    family_count: int = len(Family)
+    """The six families of `Family`, read from the closed enum rather than typed
+    again, so that the ceiling cannot drift from the set of families it covers."""
+
+    def __post_init__(self) -> None:
+        for name in ("turns_per_episode", "episodes_per_family", "family_count"):
+            if getattr(self, name) < 1:
+                raise ValueError(f"{name} has to be at least 1")
+
+    @property
+    def episode_count(self) -> int:
+        """How many episodes the layer runs against one target."""
+        return self.family_count * self.episodes_per_family
+
+    @property
+    def turn_ceiling(self) -> int:
+        """The most turns the whole layer may take against one target.
+
+        The worst case, and stated as one: every episode running to its cap. This
+        is the number a user is shown before they consent, and showing an
+        *average* instead would be worse than showing nothing, because it invites
+        a run to exceed what was agreed to (ADR-0007).
+        """
+        return self.episode_count * self.turns_per_episode
+
+
+DECLARED_ADAPTIVE_BUDGET = AdaptiveBudget()
+"""The budget the adaptive layer is held to, and the one the estimate is built from."""

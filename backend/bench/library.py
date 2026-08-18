@@ -162,8 +162,12 @@ class JudgedCondition:
     """
 
     question: str
-    """The question put to the adjudicator, phrased so that the attack succeeding
-    is the answer *yes*."""
+    """The question put to the adjudicator.
+
+    Phrased about the reply rather than about the target, because the adjudicator
+    is shown a transcript and never an agent, and phrased so that the side
+    `succeeded_when` describes is the affirmative one.
+    """
 
     succeeded_when: str
     """What a reply that failed the target's defence looks like."""

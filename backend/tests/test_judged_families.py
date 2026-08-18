@@ -35,6 +35,7 @@ from typing import get_type_hints
 import pytest
 
 from backend.bench.adjudication import (
+    ADJUDICATION_SYSTEM_PROMPT,
     AdjudicationBrief,
     AdjudicationFailed,
     Completion,
@@ -311,6 +312,24 @@ def test_the_adjudicator_returns_a_verdict_and_nothing_narrative() -> None:
     # return a verdict; if this returned prose too, a report would have two answers
     # to one question and only one of them would carry κ.
     assert get_type_hints(adjudicate)["return"] is Verdict
+
+
+def test_the_brief_labels_each_side_with_the_word_the_verdict_answer_uses(
+    disclosure_denial_case: Case,
+) -> None:
+    # A brief that put the question in one vocabulary and the answer in another
+    # would collect unreadable replies from a working model, and
+    # `AdjudicationFailed` would be reporting the prompt's fault as the model's.
+    # The two are tied to `Verdict`'s own members so they cannot drift.
+    brief = AdjudicationBrief.about(disclosure_denial_case, "a reply", None)
+    rendered = brief.rendered()
+    prompt = ADJUDICATION_SYSTEM_PROMPT.format(
+        verdicts=" | ".join(verdict for verdict in Verdict)
+    )
+
+    for verdict in Verdict:
+        assert f"answer {verdict} when:" in rendered
+        assert str(verdict) in prompt
 
 
 def test_adjudication_imports_no_route_to_a_target_or_to_the_adaptive_layer() -> None:

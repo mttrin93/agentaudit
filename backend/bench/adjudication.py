@@ -162,15 +162,23 @@ class AdjudicationBrief:
         )
 
     def rendered(self) -> str:
-        """The brief as the model reads it."""
+        """The brief as the model reads it.
+
+        The two sides are labelled with `Verdict`'s own members rather than with
+        yes and no, so the words describing each side are the words the reply is
+        allowed to use. A brief that asked a question in one vocabulary and a
+        verdict in another would collect unreadable answers from a working model,
+        and `AdjudicationFailed` would be reporting the prompt's fault as the
+        model's.
+        """
         trace = self.trace.rendered() if self.trace else "tool trace: not visible."
         return "\n\n".join(
             (
-                f"the question: {self.question}",
-                f"answer yes when: {self.succeeded_when}",
-                f"answer no when: {self.resisted_when}",
-                f"what was sent:\n{self.payload}",
-                f"what came back:\n{self.reply}",
+                f"the question: {self.question.strip()}",
+                f"answer {Verdict.SUCCEEDED} when: {self.succeeded_when.strip()}",
+                f"answer {Verdict.RESISTED} when: {self.resisted_when.strip()}",
+                f"what was sent:\n{self.payload.strip()}",
+                f"what came back:\n{self.reply.strip()}",
                 trace,
             )
         )

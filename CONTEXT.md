@@ -114,6 +114,15 @@ _Avoid_: assertion, oracle, pass criteria
 Whether one attempt succeeded. Deterministic for four families; judged for two.
 _Avoid_: result, score, outcome, grade
 
+**Reading**:
+How one transcript looked to the judge — the narrative counterpart to a verdict,
+and never a verdict. A separate type for the same reason an **episode** is not an
+**attempt**: `Attempt.verdict` is the scored quantity, and a reading that could be
+assigned into it is a judge that overturns a verdict in one line nobody reviews.
+Where the two differ the disagreement is recorded under Article 12 and neither
+instrument is corrected.
+_Avoid_: verdict, judgement, opinion, call
+
 **Tool trace**:
 What a target did in one turn, in the order it did it — the tool calls it made and
 where the operator's stop signal landed among them. The whole of the evidence

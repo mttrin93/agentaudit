@@ -268,6 +268,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         return EXIT_WITHHELD
 
     print_gate(gate, result)
+    # After everything is printed and before the exit code is read, so the document
+    # holds the run the operator just saw rather than a subset of it. Written on all
+    # three answers, because passed, failed and not decided are all gate runs and a
+    # reader compares one with another — a history that kept only the passes would
+    # be a history that cannot show the bench ever failed its own stop (spec story
+    # 80). A withheld, declined or aborted run returned above this line: it sent
+    # nothing and produced no gate, so there is no run to record.
+    written = record_run(gate, result, cases, Path(args.record), args)
+    print(f"\nthis run's own document: {written}")
     return exit_code(gate)
 
 

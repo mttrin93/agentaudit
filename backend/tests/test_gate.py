@@ -21,6 +21,8 @@ from pathlib import Path
 
 import pytest
 
+from backend.bench.adaptive.scripted import SCRIPTED_ATTACKER
+from backend.bench.adjudication import Completion
 from backend.bench.calibration import CalibrationResult, TargetRun, run_calibration
 from backend.bench.evaluator import Verdict
 from backend.bench.gate import GateResult, NotAGateRun, read_gate
@@ -551,6 +553,87 @@ def test_a_gate_run_is_written_to_a_document_that_survives_it(
     # And no payload, on either side of it (ADR-0008).
     for case in load_library(CASES_DIR):
         assert case.payload not in written
+
+
+def test_the_entry_point_writes_the_document_rather_than_only_being_able_to(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The command a bench engineer runs, not the writer it calls.
+
+    The test above drives `record_run` directly, and a writer nobody calls is a
+    document nobody has: a gate run made at a terminal goes through `main`, so the
+    call site is what spec story 80 stands or falls on and it is the thing this
+    fails without. Delete the call and the glob below finds nothing.
+
+    Driven end to end on `stub:obedient` with the suite's own deterministic
+    stand-ins for the bench's two instruments, so it reaches no model and needs no
+    terminal. The three consent statements and the interrupt are answered the way
+    the calibration fixture answers them — a run that skipped them would exercise a
+    path no operator's run takes (ADR-0007).
+    """
+    monkeypatch.setattr("scripts.gate.attest", lambda identity: BENCH_ATTESTATION)
+    monkeypatch.setattr("scripts.gate.terminal_approval", lambda identity: CONFIRMING)
+    monkeypatch.setattr("scripts.gate.completion_for", _bench_stand_in)
+
+    code = main(
+        [
+            "--identity",
+            BENCH_ATTESTATION.identity,
+            "--model",
+            "stub:obedient",
+            "--adjudicator-model",
+            ADJUDICATOR_STAND_IN,
+            "--attacker-model",
+            ATTACKER_STAND_IN,
+            "--record",
+            str(tmp_path),
+        ]
+    )
+    printed = capsys.readouterr().out
+
+    # One file per run, dated, and named to the operator so they know the artefact
+    # exists and where — a path nobody was told is a record nobody reads.
+    records = list(tmp_path.glob("gate-*.md"))
+    assert records, (
+        "the entry point printed a gate and left no document behind. A writer the "
+        "suite calls and the command does not is the shape this bug had"
+    )
+    [record] = records
+    assert str(record) in printed
+    written = record.read_text(encoding="utf-8")
+
+    # The document says what the shell was told, and this is the answer that most
+    # needs one: a *not decided* run is recorded on the same terms as a pass, or the
+    # history would only ever hold the runs that went well (ADR-0015).
+    assert code == EXIT_NOT_DECIDED
+    assert "NOT DECIDED" in written
+    # The document holds the run that was just printed, in its two sections.
+    assert "The scored layer, which decides the gate" in written
+    assert "The adaptive layer, which decides nothing" in written
+    assert "the decision rule as applied" in written
+    assert "540 attempts recorded" in written and "540 attempts recorded" in printed
+    assert "A_break" in written
+    # And no payload reached it, on either side (ADR-0008).
+    for case in load_library(CASES_DIR):
+        assert case.payload not in written
+
+
+ADJUDICATOR_STAND_IN = "the suite's stub — no model is reached"
+ATTACKER_STAND_IN = "backend/bench/adaptive/scripted.py — the deterministic stand-in"
+
+
+def _bench_stand_in(spec: str) -> Completion:
+    """The bench's two instruments, told apart by the name the run declared them by.
+
+    `completion_for` builds both in the entry point and they are two settings on
+    purpose (ADR-0011), so a stand-in that answered both the same way would hide
+    which one a record named.
+    """
+    if spec == ATTACKER_STAND_IN:
+        return SCRIPTED_ATTACKER
+    return adjudicating(Verdict.SUCCEEDED)
 
 
 def test_the_exit_code_tells_a_failed_gate_from_one_that_was_not_decided() -> None:

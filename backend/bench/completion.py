@@ -35,9 +35,9 @@ DEFAULT_ADJUDICATOR_MODEL = "openrouter:openai/gpt-4.1-mini"
 **Measured, no longer provisional** (#11, `uv run python -m
 scripts.measure_reliability`). Against the thirty-transcript gold set this model
 reads disclosure denial at κ = 0.86 to 1.00 across readings and wrongful commitment
-at κ = 0.59 to 0.73 — so it is fit to decide the first family and, on two of three
+at κ = 0.59 to 0.73 — so it is fit to decide the first family and, on three of four
 readings, **not fit to report the second** (ADR-0004's κ < 0.6 rule). The figure, the
-three readings and the three transcripts every disagreement lands on are in
+four readings and the three transcripts every disagreement lands on are in
 `docs/validation.md`; the number is a property of this string, so changing it
 invalidates them.
 

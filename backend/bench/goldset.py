@@ -214,23 +214,30 @@ class GoldSet:
         """
         return AdjudicationBrief.about(self.case, transcript.reply, None)
 
-    def goldens(self) -> tuple[Golden, ...]:
-        """The set as DeepEval goldens: input and expected output, per transcript.
+    def golden_for(self, transcript: GoldTranscript) -> Golden:
+        """One labelled reply as a DeepEval golden: input and expected output.
 
         `input` is the rendered brief rather than the raw reply, because the brief is
         what the instrument under test is given — a golden holding less than that
         would describe an evaluation nobody ran.
+
+        Per transcript rather than only in bulk, so that `run_gold_set` builds each
+        test case from the golden rather than deriving the same values a second time
+        alongside it. That is what keeps the goldens the thing that ran instead of a
+        description of it (ADR-0009), and it means there is no positional pairing of
+        two sequences to get wrong.
         """
-        return tuple(
-            Golden(
-                name=transcript.id,
-                input=self.brief_for(transcript).rendered(),
-                expected_output=str(transcript.label),
-                # Text, always: every judged criterion is a question about words.
-                multimodal=False,
-            )
-            for transcript in self.transcripts
+        return Golden(
+            name=transcript.id,
+            input=self.brief_for(transcript).rendered(),
+            expected_output=str(transcript.label),
+            # Text, always: every judged criterion is a question about words.
+            multimodal=False,
         )
+
+    def goldens(self) -> tuple[Golden, ...]:
+        """The whole set as goldens, in the order the transcripts were labelled in."""
+        return tuple(self.golden_for(transcript) for transcript in self.transcripts)
 
     def dataset(self) -> EvaluationDataset:
         """The goldens as a DeepEval dataset, with no test case in it yet.
@@ -255,16 +262,15 @@ class VerdictAgreesWithGoldLabel(BaseMetric):  # type: ignore[no-untyped-call]
     that, from the per-case results this metric produces.
     """
 
-    def __init__(self, threshold: float = AGREEMENT_THRESHOLD) -> None:
-        self.bar = threshold
-        """The threshold as this metric reads it.
-
-        Held beside DeepEval's own `threshold`, which the framework declares
-        optional, so the comparison below is between two floats rather than between a
-        float and something that may be absent. A per-case bar that could go missing
-        is a case that could be scored against nothing.
-        """
-        self.threshold = threshold
+    def __init__(self) -> None:
+        # No threshold parameter. `AGREEMENT_THRESHOLD` is the only value this metric
+        # can be scored at, so taking one would offer a caller a bar that passes a
+        # case where the instrument said the opposite of the label. The framework's
+        # own `threshold` is set from the same constant, and the comparison below
+        # reads the constant rather than the attribute — DeepEval declares
+        # `threshold` optional, and a per-case bar that can go missing is a case that
+        # can be scored against nothing.
+        self.threshold = AGREEMENT_THRESHOLD
         self.async_mode = False
         self.include_reason = True
 
@@ -274,10 +280,10 @@ class VerdictAgreesWithGoldLabel(BaseMetric):  # type: ignore[no-untyped-call]
         self.score = score
         self.reason = (
             f"both {actual!r}"
-            if score >= self.bar
+            if score >= AGREEMENT_THRESHOLD
             else f"gold label {expected!r}, instrument verdict {actual!r}"
         )
-        self.success = score >= self.bar
+        self.success = score >= AGREEMENT_THRESHOLD
         return score
 
     async def a_measure(
@@ -338,6 +344,13 @@ def load_gold_set(path: Path, library: Sequence[Case]) -> GoldSet:
 def run_gold_set(gold: GoldSet, complete: Completion) -> tuple[TestResult, ...]:
     """Adjudicate every labelled reply, then let DeepEval score the set.
 
+    **Each test case is built from its golden**, not from the gold record a second
+    time: the golden supplies the `input` and the `expected_output`, and the
+    instrument supplies the `actual_output`. That is the shape ADR-0009 describes, and
+    building the input twice would leave the goldens as a description of an evaluation
+    rather than the thing that ran — which is the "bolted-on DeepEval run alongside
+    the real statistics" the ADR rejected.
+
     The instrument is asked once per transcript through `adjudicate`, so what is
     measured is the function a run calls and not a re-implementation of it. An
     unreadable answer raises `AdjudicationFailed` out of here rather than becoming a
@@ -346,16 +359,17 @@ def run_gold_set(gold: GoldSet, complete: Completion) -> tuple[TestResult, ...]:
 
     Returns DeepEval's per-case results, which are the input κ is computed from.
     """
-    _offline()
+    _opt_out_of_telemetry()
     metrics: list[BaseMetric] = [VerdictAgreesWithGoldLabel()]
     dataset = gold.dataset()
     for transcript in gold.transcripts:
+        golden = gold.golden_for(transcript)
         dataset.add_test_case(
             LLMTestCase(
-                name=transcript.id,
-                input=gold.brief_for(transcript).rendered(),
+                name=golden.name,
+                input=golden.input,
+                expected_output=golden.expected_output,
                 actual_output=str(adjudicate(gold.brief_for(transcript), complete)),
-                expected_output=str(transcript.label),
             )
         )
     evaluated = evaluate(
@@ -399,7 +413,7 @@ def reliability_from(
         kappa=cohens_kappa(pairs),
         agreements=sum(1 for gold, instrument in pairs if gold is instrument),
         transcripts=len(pairs),
-        floor=rule.kappa_floor,
+        rule=rule,
     )
 
 
@@ -418,8 +432,12 @@ def measure_reliability(
     }
 
 
-def _offline() -> None:
+def _opt_out_of_telemetry() -> None:
     """Turn off the framework's usage telemetry before it is asked to run anything.
+
+    Named for what it sets rather than for the state it leaves behind, because it is a
+    process-global side effect and a caller reading `run_gold_set` has to be able to
+    see that.
 
     Set rather than defaulted, and set here rather than left to whoever runs the
     bench. DeepEval reports usage events to its vendor unless told not to, and this

@@ -268,6 +268,24 @@ def test_the_dataset_run_produces_one_scored_result_per_transcript(
         assert scored[0].threshold == AGREEMENT_THRESHOLD
 
 
+def test_the_run_scores_the_goldens_rather_than_a_second_derivation(
+    denial_set: GoldSet,
+) -> None:
+    # ADR-0009's shape, asserted on the values that came back: the golden supplies
+    # the input and the expected output, and the instrument supplies the verdict. A
+    # run that rebuilt the input beside the goldens would leave them describing an
+    # evaluation rather than being the one that ran, which is the "bolted-on DeepEval
+    # run alongside the real statistics" the ADR rejected.
+    goldens = denial_set.goldens()
+    results = run_gold_set(denial_set, ADJUDICATING)
+
+    assert [result.input for result in results] == [golden.input for golden in goldens]
+    assert [result.expected_output for result in results] == [
+        golden.expected_output for golden in goldens
+    ]
+    assert [result.name for result in results] == [golden.name for golden in goldens]
+
+
 def test_the_run_reaches_no_network_of_the_frameworks_own(denial_set: GoldSet) -> None:
     # DeepEval reports usage events to its vendor unless told not to, and the suite
     # claims to reach no network at all. The claim is about the one code path whose

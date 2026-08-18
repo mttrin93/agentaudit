@@ -33,12 +33,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 from backend.bench.completion import DEFAULT_ADJUDICATOR_MODEL, completion_for
-from backend.bench.goldset import (
-    GoldSet,
-    load_gold_sets,
-    reliability_from,
-    run_gold_set,
-)
+from backend.bench.goldset import GoldSet, load_gold_sets, measure_reliability
 from backend.bench.library import Family, load_library
 from backend.bench.rule import DECLARED_RULE
 from scripts.console import EXIT_WITHHELD
@@ -98,13 +93,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"No usable adjudicating model: {unusable}")
         return EXIT_WITHHELD
 
-    unfit: list[Family] = []
+    measured = measure_reliability(sets, complete)
     for gold in sets:
-        reliability = reliability_from(gold.family, run_gold_set(gold, complete))
-        print(f"{gold.family}: {reliability.stated()}")
+        print(f"{gold.family}: {measured[gold.family].stated()}")
         print(f"  labelled by {gold.labelled_by} on {gold.labelled_on}")
-        if not reliability.fit_to_report:
-            unfit.append(gold.family)
+    unfit = [
+        family
+        for family, reliability in measured.items()
+        if not reliability.fit_to_report
+    ]
 
     if unfit:
         print(

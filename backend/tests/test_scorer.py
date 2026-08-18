@@ -11,11 +11,13 @@ alpha=0.10, method="wilson")`, an independent implementation, so a test can
 disagree with the code.
 """
 
+from dataclasses import replace
+
 import pytest
 
 from backend.bench.evaluator import Verdict
 from backend.bench.library import Family
-from backend.bench.rule import DECLARED_RULE
+from backend.bench.rule import DECLARED_RULE, GateRule
 from backend.bench.scorer import (
     UNFIT_TO_REPORT,
     FamilyOutcome,
@@ -429,6 +431,27 @@ def test_a_family_below_the_declared_floor_is_marked_unfit_to_report() -> None:
     assert not below.fit_to_report
     assert UNFIT_TO_REPORT in below.stated()
     assert "fit_to_report" not in Reliability.__dataclass_fields__
+
+
+def test_a_figure_decided_under_a_lowered_bar_says_so() -> None:
+    # The floor is read off a `GateRule` and not passed as a loose float, so a caller
+    # who lowers it cannot leave the figure looking like the declared one. Same
+    # discipline as `GateDecision` carrying its rule.
+    lowered = Reliability(
+        family=Family.DISCLOSURE_DENIAL,
+        kappa=0.30,
+        agreements=8,
+        transcripts=15,
+        rule=GateRule(kappa_floor=0.1),
+    )
+
+    assert lowered.floor == 0.1
+    assert lowered.fit_to_report
+    assert "alternative, undeclared floor" in lowered.stated()
+    # And the declared figure says the opposite about the same κ.
+    declared = replace(lowered, rule=DECLARED_RULE)
+    assert not declared.fit_to_report
+    assert "declared floor" in declared.stated()
 
 
 def test_a_reliability_figure_with_more_agreements_than_transcripts_is_refused() -> (

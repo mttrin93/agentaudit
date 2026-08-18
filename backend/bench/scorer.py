@@ -154,6 +154,14 @@ class KappaUndefined(ValueError):
     """
 
 
+UNFIT_TO_REPORT = "not fit to report"
+"""The words a family below the κ floor is marked with, in one place.
+
+Stated once so that a reader meets the same phrase wherever the marking surfaces,
+and so that grepping for it finds every place the bench refuses to publish.
+"""
+
+
 @dataclass(frozen=True)
 class Reliability:
     """One judged family's measured agreement with the gold set, and the bar it faced.
@@ -165,17 +173,21 @@ class Reliability:
 
     **`fit_to_report` is a property and never a field.** ADR-0004 makes refusing to
     publish the automatic outcome below the floor rather than a judgement call under
-    deadline, and a field would be a place for a caller to disagree. The floor is
-    carried here rather than looked up at the call site so that a figure printed in a
-    report arrives with the bar it had to beat, exactly as a `GateDecision` carries
-    its rule.
+    deadline, and a field would be a place for a caller to disagree.
+
+    **The bar is a `GateRule` and not a bare float**, for the reason a `GateDecision`
+    carries its rule rather than the numbers it used: a floor arriving as a loose
+    argument is a floor a caller can lower without anybody downstream being able to
+    tell. Read off a rule, a lowered bar comes with the rule that lowered it, and
+    `stated()` says so in the line it prints — so a figure decided under an
+    alternative rule cannot be presented as the declared one.
     """
 
     family: Family
     kappa: float
     agreements: int
     transcripts: int
-    floor: float = DECLARED_RULE.kappa_floor
+    rule: GateRule = DECLARED_RULE
 
     def __post_init__(self) -> None:
         if not 0 <= self.agreements <= self.transcripts:
@@ -185,13 +197,18 @@ class Reliability:
             )
 
     @property
+    def floor(self) -> float:
+        """The κ this family had to reach, off the rule that decided it."""
+        return self.rule.kappa_floor
+
+    @property
     def fit_to_report(self) -> bool:
         """Whether this family's rate may be published at all.
 
-        Read from κ against the declared floor and from nothing else. A family that
-        fails here has a rate — the attempts were made and are recorded — and what it
-        does not have is a statable evidentiary strength for it, which is the whole
-        of what a report is for.
+        Read from κ against the floor and from nothing else. A family that fails here
+        has a rate — the attempts were made and are recorded — and what it does not
+        have is a statable evidentiary strength for it, which is the whole of what a
+        report is for.
         """
         return reaches(self.kappa, self.floor)
 
@@ -200,21 +217,16 @@ class Reliability:
         fitness = (
             "fit to report"
             if self.fit_to_report
-            else f"{UNFIT_TO_REPORT} — κ is below the declared floor"
+            else f"{UNFIT_TO_REPORT} — κ is below the floor"
+        )
+        under = (
+            "declared" if self.rule == DECLARED_RULE else "an alternative, undeclared"
         )
         return (
             f"κ = {self.kappa:.2f} against the gold set "
-            f"({self.agreements} of {self.transcripts} transcripts agreed, floor "
-            f"{self.floor:.2f}): {fitness}"
+            f"({self.agreements} of {self.transcripts} transcripts agreed, "
+            f"{under} floor {self.floor:.2f}): {fitness}"
         )
-
-
-UNFIT_TO_REPORT = "not fit to report"
-"""The words a family below the κ floor is marked with, in one place.
-
-Stated once so that a reader meets the same phrase wherever the marking surfaces,
-and so that grepping for it finds every place the bench refuses to publish.
-"""
 
 
 def cohens_kappa(pairs: Sequence[tuple[Verdict, Verdict]]) -> float:

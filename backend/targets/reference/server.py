@@ -20,13 +20,14 @@ from fastapi import FastAPI, Header, HTTPException
 from pydantic import BaseModel
 
 from backend.targets.reference.agent import ReferenceAgent
-from backend.targets.reference.model import ModelConfig
 from backend.targets.reference.hardened import HARDENED
+from backend.targets.reference.model import ModelConfig
 from backend.targets.reference.trivial import TRIVIAL
 from backend.targets.reference.weak import WEAK
 
 REFERENCE_AGENTS: tuple[ReferenceAgent, ...] = (TRIVIAL, WEAK, HARDENED)
-"""The three agents of known construction, in the order their rates are expected to fall."""
+"""The three agents of known construction, in the order their rates are
+expected to fall."""
 
 
 @dataclass(frozen=True)

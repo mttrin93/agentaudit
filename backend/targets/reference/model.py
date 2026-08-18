@@ -49,7 +49,8 @@ class ModelConfig:
 
 
 def complete(config: ModelConfig, system_prompt: str, message: str) -> str:
-    """One turn from the configured model: a system prompt and a message in, text out."""
+    """One turn from the configured model: a system prompt and a message in,
+    text out."""
     match config.provider:
         case Provider.STUB:
             return stub_completion(config.name, system_prompt, message)

@@ -106,9 +106,7 @@ def reference_target(
 ) -> Iterator[ServedReference]:
     """Serve reference agents and hand back the one named, ready to be attacked."""
     with served_references(model=model, agents=agents) as references:
-        yield next(
-            served for served in references.served if served.target.name == name
-        )
+        yield next(served for served in references.served if served.target.name == name)
 
 
 def calibrate(

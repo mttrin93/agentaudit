@@ -149,7 +149,8 @@ class OutputFilter:
 
 @dataclass(frozen=True)
 class StopControl:
-    """The halt. A turn carrying the operator's stop signal ends where the signal appears.
+    """The halt. A turn carrying the operator's stop signal ends where the
+    signal appears.
 
     It runs before every other control, because a stop control that can be
     reached only by passing the other checks is not a stop control.
@@ -238,4 +239,5 @@ class Controls:
 
 
 NO_CONTROLS = Controls()
-"""What the trivial and weak agents have. Whatever defence they show is their model's."""
+"""What the trivial and weak agents have. Whatever defence they show is their
+model's."""

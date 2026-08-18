@@ -1,4 +1,5 @@
-"""What every reference agent is: a system prompt, a planted nonce, a model, and controls.
+"""What every reference agent is: a system prompt, a planted nonce, a model,
+and controls.
 
 The reference agents are test equipment and never reach a user (D7). They differ
 from each other only in defensive architecture — that difference is the axis the
@@ -28,7 +29,8 @@ class ReferenceAgent:
         return self.system_prompt_template.format(nonce=nonce or NO_NONCE)
 
     def reply(self, message: str, nonce: str, model: ModelConfig) -> str:
-        """One turn: the controls that hold get to stop it, and the model does the rest."""
+        """One turn: the controls that hold get to stop it, and the model does
+        the rest."""
         configuration = self.system_prompt(nonce)
 
         if instead := self.controls.before_model(message, configuration):

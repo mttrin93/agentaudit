@@ -158,7 +158,9 @@ def test_a_gate_decided_on_fewer_than_six_families_is_refused() -> None:
     # Four of five is not the declared rule. A family the bench could not measure
     # has to be handled as its own outcome, never by shrinking the denominator.
     with pytest.raises(ValueError, match="6 families"):
-        decide_gate(gate_outcomes(SEPARATES, SEPARATES, SEPARATES, SEPARATES, TOO_CLOSE))
+        decide_gate(
+            gate_outcomes(SEPARATES, SEPARATES, SEPARATES, SEPARATES, TOO_CLOSE)
+        )
 
 
 def test_a_gate_decided_on_the_same_family_twice_is_refused() -> None:
@@ -230,7 +232,9 @@ def test_a_family_just_under_the_floor_fails_even_with_separated_intervals() -> 
     assert not outcome.passes
 
 
-def test_a_family_whose_intervals_overlap_fails_however_far_apart_the_means_are() -> None:
+def test_a_family_whose_intervals_overlap_fails_however_far_apart_the_means_are() -> (
+    None
+):
     # A difference in means is not a difference in distributions: 3 of 30 against
     # the hardened agent and 10 of 30 against the trivial one still overlap.
     outcome = score_family(family_rates(hardened=3, weak=7, trivial=10))

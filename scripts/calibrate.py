@@ -115,7 +115,9 @@ def _print_result(
 
     print()
     for family in _families_run(result.target_runs):
-        print(f"discrimination, {family}: {_discrimination(result.target_runs, family)}")
+        print(
+            f"discrimination, {family}: {_discrimination(result.target_runs, family)}"
+        )
 
     run_state = result.run_state
     print(
@@ -165,7 +167,10 @@ def _excerpt(text: str) -> str:
     collapsed = " ".join(text.split())
     if len(collapsed) <= REPLY_EXCERPT:
         return collapsed
-    return f"{collapsed[:REPLY_EXCERPT]}… [{len(collapsed)} chars, full transcript recorded]"
+    return (
+        f"{collapsed[:REPLY_EXCERPT]}… "
+        f"[{len(collapsed)} chars, full transcript recorded]"
+    )
 
 
 if __name__ == "__main__":

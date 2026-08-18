@@ -29,13 +29,15 @@ PlantNonce = Callable[[TargetConfig, str], None]
 
 @dataclass(frozen=True)
 class TargetRun:
-    """One target's part of a calibration run. No attempts unless registration completed."""
+    """One target's part of a calibration run. No attempts unless registration
+    completed."""
 
     target: TargetConfig
     registration: Registration
     attempts: tuple[Attempt, ...]
     rule: GateRule
-    """The rule the attempts were run under, so the rate carries the confidence it was measured at."""
+    """The rule the attempts were run under, so the rate carries the confidence
+    it was measured at."""
 
     @property
     def rates(self) -> dict[Family, Rate]:

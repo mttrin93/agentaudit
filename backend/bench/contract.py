@@ -49,7 +49,8 @@ class RetryPolicy:
     """How patient the bench is with one endpoint before it gives up on a message."""
 
     sends: int = 3
-    """How many times one message may go on the wire. Not attempts — see the module docstring."""
+    """How many times one message may go on the wire. Not attempts — see the
+    module docstring."""
 
     backoff_seconds: float = 0.5
     """The first wait, doubled on each further retry."""
@@ -99,7 +100,8 @@ class Transcript:
 
 
 def send_message(target: TargetConfig, message: str, session_id: str) -> Transcript:
-    """Send one message to a target, retrying transient failures, and record the exchange.
+    """Send one message to a target, retrying transient failures, and record
+    the exchange.
 
     The retries are invisible to the verdict by design: whatever it took to get a
     reply, what comes back is one exchange and the caller scores it once.

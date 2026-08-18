@@ -3,6 +3,12 @@
 The reference agents are served over real HTTP on an ephemeral port, because the
 gate must exercise the same code path a user's target exercises (spec:
 Implementation Decisions, "Reference agents are reached over real HTTP").
+
+They also satisfy the attestation and the approval interrupt like any other target
+(ADR-0007), so `BENCH_ATTESTATION` and `CONFIRMING` stand in for the engineer who
+attests and confirms the spend. Both are explicit at every call site: a fixture
+that supplied consent by default would make the halt invisible in exactly the
+tests that are supposed to demonstrate it.
 """
 
 from collections.abc import Iterator
@@ -31,6 +37,9 @@ from backend.bench.library import (
     VerdictClass,
     load_library,
 )
+from backend.bench.registration import Attestation
+from backend.graph.approval import Approval, Approve
+from backend.graph.budget import BudgetPayload
 from backend.targets.reference.agent import ReferenceAgent
 from backend.targets.reference.model import ModelConfig
 from backend.targets.reference.operator import nonce_planter
@@ -43,6 +52,27 @@ from backend.targets.reference.serving import serve
 
 CASES_DIR = Path(__file__).resolve().parents[1] / "cases"
 AUTH_TOKEN = "reference-auth-token"
+
+BENCH_ATTESTATION = Attestation(
+    identity="bench engineer, calibration fixture",
+    authorised_to_test=True,
+    not_production=True,
+    accepts_provider_policy_and_cost=True,
+)
+"""The three statements, made about the bench's own test equipment.
+
+True by construction here — these endpoints are processes the run itself started —
+and written down anyway, because a gate run that skipped the attestation would
+exercise a path no user's run takes.
+"""
+
+
+def _confirm(presented: BudgetPayload) -> Approval:
+    """Answer the approval interrupt with a yes, as the engineer running the gate."""
+    return Approval(confirmed=True, identity=BENCH_ATTESTATION.identity)
+
+
+CONFIRMING: Approve = _confirm
 
 
 @pytest.fixture
@@ -120,7 +150,9 @@ def calibrate(
         return run_calibration(
             cases=[case],
             targets=[reference.target],
+            attestation=BENCH_ATTESTATION,
             plant_nonce=reference.plant_nonce,
+            approve=CONFIRMING,
         )
 
 

@@ -22,10 +22,13 @@ import pytest
 
 from backend.bench.calibration import CalibrationResult, run_calibration
 from backend.bench.library import Case
+from backend.graph.budget import RunBudget
 from backend.graph.runstate import Attempt, RunState
-from backend.tests.conftest import served_references
+from backend.tests.conftest import BENCH_ATTESTATION, CONFIRMING, served_references
 
-ADAPTIVE_LAYER_EXISTS = hasattr(RunState(), "episodes")
+ADAPTIVE_LAYER_EXISTS = hasattr(
+    RunState(budget=RunBudget.declare(cases=(), targets=())), "episodes"
+)
 
 pytestmark = pytest.mark.skipif(
     not ADAPTIVE_LAYER_EXISTS,
@@ -65,7 +68,9 @@ def calibrate_all_three(case: Case) -> CalibrationResult:
         return run_calibration(
             cases=[case],
             targets=[served.target for served in references.served],
+            attestation=BENCH_ATTESTATION,
             plant_nonce=references.plant_nonce,
+            approve=CONFIRMING,
         )
 
 

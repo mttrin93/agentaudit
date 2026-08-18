@@ -21,6 +21,8 @@ from backend.targets.reference.agent import ReferenceAgent
 from backend.targets.reference.controls import OPERATOR_ECHO_PROBE, Controls
 from backend.targets.reference.hardened import HARDENED
 from backend.tests.conftest import (
+    BENCH_ATTESTATION,
+    CONFIRMING,
     served_references,
     target_run_for,
     unlisted_case,
@@ -183,7 +185,9 @@ def test_the_three_agents_order_as_construction_says_and_separate(
         result = run_calibration(
             cases=[leakage_case],
             targets=[served.target for served in references.served],
+            attestation=BENCH_ATTESTATION,
             plant_nonce=references.plant_nonce,
+            approve=CONFIRMING,
         )
 
     rates = {

@@ -3,12 +3,21 @@
     uv run python -m scripts.calibrate
     uv run python -m scripts.calibrate --model stub:obedient
     uv run python -m scripts.calibrate --agents trivial hardened
+    uv run python -m scripts.calibrate --identity "your name"
 
 The reference agents are served locally over real HTTP for the duration of the
 run, and the script plants the registration nonce in each target's system prompt
 the way an operator would by hand. It prints what was measured: a failure rate
 with its Wilson interval per agent, and the discrimination score between the
 trivial and hardened ends of the family.
+
+**It asks twice before it sends anything, and both prompts are the point.** The
+reference agents satisfy the attestation and the approval interrupt like any other
+target (ADR-0007), so the run stops for the three statements, then stops again at
+the graph interrupt with the estimated cost in front of you. Answering no to
+either spends nothing. Neither prompt has a `--yes`: a consent mechanism with a
+flag to skip it is a convenience feature after all, which is the one thing
+ADR-0007 says this must not become.
 
 That reading is not a gate result. The gate is decided over six families at
 n = 30 each, against a stated rule, and arrives in #13; what prints here is one
@@ -28,8 +37,11 @@ from dotenv import load_dotenv
 from backend.bench.calibration import CalibrationResult, TargetRun, run_calibration
 from backend.bench.contract import TargetConfig
 from backend.bench.library import Family, load_library
+from backend.bench.registration import Attestation
 from backend.bench.rule import DECLARED_RULE
 from backend.bench.scorer import Rate, discrimination
+from backend.graph.approval import Approval, Approve
+from backend.graph.budget import BudgetExceeded, BudgetPayload, Layer
 from backend.targets.reference.hardened import HARDENED
 from backend.targets.reference.model import ModelConfig
 from backend.targets.reference.operator import nonce_planter
@@ -48,6 +60,15 @@ CASES_DIR = Path(__file__).resolve().parents[1] / "backend" / "cases"
 DEFAULT_MODEL = "openrouter:openai/gpt-4.1-nano"
 REPLY_EXCERPT = 400
 
+WITHHELD = 2
+"""Exit code when the attestation was not made. Not an error — a refusal."""
+
+DECLINED = 3
+"""Exit code when the estimated cost was not confirmed at the interrupt."""
+
+ABORTED = 4
+"""Exit code when the run hit its declared ceiling and stopped."""
+
 
 def main(argv: Sequence[str] | None = None) -> int:
     load_dotenv()
@@ -63,11 +84,21 @@ def main(argv: Sequence[str] | None = None) -> int:
         default=[agent.name for agent in REFERENCE_AGENTS],
         help="which reference agents to calibrate against",
     )
+    parser.add_argument(
+        "--identity",
+        default=os.environ.get("USER", ""),
+        help="who is attesting and confirming this run; recorded with the attestation",
+    )
     args = parser.parse_args(argv)
 
     model = ModelConfig.parse(args.model)
     cases = load_library(CASES_DIR)
     auth_token = secrets.token_urlsafe(16)
+
+    attestation = _attest(args.identity)
+    if attestation is None:
+        print("Attestation withheld. Nothing was sent.")
+        return WITHHELD
 
     app = create_reference_app(ReferenceConfig(model=model, auth_token=auth_token))
     with serve(app) as base_url:
@@ -80,13 +111,80 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
             for name in args.agents
         ]
-        result = run_calibration(
-            cases=cases, targets=targets, plant_nonce=nonce_planter(base_url)
-        )
+        try:
+            result = run_calibration(
+                cases=cases,
+                targets=targets,
+                attestation=attestation,
+                plant_nonce=nonce_planter(base_url),
+                approve=_terminal_approval(attestation.identity),
+            )
+        except BudgetExceeded as abort:
+            print(f"\nRun aborted on budget: {abort}")
+            return ABORTED
+
+    if not result.approval.proceeded:
+        print(f"\nRun not started: {result.approval.reason}")
+        print("Nothing was sent, and nothing was spent.")
+        return DECLINED
 
     _print_result(result, model, len(cases))
     refused = [run for run in result.target_runs if run.registration.refused]
     return 1 if refused else 0
+
+
+def _attest(identity: str) -> Attestation | None:
+    """Collect the three statements. All three, or the run does not start."""
+    if not identity.strip():
+        print("No identity given. Pass --identity; an attestation records who made it.")
+        return None
+
+    print("Attestation. All three are required before anything is sent:")
+    for _, wording in Attestation.STATEMENTS:
+        print(f"  · {wording}")
+    if not _yes(f"Do you attest, as {identity}, to all three? [y/N] "):
+        return None
+
+    return Attestation(
+        identity=identity,
+        authorised_to_test=True,
+        not_production=True,
+        accepts_provider_policy_and_cost=True,
+    )
+
+
+def _terminal_approval(identity: str) -> Approve:
+    """Answer the graph's interrupt from the terminal.
+
+    The same halt is answered by an HTTP request at 6b. Only this function
+    changes; the graph does not.
+    """
+
+    def approve(presented: BudgetPayload) -> Approval:
+        print("\nEstimated cost of this run, before the first call:")
+        for line in presented["presented"]:
+            print(line)
+        if _yes("\nProceed and spend this? [y/N] "):
+            return Approval(confirmed=True, identity=identity)
+        return Approval(
+            confirmed=False,
+            identity=identity,
+            reason="declined at the approval interrupt",
+        )
+
+    return approve
+
+
+def _yes(prompt: str) -> bool:
+    """A yes, and only from a human at a terminal.
+
+    A run that is not being watched has nobody to consent on its behalf, so a
+    piped or absent stdin is a no rather than a default.
+    """
+    if not sys.stdin.isatty():
+        print(f"{prompt}\n  no terminal to ask — treating as no")
+        return False
+    return input(prompt).strip().lower() in {"y", "yes"}
 
 
 def _print_result(
@@ -120,11 +218,19 @@ def _print_result(
         )
 
     run_state = result.run_state
+    budget = result.budget
     print(
         f"run state: position={run_state.position} "
-        f"succeeded={len(run_state.succeeded_attempts)} "
-        f"calls_spent={run_state.calls_spent}"
+        f"succeeded={len(run_state.succeeded_attempts)}"
     )
+    # Per layer, never blended: a single figure would hide which half of the run
+    # is spending the operator's inference budget (ADR-0007).
+    for layer in Layer:
+        print(
+            f"calls spent, {layer} layer: {run_state.spent_in(layer)} "
+            f"of a declared ceiling of {budget.ceiling(layer)}"
+        )
+    print(f"confirmed by: {result.approval.identity}")
 
 
 def _rate(rate: Rate) -> str:

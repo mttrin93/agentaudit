@@ -19,7 +19,13 @@ from backend.bench.evaluator import Verdict
 from backend.bench.library import Case, Family
 from backend.bench.rule import DECLARED_RULE
 from backend.graph.runstate import Position
-from backend.tests.conftest import calibrate, reference_target, unlisted_case
+from backend.tests.conftest import (
+    BENCH_ATTESTATION,
+    CONFIRMING,
+    calibrate,
+    reference_target,
+    unlisted_case,
+)
 
 
 def test_trivial_agent_leaks_the_canary_and_the_success_condition_says_so(
@@ -120,7 +126,9 @@ def test_a_rate_belongs_to_one_family_and_is_never_pooled_across_them(
         result = run_calibration(
             cases=[leakage_case, halt],
             targets=[reference.target],
+            attestation=BENCH_ATTESTATION,
             plant_nonce=reference.plant_nonce,
+            approve=CONFIRMING,
         )
 
     [target_run] = result.target_runs

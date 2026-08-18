@@ -13,6 +13,7 @@ from backend.bench.calibration import run_calibration
 from backend.bench.evaluator import Verdict
 from backend.bench.library import Case
 from backend.bench.rule import DECLARED_RULE
+from backend.graph.budget import Layer
 from backend.tests.conftest import BENCH_ATTESTATION, CONFIRMING
 from backend.tests.flaky_target import IMPATIENT, flaky_target
 
@@ -79,5 +80,9 @@ def test_a_healthy_endpoint_is_sent_each_message_exactly_once(
     assert target_run.registration.probe.sends == 1
 
     # Calls spent counts what went out on the wire, since every send is on the
-    # operator's endpoint and their inference budget.
-    assert result.run_state.calls_spent == DECLARED_RULE.attempts_per_case + 1
+    # operator's endpoint and their inference budget. Per layer, because a run has
+    # two of them and the attacker's turns are counted against a ceiling of their
+    # own (ADR-0007, ADR-0010).
+    assert (
+        result.run_state.spent_in(Layer.SCORED) == DECLARED_RULE.attempts_per_case + 1
+    )

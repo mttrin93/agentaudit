@@ -6,13 +6,14 @@ question from whether one attempt succeeded, and it has no denominator because
 its length varies with what the attacker decided to do (ADR-0010, CONTEXT.md).
 Nothing here may be counted into a rate.
 
-The record lands ahead of the attacker that fills it, on the same reasoning as
-`budget.py`: #16 must not be able to start without the ceiling it spends under,
-and it must not be able to start without a record that says what the attacker was
-working with. `RunState.episodes` is deliberately **not** added here — the
+The record landed ahead of the attacker that fills it, on the same reasoning as
+`budget.py`: #16 must not have been able to start without the ceiling it spends
+under, and not without a record that says what the attacker was working with.
+`RunState.episodes` was deliberately left out of that first commit — the
 layer-ordering test in `backend/tests/test_layer_ordering.py` activates on that
-field, and it should activate on the commit that first runs an episode rather
-than on the one that first describes one.
+field, so it activates on the commit that first runs an episode rather than on the
+one that first describes one, which is #16 and is where `attacker.py` fills this
+record in.
 
 **Why an episode records the tools it had.** A target without tool-call
 visibility degrades two things, not one. The two tool-visibility families report
@@ -27,10 +28,12 @@ explains.
 from __future__ import annotations
 
 import time
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from enum import StrEnum
 
-from backend.bench.contract import TargetConfig
+from backend.bench.adaptive.proposal import ProposedRoute
+from backend.bench.contract import TargetConfig, Transcript
 from backend.bench.library import Family
 
 
@@ -93,6 +96,28 @@ class AdaptiveEpisode:
     timestamp on both records to compare (spec, Testing Decisions).
     """
 
+    transcripts: tuple[Transcript, ...] = ()
+    """Every exchange this episode had with the target, in order.
+
+    Recorded in full and **never committed** (spec story 105): a route that beat a
+    target is a working, previously unpublished exploit, and shipping one in a
+    public repository is the disclosure posture inverted (ADR-0008). Nothing in
+    this package writes a transcript to disk; what a reader gets is the prose
+    description on `ProposedRoute` and in the validation document.
+
+    Held here rather than on a turn record because a turn is not a unit of
+    anything — `turns` is the count the effort statistic reads, and these are the
+    evidence behind it.
+    """
+
+    proposals: tuple[ProposedRoute, ...] = ()
+    """The routes the attacker put forward during this episode.
+
+    Proposed, never admitted: each carries a case with no admission record, and
+    the gate decides them against a stated threshold (#17, ADR-0012). An episode
+    with proposals has not grown the library; it has asked.
+    """
+
     def __post_init__(self) -> None:
         if self.turns < 0:
             raise ValueError("an episode cannot have taken fewer than no turns")
@@ -104,12 +129,19 @@ class AdaptiveEpisode:
         family: Family,
         outcome: EpisodeOutcome,
         turns: int,
+        transcripts: Sequence[Transcript] = (),
+        proposals: Sequence[ProposedRoute] = (),
+        started_at: float | None = None,
     ) -> AdaptiveEpisode:
         """Record an episode with the kit the target's registration allowed it.
 
         The one constructor #16 should reach for: the tools are derived from the
         target rather than passed, so an episode cannot be recorded claiming a
         tool the attacker could not possibly have had.
+
+        `started_at` is passed rather than taken here, because the record is built
+        when the episode *ends* and the ordering invariant of ADR-0010 is about
+        when it began.
         """
         return cls(
             family=family,
@@ -117,6 +149,9 @@ class AdaptiveEpisode:
             outcome=outcome,
             turns=turns,
             tools=tools_against(target),
+            started_at=time.monotonic() if started_at is None else started_at,
+            transcripts=tuple(transcripts),
+            proposals=tuple(proposals),
         )
 
     @property

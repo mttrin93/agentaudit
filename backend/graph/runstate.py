@@ -11,8 +11,10 @@ independently — a layer with room left may not borrow from the other's unspent
 allowance.
 """
 
+import time
 from dataclasses import dataclass, field
 
+from backend.bench.adaptive.episode import AdaptiveEpisode
 from backend.bench.contract import Transcript
 from backend.bench.evaluator import Verdict
 from backend.bench.library import Family, VerdictClass
@@ -49,6 +51,16 @@ class Attempt:
     that inference is impossible.
     """
 
+    started_at: float = field(default_factory=time.monotonic)
+    """When this attempt began — before the message went on the wire, not when the
+    record was built.
+
+    Carried so that the one invariant of the two-layer run that no type can hold
+    is checkable: adaptive episodes run strictly after the fixed suite for a given
+    target, and `backend/tests/test_layer_ordering.py` compares this against
+    `AdaptiveEpisode.started_at` to say so (ADR-0010).
+    """
+
 
 @dataclass(frozen=True)
 class Position:
@@ -72,6 +84,17 @@ class RunState:
     budget: RunBudget
     position: Position | None = None
     attempts: list[Attempt] = field(default_factory=list)
+    episodes: list[AdaptiveEpisode] = field(default_factory=list)
+    """What the adaptive layer did, in a field of its own.
+
+    Separate from `attempts` and holding a record that cannot be constructed from
+    one, so that `TargetRun.rates` — which groups everything in `attempts` by
+    family and divides — cannot reach an adaptive turn however it is called. An
+    episode sharing that list would move every denominator in the bench silently:
+    the arithmetic would stay valid, the population would change, and no test
+    would fail (ADR-0010).
+    """
+
     spent: dict[Layer, int] = field(default_factory=lambda: dict.fromkeys(Layer, 0))
 
     def enter(self, target_name: str, case_id: str, attempt_index: int) -> None:
@@ -137,6 +160,16 @@ class RunState:
 
     def record(self, attempt: Attempt) -> None:
         self.attempts.append(attempt)
+
+    def record_episode(self, episode: AdaptiveEpisode) -> None:
+        """Keep one episode, in the store the adaptive layer has to itself.
+
+        A second method rather than a wider `record`. A signature that accepted
+        both records is the widening ADR-0010 asks anyone who reaches for it to
+        stop at: the type separation only holds while there is nowhere for the two
+        to meet.
+        """
+        self.episodes.append(episode)
 
     @property
     def succeeded_attempts(self) -> list[Attempt]:

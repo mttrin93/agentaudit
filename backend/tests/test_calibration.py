@@ -18,6 +18,7 @@ from backend.bench.calibration import run_calibration
 from backend.bench.evaluator import Verdict
 from backend.bench.library import Case, Family
 from backend.bench.rule import DECLARED_RULE
+from backend.graph.budget import Layer
 from backend.graph.runstate import Position
 from backend.tests.conftest import (
     BENCH_ATTESTATION,
@@ -169,5 +170,9 @@ def test_the_run_state_records_position_successes_and_calls_spent(
     assert [a.case_id for a in run_state.succeeded_attempts] == [
         leakage_case.id
     ] * attempts
-    # The registration probe spends a call against the endpoint too.
-    assert run_state.calls_spent == attempts + 1
+    # The registration probe spends a call against the endpoint too. Read on the
+    # scored counter rather than on the blended one, because a run has two layers
+    # and the adaptive one spends against its own ceiling (ADR-0007, ADR-0010) —
+    # a suite's cost read off `calls_spent` would move every time the attacker
+    # had a longer episode.
+    assert run_state.spent_in(Layer.SCORED) == attempts + 1

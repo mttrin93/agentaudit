@@ -24,13 +24,27 @@ cases without one is refused before the estimate and before anything reaches an
 endpoint, rather than partway through: an attempt nothing can score is the operator's
 money spent with no measurement behind it, and a partial suite is void rather than
 smaller (ADR-0007).
+
+**A run has two layers, and the second one runs here, last.** Once the fixed suite
+has finished against every target, `run_adaptive_layer` attacks the ones that
+registered by a route of its own choosing (#16). Nothing it produces is scored: it
+records `AdaptiveEpisode`s in a field of their own, spends against its own ceiling,
+and reaches the scored side through exactly one edge — `propose_case`, which the
+admission gate decides (ADR-0010). `attacker` defaults to the deterministic
+stand-in of `adaptive/scripted.py` so that the layer always runs; the entry point
+in `scripts/calibrate.py` names a configured model instead, on the same terms as
+the adjudicator.
 """
 
 from collections import defaultdict
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 
+from backend.bench.adaptive.attacker import AttackerCompletion
 from backend.bench.adaptive.budget import DECLARED_ADAPTIVE_BUDGET, AdaptiveBudget
+from backend.bench.adaptive.layer import AttackableTarget, run_adaptive_layer
+from backend.bench.adaptive.precedent import NO_PRECEDENT, PrecedentStore
+from backend.bench.adaptive.scripted import SCRIPTED_ATTACKER
 from backend.bench.adjudication import Completion, NoAdjudicator
 from backend.bench.applicability import SkippedCase, applicable, skipped_cases
 from backend.bench.attacker import run_case
@@ -216,6 +230,8 @@ def run_calibration(
     plant_nonce: PlantNonce | None = None,
     approve: Approve | None = None,
     adjudicator: Completion | None = None,
+    attacker: AttackerCompletion = SCRIPTED_ATTACKER,
+    precedent: PrecedentStore = NO_PRECEDENT,
     rule: GateRule = DECLARED_RULE,
     adaptive: AdaptiveBudget = DECLARED_ADAPTIVE_BUDGET,
     budget: RunBudget | None = None,
@@ -260,6 +276,26 @@ def run_calibration(
                     rule=rule,
                 )
             )
+        # And only then the second layer, on every target that registered. After
+        # the whole suite rather than after each target's own: the ordering
+        # ADR-0010 requires is per target, and running the layer here satisfies it
+        # for all of them while leaving target order free to be randomised per
+        # family, which ADR-0011 requires and a per-target interleaving would not
+        # allow.
+        run_adaptive_layer(
+            attackable=[
+                AttackableTarget(
+                    target=completed.target, canary=completed.registration.nonce
+                )
+                for completed in target_runs
+                if completed.registration.complete
+            ],
+            cases=cases,
+            run_state=run_state,
+            attacker=attacker,
+            budget=adaptive,
+            precedent=precedent,
+        )
 
     approval = run_under_approval(declared, run_suite, approve)
 

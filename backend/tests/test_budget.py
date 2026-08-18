@@ -412,5 +412,8 @@ def test_a_run_that_retries_every_message_still_fits_inside_its_ceiling(
     scored = result.run_state.spent_in(Layer.SCORED)
     assert scored == result.budget.scored_ceiling
     assert scored == result.budget.estimate.scored.calls * IMPATIENT.sends
-    # And the layer that never ran spent nothing, rather than sharing a counter.
-    assert result.run_state.spent_in(Layer.ADAPTIVE) == 0
+    # And the other layer ran on this endpoint too, retrying every message the same
+    # way, without a single one of its sends landing in the figure above. Two
+    # counters rather than one is what makes that checkable (ADR-0007, ADR-0010).
+    adaptive = result.run_state.spent_in(Layer.ADAPTIVE)
+    assert 0 < adaptive <= result.budget.adaptive_ceiling

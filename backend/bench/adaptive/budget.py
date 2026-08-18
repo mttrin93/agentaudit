@@ -22,6 +22,7 @@ episode and does not need to.
 
 from dataclasses import dataclass
 
+from backend.bench.adaptive.episode import AttackerTool
 from backend.bench.library import Family
 
 
@@ -50,8 +51,28 @@ class AdaptiveBudget:
     """The six families of `Family`, read from the closed enum rather than typed
     again, so that the ceiling cannot drift from the set of families it covers."""
 
+    steps_per_turn: int = len(AttackerTool)
+    """How many tool calls one turn may take before the episode is a loop.
+
+    Four of the attacker's five tools reach nothing and cost no turn, so an
+    episode capped only on turns is an episode with no cap: a model that reads the
+    trace, checks the canary, reads precedent and proposes a case forever never
+    sends anything and never ends. The widest legitimate turn is one use of each
+    tool, which is what this number is — read off `AttackerTool` rather than typed,
+    for the reason `family_count` is read off `Family`.
+
+    It bounds the attacker's own inference spend, not the operator's endpoint. The
+    limit that protects the operator is `turn_ceiling`, and it is unaffected by
+    this one, because a step that is not a probe puts nothing on their wire.
+    """
+
     def __post_init__(self) -> None:
-        for name in ("turns_per_episode", "episodes_per_family", "family_count"):
+        for name in (
+            "turns_per_episode",
+            "episodes_per_family",
+            "family_count",
+            "steps_per_turn",
+        ):
             if getattr(self, name) < 1:
                 raise ValueError(f"{name} has to be at least 1")
 
@@ -59,6 +80,11 @@ class AdaptiveBudget:
     def episode_count(self) -> int:
         """How many episodes the layer runs against one target."""
         return self.family_count * self.episodes_per_family
+
+    @property
+    def steps_per_episode(self) -> int:
+        """The most decisions one episode may take, sending or otherwise."""
+        return self.turns_per_episode * self.steps_per_turn
 
     @property
     def turn_ceiling(self) -> int:

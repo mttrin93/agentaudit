@@ -19,6 +19,7 @@ than constructed here, so the model that decides a judged family is a run's
 declared input and not a default buried three modules down.
 """
 
+import time
 import uuid
 
 from backend.bench.adjudication import (
@@ -65,6 +66,11 @@ def run_attempt(
     adjudicator: Completion | None = None,
 ) -> Attempt:
     """Send one case to one target, reach a verdict on the reply, record the attempt."""
+    # Taken before the message goes on the wire rather than when the record is
+    # built, because the ordering invariant of ADR-0010 is about when an attempt
+    # began: an episode that started while this attempt was in flight has to be
+    # visible as having started after it.
+    began = time.monotonic()
     run_state.authorise_call(Layer.SCORED, target.retry.sends)
     run_state.enter(target.name, case.id, index)
     transcript = send_message(
@@ -79,6 +85,7 @@ def run_attempt(
         transcript=transcript,
         verdict=verdict_of(case, transcript, target, canary, adjudicator),
         verdict_class=case.verdict_class,
+        started_at=began,
     )
     run_state.record(attempt)
     return attempt

@@ -1,8 +1,9 @@
 """The bench's short-term memory: where a run is, what it has found, what it has spent.
 
 A run state is carried as a plain object here, in the module PLAN.md §7 assigns it.
-The approval interrupt the run halts on is the graph in `approval.py`; #13 adds the
-library version.
+The approval interrupt the run halts on is the graph in `approval.py`, and the
+library version is recorded here, on the run, because a rate is only comparable
+with another rate measured against the same cases (spec story 27).
 
 Spending is counted **per layer** (#5). Two counters rather than one, because a
 single blended figure hides which half of a run is consuming the operator's
@@ -17,7 +18,7 @@ from dataclasses import dataclass, field
 from backend.bench.adaptive.episode import AdaptiveEpisode
 from backend.bench.contract import Transcript
 from backend.bench.evaluator import Verdict
-from backend.bench.library import Family, VerdictClass
+from backend.bench.library import EMPTY_LIBRARY, Family, LibraryVersion, VerdictClass
 from backend.graph.budget import BudgetExceeded, Layer, RunBudget
 
 
@@ -82,6 +83,15 @@ class RunState:
     """
 
     budget: RunBudget
+    library: LibraryVersion = EMPTY_LIBRARY
+    """Which library this run was made against — the count and the digest.
+
+    On the run rather than beside it, so that a result and the version that
+    produced it cannot be separated by the time somebody compares two runs. It
+    defaults to the empty library rather than to `None`: a run state built with no
+    cases has a library of none, which is a fact and not a missing field.
+    """
+
     position: Position | None = None
     attempts: list[Attempt] = field(default_factory=list)
     episodes: list[AdaptiveEpisode] = field(default_factory=list)

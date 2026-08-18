@@ -42,8 +42,8 @@ judged family whose κ misses the declared floor — or that has no κ at all �
 publish the rate by neglecting to ask.
 
 **What is deliberately not here.** `D` arrives as `None` until a gate run has read
-the family (#13), and never as 0.0 — the same soft-zero refusal `measurability.py`
-makes about a rate.
+the family (`gate.py`), and never as 0.0 — the same soft-zero refusal
+`measurability.py` makes about a rate.
 """
 
 from collections.abc import Iterable, Mapping, Sequence
@@ -56,6 +56,7 @@ from backend.bench.contract import DeclaredControl
 from backend.bench.evaluator import Verdict
 from backend.bench.library import Case, ExternalId, Family, VerdictClass
 from backend.bench.measurability import NotMeasurable
+from backend.bench.reproducibility import Reproducibility
 from backend.bench.scanner import Scan, family_claimed_by, scan
 from backend.bench.scorer import (
     DECLARED_BAND_CUTS,
@@ -68,40 +69,6 @@ from backend.bench.scorer import (
     band_for,
 )
 from backend.graph.runstate import Attempt
-
-
-class Reproducibility(StrEnum):
-    """Whether a section can be re-derived by its reader, or only read.
-
-    Printed on every section rather than in a footnote about one, because the
-    distinction only means something if it is stated on both sides: a reader who
-    sees "not reproducible" once and nothing anywhere else cannot tell whether the
-    label is a property of that section or a caveat the author felt like adding.
-
-    Scoping reproducibility rather than claiming it whole is ADR-0010's own
-    consequence — the gate decision is re-derivable from recorded inputs, the
-    adaptive search is recorded and not re-derivable, and printing the difference is
-    the same discipline as printing κ beside a judged family.
-    """
-
-    RE_DERIVABLE = "re_derivable"
-    NOT_REPRODUCIBLE = "not_reproducible"
-
-    def stated(self) -> str:
-        """The label in the words the section header prints."""
-        match self:
-            case Reproducibility.RE_DERIVABLE:
-                return (
-                    "re-derivable — every figure here follows from the recorded "
-                    "attempts, the case records and the stated rule, so a reader "
-                    "holding those can recompute it without this bench"
-                )
-            case Reproducibility.NOT_REPRODUCIBLE:
-                return (
-                    "not reproducible — re-run this layer and the attacker takes a "
-                    "different path. A route it found is evidence that the route "
-                    "exists; a route it did not find is evidence of nothing"
-                )
 
 
 class ControlStatus(StrEnum):
@@ -703,8 +670,8 @@ def assemble(
     recorded episodes. This function sees all three and combines none of them —
     there is no line below that reads a figure out of one section and into another.
 
-    `gate` supplies `D` per family from the last gate run (#13). Without one, every
-    entry says so rather than showing a zero.
+    `gate` supplies `D` per family from the last gate run (`gate.py`). Without one,
+    every entry says so rather than showing a zero.
 
     `episodes` are the adaptive layer's, and they arrive as an argument rather than
     off the run state because #16 records them and #17 measures them; this ticket

@@ -30,7 +30,8 @@ reading no longer reproduces is what the retirement rule is for (#14), and this 
 the script that would show it.
 
 What prints is not a gate result. Admission is one case against the three reference
-agents; the gate is six families at n = 30 each against a declared rule (#13).
+agents; the gate is six families at n = 30 each against a declared rule, and it is
+`scripts/gate.py`.
 """
 
 import argparse

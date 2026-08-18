@@ -14,7 +14,9 @@ a consumer reads the class off the record and never infers it from the family na
 (ADR-0004).
 """
 
+import hashlib
 import tomllib
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import date
 from enum import StrEnum
@@ -432,6 +434,63 @@ class Case:
                         "(ADR-0004), so a judged case holding one would have its "
                         "verdict decided by the deterministic path after all"
                     )
+
+
+@dataclass(frozen=True)
+class LibraryVersion:
+    """Which library a run was made against — a count and a digest of the records.
+
+    Recorded on every run, because two runs months apart are comparable or provably
+    not (spec story 27), and "provably not" is the half that needs a number. A run
+    that says only *eighteen cases* cannot tell a reader whether the eighteen are
+    the same eighteen.
+
+    **Read off the records rather than declared beside them.** A hand-kept version
+    string is a version string somebody forgets to raise on the run where it
+    mattered, and the digest is over what actually ran: every field of every case,
+    including its payload and its criterion, so a payload edited without a rename
+    moves the version. It is a hash and not the records, so nothing here publishes
+    a payload (ADR-0008).
+    """
+
+    cases: int
+    digest: str
+
+    @classmethod
+    def of(cls, cases: Iterable[Case]) -> "LibraryVersion":
+        """The version of the library that is about to run, or that just ran.
+
+        Ordered by case id rather than by the order the caller happened to hold
+        them in, so that the same library loaded twice is the same version.
+        """
+        recorded = sorted(cases, key=lambda case: case.id)
+        digest = hashlib.sha256(
+            "\n".join(repr(case) for case in recorded).encode("utf-8")
+        )
+        return cls(cases=len(recorded), digest=digest.hexdigest()[:12])
+
+    def stated(self) -> str:
+        """The version as a run prints it, in the provenance block's words."""
+        if not self.cases:
+            return (
+                "library version: no case ran, so there is nothing to version. Not "
+                "a library that happened to be empty at the same digest as another"
+            )
+        return (
+            f"library version: {self.cases} "
+            f"{'case' if self.cases == 1 else 'cases'}, sha256:{self.digest} — over "
+            "every field of every record that ran, so an edited payload is a "
+            "different version"
+        )
+
+
+EMPTY_LIBRARY = LibraryVersion.of(())
+"""The version of a run that has no library.
+
+Built through `of` rather than by hand, so that the run state's default and a
+version computed from an empty sequence are the same value. Two constructors that
+disagreed about the empty case would put two different digests on the same fact.
+"""
 
 
 def load_library(directory: Path) -> list[Case]:

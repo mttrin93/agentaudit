@@ -37,7 +37,6 @@ from backend.bench.assembler import (
     FamilyEntry,
     MeasuredSection,
     ReportedEpisode,
-    Reproducibility,
     ScannedControl,
     TargetResult,
     reported_episodes,
@@ -45,6 +44,7 @@ from backend.bench.assembler import (
 from backend.bench.contract import DeclaredControl
 from backend.bench.library import Case, ExternalId, Family, VerdictClass
 from backend.bench.measurability import NotMeasurable
+from backend.bench.reproducibility import Reproducibility
 from backend.bench.scorer import (
     DECLARED_BAND_CUTS,
     Band,

@@ -17,7 +17,6 @@ from dataclasses import replace
 
 import pytest
 
-from backend.bench.completion import _client
 from backend.bench.contract import Transcript
 from backend.bench.evaluator import Verdict
 from backend.bench.library import Case, Family, VerdictClass
@@ -25,7 +24,6 @@ from backend.graph.runstate import Attempt
 from backend.tests.conftest import target_run_for
 from scripts.console import EXIT_WITHHELD
 from scripts.probe_target import (
-    ADJUDICATOR_ENV,
     OperatorGap,
     deterministic_subset,
     main,
@@ -194,34 +192,42 @@ def test_a_family_not_run_prints_as_not_run_rather_than_as_a_rate(
     assert f"failure rate, {Family.DISCLOSURE_DENIAL}" not in printed
 
 
-def test_no_adjudicator_and_no_deterministic_only_still_refuses(
+def test_an_unusable_adjudicator_and_no_deterministic_only_still_refuses(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     """The path that must not become a silent drop.
 
-    Without either flag the run needs an instrument it has not got, and the two
-    judged families must not quietly vanish from the output — a run that dropped
-    them and reported four families would look like a complete result. The refusal
-    lands before the attestation and before anything is sent, because a run that
-    discovered this at its first judged attempt would already have spent the
-    operator's budget on attempts nothing can score.
+    A run with no usable instrument and no `--deterministic-only` needs something it
+    has not got, and the two judged families must not quietly vanish from the
+    output: a run that dropped them and reported four families would read as a
+    complete result. The refusal lands before the attestation and before anything is
+    sent, which is what the `attest` stub is for — a run that discovered this at its
+    first judged attempt would already have spent the operator's budget on attempts
+    nothing can score.
+
+    The instrument is made unusable by a malformed configuration rather than by an
+    absent credential. Both reach the same refusal, and only this one is a fact about
+    the argument: an absent credential depends on the environment the suite happens
+    to run in and on a cached client, so a guard written that way passes alone and
+    fails in the suite.
     """
-    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
-    monkeypatch.delenv(ADJUDICATOR_ENV, raising=False)
-    monkeypatch.setattr("scripts.probe_target.load_dotenv", lambda: None)
-    # `completion._client` is lru_cached, so a client another test built while a
-    # credential was present would answer here and this refusal would never fire.
-    # Cleared rather than tolerated: a test that passes alone and fails in the suite
-    # is a test nobody trusts the next time it goes red.
-    _client.cache_clear()
     monkeypatch.setattr(
         "scripts.probe_target.attest",
         lambda identity: pytest.fail("asked for an attestation before refusing"),
     )
 
     exit_code = main(
-        ["--url", "https://target.invalid/messages", "--identity", "t", "--token", "x"]
+        [
+            "--url",
+            "https://target.invalid/messages",
+            "--identity",
+            "t",
+            "--token",
+            "x",
+            "--adjudicator-model",
+            "not-a-provider-and-model",
+        ]
     )
     printed = capsys.readouterr().out
 

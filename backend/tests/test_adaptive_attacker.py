@@ -23,6 +23,7 @@ import pytest
 
 from backend.bench.adaptive.attacker import AttackerCompletion
 from backend.bench.adaptive.budget import DECLARED_ADAPTIVE_BUDGET, AdaptiveBudget
+from backend.bench.adaptive.discrimination import Reading, measure
 from backend.bench.adaptive.episode import (
     AdaptiveEpisode,
     AttackerTool,
@@ -499,3 +500,28 @@ def test_a_shorter_declared_budget_is_the_budget_the_layer_runs_under(
 
     assert len(episodes) == 1
     assert episodes[0].turns == 3
+
+
+def test_the_adaptive_block_is_measured_from_the_episodes_a_run_recorded(
+    leakage_case: Case,
+) -> None:
+    # The statistics are #17's and are driven directly in
+    # `test_adaptive_discrimination.py`. What is checked here is the seam: a real
+    # run's episodes are the input `measure` takes, and against these two agents on
+    # this case the layer separates them — the trivial agent hands over its
+    # configuration and the hardened agent's output filter holds for eight turns.
+    with attackable(names=("trivial", "hardened")) as targets:
+        _, episodes = attack(targets, [leakage_case], seed=17)
+
+    result = measure(episodes, trivial="trivial", hardened="hardened")
+
+    assert result.separation.scope == (Family.DATA_LEAKAGE,)
+    assert result.separation.value == 1.0
+    assert result.separation.reading is Reading.DISCRIMINATES
+    hardened = next(e for e in result.effort if e.target_name == "hardened")
+    assert hardened.median is None
+    assert hardened.censored == (Family.DATA_LEAKAGE,)
+    # One family in scope is one pair, so the sign test says almost nothing here
+    # and says it honestly: p = 0.5 at n = 1 is what one discordant pair is worth.
+    assert result.sign_test.discordant == 1
+    assert result.sign_test.p_value == 0.5

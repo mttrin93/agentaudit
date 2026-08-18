@@ -43,9 +43,12 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
+from backend.bench.adaptive.discrimination import NoFamiliesInScope, measure
+from backend.bench.adaptive.episode import AdaptiveEpisode
 from backend.bench.admission import (
     NotAdmitted,
     admitted_library,
+    library_provenance,
     outcome_for,
     provenance_counts,
 )
@@ -56,7 +59,7 @@ from backend.bench.completion import (
     completion_for,
 )
 from backend.bench.contract import TargetConfig
-from backend.bench.library import Case, Family, VerdictClass
+from backend.bench.library import Case, Family, VerdictClass, bar_for
 from backend.bench.rule import DECLARED_RULE
 from backend.bench.scorer import discrimination
 from backend.graph.budget import BudgetExceeded, Layer, RunBudget
@@ -305,13 +308,13 @@ def _print_result(
 
 
 def _print_episodes(result: CalibrationResult) -> None:
-    """The adaptive section, in its own block and carrying no number.
+    """The adaptive section, in its own block and carrying no rate.
 
     Printed apart from the rates and never beside them: an episode has no
-    denominator, `A_break` and `A_effort` belong to #17, and nothing here decides
-    anything about the gate (ADR-0010, ADR-0011). Labelled *not reproducible*,
-    because claiming a stochastic search is reproducible would be the overreach
-    the judge's narrative was demoted for.
+    denominator, `A_break` and `A_effort` are measured on families and turns rather
+    than on attempts, and nothing here decides anything about the gate (ADR-0010,
+    ADR-0011). Labelled *not reproducible*, because claiming a stochastic search is
+    reproducible would be the overreach the judge's narrative was demoted for.
     """
     episodes = result.run_state.episodes
     print("\nadaptive layer — recorded, not reproducible, and scored on nothing")
@@ -326,7 +329,32 @@ def _print_episodes(result: CalibrationResult) -> None:
             f"after {episode.turns} turns"
         )
         for proposal in episode.proposals:
-            print(f"    proposed {proposal.case.id}: {proposal.description}")
+            # Proposed, never admitted. `propose_case` drafts and the admission
+            # gate decides, and an adaptive-discovered case faces the cross-model
+            # bar — which needs a second underlying model and so a second run
+            # (ADR-0012, `scripts/admit.py --second-model`).
+            print(
+                f"    proposed {proposal.case.id}: {proposal.description} "
+                f"— faces the {bar_for(proposal.case.discovered_by)} bar, "
+                "not admitted by having been proposed"
+            )
+    _print_adaptive_discrimination(episodes)
+
+
+def _print_adaptive_discrimination(episodes: Sequence[AdaptiveEpisode]) -> None:
+    """`A_break`, `A_effort` and the sign test, in their own block.
+
+    Never in a `D` table and never named `D`: these are measured on episodes and
+    families, and a Wilson interval on `n = 6` has no business printed beside one on
+    `n = 30` (ADR-0011). The block prints the reading table whatever the outcome,
+    so a reader sees what each of the four possible answers would have meant.
+    """
+    try:
+        print(measure(episodes, trivial=TRIVIAL.name, hardened=HARDENED.name).stated())
+    except NoFamiliesInScope as unmeasured:
+        # A stated refusal rather than a zero. "No separation" and "nothing was
+        # measured" are the two readings that must never collapse into one number.
+        print(f"adaptive discrimination: not read — {unmeasured}")
 
 
 def _families_run(target_runs: Sequence[TargetRun]) -> list[Family]:
@@ -372,6 +400,11 @@ def _print_provenance(cases: Sequence[Case]) -> None:
         "provenance:            "
         + ", ".join(f"{member} {counts[member]}" for member in counts)
     )
+    # The two series ADR-0012 asks for on every gate run: how far the library has
+    # drifted towards routes fitted to these three agents, and whether the drift is
+    # doing the damage the cross-model bar exists to prevent.
+    for line in library_provenance(cases).stated().splitlines():
+        print(f"  {line}")
     for case in cases:
         # The bar beside the case, so an adaptive-discovered case is distinguishable
         # from an authored one by reading the report (ADR-0012).

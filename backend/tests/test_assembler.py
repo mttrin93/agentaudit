@@ -27,6 +27,7 @@ from backend.bench.adaptive.episode import (
     AttackerTool,
     EpisodeOutcome,
 )
+from backend.bench.adaptive.proposal import ProposedRoute, proposed_from
 from backend.bench.assembler import (
     DECLARED_COVERAGE_GAPS,
     AdaptiveSection,
@@ -39,9 +40,10 @@ from backend.bench.assembler import (
     Reproducibility,
     ScannedControl,
     TargetResult,
+    reported_episodes,
 )
 from backend.bench.contract import DeclaredControl
-from backend.bench.library import ExternalId, Family, VerdictClass
+from backend.bench.library import Case, ExternalId, Family, VerdictClass
 from backend.bench.measurability import NotMeasurable
 from backend.bench.scorer import (
     DECLARED_BAND_CUTS,
@@ -52,6 +54,7 @@ from backend.bench.scorer import (
     band_for,
     failure_rate,
 )
+from backend.tests.conftest import a_target
 from backend.tests.test_scorer import WILSON_90
 
 FIGURES = (Rate, Interval, Band)
@@ -438,6 +441,64 @@ def test_a_route_states_the_tools_the_attacker_did_not_have() -> None:
     assert "not evidence that the target held" in one_eyed.stated()
 
 
+def test_the_adaptive_section_is_populated_from_the_recorded_episodes() -> None:
+    # #17 fills the shape this module owns. One target's episodes become the
+    # section's rows, and an episode against another agent stays out of it — the
+    # reporting form of the context isolation ADR-0011 requires of the attacker.
+    mine = an_episode(Family.DATA_LEAKAGE, EpisodeOutcome.BROKEN, turns=2)
+    theirs = AdaptiveEpisode(
+        family=Family.SCOPE_CREEP,
+        target_name="somebody else",
+        outcome=EpisodeOutcome.BROKEN,
+        turns=1,
+    )
+    section = AdaptiveSection(episodes=reported_episodes([mine, theirs], "target"))
+
+    assert section.families_broken == frozenset({Family.DATA_LEAKAGE})
+    assert [reported.episode for reported in section.episodes] == [mine]
+
+
+def test_a_reported_episode_takes_its_prose_from_the_route_the_attacker_wrote(
+    leakage_case: Case,
+) -> None:
+    # The description is the attacker's own where it wrote one, and it is the only
+    # part of a route ever written down outside a run (ADR-0008).
+    described = reported_episodes(
+        [
+            AdaptiveEpisode(
+                family=Family.DATA_LEAKAGE,
+                target_name="target",
+                outcome=EpisodeOutcome.BROKEN,
+                turns=3,
+                proposals=(
+                    a_proposed_route(leakage_case, "escalating requests for the setup"),
+                ),
+            )
+        ],
+        "target",
+    )
+
+    assert described[0].description == "escalating requests for the setup"
+
+
+def test_an_episode_that_proposed_nothing_still_carries_prose_and_no_payload() -> None:
+    # Derived from the record and from nothing else: what an attacker *would* have
+    # said about a route it did not think worth promoting is not evidence, and the
+    # transcripts that hold the probe text are never rendered.
+    broke, censored, silent = reported_episodes(
+        [
+            an_episode(Family.DATA_LEAKAGE, EpisodeOutcome.BROKEN, turns=4),
+            an_episode(Family.SCOPE_CREEP, EpisodeOutcome.CENSORED, turns=8),
+            an_episode(Family.HALT_DEFEAT, EpisodeOutcome.CENSORED, turns=0),
+        ],
+        "target",
+    )
+
+    assert "broke the objective in 4 turns" in broke.description
+    assert "no break in 8 turns" in censored.description
+    assert "sent nothing to the target" in silent.description
+
+
 # --- Coverage gaps ----------------------------------------------------------
 
 
@@ -530,4 +591,15 @@ def a_result() -> TargetResult:
                 a_reported_episode(Family.HALT_DEFEAT, EpisodeOutcome.BROKEN, turns=4),
             )
         ),
+    )
+
+
+def a_proposed_route(objective: Case, description: str) -> ProposedRoute:
+    """One route the attacker put forward, drafted the way `propose_case` drafts it."""
+    return proposed_from(
+        objective=objective,
+        target=a_target("target"),
+        family=objective.family,
+        payload="the probe that actually ran",
+        description=description,
     )

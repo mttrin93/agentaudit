@@ -80,27 +80,23 @@ class ApprovalOutcome:
 
 
 class ApprovalState(TypedDict):
-    """The graph's state. Deliberately primitives only.
+    """The graph's state: the human's answer, and nothing else.
 
-    The run's real state lives in `RunState`, which the suite node mutates
-    through a closure. Nothing here carries a case, a target, a transcript or a
-    callable: this state is checkpointed, and a checkpoint is not the place to
-    discover which of a run's records happen to survive a serializer.
+    Deliberately primitives only. The run's real state lives in `RunState`, which
+    the suite node mutates through a closure. Nothing here carries a case, a
+    target, a transcript or a callable: this state is checkpointed, and a
+    checkpoint is not the place to discover which of a run's records happen to
+    survive a serializer.
+
+    It holds no record of whether the suite ran, either. That fact belongs to
+    `RunState`, which counts what was spent — a second copy of it here would be a
+    checkpointed field that no reader consults and that can disagree with the
+    counters.
     """
 
     confirmed: bool
     identity: str
     reason: str
-    suite_ran: bool
-
-
-class ApprovalUpdate(TypedDict, total=False):
-    """A partial update to `ApprovalState`, which is what a node returns."""
-
-    confirmed: bool
-    identity: str
-    reason: str
-    suite_ran: bool
 
 
 class ApprovalRun:
@@ -108,7 +104,7 @@ class ApprovalRun:
 
     def __init__(self, budget: RunBudget, run_suite: Callable[[], None]) -> None:
         self.budget = budget
-        self._run_suite = run_suite
+        self._suite = run_suite
         self._config: RunnableConfig = {
             "configurable": {"thread_id": f"run-{uuid.uuid4()}"}
         }
@@ -123,7 +119,7 @@ class ApprovalRun:
         builder.add_edge(RUN_SUITE, END)
         self._graph = builder.compile(checkpointer=InMemorySaver())
 
-    def _confirm_cost(self, state: ApprovalState) -> ApprovalUpdate:
+    def _confirm_cost(self, state: ApprovalState) -> ApprovalState:
         """Surface the estimate and stop. Nothing above the interrupt spends."""
         answer = interrupt(self.budget.as_payload())
         return read_answer(answer)
@@ -133,9 +129,13 @@ class ApprovalRun:
         past it."""
         return RUN_SUITE if state["confirmed"] else STOP
 
-    def _run_the_suite(self, state: ApprovalState) -> ApprovalUpdate:
-        self._run_suite()
-        return ApprovalUpdate(suite_ran=True)
+    def _run_the_suite(self, state: ApprovalState) -> None:
+        """The spending, on the far side of the edge the answer decides.
+
+        Returns no state update: what this node did is visible in the run's own
+        counters, and the graph has no second opinion to offer about it.
+        """
+        self._suite()
 
     @property
     def paused(self) -> bool:
@@ -145,7 +145,7 @@ class ApprovalRun:
     def present(self) -> BudgetPayload:
         """Run up to the interrupt and stop there. No target has been called yet."""
         result = self._graph.invoke(
-            ApprovalState(confirmed=False, identity="", reason="", suite_ran=False),
+            ApprovalState(confirmed=False, identity="", reason=""),
             self._config,
         )
         interrupts = result.get("__interrupt__")
@@ -172,7 +172,7 @@ class ApprovalRun:
         return cast(ApprovalState, result)
 
 
-def read_answer(answer: Any) -> ApprovalUpdate:
+def read_answer(answer: Any) -> ApprovalState:
     """Take the resume value at arm's length. The boundary, so it is public.
 
     A malformed answer is not a yes. The resume value crosses a checkpoint and will
@@ -181,8 +181,10 @@ def read_answer(answer: Any) -> ApprovalUpdate:
     value spending a user's inference budget is the failure to guard against.
     """
     if not isinstance(answer, dict):
-        return ApprovalUpdate(confirmed=False, reason="the answer was not a decision")
-    return ApprovalUpdate(
+        return ApprovalState(
+            confirmed=False, identity="", reason="the answer was not a decision"
+        )
+    return ApprovalState(
         confirmed=answer.get("confirmed") is True,
         identity=str(answer.get("identity", "")),
         reason=str(answer.get("reason", "")),

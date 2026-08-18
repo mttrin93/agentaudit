@@ -11,18 +11,22 @@ would fail, and the user would have consented to a number the bench had made up.
 """
 
 from dataclasses import replace
+from decimal import Decimal
 
 import pytest
 
 from backend.bench.adaptive.budget import DECLARED_ADAPTIVE_BUDGET, AdaptiveBudget
+from backend.bench.attacker import run_attempt
 from backend.bench.calibration import run_calibration
-from backend.bench.contract import RetryPolicy, TargetConfig
+from backend.bench.contract import RetryPolicy
 from backend.bench.library import Case, Family
 from backend.bench.rule import DECLARED_RULE
 from backend.graph.budget import (
+    NOT_PRICED,
     REGISTRATION_PROBES_PER_TARGET,
     BudgetExceeded,
     CallFigure,
+    CallPrice,
     Estimate,
     FigureKind,
     Layer,
@@ -32,37 +36,14 @@ from backend.graph.runstate import RunState
 from backend.tests.conftest import (
     BENCH_ATTESTATION,
     CONFIRMING,
+    SENDS,
+    a_budget,
+    a_target,
     reference_target,
+    some_cases,
     unlisted_case,
 )
 from backend.tests.flaky_target import IMPATIENT, flaky_target
-
-SENDS = 3
-"""The retry limit the targets below declare, and so the multiplier on the ceiling."""
-
-
-def a_target(name: str = "target", sends: int = SENDS) -> TargetConfig:
-    """A target description. Never served — these tests do arithmetic, not calls."""
-    return TargetConfig(
-        name=name,
-        url=f"https://{name}.invalid/messages",
-        auth_token="token",
-        agent_type="assistant",
-        retry=RetryPolicy(sends=sends, backoff_seconds=0.0),
-    )
-
-
-def some_cases(count: int) -> list[Case]:
-    return [
-        unlisted_case(payload=f"payload {i}", case_id=f"case-{i}") for i in range(count)
-    ]
-
-
-def a_budget(cases: int = 3, targets: int = 2, sends: int = SENDS) -> RunBudget:
-    return RunBudget.declare(
-        cases=some_cases(cases),
-        targets=[a_target(f"target-{i}", sends=sends) for i in range(targets)],
-    )
 
 
 def test_the_scored_figure_is_the_librarys_own_arithmetic() -> None:
@@ -148,6 +129,92 @@ def test_the_ceiling_covers_every_message_retried_to_the_transport_limit() -> No
     assert budget.adaptive_ceiling == budget.estimate.adaptive.calls * SENDS
 
 
+def test_a_fleet_of_differently_patient_targets_gets_the_tight_ceiling() -> None:
+    """Summed per target, not the most patient target's limit applied to all.
+
+    `max` across the fleet would be a ceiling nobody's arithmetic asks for: it
+    would let a run spend the patient target's allowance against the impatient
+    one, which is a consent figure loosened by a convenience.
+    """
+    cases = some_cases(2)
+    patient, impatient = a_target("patient", sends=3), a_target("impatient", sends=1)
+
+    budget = RunBudget.declare(cases=cases, targets=[patient, impatient])
+
+    per_target = REGISTRATION_PROBES_PER_TARGET + 2 * DECLARED_RULE.attempts_per_case
+    assert budget.scored_ceiling == per_target * 3 + per_target * 1
+    assert budget.scored_ceiling < budget.estimate.scored.calls * 3
+    # The largest limit is still reported, so a reader can see where it came from.
+    assert budget.retry_allowance == 3
+
+
+def test_a_priced_run_shows_what_each_figure_costs() -> None:
+    budget = RunBudget.declare(
+        cases=some_cases(1),
+        targets=[a_target("one", sends=1)],
+        price=CallPrice(per_call=Decimal("0.002"), currency="EUR"),
+    )
+    estimate = budget.estimate
+
+    # 11 calls at 0.002 is 0.022, which rounds *up* to the minor unit: a consent
+    # figure that rounded down would understate the bench's own bill.
+    assert estimate.scored.calls == 11
+    assert estimate.cost(estimate.scored) == "0.03 EUR"
+    # A bound's cost is a bound, carried from the figure rather than restated.
+    assert estimate.cost(estimate.adaptive).startswith("≤ ")
+    assert estimate.cost(estimate.total).startswith("≤ ")
+    assert budget.as_payload()["currency"] == "EUR"
+
+    # And the rows add up to the total. Each is rounded up and only then added, so
+    # a reader checking the column with a pencil agrees with the bench — and the
+    # total is never the smaller of the two ways to compute it.
+    price = CallPrice(per_call=Decimal("0.002"), currency="EUR")
+    assert price.total_of(estimate.scored.calls, estimate.adaptive.calls) == (
+        price.cost_of(estimate.scored.calls) + price.cost_of(estimate.adaptive.calls)
+    )
+    assert price.total_of(estimate.scored.calls, estimate.adaptive.calls) >= (
+        price.cost_of(estimate.total.calls)
+    )
+
+
+def test_an_unpriced_run_says_so_rather_than_showing_zero() -> None:
+    # A run whose cost is unknown and a run that is free are different facts, and
+    # only one of them is safe to confirm without reading further.
+    budget = a_budget()
+
+    assert budget.estimate.price is None
+    assert budget.estimate.cost(budget.estimate.scored) == NOT_PRICED
+    assert budget.as_payload()["scored"]["cost"] == NOT_PRICED
+    assert budget.as_payload()["currency"] == ""
+    assert any("Not priced" in line for line in budget.lines())
+
+
+def test_a_price_cannot_be_negative_or_currencyless() -> None:
+    with pytest.raises(ValueError):
+        CallPrice(per_call=Decimal("-0.01"))
+    with pytest.raises(ValueError):
+        CallPrice(per_call=Decimal("0.01"), currency="  ")
+
+
+def test_nothing_shown_with_a_bound_may_be_exceeded() -> None:
+    """The estimate's total is conditional; the hard ceiling is the limit.
+
+    A `≤ 277` a run may legitimately overrun threefold would be a bound in
+    typography only, so the total says what it assumes and the enforced figure is
+    shown beside it, larger, and also as a bound.
+    """
+    budget = a_budget()
+    lines = budget.lines()
+
+    assert budget.hard_ceiling.kind is FigureKind.CEILING
+    assert budget.hard_ceiling.calls == (
+        budget.scored_ceiling + budget.adaptive_ceiling
+    )
+    assert budget.hard_ceiling.calls >= budget.estimate.total.calls
+    assert any("if no message is retried" in line for line in lines)
+    assert any("the run aborts rather than exceed it" in line for line in lines)
+
+
 def test_a_ceiling_below_the_figure_it_is_meant_to_cover_is_refused() -> None:
     budget = a_budget()
 
@@ -177,6 +244,62 @@ def test_the_run_state_reports_what_each_layer_has_spent() -> None:
     assert run_state.spent_in(Layer.SCORED) == 4
     assert run_state.spent_in(Layer.ADAPTIVE) == 7
     assert run_state.calls_spent == 11
+
+
+def test_spend_is_visible_per_layer_while_the_run_is_still_in_progress(
+    leakage_case: Case,
+) -> None:
+    """Read between attempts rather than after the run.
+
+    The figure exists so that a long run is observable while it happens, and so
+    that it is visible which half is consuming the budget. The reader at 6b is the
+    progress endpoint; the state it will read is this one.
+    """
+    nonce = "AGENTAUDIT-CANARY-MIDRUN"
+    with reference_target(name="trivial") as reference:
+        budget = RunBudget.declare(cases=[leakage_case], targets=[reference.target])
+        run_state = RunState(budget=budget)
+        reference.plant_nonce(reference.target, nonce)
+
+        seen = []
+        for index in range(3):
+            run_attempt(
+                reference.target,
+                leakage_case,
+                canary=nonce,
+                run_state=run_state,
+                index=index,
+            )
+            seen.append(
+                (
+                    run_state.spent_in(Layer.SCORED),
+                    run_state.spent_in(Layer.ADAPTIVE),
+                )
+            )
+
+    assert seen == [(1, 0), (2, 0), (3, 0)]
+    assert run_state.spent_in(Layer.SCORED) < budget.ceiling(Layer.SCORED)
+
+
+def test_a_call_recorded_without_being_authorised_still_cannot_pass_the_ceiling() -> (
+    None
+):
+    """The counter's own backstop, for a call site that reaches it without asking.
+
+    `authorise_call` guards the two call sites that exist today; #16 adds one, and
+    this is what catches it on the day it is written. It raises after recording,
+    because by then the call has been made and a counter that lied about it would
+    be worse than the breach.
+    """
+    budget = a_budget()
+    run_state = RunState(budget=budget)
+
+    with pytest.raises(BudgetExceeded) as abort:
+        run_state.record_call(Layer.ADAPTIVE, sends=budget.adaptive_ceiling + 1)
+
+    assert abort.value.layer is Layer.ADAPTIVE
+    assert run_state.spent_in(Layer.ADAPTIVE) == budget.adaptive_ceiling + 1
+    assert "nothing had authorised" in str(abort.value)
 
 
 def test_a_message_is_refused_before_it_is_sent_when_its_worst_case_will_not_fit() -> (

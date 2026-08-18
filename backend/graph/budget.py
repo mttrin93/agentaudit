@@ -16,26 +16,34 @@ exact. Showing an *average* adaptive cost is the one thing explicitly forbidden 
 it would be worse than showing nothing, because it invites a run to exceed what
 the user agreed to.
 
+**Money is declared, never guessed.** A target is the operator's endpoint on the
+operator's provider, so the price of a call belongs to them and not to the bench.
+A price the bench invented would be worse than no price at all, for exactly the
+reason an averaged adaptive ceiling would be — so `CallPrice` is declared, and a
+run with none declared says *not priced* rather than showing zero. What is priced
+rounds up: a consent figure that understates is not a consent figure.
+
 **Calls, not attempts.** The budget counts sends on the wire, retries included,
 because a retried message reaches the endpoint and costs the operator what it
 cost. An attempt is the unit of a denominator and is deliberately not this number
 (CONTEXT.md).
 
-**The ceiling is not the estimate.** The estimate says what the run costs when
-nothing has to be retried; the declared ceiling is what it may not exceed when
-everything does. Both are shown, and neither is derived from the other by a
-comfortable-looking margin: the ceiling is the estimate times the transport's own
-retry limit, which is the tight worst case of the policy the bench already
-declares in `contract.py`. That relationship is what lets the budget be checked
-*before* each message rather than detected after it — a run that stays inside its
-arithmetic can always cover the worst case of its next message, so a well-behaved
-run is never aborted early and a misbehaving one never overspends.
+**Nothing rendered with `≤` may be exceeded.** The estimate's total is what the
+run costs when no message has to be retried, and it says so; the figure a run may
+not exceed is the hard ceiling, which is the estimate with every message retried
+to its target's own transport limit. Both are shown, both carry `≤`, and the
+larger one is the one that is enforced. That relationship is also what lets the
+budget be checked *before* each message rather than detected after it: a run that
+stays inside its arithmetic can always cover the worst case of its next message,
+so a well-behaved run is never aborted early and a misbehaving one never
+overspends.
 """
 
 from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
+from decimal import ROUND_UP, Decimal
 from enum import StrEnum
 from typing import TypedDict
 
@@ -50,7 +58,16 @@ REGISTRATION_PROBES_PER_TARGET = 1
 Inside the estimate rather than beside it: a consent figure that quietly omitted
 the calls registration makes would understate what the run costs, and it is also
 what the scored ceiling has to cover — a suite budgeted at exactly its attempts
-would abort on the registration probe of its first target.
+would abort on the registration probe of its first target. It is why the scored
+figure reads 181 per target where ADR-0007's table reads 180; the difference is
+published in the figure's own `basis` rather than absorbed.
+"""
+
+NOT_PRICED = "not priced"
+"""What the consent surface says when the operator declared no price.
+
+Never `0.00`: a run whose cost is unknown and a run that is free are different
+facts, and only one of them is safe to confirm without reading further.
 """
 
 
@@ -71,6 +88,44 @@ class FigureKind(StrEnum):
 
     EXACT = "exact"
     CEILING = "ceiling"
+
+
+@dataclass(frozen=True)
+class CallPrice:
+    """What one call to the target costs the operator, as the operator states it."""
+
+    per_call: Decimal
+    currency: str = "USD"
+
+    def __post_init__(self) -> None:
+        if self.per_call < 0:
+            raise ValueError("a call cannot cost less than nothing")
+        if not self.currency.strip():
+            raise ValueError("a price has to say what currency it is in")
+
+    def cost_of(self, calls: int) -> Decimal:
+        """The cost of that many calls, rounded **up** to the currency's minor unit.
+
+        Up rather than to nearest, because this figure is shown to somebody
+        deciding whether to spend it. A consent figure that rounded down would be
+        the bench understating its own bill.
+        """
+        return (self.per_call * calls).quantize(Decimal("0.01"), rounding=ROUND_UP)
+
+    def total_of(self, *counts: int) -> Decimal:
+        """Each count priced and rounded up, and only then added.
+
+        Summed after rounding rather than before, so the rows of the consent table
+        add up to its total. A surface whose columns visibly disagree is one a
+        reader stops reading, and rounding each row up first keeps the total on the
+        conservative side of the disagreement.
+        """
+        return sum((self.cost_of(count) for count in counts), Decimal(0))
+
+    def rendered(self, amount: Decimal, kind: FigureKind) -> str:
+        """`0.91 USD`, or `≤ 0.48 USD` when the calls it prices are a bound."""
+        shown = f"{amount} {self.currency}"
+        return shown if kind is FigureKind.EXACT else f"≤ {shown}"
 
 
 @dataclass(frozen=True)
@@ -118,6 +173,8 @@ class Estimate:
 
     scored: CallFigure
     adaptive: CallFigure
+    price: CallPrice | None = None
+    """The operator's own price per call, or `None` for a run they did not price."""
 
     def __post_init__(self) -> None:
         if not self.scored.is_exact:
@@ -137,25 +194,20 @@ class Estimate:
         """The two figures added, which makes the total a ceiling and never a fact."""
         return self.scored + self.adaptive
 
-    def lines(self) -> tuple[str, ...]:
-        """The estimate as ADR-0007 presents it: a fact, a bound, and a bounded
-        total."""
-        rows = (
-            ("Scored layer", self.scored),
-            ("Adaptive layer", self.adaptive),
+    def cost(self, figure: CallFigure) -> str:
+        """What one figure costs, or `not priced`. Never a number the bench invented."""
+        if self.price is None:
+            return NOT_PRICED
+        return self.price.rendered(self.price.cost_of(figure.calls), figure.kind)
+
+    def total_cost(self) -> str:
+        """What both layers cost together — the rows added, so the table adds up."""
+        if self.price is None:
+            return NOT_PRICED
+        return self.price.rendered(
+            self.price.total_of(self.scored.calls, self.adaptive.calls),
+            self.total.kind,
         )
-        width = max(len(figure.rendered()) for _, figure in (*rows, ("", self.total)))
-        rendered = [
-            f"  {label:<16}{figure.rendered():>{width}} calls   "
-            f"{figure.kind} — {figure.basis}"
-            for label, figure in rows
-        ]
-        rendered.append(f"  {'':<16}{'─' * (width + 6)}")
-        rendered.append(
-            f"  {'Total':<16}{self.total.rendered():>{width}} calls   "
-            f"{self.total.kind} — a fact plus a bound is a bound"
-        )
-        return tuple(rendered)
 
 
 class LayerFigurePayload(TypedDict):
@@ -164,6 +216,7 @@ class LayerFigurePayload(TypedDict):
     calls: int
     kind: str
     basis: str
+    cost: str
 
 
 class BudgetPayload(TypedDict):
@@ -178,19 +231,19 @@ class BudgetPayload(TypedDict):
     scored: LayerFigurePayload
     adaptive: LayerFigurePayload
     total: LayerFigurePayload
+    hard_ceiling: LayerFigurePayload
     scored_ceiling: int
     adaptive_ceiling: int
-    retry_allowance: int
+    currency: str
     presented: list[str]
 
 
 class BudgetExceeded(RuntimeError):
-    """A run aborted rather than spend past what the operator confirmed.
+    """A run stopped rather than spend past what the operator confirmed.
 
-    Raised before the message that would breach the ceiling goes on the wire, so
-    the abort is a refusal rather than a discovery. It is loud on purpose: a run
-    that stopped early measured fewer attempts than the rate it would report is
-    denominated on, so a partial run is void rather than smaller.
+    Loud on purpose: a run that stopped early measured fewer attempts than the
+    rate it would report is denominated on, so a partial run is void rather than
+    smaller.
     """
 
     def __init__(self, layer: Layer, ceiling: int, spent: int, requested: int) -> None:
@@ -199,10 +252,34 @@ class BudgetExceeded(RuntimeError):
         self.spent = spent
         self.requested = requested
         super().__init__(
-            f"the {layer} layer has spent {spent} of a declared {ceiling} calls, "
-            f"and the next message needs up to {requested} more: aborting rather "
-            "than spend past the estimate the operator confirmed"
+            (
+                f"the {layer} layer has spent {spent} of a declared {ceiling} "
+                f"calls, and the next message needs up to {requested} more: "
+                "refusing it rather than spend past the estimate the operator "
+                "confirmed"
+            )
+            if requested
+            else (
+                f"the {layer} layer has spent {spent}, past its declared ceiling "
+                f"of {ceiling}: a call was recorded that nothing had authorised "
+                "against the budget"
+            )
         )
+
+
+@dataclass(frozen=True)
+class _Row:
+    """One line of the consent table, plus the arithmetic printed under it."""
+
+    label: str
+    figure: CallFigure
+    cost: str
+    note: str = ""
+    basis: str | None = None
+    """The line printed beneath the row.
+
+    `""` prints none; `None` means the figure's own stated basis.
+    """
 
 
 @dataclass(frozen=True)
@@ -219,8 +296,13 @@ class RunBudget:
     scored_ceiling: int
     adaptive_ceiling: int
     retry_allowance: int
-    """How many times one message may go on the wire, from the transport's own
-    retry policy. The ceilings are the estimate times this."""
+    """The most sends any one of this run's targets allows a single message.
+
+    Shown so a reader can see where the ceilings came from. The ceilings themselves
+    are summed per target rather than multiplied by this, so a fleet whose targets
+    declare different retry policies gets the tight bound rather than the most
+    patient target's bound applied to all of them.
+    """
 
     def __post_init__(self) -> None:
         if self.scored_ceiling < self.estimate.scored.calls:
@@ -241,6 +323,7 @@ class RunBudget:
         targets: Sequence[TargetConfig],
         rule: GateRule = DECLARED_RULE,
         adaptive: AdaptiveBudget = DECLARED_ADAPTIVE_BUDGET,
+        price: CallPrice | None = None,
     ) -> RunBudget:
         """Work out both numbers from the run's own inputs.
 
@@ -268,13 +351,12 @@ class RunBudget:
                 f" × {_count(len(targets), 'target')}"
             ),
         )
-        estimate = Estimate(scored=scored, adaptive=adaptive_figure)
-        allowance = max((target.retry.sends for target in targets), default=1)
+        sends = [target.retry.sends for target in targets]
         return cls(
-            estimate=estimate,
-            scored_ceiling=scored.calls * allowance,
-            adaptive_ceiling=adaptive_figure.calls * allowance,
-            retry_allowance=allowance,
+            estimate=Estimate(scored=scored, adaptive=adaptive_figure, price=price),
+            scored_ceiling=sum(per_target * send for send in sends),
+            adaptive_ceiling=sum(adaptive.turn_ceiling * send for send in sends),
+            retry_allowance=max(sends, default=1),
         )
 
     def ceiling(self, layer: Layer) -> int:
@@ -283,27 +365,103 @@ class RunBudget:
         other's unspent allowance."""
         return self.scored_ceiling if layer is Layer.SCORED else self.adaptive_ceiling
 
-    def lines(self) -> tuple[str, ...]:
-        """The estimate, then the ceiling that is enforced over it."""
-        return (
-            *self.estimate.lines(),
-            "",
-            f"  Hard ceiling    {self.scored_ceiling} scored + "
-            f"{self.adaptive_ceiling} adaptive calls, enforced independently.",
-            f"  {'':<16}Every message retried to the transport limit "
-            f"({self.retry_allowance} sends).",
-            f"  {'':<16}The run aborts rather than exceed either.",
+    @property
+    def hard_ceiling(self) -> CallFigure:
+        """The most the run may spend across both layers, as a bound.
+
+        Rendered with `≤` like the estimate's total, because it is the same kind of
+        number and the larger one: nothing an operator is shown with a `≤` in front
+        of it may be exceeded, and this is the figure that is enforced.
+        """
+        return CallFigure(
+            calls=self.scored_ceiling + self.adaptive_ceiling,
+            kind=FigureKind.CEILING,
+            basis=(
+                f"{self.scored_ceiling} scored + {self.adaptive_ceiling} adaptive, "
+                "enforced per layer — every message retried to its target's "
+                f"transport limit (at most {self.retry_allowance} sends)"
+            ),
         )
+
+    @property
+    def hard_ceiling_cost(self) -> str:
+        """What the limit would cost if the run spent all of it."""
+        price = self.estimate.price
+        if price is None:
+            return NOT_PRICED
+        return price.rendered(
+            price.total_of(self.scored_ceiling, self.adaptive_ceiling),
+            FigureKind.CEILING,
+        )
+
+    def lines(self) -> tuple[str, ...]:
+        """The consent surface: a fact, a bound, a bounded total, and the limit.
+
+        Each figure's stated basis goes on the line under it rather than beside it,
+        because the arithmetic is what makes the number checkable and it should not
+        be the part that a narrow terminal cuts off.
+        """
+        estimate = self.estimate
+        rows = (
+            _Row("Scored layer", estimate.scored, estimate.cost(estimate.scored)),
+            _Row("Adaptive layer", estimate.adaptive, estimate.cost(estimate.adaptive)),
+            None,
+            # No basis line under the total: its components are the two rows above
+            # it, and repeating both is the one place this table could start hiding
+            # the arithmetic inside a wall of it.
+            _Row(
+                "Total",
+                estimate.total,
+                estimate.total_cost(),
+                note="if no message is retried",
+                basis="",
+            ),
+            _Row(
+                "Hard ceiling",
+                self.hard_ceiling,
+                self.hard_ceiling_cost,
+                note="the limit; the run aborts rather than exceed it",
+            ),
+        )
+        shown = [row for row in rows if row is not None]
+        width = max(len(row.figure.rendered()) for row in shown)
+        money = max(len(row.cost) for row in shown)
+
+        rendered: list[str] = []
+        for row in rows:
+            if row is None:
+                rendered.append(f"  {'':<16}{'─' * (width + 6)}")
+                continue
+            kind = str(row.figure.kind)
+            said = f"{kind} — {row.note}" if row.note else kind
+            rendered.append(
+                f"  {row.label:<16}{row.figure.rendered():>{width}} calls   "
+                f"{row.cost:>{money}}   {said}"
+            )
+            basis = row.figure.basis if row.basis is None else row.basis
+            if basis:
+                rendered.append(f"  {'':<18}{basis}")
+
+        if estimate.price is None:
+            rendered.append(
+                f"  {'':<18}Not priced: declare a price per call to see the cost. "
+                "You are confirming a call count only."
+            )
+        return tuple(rendered)
 
     def as_payload(self) -> BudgetPayload:
         """The consent surface as primitives, for the interrupt and for 6b."""
+        estimate = self.estimate
         return BudgetPayload(
-            scored=_figure_payload(self.estimate.scored),
-            adaptive=_figure_payload(self.estimate.adaptive),
-            total=_figure_payload(self.estimate.total),
+            scored=_layer_payload(estimate.scored, estimate.cost(estimate.scored)),
+            adaptive=_layer_payload(
+                estimate.adaptive, estimate.cost(estimate.adaptive)
+            ),
+            total=_layer_payload(estimate.total, estimate.total_cost()),
+            hard_ceiling=_layer_payload(self.hard_ceiling, self.hard_ceiling_cost),
             scored_ceiling=self.scored_ceiling,
             adaptive_ceiling=self.adaptive_ceiling,
-            retry_allowance=self.retry_allowance,
+            currency="" if estimate.price is None else estimate.price.currency,
             presented=list(self.lines()),
         )
 
@@ -314,7 +472,7 @@ def _count(number: int, noun: str) -> str:
     return f"{number} {noun}" if number == 1 else f"{number} {noun}s"
 
 
-def _figure_payload(figure: CallFigure) -> LayerFigurePayload:
+def _layer_payload(figure: CallFigure, cost: str) -> LayerFigurePayload:
     return LayerFigurePayload(
-        calls=figure.calls, kind=str(figure.kind), basis=figure.basis
+        calls=figure.calls, kind=str(figure.kind), basis=figure.basis, cost=cost
     )

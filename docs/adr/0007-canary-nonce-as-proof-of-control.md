@@ -23,5 +23,22 @@ status: accepted
   ```
 
   Showing an *average* adaptive cost would be worse than showing nothing: it invites a run to exceed what the user agreed to. The ceiling is enforced at **two levels** — a per-episode turn cap and a whole-layer call ceiling — because a per-family cap multiplied by six families is a multiplication a user consents to once and then forgets.
+- **Amended by #5, on two figures the table above does not show.** The estimate the
+  bench presents reads **181** per target rather than 180, because the nonce echo
+  probe is a call on the operator's endpoint like any other and a consent figure
+  that omitted it would understate the run. It is still exact arithmetic, and the
+  extra call is published in the figure's own stated basis rather than absorbed
+  into it. Separately, the **enforced** ceiling is not the estimate: it is the
+  estimate with every message retried to its target's own transport limit, summed
+  per target. Both are shown, both carry `≤`, and the larger is the one enforced —
+  a run may not exceed anything it was shown with a `≤` in front of it. Building
+  the ceiling from the same retry limit is what lets the budget be checked *before*
+  each message rather than detected after it, so a run inside its arithmetic is
+  never aborted early and a run outside it never overspends.
+- **Cost is declared by the operator, never estimated by the bench.** A target is
+  the operator's endpoint on the operator's provider, so the price per call is
+  theirs. A run with no price declared reports its cost as *not priced* rather than
+  as zero — an unknown cost and a free run are different facts, and only one is
+  safe to confirm without reading further. What is priced rounds up.
 - **A mid-episode abort records the episode as censored, never as resisted.** Budget exhaustion that read as target strength would be infrastructure scored as a security result, which is the discipline this project already applies to timeouts, 401s, malformed replies and rate limits, arriving at a new surface. Censoring is also the statistically correct treatment — see [ADR-0011](./0011-the-adaptive-attacker-is-label-blind.md).
 - The "security guard" is the **authorisation guard**, not a prompt-injection filter on the bench's own model, and it is in scope rather than optional. A tool whose function is attacking network endpoints does not file its authorisation control under optional extras.

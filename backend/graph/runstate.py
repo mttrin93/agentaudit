@@ -109,6 +109,13 @@ class RunState:
         `layer` has no default. An adaptive call landing in the scored counter
         because a caller left the argument off would blend the two figures that
         ADR-0007 exists to keep apart, and it would do so silently.
+
+        The ceiling is checked here as well as in `authorise_call`, and the check
+        is not redundant: `authorise_call` guards the two call sites that exist,
+        and this one guards a caller that reaches the counter without asking
+        first — which is what a new call site looks like on the day it is written
+        (#16 adds one). It raises *after* recording, because by then the call has
+        been made and a counter that lied about it would be worse than the breach.
         """
         self.spent[layer] += sends
         ceiling = self.budget.ceiling(layer)

@@ -28,17 +28,18 @@ from backend.graph.approval import (
 from backend.graph.budget import BudgetPayload, Layer, RunBudget
 from backend.tests.conftest import (
     BENCH_ATTESTATION,
+    a_budget,
     calibrate,
     reference_target,
     unlisted_case,
 )
-from backend.tests.test_budget import a_budget
 
-WITHHELD_IN_TURN = (
+STATEMENT_FIELDS = (
     "authorised_to_test",
     "not_production",
     "accepts_provider_policy_and_cost",
 )
+"""The three fields of `Attestation`, named here so each can be withheld in turn."""
 
 
 def declining(reason: str = "not today") -> Approval:
@@ -48,7 +49,7 @@ def declining(reason: str = "not today") -> Approval:
 # --- the three statements -------------------------------------------------------
 
 
-@pytest.mark.parametrize("withheld", WITHHELD_IN_TURN)
+@pytest.mark.parametrize("withheld", STATEMENT_FIELDS)
 def test_an_attestation_missing_any_one_statement_cannot_be_constructed(
     withheld: str,
 ) -> None:
@@ -60,7 +61,7 @@ def test_an_attestation_missing_any_one_statement_cannot_be_constructed(
     violations against their own account, and that they spend their own inference
     budget.
     """
-    statements = dict.fromkeys(WITHHELD_IN_TURN, True) | {withheld: False}
+    statements = dict.fromkeys(STATEMENT_FIELDS, True) | {withheld: False}
     wording = dict(Attestation.STATEMENTS)[withheld]
 
     with pytest.raises(ValueError) as refusal:
@@ -85,7 +86,7 @@ def test_an_attestation_has_to_record_who_made_it() -> None:
 def test_the_wording_shown_to_an_operator_covers_every_statement_recorded() -> None:
     # The prompt and the record are one thing. A statement in the record with no
     # wording beside it is a consequence the bench claims was disclosed and was not.
-    assert {field for field, _ in Attestation.STATEMENTS} == set(WITHHELD_IN_TURN)
+    assert {field for field, _ in Attestation.STATEMENTS} == set(STATEMENT_FIELDS)
 
 
 def test_the_attestation_is_recorded_with_timestamp_identity_and_endpoint_hash(
@@ -221,6 +222,11 @@ def test_the_interrupt_presents_two_figures_and_the_ceilings() -> None:
     )
     assert presented["scored_ceiling"] == budget.scored_ceiling
     assert presented["adaptive_ceiling"] == budget.adaptive_ceiling
+    # And the figure that is actually enforced, larger than the total and also a
+    # bound: nothing shown with a `≤` may be exceeded.
+    assert presented["hard_ceiling"]["kind"] == "ceiling"
+    assert presented["hard_ceiling"]["calls"] >= presented["total"]["calls"]
+    assert presented["scored"]["cost"] == "not priced"
     assert any("Adaptive layer" in line for line in presented["presented"])
 
 
@@ -275,3 +281,18 @@ def test_the_declared_budget_travels_with_the_result(leakage_case: Case) -> None
     assert isinstance(result.budget, RunBudget)
     assert result.approval.budget is result.budget
     assert result.run_state.budget is result.budget
+
+
+def test_a_run_with_no_terminal_to_ask_is_a_no() -> None:
+    """The command line refuses rather than defaults.
+
+    A run nobody is watching has nobody to consent on its behalf, so an absent or
+    piped stdin is a no. There is deliberately no `--yes`: a consent mechanism with
+    a flag to skip it is the convenience feature ADR-0007 says this must not become.
+    """
+    from scripts.calibrate import EXIT_WITHHELD, main
+
+    # Under pytest stdin is not a terminal, which is the condition being tested.
+    assert main(["--identity", "nobody at a terminal", "--model", "stub:obedient"]) == (
+        EXIT_WITHHELD
+    )

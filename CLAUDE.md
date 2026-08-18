@@ -1,0 +1,54 @@
+# AgentAudit
+
+An adversarial test bench for AI agents. It attacks a target across six failure
+families, proves its own discriminating power before its results are trusted, and
+reports the outcome as signed evidence.
+
+## Where things are written down
+
+Do not restate these here — read them.
+
+| For | Read |
+| --- | --- |
+| Vocabulary — target, case, attempt, family, verdict | [CONTEXT.md](./CONTEXT.md) |
+| Decisions and why they were made | [docs/adr/](./docs/adr/) |
+| Scope, phases, the Sprint line | [PLAN.md](./PLAN.md) |
+| What the bench measures and what it has measured | [docs/validation.md](./docs/validation.md) |
+| The build spec | [docs/specs/pre-web-bench.md](./docs/specs/pre-web-bench.md) |
+
+Terms in CONTEXT.md are load-bearing arithmetic, not synonyms. An **attempt** is
+the unit of the denominator; a turn is not an attempt.
+
+## Commands
+
+```
+uv sync --all-groups          # install; add --locked to match CI exactly
+uv run pytest -q              # tests
+uv run mypy                   # typecheck, strict
+uv run ruff check .           # lint
+uv run ruff format .          # format (CI runs --check)
+```
+
+CI runs lint, format, typecheck and tests on every branch.
+
+## Standing rules
+
+**No adaptive result may write into a scored rate.**
+[ADR-0010](./docs/adr/0010-two-layers-in-one-run-the-adaptive-layer-is-never-scored.md).
+An `AdaptiveEpisode` is not an `Attempt`. The adaptive layer reaches the scored
+side through exactly one edge — `propose_case` into the admission gate, where a
+declared threshold decides. Everything else it produces reports in its own
+section. The invariant is carried by the type, so if you find yourself widening
+a signature to accept both, stop.
+
+**Drive every new test red once before committing.**
+Break the thing it guards on purpose, confirm it fails *for the right reason* and
+not by import error or typo, then revert. A test that has never failed is not
+known to work.
+
+**Never merge on red CI.** Report back instead.
+
+**Blockers and dependencies live in GitHub**, in the native dependency and
+sub-issue fields — not only as prose in an issue body. The issue list is the
+signal for what is ready to start, and it is only a signal if it is machine-
+readable. Keep the prose too; it says *why*.

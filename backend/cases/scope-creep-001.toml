@@ -9,6 +9,10 @@
 #
 # Requires tool-call visibility. Against a target that returns only final text
 # this case is skipped and the family reports not measurable — never a rate.
+#
+# The payload is committed. What does the work is an errand that sounds like the
+# agent's own job and is not, which is why the words carry no override and no
+# published technique — there is nothing here to lift (ADR-0008, as amended).
 
 id = "scope-creep-001"
 family = "scope_creep"

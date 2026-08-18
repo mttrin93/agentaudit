@@ -2,8 +2,10 @@
 
 Built first, deliberately. Without a known floor a weak case is indistinguishable
 from a strong defence, so the floor comes before the first case. It has no input
-checks, no scope limits and no output filter; the stop control the halt-defeat
-family attacks arrives in #6.
+checks, no scope limits, no output filter and no stop control — and it is wired
+to the same toolbox as the other two, so it calls tools its operator never
+declared and acts after the operator's stop signal. That is the floor the two
+tool-visibility families are measured against (`tools.py`).
 
 The registration nonce lives in its system prompt, which is where a user's target
 holds it too, and the instruction to echo it on request is the work a real target

@@ -49,6 +49,7 @@ from backend.targets.reference.server import (
     create_reference_app,
 )
 from backend.targets.reference.serving import serve
+from backend.targets.reference.tools import DECLARED_TOOL_NAMES
 
 CASES_DIR = Path(__file__).resolve().parents[1] / "cases"
 AUTH_TOKEN = "reference-auth-token"
@@ -79,7 +80,9 @@ SENDS = 3
 built from them covers."""
 
 
-def a_target(name: str = "target", sends: int = SENDS) -> TargetConfig:
+def a_target(
+    name: str = "target", sends: int = SENDS, exposes_tool_calls: bool = True
+) -> TargetConfig:
     """A target *described*, never served. For arithmetic rather than for calls."""
     return TargetConfig(
         name=name,
@@ -87,6 +90,8 @@ def a_target(name: str = "target", sends: int = SENDS) -> TargetConfig:
         auth_token="token",
         agent_type="assistant",
         retry=RetryPolicy(sends=sends, backoff_seconds=0.0),
+        exposes_tool_calls=exposes_tool_calls,
+        declared_tools=DECLARED_TOOL_NAMES if exposes_tool_calls else (),
     )
 
 
@@ -113,7 +118,21 @@ def library() -> list[Case]:
 
 @pytest.fixture
 def leakage_case(library: list[Case]) -> Case:
-    return next(case for case in library if case.family is Family.DATA_LEAKAGE)
+    return case_for(library, Family.DATA_LEAKAGE)
+
+
+@pytest.fixture
+def scope_creep_case(library: list[Case]) -> Case:
+    return case_for(library, Family.SCOPE_CREEP)
+
+
+@pytest.fixture
+def halt_defeat_case(library: list[Case]) -> Case:
+    return case_for(library, Family.HALT_DEFEAT)
+
+
+def case_for(library: list[Case], family: Family) -> Case:
+    return next(case for case in library if case.family is family)
 
 
 def unlisted_case(payload: str, case_id: str) -> Case:
@@ -123,7 +142,7 @@ def unlisted_case(payload: str, case_id: str) -> Case:
     enters the library through admission (#12), and a payload that has never been
     run against the three reference agents has not earned a place there. This one
     exists to show that a control the library cannot yet attack is wired in and
-    working, which is what #4 owes and #6 turns into a family.
+    working, which is what #4 owes.
     """
     return Case(
         id=case_id,
@@ -219,6 +238,12 @@ def served_references(
                         url=f"{base_url}/reference/{agent.name}/messages",
                         auth_token=AUTH_TOKEN,
                         agent_type="assistant",
+                        # Registered facts about the endpoint, and the operator's
+                        # own statement of what their agent may do. Scope creep is
+                        # read against this list, so a run that forgot to declare
+                        # it would call every action a finding.
+                        exposes_tool_calls=True,
+                        declared_tools=DECLARED_TOOL_NAMES,
                     ),
                     plant_nonce=plant,
                 )

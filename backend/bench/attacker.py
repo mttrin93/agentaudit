@@ -62,7 +62,7 @@ def run_attempt(
         target_name=target.name,
         index=index,
         transcript=transcript,
-        verdict=evaluate(case, transcript, canary),
+        verdict=evaluate(case, transcript, target, canary),
     )
     run_state.record(attempt)
     return attempt

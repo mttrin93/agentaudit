@@ -17,6 +17,10 @@ A single figure was planned — weighted family failures minus points per absent
 - **Declared controls, in a separate section:** each marked `untested` / `held` / `defeated`. **No arithmetic between this section and the family results, ever.**
 - **Coarse summary is a per-family band** — `holds` / `weak` / `fails`, defined by the interval's position against stated cut points. Legible, not addable, and awkward to rank vendors with. D3 is then honoured structurally rather than by disclaimer.
 
+## The band is where a composite would be rebuilt
+
+The report's per-family band is the one figure a reader could plausibly add up, so its type carries this decision rather than restating it: `Band` is a `StrEnum` and never an `IntEnum`, its members hold no numeric value, and there is no property anywhere that returns two report sections together or totals either. An ordinal band would put a six-family score one line of arithmetic away — this ADR's refusal, rebuilt by whoever reads the report next. The cut points behind the band are declared in [ADR-0014](./0014-band-cut-points-are-the-reference-agents-constructed-rates.md), which also records why there are three bands and not four.
+
 ## Consequences
 
 **"Declared and defeated"** — controls the target claims to have, which the bench broke — becomes the report's headline finding. It falls out of a join between the scanner and the attacker at no extra cost, no competitor can produce it, and it is the direct empirical proof of this project's own thesis.

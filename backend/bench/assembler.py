@@ -5,7 +5,7 @@ holds or quietly stops holding. A result is three sections —
 
 | Section | What it holds | Reproducible |
 |---|---|---|
-| Measured | rate, interval, verdict class, `D`, coverage note, band | yes |
+| Measured | rate, interval, verdict class, `D`, κ, coverage note, band | yes |
 | Declared | each control marked untested, held or defeated | yes |
 | Adaptive | what one attacker achieved, in prose | **no** |
 
@@ -34,10 +34,16 @@ nobody can mistake it for a measurement. This module owns the section's shape; t
 statistics that fill it (`A_break`, `A_effort`, the censoring counts) are #17's,
 and they are deliberately absent here rather than stubbed.
 
-**What is deliberately not here.** κ per judged family belongs on the judged
-entries and arrives with the gold set (#11); `D` arrives as `None` until a gate run
-has read the family (#13), and never as 0.0 — the same soft-zero refusal
-`measurability.py` makes about a rate.
+**κ is on the judged entries and nowhere else** (#11, ADR-0004). It is a figure
+about the instrument that decided a judged family, so a deterministic entry carrying
+one is refused: the success condition is authoritative and needs no vouching for. A
+judged family whose κ misses the declared floor — or that has no κ at all — is
+`unfit_to_report`, and that marking is derived rather than set, so a renderer cannot
+publish the rate by neglecting to ask.
+
+**What is deliberately not here.** `D` arrives as `None` until a gate run has read
+the family (#13), and never as 0.0 — the same soft-zero refusal `measurability.py`
+makes about a rate.
 """
 
 from collections.abc import Iterable, Mapping, Sequence
@@ -58,6 +64,7 @@ from backend.bench.scorer import (
     GateDecision,
     Interval,
     Rate,
+    Reliability,
     band_for,
 )
 from backend.graph.runstate import Attempt
@@ -237,10 +244,38 @@ class FamilyEntry:
     """The published identifiers this family's cases test one case *within*, each
     with the boundary of that claim (ADR-0002)."""
 
+    reliability: Reliability | None = None
+    """κ for the instrument that decided this family, on a judged entry.
+
+    `None` on every deterministic entry and it must be: a deterministic verdict is
+    re-derivable from the record and the transcript, so there is no instrument for a
+    reliability figure to be about and one printed there would imply the rate needed
+    it. `None` on a judged entry means no gold set has been run against the instrument
+    that produced this rate, which is not the same reading as a κ of zero and is why
+    `fit_to_report` refuses both.
+    """
+
     @property
     def interval(self) -> Interval:
         """The Wilson interval around the rate, at the confidence the rule states."""
         return self.rate.interval
+
+    @property
+    def fit_to_report(self) -> bool:
+        """Whether this family's rate may be published.
+
+        True for every deterministic family, because the success condition is
+        authoritative and re-derivable (ADR-0004). For a judged family it is κ against
+        the declared floor and nothing else — no argument, no override, and no
+        exception for a run that is otherwise complete. ADR-0004 makes the refusal
+        automatic precisely so that it is not a judgement call under deadline, and a
+        judged entry with no κ at all is refused on the same reasoning: a rate whose
+        evidentiary strength nobody can state is the thing the rule exists to stop
+        being published (ADR-0013).
+        """
+        if self.verdict_class is VerdictClass.DETERMINISTIC:
+            return True
+        return self.reliability is not None and self.reliability.fit_to_report
 
 
 @dataclass(frozen=True)
@@ -263,7 +298,40 @@ class MeasuredSection:
     cuts: BandCuts = DECLARED_BAND_CUTS
     """The cut points the bands above were read against, printed with them."""
 
+    @property
+    def unfit_to_report(self) -> tuple[Family, ...]:
+        """The judged families whose κ did not reach the declared floor, or is absent.
+
+        Derived and never set, so the marking happens whether or not a caller thought
+        to ask for it. A renderer that ignores this list prints a rate ADR-0004 says
+        must not be published, which is a defect a reader can find; a renderer that
+        had to be told which families to mark would be one where nobody could.
+        """
+        return tuple(entry.family for entry in self.judged if not entry.fit_to_report)
+
     def __post_init__(self) -> None:
+        misplaced = [entry.family for entry in self.deterministic if entry.reliability]
+        if misplaced:
+            raise ValueError(
+                f"{sorted(misplaced)} are deterministic and carry a κ figure. κ is "
+                "the reliability of the instrument that decides a judged family, and "
+                "a deterministic verdict has no instrument — printing one there would "
+                "say the success condition needed vouching for (ADR-0004)"
+            )
+
+        astray = [
+            entry.family
+            for entry in self.judged
+            if entry.reliability and entry.reliability.family is not entry.family
+        ]
+        if astray:
+            raise ValueError(
+                f"{sorted(astray)} carry a κ measured on another family. κ is per "
+                "judged family and never pooled, so a figure filed under the wrong "
+                "one would let a family the instrument reads well vouch for one it "
+                "reads badly"
+            )
+
         for entries, expected in (
             (self.deterministic, VerdictClass.DETERMINISTIC),
             (self.judged, VerdictClass.JUDGED),
@@ -574,6 +642,7 @@ def assemble(
     episodes: Sequence[ReportedEpisode] = (),
     cuts: BandCuts = DECLARED_BAND_CUTS,
     coverage_gaps: tuple[CoverageGap, ...] = DECLARED_COVERAGE_GAPS,
+    reliability: Mapping[Family, Reliability] | None = None,
 ) -> TargetResult:
     """Assemble one target's result from what was recorded against it.
 
@@ -589,6 +658,10 @@ def assemble(
     `episodes` are the adaptive layer's, and they arrive as an argument rather than
     off the run state because #16 records them and #17 measures them; this ticket
     owns only the shape they are reported in.
+
+    `reliability` supplies κ per judged family from the gold-set run (`goldset.py`).
+    It reaches the judged entries only, and a judged family absent from it is marked
+    unfit to report rather than published without a stated reliability (ADR-0004).
     """
     scanned = scan(target_run.target)
     return TargetResult(
@@ -600,9 +673,18 @@ def assemble(
                 cases,
                 gate,
                 cuts,
+                # Nothing, always. The parameter is required rather than defaulted so
+                # that this line has to be written and can be read: a κ figure cannot
+                # reach a family whose verdict came from a success condition.
+                {},
             ),
             judged=_entries(
-                target_run.judged_rates, VerdictClass.JUDGED, cases, gate, cuts
+                target_run.judged_rates,
+                VerdictClass.JUDGED,
+                cases,
+                gate,
+                cuts,
+                reliability or {},
             ),
             not_measurable=dict(target_run.not_measurable),
             cuts=cuts,
@@ -649,11 +731,16 @@ def _entries(
     cases: Iterable[Case],
     gate: GateDecision | None,
     cuts: BandCuts,
+    reliability: Mapping[Family, Reliability],
 ) -> tuple[FamilyEntry, ...]:
     """The per-family entries of one verdict class, in the closed family order.
 
     `Family`'s own order rather than the order the run happened to measure in, so
     two targets' sections line up row for row.
+
+    `reliability` is required rather than defaulted, so the deterministic call site
+    has to state that it passes none: a κ figure reaching an entry whose verdict came
+    from a success condition would be a defect nobody reading the call could see.
     """
     coverage = _coverage(cases)
     scores = _discrimination(gate)
@@ -665,6 +752,7 @@ def _entries(
             band=band_for(rates[family], cuts),
             discrimination=scores.get(family),
             coverage=coverage.get(family, ()),
+            reliability=reliability.get(family),
         )
         for family in Family
         if family in rates

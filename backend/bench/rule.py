@@ -51,6 +51,16 @@ class GateRule:
     here so the bench's accuracy thresholds are stated in one place.
     """
 
+    gold_transcripts_per_family: int = 15
+    """How many hand-labelled transcripts one judged family's κ is measured over.
+
+    Fifteen per judged family, thirty in total (spec stories 33 and 34), and stated
+    here for the same reason `attempts_per_case` is: it is the denominator the
+    reliability figure is read on, so moving it moves what κ means. A figure computed
+    over some other number of transcripts is not the declared figure, and
+    `goldset.py` refuses to produce one.
+    """
+
     tolerated_inversions: int = 1
     """How far the hardened ≤ weak ≤ trivial ordering may break on one family.
 

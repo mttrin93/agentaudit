@@ -11,3 +11,9 @@ wheels/
 
 # Secrets
 .env
+
+# DeepEval writes its last run and its anonymous-telemetry id here. Neither is a
+# result the bench reports: kappa is read out of the returned per-case results
+# (backend/bench/goldset.py) and recorded in docs/validation.md.
+.deepeval/
+.deepeval-cache.json

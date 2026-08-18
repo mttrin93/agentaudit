@@ -200,6 +200,7 @@ def test_a_family_entry_carries_the_figures_a_reader_needs_and_no_others() -> No
         "band",
         "discrimination",
         "coverage",
+        "reliability",
     }
 
     entry = an_entry(Family.DATA_LEAKAGE, successes=30, discrimination=0.8)
@@ -209,6 +210,11 @@ def test_a_family_entry_carries_the_figures_a_reader_needs_and_no_others() -> No
     assert entry.band is Band.FAILS
     assert entry.discrimination == 0.8
     assert entry.coverage == (LEAKAGE_ID,)
+    # κ arrives with the gold set (#11) and belongs to the judged entries. On a
+    # deterministic entry it is absent, and `fit_to_report` is true without one
+    # because the success condition is authoritative (ADR-0004).
+    assert entry.reliability is None
+    assert entry.fit_to_report
 
 
 # --- Three sections, and no arithmetic across them ---------------------------

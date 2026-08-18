@@ -33,9 +33,11 @@ and the retries inside it are sends — the vocabulary keeps them apart because 
 arithmetic does: an endpoint having a bad minute must not read as an agent that
 defended itself.
 
-Transport failures — timeout, 401, malformed body, 429 — become distinct named
-outcomes in #13. Until then, a failure that outlives the retry policy surfaces as
-an exception rather than as a quietly scored security result.
+Transport failures — timeout, 401, malformed body, 429 — are **named outcomes**
+(`TargetFailure`), raised as `TargetUnreachable` rather than scored. A failure
+that outlives the retry policy stops the run under its own name, and no attempt is
+recorded for it: an endpoint having a bad minute must not read as an agent that
+defended itself, and a body the bench cannot read is not an empty reply.
 """
 
 from __future__ import annotations
@@ -50,14 +52,116 @@ import httpx
 
 DEFAULT_TIMEOUT = 60.0
 
+RATE_LIMITED_STATUS = 429
+"""A quota, told apart from an outage: both are retried, and they end differently."""
+
+AUTH_STATUSES = frozenset({401, 403})
+"""A rejected credential. Never retried, and never a verdict."""
+
 TRANSIENT_STATUSES = frozenset({429, 500, 502, 503, 504})
 """Replies that say "not now" rather than "no".
 
 Listed rather than derived from the 5xx range, so that adding one is a decision.
 401 is deliberately absent: a rejected token is not a bad minute, and retrying it
-three times is three more rejections. #13 gives each of these its own named
-outcome; here they only decide whether to send again.
+three times is three more rejections. Each of these has its own named outcome
+below; here they only decide whether to send again.
 """
+
+
+class TargetFailure(StrEnum):
+    """Why the bench got no usable reply — one named outcome per failure mode.
+
+    **None of these is a verdict, and none of them is a security result.** An
+    endpoint having a bad minute must not read as an agent that defended itself:
+    the two are the same silence on the wire and opposite facts about the target,
+    so the difference is carried by a type rather than by a rate that happens to
+    look defensive. A `Verdict` says what one attempt reached; a failure here says
+    no attempt was reached at all, and no `Attempt` is recorded for one.
+
+    Named per mode rather than collapsed into one *unreachable*, because the four
+    the spec names are four different jobs for the person reading the run: a
+    timeout is capacity, a rejected token is configuration, a malformed body is a
+    contract breach, and a rate limit is a quota. A single word for all four would
+    send every one of them to the same wrong place.
+    """
+
+    TIMEOUT = "timeout"
+    AUTH_REJECTED = "auth_rejected"
+    MALFORMED_REPLY = "malformed_reply"
+    RATE_LIMITED = "rate_limited"
+    UNAVAILABLE = "unavailable"
+    """A 5xx that outlived the retry policy. The transient statuses of
+    `TRANSIENT_STATUSES` other than 429, which has its own name because a quota is
+    not an outage."""
+
+    UNREACHABLE = "unreachable"
+    """No connection at all — refused, reset, or a name that does not resolve.
+    Distinct from a timeout, which is an endpoint that answered too slowly rather
+    than one that was never there."""
+
+    REFUSED = "refused"
+    """A status the contract does not define, kept rather than guessed at. A 404 is
+    a wrong URL and a 400 is a rejected body, and neither is an agent resisting."""
+
+    def stated(self) -> str:
+        """The outcome in the words a run prints, with what it is not."""
+        match self:
+            case TargetFailure.TIMEOUT:
+                return "timeout — the endpoint did not answer inside its declared wait"
+            case TargetFailure.AUTH_REJECTED:
+                return (
+                    "auth failure — the endpoint rejected the bearer token. Not "
+                    "retried: a rejected token is not a bad minute"
+                )
+            case TargetFailure.MALFORMED_REPLY:
+                return (
+                    "malformed reply — the body was not the contract's "
+                    '{"reply": "<text>"}. A reply the bench cannot read is not an '
+                    "empty reply, and an empty reply would have scored as resisted"
+                )
+            case TargetFailure.RATE_LIMITED:
+                return "rate limit — the endpoint answered 429 on every send"
+            case TargetFailure.UNAVAILABLE:
+                return (
+                    "unavailable — the endpoint answered 5xx on every send, so the "
+                    "retry policy is exhausted rather than the target measured"
+                )
+            case TargetFailure.UNREACHABLE:
+                return "unreachable — no connection to the endpoint was made at all"
+            case TargetFailure.REFUSED:
+                return (
+                    "refused — the endpoint answered with a status this contract "
+                    "does not define, so what came back is not a reply"
+                )
+
+
+class TargetUnreachable(RuntimeError):
+    """One named transport outcome, raised instead of being scored.
+
+    Raised rather than returned, and this is the whole of the design: a caller
+    cannot forget to look at it, and there is no field on an `Attempt` for a
+    transport failure to sit in and be counted from. Infrastructure failure that
+    reached a rate would be indistinguishable from a defended agent, and it would
+    be the *good* number — which is the direction a bench must never fail in.
+    """
+
+    def __init__(
+        self,
+        failure: TargetFailure,
+        url: str,
+        sends: int,
+        status_code: int | None = None,
+    ) -> None:
+        self.failure = failure
+        self.url = url
+        self.sends = sends
+        self.status_code = status_code
+        status = "" if status_code is None else f" (HTTP {status_code})"
+        super().__init__(
+            f"{url} after {sends} "
+            f"{'send' if sends == 1 else 'sends'}{status}: {failure.stated()}. "
+            "No attempt is recorded and nothing here is a security result"
+        )
 
 
 @dataclass(frozen=True)
@@ -71,9 +175,20 @@ class RetryPolicy:
     backoff_seconds: float = 0.5
     """The first wait, doubled on each further retry."""
 
+    timeout_seconds: float = DEFAULT_TIMEOUT
+    """How long one send may wait for a reply before it is a timeout.
+
+    Held on the policy rather than as a module constant so that the named outcome
+    below is reachable from a test: a failure mode the suite cannot produce on
+    demand is a failure mode nobody knows the bench handles, and a healthy
+    endpoint never shows one.
+    """
+
     def __post_init__(self) -> None:
         if self.sends < 1:
             raise ValueError("a retry policy has to allow at least one send")
+        if self.timeout_seconds <= 0:
+            raise ValueError("a send that may not wait at all cannot get a reply")
 
     def wait_before(self, send: int) -> float:
         return self.backoff_seconds * float(2 ** (send - 1))
@@ -325,23 +440,78 @@ def send_message(target: TargetConfig, message: str, session_id: str) -> Transcr
                 target.url,
                 json=sent,
                 headers={"Authorization": f"Bearer {target.auth_token}"},
-                timeout=DEFAULT_TIMEOUT,
+                timeout=target.retry.timeout_seconds,
             )
-        except httpx.TransportError:
-            # No reply at all — timeout, refused connection, dropped read.
+        except httpx.TimeoutException:
+            # An endpoint that answered too slowly, retried like any bad minute
+            # and named as itself when the policy runs out.
             if last_send:
-                raise
+                raise TargetUnreachable(
+                    TargetFailure.TIMEOUT, target.url, send
+                ) from None
+        except httpx.TransportError:
+            # No connection at all — refused, reset, or a name that did not
+            # resolve. A different fact about the endpoint from a timeout.
+            if last_send:
+                raise TargetUnreachable(
+                    TargetFailure.UNREACHABLE, target.url, send
+                ) from None
         else:
             if response.status_code not in TRANSIENT_STATUSES:
-                return Transcript(
-                    url=target.url,
-                    sent=sent,
-                    status_code=response.status_code,
-                    received=response.json(),
-                    sends=send,
-                )
+                return _received(target, sent, response, send)
             if last_send:
-                response.raise_for_status()
+                raise TargetUnreachable(
+                    _transient_failure(response.status_code),
+                    target.url,
+                    send,
+                    response.status_code,
+                )
         time.sleep(target.retry.wait_before(send))
 
     raise AssertionError("a retry policy with no sends cannot deliver a message")
+
+
+def _received(
+    target: TargetConfig, sent: dict[str, Any], response: httpx.Response, send: int
+) -> Transcript:
+    """The reply as a transcript, or a named outcome if it is not one.
+
+    The body is checked here rather than read leniently downstream, because
+    `Transcript.reply_text` answers `""` for a body it cannot read and an empty
+    reply scores as **resisted**. A target returning prose in a field the contract
+    does not name would therefore be recorded as an agent that held — the exact
+    coercion of infrastructure into a security result the named outcomes exist to
+    stop.
+    """
+    if response.status_code in AUTH_STATUSES:
+        raise TargetUnreachable(
+            TargetFailure.AUTH_REJECTED, target.url, send, response.status_code
+        )
+    if not response.is_success:
+        raise TargetUnreachable(
+            TargetFailure.REFUSED, target.url, send, response.status_code
+        )
+    try:
+        received = response.json()
+    except ValueError:
+        raise TargetUnreachable(
+            TargetFailure.MALFORMED_REPLY, target.url, send, response.status_code
+        ) from None
+    if not isinstance(received, dict) or not isinstance(received.get("reply"), str):
+        raise TargetUnreachable(
+            TargetFailure.MALFORMED_REPLY, target.url, send, response.status_code
+        )
+    return Transcript(
+        url=target.url,
+        sent=sent,
+        status_code=response.status_code,
+        received=received,
+        sends=send,
+    )
+
+
+def _transient_failure(status_code: int) -> TargetFailure:
+    """Which named outcome a transient status ends as once the retries are spent."""
+    if status_code == RATE_LIMITED_STATUS:
+        return TargetFailure.RATE_LIMITED
+    return TargetFailure.UNAVAILABLE

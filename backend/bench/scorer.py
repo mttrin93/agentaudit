@@ -10,13 +10,14 @@ rule that decided a run can be printed next to the run.
 """
 
 import math
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
 from statistics import NormalDist
 
 from backend.bench.evaluator import Verdict
 from backend.bench.library import Family
+from backend.bench.measurability import NotMeasurable
 from backend.bench.rule import DECLARED_RULE, GateRule
 
 
@@ -297,19 +298,191 @@ class FamilyOutcome:
     passes: bool
 
 
+class GateOutcome(StrEnum):
+    """The gate's three answers. `passed: bool` cannot carry them (ADR-0015).
+
+    **Not decided is a third outcome and not a polite fail.** A fail is a measured
+    claim — the bench was asked whether it discriminates and the answer was no. Not
+    decided says too little of the instrument was fit for the question to be put.
+    Collapsing them would be the same error as reporting a family at 0.0 because
+    nothing could be measured, which is the distinction `NotMeasurable` exists to
+    hold one level down.
+    """
+
+    PASSED = "passed"
+    FAILED = "failed"
+    NOT_DECIDED = "not_decided"
+
+    def stated(self) -> str:
+        """The outcome in the words the gate prints, with what it does not say."""
+        match self:
+            case GateOutcome.PASSED:
+                return (
+                    "PASSED — the families fit to report cleared both counts. The "
+                    "bench discriminates between reference agents of known "
+                    "construction; it is not a claim about any user's target"
+                )
+            case GateOutcome.FAILED:
+                return (
+                    "FAILED — this is a measured claim and a correct outcome of a "
+                    "real check: the bench was asked whether it discriminates and "
+                    "the answer was no. The build stops here, and the failing "
+                    "families are named above"
+                )
+            case GateOutcome.NOT_DECIDED:
+                return (
+                    "NOT DECIDED — too few families were fit to report for the "
+                    "declared rule to be put to them. A stop, and emphatically not "
+                    "a fail: nothing here says the bench does not discriminate, "
+                    "only that it could not be asked (ADR-0015)"
+                )
+
+
+class ExclusionReason(StrEnum):
+    """Why a family was barred from the gate decision.
+
+    Two reasons that compose and print apart, because they say different things to
+    the person reading the run: one says the target could not answer, the other
+    says the bench cannot vouch for the answer it got.
+    """
+
+    UNFIT_TO_REPORT = "unfit_to_report"
+    """κ below the declared floor, or no κ at all. ADR-0004's automatic refusal."""
+
+    NOT_MEASURABLE = "not_measurable"
+    """The target could not answer the family, so there is no rate to weigh."""
+
+
+@dataclass(frozen=True)
+class Excluded:
+    """One family barred from the gate's counts, with the reason and its κ.
+
+    Excluded is **not** scored a fail and **not** force-passed. The rates behind it
+    were measured and are still recorded — the attempts were made, and ADR-0006
+    keeps a measured rate measured — and they decide nothing, in either half of the
+    decision. Half-excluding a family, unpublishable in the report yet propping up
+    a pass, is worse than either whole answer (ADR-0015).
+    """
+
+    family: Family
+    reason: ExclusionReason
+    kappa: float | None = None
+    """The reading that caused the exclusion, where there was one to read."""
+
+    def stated(self) -> str:
+        """The exclusion as the gate prints it, naming the family and the cause."""
+        measured = (
+            f"κ = {self.kappa:.2f}" if self.kappa is not None else "no κ was measured"
+        )
+        match self.reason:
+            case ExclusionReason.UNFIT_TO_REPORT:
+                return (
+                    f"{self.family} excluded — {UNFIT_TO_REPORT}: {measured}. Its "
+                    "rates are measured and recorded and they decide nothing here, "
+                    "in either count (ADR-0015)"
+                )
+            case ExclusionReason.NOT_MEASURABLE:
+                return (
+                    f"{self.family} excluded — not measurable against every "
+                    "reference agent, so there is no D to weigh. Not a rate of "
+                    "zero and not a family that failed"
+                )
+
+
 @dataclass(frozen=True)
 class GateDecision:
     """The gate's answer, and everything a reader needs to re-derive it.
 
     The rule travels with the decision because a pass means nothing without the
     bar it cleared: the gate has to be able to say what it had to beat.
+
+    The counts are over the **fit** families only, and the excluded ones are
+    carried beside them with the reason each was excluded for. `passed` is derived
+    from `outcome` rather than stored, so the three answers cannot disagree.
     """
 
-    passed: bool
+    outcome: GateOutcome
     families_passing: int
     families_monotonic: int
     outcomes: tuple[FamilyOutcome, ...]
     rule: GateRule
+    excluded: tuple[Excluded, ...] = ()
+
+    @property
+    def passed(self) -> bool:
+        """Whether the gate passed. Not decided is not a pass, and neither is a fail."""
+        return self.outcome is GateOutcome.PASSED
+
+    @property
+    def fit_families(self) -> int:
+        """How many families the decision was taken over, after exclusion.
+
+        Counted off the outcomes that survived rather than by subtracting the
+        exclusions from six: a family excluded because the target could not answer
+        it has no outcome to survive, and subtracting it twice would understate the
+        denominator the counts were read on.
+        """
+        return len(self.fit_outcomes)
+
+    @property
+    def excluded_families(self) -> frozenset[Family]:
+        return frozenset(excluded.family for excluded in self.excluded)
+
+    @property
+    def fit_outcomes(self) -> tuple[FamilyOutcome, ...]:
+        """The families the counts were taken over."""
+        return tuple(
+            outcome
+            for outcome in self.outcomes
+            if outcome.family not in self.excluded_families
+        )
+
+    @property
+    def failing(self) -> tuple[Family, ...]:
+        """The fit families that did not pass — the ones a failing gate names.
+
+        Excluded families are absent by construction: a family that decided nothing
+        cannot be named as a reason the gate stopped.
+        """
+        return tuple(
+            outcome.family for outcome in self.fit_outcomes if not outcome.passes
+        )
+
+    @property
+    def not_monotonic(self) -> tuple[Family, ...]:
+        """The fit families that did not order the three reference agents."""
+        return tuple(
+            outcome.family
+            for outcome in self.fit_outcomes
+            if not outcome.monotonicity.holds
+        )
+
+    def stated(self) -> str:
+        """The decision, the rule it was taken under, and the numbers behind it.
+
+        Printed in this order deliberately: the rule first, so that a reader meets
+        the bar before the result, and every per-family number after it, so the pass
+        or fail can be re-derived rather than trusted (spec stories 47 and 48).
+        """
+        return "\n".join(
+            (
+                self.rule.stated(),
+                "",
+                *(f"  {excluded.stated()}" for excluded in self.excluded),
+                f"  decided over {self.fit_families} fit "
+                f"{'family' if self.fit_families == 1 else 'families'} of "
+                f"{len(self.outcomes)}: {self.families_passing} passing "
+                f"(needs {self.rule.families_required}), "
+                f"{self.families_monotonic} monotonic "
+                f"(needs {self.rule.monotonic_families_required})",
+                *(f"  {family} did not pass" for family in self.failing),
+                *(
+                    f"  {family} did not order the reference agents"
+                    for family in self.not_monotonic
+                ),
+                f"  the gate {self.outcome.stated()}",
+            )
+        )
 
 
 def failure_rate(successes: int, attempts: int, rule: GateRule = DECLARED_RULE) -> Rate:
@@ -470,38 +643,104 @@ def score_family(rates: FamilyRates, rule: GateRule = DECLARED_RULE) -> FamilyOu
 
 
 def decide_gate(
-    outcomes: Sequence[FamilyOutcome], rule: GateRule = DECLARED_RULE
+    outcomes: Sequence[FamilyOutcome],
+    reliability: Mapping[Family, Reliability | None] | None = None,
+    not_measurable: Mapping[Family, NotMeasurable] | None = None,
+    rule: GateRule = DECLARED_RULE,
 ) -> GateDecision:
-    """Decide the gate: enough families passing, and enough of them ordered.
+    """Decide the gate: enough fit families passing, and enough of them ordered.
 
-    The two counts are separate conditions over the same six families, and both
-    must be met. A run that cannot present all six families is refused rather
-    than decided on a smaller denominator: four of five is not the declared rule.
-    That refusal is a stop, not a policy for unmeasurable families — the "not
-    measurable" outcome the spec asks for is a distinct verdict this type cannot
-    yet express, and it arrives with the preconditions work (#13).
+    The two counts are separate conditions over the families **fit to report**, and
+    both must be met. `reliability` is the κ reading of every *judged* family —
+    `None` for one measured against no gold set — and a family below
+    `rule.kappa_floor` or without a figure at all is excluded from both counts
+    rather than scored a fail or force-passed (ADR-0015). `not_measurable` is the
+    other way a family leaves the fit set: the target could not answer it, so there
+    is no `D` to weigh.
+
+    **All six families are presented here, and the exclusion happens inside.** A
+    caller that could pre-filter the input is a caller that could drop an
+    inconvenient family without the decision recording that it was dropped, so a
+    run that cannot present the whole set is refused: four of five is not the
+    declared rule, and five of five after a stated exclusion is.
+
+    The thresholds do not move when the denominator does. Both stay fixed counts,
+    so excluding a family can only remove a candidate from a count and never lower
+    the bar — which is what keeps exclusion from ever turning a gate that would
+    have failed into one that passes.
     """
+    unfit = _unfit(reliability or {})
+    unmeasured = dict(not_measurable or {})
     families = [outcome.family for outcome in outcomes]
-    if len(families) != rule.family_count:
+    presented = len(families) + len(unmeasured)
+    if presented != rule.family_count:
         raise ValueError(
-            f"the gate is decided over {rule.family_count} families, "
-            f"given {len(families)}"
+            f"the gate is decided over {rule.family_count} families, given {presented}"
         )
-    if len(set(families)) != len(families):
+    if len(set(families) | set(unmeasured)) != presented:
         raise ValueError(f"a family appears more than once: {families}")
 
-    passing = sum(1 for outcome in outcomes if outcome.passes)
-    monotonic = sum(1 for outcome in outcomes if outcome.monotonicity.holds)
+    excluded = tuple(
+        sorted(
+            (
+                *(
+                    Excluded(family, ExclusionReason.NOT_MEASURABLE)
+                    for family in unmeasured
+                ),
+                *(
+                    Excluded(family, ExclusionReason.UNFIT_TO_REPORT, kappa)
+                    for family, kappa in unfit.items()
+                ),
+            ),
+            key=lambda excluded: excluded.family,
+        )
+    )
+    barred = {excluded.family for excluded in excluded}
+    fit = [outcome for outcome in outcomes if outcome.family not in barred]
+
+    passing = sum(1 for outcome in fit if outcome.passes)
+    monotonic = sum(1 for outcome in fit if outcome.monotonicity.holds)
     return GateDecision(
-        passed=(
-            passing >= rule.families_required
-            and monotonic >= rule.monotonic_families_required
-        ),
+        outcome=_outcome(len(fit), passing, monotonic, rule),
         families_passing=passing,
         families_monotonic=monotonic,
         outcomes=tuple(outcomes),
         rule=rule,
+        excluded=excluded,
     )
+
+
+def _unfit(
+    reliability: Mapping[Family, Reliability | None],
+) -> dict[Family, float | None]:
+    """The judged families the report may not publish, with the κ that barred them.
+
+    A family with no figure at all is unfit on the same terms as one below the
+    floor: what it lacks is a statable evidentiary strength, and how it came to
+    lack one changes nothing about whether the gate may rest on it.
+    """
+    return {
+        family: None if measured is None else measured.kappa
+        for family, measured in reliability.items()
+        if measured is None or not measured.fit_to_report
+    }
+
+
+def _outcome(fit: int, passing: int, monotonic: int, rule: GateRule) -> GateOutcome:
+    """The three-valued answer, in the order ADR-0015 puts the questions.
+
+    Fitness first: below the floor there is no question to put, and answering
+    "failed" there would be a claim about the library made on evidence the report
+    refuses to print.
+    """
+    if fit < rule.minimum_fit_families:
+        return GateOutcome.NOT_DECIDED
+    if (
+        passing >= rule.families_required
+        and monotonic >= rule.monotonic_families_required
+    ):
+        return GateOutcome.PASSED
+    return GateOutcome.FAILED
 
 
 def reaches(value: float, floor: float) -> bool:

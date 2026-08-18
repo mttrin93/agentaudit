@@ -3,8 +3,9 @@
 Everything in the pre-web scope is reached from here: the case library, the
 attestation, the approval interrupt and its budget, registration and the nonce
 protocol, the applicability and precondition checks, the attempt, and the verdict.
-Ten attempts per case (#4), the judge (#8) and the gate decision (#13) extend this
-callable rather than adding a second way in.
+Ten attempts per case (#4), the judge (#8) and the gate decision (`gate.py`, which
+reads what this returns and decides nothing else) extend this callable rather than
+adding a second way in.
 
 The order below is the order ADR-0007 requires and is not an implementation
 detail: attestation, then the estimate, then the halt, and only then anything that
@@ -50,7 +51,7 @@ from backend.bench.applicability import SkippedCase, applicable, skipped_cases
 from backend.bench.attacker import run_case
 from backend.bench.contract import TargetConfig
 from backend.bench.evaluator import Verdict
-from backend.bench.library import Case, Family, VerdictClass
+from backend.bench.library import Case, Family, VerdictClass, library_version
 from backend.bench.measurability import (
     NotMeasurable,
     not_measurable_families,
@@ -260,7 +261,7 @@ def run_calibration(
     declared = budget or RunBudget.declare(
         cases=cases, targets=targets, rule=rule, adaptive=adaptive
     )
-    run_state = RunState(budget=declared)
+    run_state = RunState(budget=declared, library=library_version(cases))
     target_runs: list[TargetRun] = []
 
     def run_suite() -> None:

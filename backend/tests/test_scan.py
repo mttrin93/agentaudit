@@ -51,6 +51,7 @@ from backend.bench.scorer import (
     FamilyOutcome,
     FamilyRates,
     GateDecision,
+    GateOutcome,
     failure_rate,
     monotonicity,
 )
@@ -455,7 +456,7 @@ def a_gate(score: float, family: Family = Family.DATA_LEAKAGE) -> GateDecision:
         trivial=failure_rate(27, 30),
     )
     return GateDecision(
-        passed=True,
+        outcome=GateOutcome.PASSED,
         families_passing=1,
         families_monotonic=1,
         outcomes=(

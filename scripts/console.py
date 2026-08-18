@@ -12,8 +12,14 @@ point at rather than what they ask before pointing.
 """
 
 import sys
+from collections.abc import Sequence
 from decimal import Decimal
 
+from backend.bench.adaptive.discrimination import NoFamiliesInScope, measure
+from backend.bench.adaptive.episode import AdaptiveEpisode
+from backend.bench.admission import library_provenance, outcome_for
+from backend.bench.calibration import CalibrationResult
+from backend.bench.library import Case, bar_for
 from backend.bench.registration import Attestation
 from backend.bench.rule import DECLARED_RULE
 from backend.bench.scorer import Rate
@@ -134,3 +140,79 @@ def excerpt(text: str) -> str:
         f"{collapsed[:REPLY_EXCERPT]}… "
         f"[{len(collapsed)} chars, full transcript recorded]"
     )
+
+
+def print_episodes(result: CalibrationResult, trivial: str, hardened: str) -> None:
+    """The adaptive section, in its own block and carrying no rate.
+
+    Printed apart from the rates and never beside them: an episode has no
+    denominator, `A_break` and `A_effort` are measured on families and turns rather
+    than on attempts, and nothing here decides anything about the gate (ADR-0010,
+    ADR-0011). Labelled *not reproducible*, because claiming a stochastic search is
+    reproducible would be the overreach the judge's narrative was demoted for.
+    """
+    episodes = result.run_state.episodes
+    print("\nadaptive layer — recorded, not reproducible, and scored on nothing")
+    if not episodes:
+        print("  no episode ran")
+        return
+    for episode in episodes:
+        # The target is named here because this is the bench's own record, read by
+        # the engineer who ran it. What the attacker saw was an opaque handle.
+        print(
+            f"  {episode.target_name} / {episode.family}: {episode.stated()} "
+            f"after {episode.turns} turns"
+        )
+        for proposal in episode.proposals:
+            # Proposed, never admitted. `propose_case` drafts and the admission
+            # gate decides, and an adaptive-discovered case faces the cross-model
+            # bar — which needs a second underlying model and so a second run
+            # (ADR-0012, `scripts/admit.py --second-model`).
+            print(
+                f"    proposed {proposal.case.id}: {proposal.description} "
+                f"— faces the {bar_for(proposal.case.discovered_by)} bar, "
+                "not admitted by having been proposed"
+            )
+    print_adaptive_discrimination(episodes, trivial=trivial, hardened=hardened)
+
+
+def print_adaptive_discrimination(
+    episodes: Sequence[AdaptiveEpisode], trivial: str, hardened: str
+) -> None:
+    """`A_break`, `A_effort` and the sign test, in their own block.
+
+    Never in a `D` table and never named `D`: these are measured on episodes and
+    families, and a Wilson interval on `n = 6` has no business printed beside one on
+    `n = 30` (ADR-0011). The block prints the reading table whatever the outcome,
+    so a reader sees what each of the four possible answers would have meant.
+    """
+    try:
+        print(measure(episodes, trivial=trivial, hardened=hardened).stated())
+    except NoFamiliesInScope as unmeasured:
+        # A stated refusal rather than a zero. "No separation" and "nothing was
+        # measured" are the two readings that must never collapse into one number.
+        print(f"adaptive discrimination: not read — {unmeasured}")
+
+
+def print_provenance(cases: Sequence[Case]) -> None:
+    """Who found this library, and the bar each case entered under.
+
+    Printed on every run, because ADR-0012 asks for the adaptive-discovered
+    fraction of the *live* library rather than for a number somebody can look up:
+    a library filling with routes fitted to these three agents should arrive as a
+    series across runs and not as a surprise at the end of one.
+
+    Every provenance is printed whether or not it is used, so a fraction of zero
+    reads as a count rather than as an absence of the thing.
+    """
+    # One block and one denominator. The live counts, the adaptive-discovered share
+    # of them, and the retirement rate by provenance are the two series ADR-0012
+    # asks for on every gate run: how far the library has drifted towards routes
+    # fitted to these three agents, and whether the drift is doing the damage the
+    # cross-model bar exists to prevent.
+    for line in library_provenance(cases).stated().splitlines():
+        print(f"{'' if line.startswith(' ') else '  '}{line}")
+    for case in cases:
+        # The bar beside the case, so an adaptive-discovered case is distinguishable
+        # from an authored one by reading the report (ADR-0012).
+        print(f"  {outcome_for(case).stated()}")

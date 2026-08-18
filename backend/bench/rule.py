@@ -81,6 +81,61 @@ class GateRule:
     licenses, so the bench is held to a stricter bar on it (ADR-0003).
     """
 
+    minimum_fit_families: int = 5
+    """How few families the gate may still be decided on. Five (ADR-0015).
+
+    A family the bench cannot vouch for — a judged family below `kappa_floor`, or
+    one the target could not answer at all — is **excluded** from the decision
+    rather than scored a fail or force-passed, so the denominator can shrink. Five
+    is the smallest denominator on which both counts above remain satisfiable at
+    all, and below it the gate returns **not decided**, which is a stop and never a
+    fail.
+
+    The two counts stay counts and never become fractions of this denominator. A
+    fraction would pay a run for degrading its own instrument: the same six
+    outcomes with three families passing fail at six fit and would pass at four,
+    with nothing changed but the adjudicator getting less reliable. Fixed counts
+    satisfy the invariant that exclusion is never a lever — excluding a family can
+    only remove a candidate, never move the bar (ADR-0015).
+    """
+
+    def stated(self) -> str:
+        """The rule as the gate prints it beside its result.
+
+        Printed rather than summarised, because a pass means nothing without the bar
+        it cleared, and because a threshold nobody can read is a threshold that can
+        be moved (ADR-0003).
+
+        **Nothing here is an adaptive threshold and there is nowhere for one to
+        live.** `T` and `k` are declared in `AdaptiveBudget`; this record holds the
+        numbers that decide, and the adaptive layer decides nothing (ADR-0010).
+        """
+        return "\n".join(
+            (
+                "the decision rule as applied, from ADR-0003 and ADR-0015:",
+                f"  n = {self.attempts_per_case} attempts per case, three cases per "
+                f"family, so n = {3 * self.attempts_per_case} per family per agent",
+                f"  per-family pass: D ≥ {self.discrimination_floor:.2f} and the "
+                f"hardened and trivial Wilson "
+                f"{self.interval_confidence:.0%} intervals do not overlap",
+                "  monotonicity: hardened ≤ weak ≤ trivial across all three "
+                f"reference agents, {self.tolerated_inversions} inversion tolerated",
+                f"  a judged family below κ = {self.kappa_floor:.2f} against the "
+                "gold set is not fit to report and is excluded from the decision; "
+                "so is a family the target could not answer",
+                f"  the gate passes only at {self.families_required} of "
+                f"{self.family_count} families passing and monotonicity on "
+                f"{self.monotonic_families_required} of {self.family_count} — fixed "
+                "counts, never fractions of the fit-to-report denominator",
+                f"  decided on no fewer than {self.minimum_fit_families} fit "
+                "families; below that the gate is not decided, which is a stop and "
+                "not a fail",
+                "  no adaptive threshold appears above: T and k are declared in "
+                "AdaptiveBudget, and nothing that decides nothing belongs in the "
+                "rule the gate prints (ADR-0010)",
+            )
+        )
+
 
 DECLARED_RULE = GateRule()
 """The rule the bench is held to. Every scorer function reads this by default.

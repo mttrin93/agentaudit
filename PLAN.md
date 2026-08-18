@@ -358,6 +358,7 @@ agentaudit/
 │   │   ├── completion.py    # the bench's own model call — the instrument, never the target
 │   │   ├── rule.py          # the gate rule as declared thresholds
 │   │   ├── scorer.py        # discrimination, intervals, the gate decision, bands
+│   │   ├── gate.py          # the gate over one run — handed attempts, never episodes
 │   │   ├── assembler.py     # declared-vs-defeated join, coverage gaps, the adaptive section
 │   │   ├── adaptive/        # the second layer — nothing here may write into a rate
 │   │   │   ├── attacker.py  # the agent loop, label-blind, turn-capped
@@ -378,18 +379,19 @@ agentaudit/
 ├── frontend/                # Vite + React + TypeScript
 │   └── src/pages/           # register, run, report  (review — Sprint 4)
 ├── scripts/
-│   ├── calibrate.py         # runs the gate — no web layer needed
+│   ├── gate.py              # runs the gate — no web layer needed
+│   ├── calibrate.py         # one family's worth of evidence, never a gate result
 │   └── verify.py            # offline signature check for a report recipient
 └── infra/                   # Terraform (P1)
 ```
 
-**Phases 1 to 4c and 8b need no web layer.** Drive them from `scripts/calibrate.py`. Add the API at 6b, the frontend at 7.
+**Phases 1 to 4c and 8b need no web layer.** Drive them from `scripts/calibrate.py`, and the gate itself from `scripts/gate.py`. Add the API at 6b, the frontend at 7.
 
 ---
 
 ## 8. The API job pattern
 
-One target run is six families at three cases at ten attempts, so **180 target calls** in the scored layer — exactly, because it is arithmetic — plus retries and judge calls, then **up to 96 more** in the adaptive layer at `T = 8` and `k = 2`. That takes many minutes. A single request that returns the result will time out. A full gate run is 540 scored calls plus about 288 adaptive, roughly **830**, doubled for 8b — that runs from `calibrate.py`, not through the API.
+One target run is six families at three cases at ten attempts, so **180 target calls** in the scored layer — exactly, because it is arithmetic — plus retries and judge calls, then **up to 96 more** in the adaptive layer at `T = 8` and `k = 2`. That takes many minutes. A single request that returns the result will time out. A full gate run is 540 scored calls plus about 288 adaptive, roughly **830**, doubled for 8b — that runs from `scripts/gate.py`, not through the API.
 
 1. `POST /runs` records the pre-run cost estimate **as two figures — the fixed suite exactly, the adaptive layer as a ceiling, never blended and never averaged** — halts at the approval interrupt for the user's confirmation, then starts the suite and returns a `run_id` at once.
 2. The suite runs in the background under the declared call budget, with a hard abort on breach. The adaptive layer runs after it, under its own ceiling and its own counter; an abort mid-episode records that episode as **censored**, never as resisted.

@@ -36,7 +36,7 @@ import os
 import secrets
 import sys
 from collections.abc import Sequence
-from decimal import Decimal, InvalidOperation
+from decimal import InvalidOperation
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -44,17 +44,9 @@ from dotenv import load_dotenv
 from backend.bench.calibration import CalibrationResult, TargetRun, run_calibration
 from backend.bench.contract import TargetConfig
 from backend.bench.library import Family, load_library
-from backend.bench.registration import Attestation
 from backend.bench.rule import DECLARED_RULE
-from backend.bench.scorer import Rate, discrimination
-from backend.graph.approval import Approval, Approve
-from backend.graph.budget import (
-    BudgetExceeded,
-    BudgetPayload,
-    CallPrice,
-    Layer,
-    RunBudget,
-)
+from backend.bench.scorer import discrimination
+from backend.graph.budget import BudgetExceeded, Layer, RunBudget
 from backend.targets.reference.hardened import HARDENED
 from backend.targets.reference.model import ModelConfig
 from backend.targets.reference.operator import nonce_planter
@@ -66,22 +58,26 @@ from backend.targets.reference.server import (
 from backend.targets.reference.serving import serve
 from backend.targets.reference.tools import DECLARED_TOOL_NAMES
 from backend.targets.reference.trivial import TRIVIAL
+from scripts.console import (
+    EXIT_ABORTED,
+    EXIT_DECLINED,
+    EXIT_WITHHELD,
+    attest,
+    excerpt,
+    price,
+    rate_line,
+    terminal_approval,
+)
 
 CASES_DIR = Path(__file__).resolve().parents[1] / "backend" / "cases"
 # The reference agents need a model that will actually run them as built. A model
 # that refuses the trivial agent's payloads is reporting its own defences, not the
 # agent's absent ones — the confound #15 exists to measure. See docs/validation.md.
 DEFAULT_MODEL = "openrouter:openai/gpt-4.1-nano"
-REPLY_EXCERPT = 400
 
-EXIT_WITHHELD = 2
-"""Exit code when the attestation was not made. Not an error — a refusal."""
-
-EXIT_DECLINED = 3
-"""Exit code when the estimated cost was not confirmed at the interrupt."""
-
-EXIT_ABORTED = 4
-"""Exit code when the run hit its declared ceiling and stopped."""
+# The attestation, the approval interrupt, the exit codes and the rate format live
+# in `scripts.console`, shared with `probe_target.py`. One consent mechanism, asked
+# the same way whichever target a run points at (ADR-0007).
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -123,7 +119,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     try:
-        price = _price(args.price_per_call, args.currency)
+        call_price = price(args.price_per_call, args.currency)
     except (InvalidOperation, ValueError) as bad:
         print(f"Not a usable price per call: {bad}")
         return EXIT_WITHHELD
@@ -132,7 +128,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     cases = load_library(CASES_DIR)
     auth_token = secrets.token_urlsafe(16)
 
-    attestation = _attest(args.identity)
+    attestation = attest(args.identity)
     if attestation is None:
         print("Attestation withheld. Nothing was sent.")
         return EXIT_WITHHELD
@@ -159,8 +155,10 @@ def main(argv: Sequence[str] | None = None) -> int:
                 targets=targets,
                 attestation=attestation,
                 plant_nonce=nonce_planter(base_url),
-                approve=_terminal_approval(attestation.identity),
-                budget=RunBudget.declare(cases=cases, targets=targets, price=price),
+                approve=terminal_approval(attestation.identity),
+                budget=RunBudget.declare(
+                    cases=cases, targets=targets, price=call_price
+                ),
             )
         except BudgetExceeded as abort:
             print(f"\nRun aborted on budget: {abort}")
@@ -176,75 +174,6 @@ def main(argv: Sequence[str] | None = None) -> int:
     return 1 if refused else 0
 
 
-def _price(per_call: str | None, currency: str) -> CallPrice | None:
-    """The operator's price per call, or `None` for a run they did not price."""
-    if per_call is None:
-        return None
-    return CallPrice(per_call=Decimal(per_call), currency=currency)
-
-
-def _attest(identity: str) -> Attestation | None:
-    """Collect the three statements, one question each.
-
-    One question each rather than one question for all three, because the record
-    has a field per statement and a single `[y/N]` cannot fill them honestly.
-    Asking separately is also the only way the type's refusal is ever reached on
-    the path a human takes — a partial attestation can be *given* here, and is
-    then declined with the statement that was withheld named back.
-    """
-    if not identity.strip():
-        print("An attestation records who made it, so --identity cannot be blank.")
-        return None
-
-    print(
-        f"Attestation, as {identity}. All three are required before anything is sent."
-    )
-    answers = {
-        field: _yes(f"  · {wording}? [y/N] ")
-        for field, wording in Attestation.STATEMENTS
-    }
-
-    try:
-        return Attestation(identity=identity, **answers)
-    except ValueError as refusal:
-        print(f"\n{refusal}")
-        return None
-
-
-def _terminal_approval(identity: str) -> Approve:
-    """Answer the graph's interrupt from the terminal.
-
-    The same halt is answered by an HTTP request at 6b. Only this function
-    changes; the graph does not.
-    """
-
-    def approve(presented: BudgetPayload) -> Approval:
-        print("\nEstimated cost of this run, before the first call:")
-        for line in presented["presented"]:
-            print(line)
-        if _yes("\nProceed and spend this? [y/N] "):
-            return Approval(confirmed=True, identity=identity)
-        return Approval(
-            confirmed=False,
-            identity=identity,
-            reason="declined at the approval interrupt",
-        )
-
-    return approve
-
-
-def _yes(prompt: str) -> bool:
-    """A yes, and only from a human at a terminal.
-
-    A run that is not being watched has nobody to consent on its behalf, so a
-    piped or absent stdin is a no rather than a default.
-    """
-    if not sys.stdin.isatty():
-        print(f"{prompt}\n  no terminal to ask — treating as no")
-        return False
-    return input(prompt).strip().lower() in {"y", "yes"}
-
-
 def _print_result(
     result: CalibrationResult, model: ModelConfig, case_count: int
 ) -> None:
@@ -258,9 +187,9 @@ def _print_result(
         print(f"\ntarget {target_run.target.name} ({target_run.target.url})")
         print(f"  registration: {status}")
         print(f"  nonce:        {registration.nonce}")
-        print(f"  echo reply:   {_excerpt(registration.probe.reply_text)}")
+        print(f"  echo reply:   {excerpt(registration.probe.reply_text)}")
         for family, rate in target_run.rates.items():
-            print(f"  failure rate, {family}: {_rate(rate)}")
+            print(f"  failure rate, {family}: {rate_line(rate)}")
         # Printed beside the rates and never as one of them: a refusal to
         # measure is a third outcome, not a rate of zero (ADR-0004).
         for family, reason in target_run.not_measurable.items():
@@ -271,7 +200,7 @@ def _print_result(
         for attempt in target_run.attempts:
             print(f"  attempt {attempt.case_id} #{attempt.index}")
             print(f"    verdict: {attempt.verdict}  (from the success condition)")
-            print(f"    reply:   {_excerpt(attempt.transcript.reply_text)}")
+            print(f"    reply:   {excerpt(attempt.transcript.reply_text)}")
 
     print()
     for family in _families_run(result.target_runs):
@@ -293,15 +222,6 @@ def _print_result(
             f"of a declared ceiling of {budget.ceiling(layer)}"
         )
     print(f"confirmed by: {result.approval.identity}")
-
-
-def _rate(rate: Rate) -> str:
-    interval = rate.interval
-    return (
-        f"{rate.value:.2f} ({rate.successes}/{rate.attempts}), "
-        f"Wilson {DECLARED_RULE.interval_confidence:.0%} "
-        f"[{interval.lower:.3f}, {interval.upper:.3f}]"
-    )
 
 
 def _families_run(target_runs: Sequence[TargetRun]) -> list[Family]:
@@ -328,16 +248,6 @@ def _discrimination(target_runs: Sequence[TargetRun], family: Family) -> str:
     return (
         f"D = {score:.2f} ({TRIVIAL.name} {trivial.value:.2f} − "
         f"{HARDENED.name} {hardened.value:.2f}) — not a gate result"
-    )
-
-
-def _excerpt(text: str) -> str:
-    collapsed = " ".join(text.split())
-    if len(collapsed) <= REPLY_EXCERPT:
-        return collapsed
-    return (
-        f"{collapsed[:REPLY_EXCERPT]}… "
-        f"[{len(collapsed)} chars, full transcript recorded]"
     )
 
 

@@ -290,7 +290,8 @@ def test_a_run_with_no_terminal_to_ask_is_a_no() -> None:
     piped stdin is a no. There is deliberately no `--yes`: a consent mechanism with
     a flag to skip it is the convenience feature ADR-0007 says this must not become.
     """
-    from scripts.calibrate import EXIT_WITHHELD, main
+    from scripts.calibrate import main
+    from scripts.console import EXIT_WITHHELD
 
     # Under pytest stdin is not a terminal, which is the condition being tested.
     assert main(["--identity", "nobody at a terminal", "--model", "stub:obedient"]) == (

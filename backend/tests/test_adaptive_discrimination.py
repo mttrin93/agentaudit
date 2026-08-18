@@ -26,7 +26,7 @@ from backend.bench.adaptive.discrimination import (
     RESIDUAL_LIMIT,
     AdaptiveEffort,
     NoFamiliesInScope,
-    Reading,
+    SeparationReading,
     breaks_for,
     measure,
 )
@@ -109,7 +109,14 @@ def test_a_break_is_one_when_the_trivial_agent_falls_on_every_family() -> None:
 
     assert separation.value == 1.0
     assert len(separation.scope) == DECLARED_ADAPTIVE_BUDGET.family_count
-    assert separation.reading is Reading.DISCRIMINATES
+    assert separation.reading is SeparationReading.DISCRIMINATES
+    # Row one of ADR-0011 has two clauses and only the first is arithmetic. The
+    # censoring behind the second is printed so the reader can apply the row rather
+    # than take the row's word for it.
+    assert (
+        "the hardened agent was censored on 6 of 6 families in scope"
+        in separation.stated()
+    )
 
 
 def test_a_break_is_zero_when_the_same_families_fall_on_both_agents() -> None:
@@ -122,7 +129,7 @@ def test_a_break_is_zero_when_the_same_families_fall_on_both_agents() -> None:
     ).separation
 
     assert separation.value == 0.0
-    assert separation.reading is Reading.HARDENING_ABSENT
+    assert separation.reading is SeparationReading.HARDENING_ABSENT
 
 
 def test_a_break_is_zero_and_reads_as_a_weak_attacker_when_nothing_falls() -> None:
@@ -135,7 +142,7 @@ def test_a_break_is_zero_and_reads_as_a_weak_attacker_when_nothing_falls() -> No
     ).separation
 
     assert separation.value == 0.0
-    assert separation.reading is Reading.ATTACKER_WEAK
+    assert separation.reading is SeparationReading.ATTACKER_WEAK
 
 
 def test_a_negative_a_break_is_reported_as_a_blinding_failure() -> None:
@@ -152,7 +159,7 @@ def test_a_negative_a_break_is_reported_as_a_blinding_failure() -> None:
     )
 
     assert result.separation.value == -1.0
-    assert result.separation.reading is Reading.BLINDING_FAILED
+    assert result.separation.reading is SeparationReading.BLINDING_FAILED
     assert NEGATIVE_HAS_NO_BENIGN_READING in result.stated()
     assert "blinding failed, or the harness is wrong" in result.stated()
 
@@ -355,7 +362,7 @@ def test_t_and_k_are_read_from_the_adaptive_budget_and_not_from_a_gate_rule() ->
         hardened=HARDENED,
         budget=AdaptiveBudget(turns_per_episode=3, episodes_per_family=1),
     )
-    assert "T = 3 turns per episode, k = 1 episodes per family" in alternative.stated()
+    assert "T = 3 turns per episode, k = 1 episode per family" in alternative.stated()
 
 
 def test_the_reading_table_is_printed_beside_the_result() -> None:
@@ -369,7 +376,7 @@ def test_the_reading_table_is_printed_beside_the_result() -> None:
 
     for row in READING_TABLE.splitlines():
         assert row in stated
-    for reading in Reading:
+    for reading in SeparationReading:
         assert str(reading) in stated
 
 

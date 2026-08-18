@@ -493,18 +493,26 @@ adjudicator.
 
 ```
 A_break = +0.25 (1 family broken on trivial − 0 on hardened) over 4 families in scope
+  the hardened agent was censored on 4 of 4 families in scope
   reading: the attacker works and the hardening is real
 A_effort, trivial:  median 1 turn to first success over 1 broken family, censored on 3 of 4 at T = 8
 A_effort, hardened: no median — every episode was censored (4 of 4 at T = 8)
 A_effort, weak:     median 1 turn to first success over 1 broken family, censored on 3 of 4 at T = 8
 paired one-sided sign test over 4 families: 1 discordant pair, 1 favouring trivial — p = 0.500
+
+provenance of the live library: authored 18, adaptive 0, user_gap 0 — 0.00 adaptive-discovered
+  retirement rate, authored: 0.00 retired (0 of 18 ever written), 18 live
+  retirement rate, adaptive: none written
+  retirement rate, user_gap: none written
 ```
 
 1. **The denominator is four, not six, and the figure says so.** ADR-0011 writes
    `A_break` over six. Six is what it is when six families run, and the two judged
    families cannot. Dividing by six anyway would report a gap in the *library* as a
    shortfall in the *attacker*, so the block divides by what ran and prints both
-   numbers. This is #16's scoping decision arriving in the arithmetic.
+   numbers. This is #16's scoping decision arriving in the arithmetic, and ADR-0011
+   now records it as an amendment rather than leaving the code to differ from the
+   decision it implements.
 2. **The sign of `A_break` is right and its magnitude is not evidence of much.** One
    discordant pair at `p = 0.500` is what one pair is worth, and the honest reading of
    three censored families out of four on *every* agent — the trivial one included — is
@@ -512,7 +520,10 @@ paired one-sided sign test over 4 families: 1 discordant pair, 1 favouring trivi
    small. It is weak by construction. It reads precedent, sends a fixed probe, checks
    the canary, and does not compose anything from what came back. That is what test
    equipment is for, and it is why the block prints the reading table whatever the
-   outcome rather than only the row it landed on.
+   outcome rather than only the row it landed on. The first row has two clauses —
+   `A_break` high **and** hardened mostly censored — and only the first is arithmetic
+   the block can decide, so the hardened agent's censoring is printed on the line above
+   the reading and the reader applies the row.
 3. **The one family it broke, it broke on the first turn, at both ends of the scale
    except the hardened one.** Data leakage fell to probe one against trivial and against
    weak, and never against hardened across sixteen turns. The hardened agent's output
@@ -525,17 +536,27 @@ paired one-sided sign test over 4 families: 1 discordant pair, 1 favouring trivi
    disprove it. The residual is printed beside the figure on every run, because
    behavioural inference is unblindable and no result here changes that.
 5. **The library is still entirely authored, and the promotion path has not moved it.**
-   Provenance reads eighteen `authored`, zero `adaptive`, zero `user_gap`; the
-   adaptive-discovered share of the live library is 0.00 of eighteen; the retirement rate
-   is 0.00 for `authored` and *none written* for the other two, which is a count rather
-   than an absence. Both figures print on every calibration run from here on.
-6. **Every proposal the layer made was refused, and refused for the right reason.** The
-   scripted attacker proposed a case on each of the two episodes it broke. Neither
-   entered the library: `discovered_by = adaptive` selects the cross-model bar by itself,
-   and that bar needs a reading on a second underlying model, which is #15's run. A
-   proposal that is rejected is discarded rather than parked — `promote` hands back no
-   case at all, and `admitted_library` refuses a record whose own counts do not clear the
-   bar it claims, so there is nowhere on disk for one to wait.
+   The live library reads eighteen `authored`, zero `adaptive`, zero `user_gap` — 0.00
+   adaptive-discovered — and the retirement rate is 0.00 for `authored` and *none
+   written* for the other two, which is a count rather than an absence. Both figures
+   print on every calibration run from here on, in one block on one denominator: two
+   provenance figures side by side on different denominators would invite exactly the
+   misreading the series exists to prevent.
+6. **Two proposals were made and neither was decided, which is the correct state of the
+   loop today.** The scripted attacker proposed a case on each of the two episodes it
+   broke. Neither reached admission, and not because anything refused it: a proposal
+   carries `discovered_by = adaptive`, that provenance selects the cross-model bar by
+   itself, and the bar needs a reading on a **second underlying model** — which is #15's
+   run and does not exist yet. The run printed the bar each proposal faces and stopped
+   there.
+
+   What this ticket owns is the decision that would follow. `promote` is the seam, it is
+   driven at seam two rather than by the run above, and it refuses on every path where
+   the bar is unmet: one model, two readings on the same model, a second model that does
+   not separate, or no reading at all. A refusal returns **no case** — there is no field
+   on the result for one to wait in — and `admitted_library` independently refuses any
+   record on disk whose own counts do not clear the bar it claims. A rejected proposal
+   is discarded rather than parked, at both ends.
 
 Nothing above is a `D`, and nothing above decides anything. `A_break` is measured on
 episodes and families, `D` is measured on attempts, and the two are printed in separate

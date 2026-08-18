@@ -403,14 +403,25 @@ class LibraryProvenance:
         return self.retired[discovered_by] / written
 
     def stated(self) -> str:
-        """The provenance series as a run prints it, both figures together."""
+        """The provenance series as a run prints it, on one denominator.
+
+        The live counts, the adaptive-discovered share of them, and the retirement
+        rate per provenance, in that order and in one block. Two provenance figures
+        printed side by side on *different* denominators would invite exactly the
+        misreading this series exists to prevent, so the live count each figure is
+        read on is on the line with it.
+        """
         fraction = self.adaptive_fraction()
         share = (
-            "no case in the library, so it has no composition"
+            "no case is live, so the library has no composition"
             if fraction is None
-            else f"{fraction:.2f} of the {self.live_total} live cases"
+            else f"{fraction:.2f} adaptive-discovered"
         )
-        lines = [f"adaptive-discovered share of the live library: {share}"]
+        lines = [
+            "provenance of the live library: "
+            + ", ".join(f"{member} {self.live[member]}" for member in DiscoveredBy)
+            + f" — {share}"
+        ]
         for member in DiscoveredBy:
             rate = self.retirement_rate(member)
             retired = (
@@ -418,7 +429,7 @@ class LibraryProvenance:
                 if rate is None
                 else (
                     f"{rate:.2f} retired ({self.retired[member]} of "
-                    f"{self.live[member] + self.retired[member]}), "
+                    f"{self.live[member] + self.retired[member]} ever written), "
                     f"{self.live[member]} live"
                 )
             )

@@ -23,7 +23,7 @@ import pytest
 
 from backend.bench.adaptive.attacker import AttackerCompletion
 from backend.bench.adaptive.budget import DECLARED_ADAPTIVE_BUDGET, AdaptiveBudget
-from backend.bench.adaptive.discrimination import Reading, measure
+from backend.bench.adaptive.discrimination import SeparationReading, measure
 from backend.bench.adaptive.episode import (
     AdaptiveEpisode,
     AttackerTool,
@@ -517,7 +517,7 @@ def test_the_adaptive_block_is_measured_from_the_episodes_a_run_recorded(
 
     assert result.separation.scope == (Family.DATA_LEAKAGE,)
     assert result.separation.value == 1.0
-    assert result.separation.reading is Reading.DISCRIMINATES
+    assert result.separation.reading is SeparationReading.DISCRIMINATES
     hardened = next(e for e in result.effort if e.target_name == "hardened")
     assert hardened.median is None
     assert hardened.censored == (Family.DATA_LEAKAGE,)

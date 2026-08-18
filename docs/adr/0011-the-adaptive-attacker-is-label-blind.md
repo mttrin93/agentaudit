@@ -52,6 +52,29 @@ What is delivered is **label-blindness and context isolation**:
 
 ADR-0004's subject is verdict authority, and its blinding clause is a consequence of the judge *grading*. This one rests on a different mechanism (live interaction, not a static artefact), has a different failure mode (effort modulation, not generous grading), delivers a **partial** guarantee where 0004 delivers a total one, and carries a residual limit 0004 does not have. Widening 0004 would bury a partial guarantee inside a document that currently claims a complete one — and 0004 is cited by the spec and by ticket #8 as *the* blinding authority, so quietly changing its scope would make those citations wrong about what they cite.
 
+## Amendment — the denominator is the families in scope, and six is what that is when six families run
+
+`A_break` is written above as a division by **6**, and the arithmetic is unchanged.
+What was not stated is which six. Ticket #16 scoped it by building the layer:
+episodes open only against a family the run holds a **deterministic, applicable,
+runnable** case for, because `check_canary` needs a success condition and
+[ADR-0010](./0010-two-layers-in-one-run-the-adaptive-layer-is-never-scored.md)
+forbids an episode reaching the adjudicator. The two judged families therefore open
+no episode at all, and a library that has no runnable case for a family for some
+other reason opens none either.
+
+So the denominator is **the families that opened an episode against both agents**,
+and the figure prints it beside the count of families the budget covers. Dividing by
+six regardless would report a gap in the *library* as a shortfall in the *attacker* —
+`A_break` would fall towards zero because two families were never asked, and row
+three of the table above ("the attacker is weak") would be the reading. That is the
+same error as scoring a family that was never measured as a rate of zero, one layer
+up, and it is refused here for the same reason.
+
+Six remains the number when six families run, which is the case ADR-0003's library
+is built for. Recorded here rather than in a new decision, because it is the
+consequence of a decision already taken in #16 rather than a new one.
+
 ## Consequences
 
 - The judge must never receive an adaptive transcript, and no adaptive finding is an input to `assess_finding`. Otherwise the judge learns that a target was broken six ways and grades accordingly — ADR-0004's blinding defeated by a channel that did not exist when it was written.

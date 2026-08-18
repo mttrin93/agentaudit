@@ -50,7 +50,6 @@ from backend.bench.admission import (
     admitted_library,
     library_provenance,
     outcome_for,
-    provenance_counts,
 )
 from backend.bench.calibration import CalibrationResult, TargetRun, run_calibration
 from backend.bench.completion import (
@@ -395,16 +394,13 @@ def _print_provenance(cases: Sequence[Case]) -> None:
     Every provenance is printed whether or not it is used, so a fraction of zero
     reads as a count rather than as an absence of the thing.
     """
-    counts = provenance_counts(cases)
-    print(
-        "provenance:            "
-        + ", ".join(f"{member} {counts[member]}" for member in counts)
-    )
-    # The two series ADR-0012 asks for on every gate run: how far the library has
-    # drifted towards routes fitted to these three agents, and whether the drift is
-    # doing the damage the cross-model bar exists to prevent.
+    # One block and one denominator. The live counts, the adaptive-discovered share
+    # of them, and the retirement rate by provenance are the two series ADR-0012
+    # asks for on every gate run: how far the library has drifted towards routes
+    # fitted to these three agents, and whether the drift is doing the damage the
+    # cross-model bar exists to prevent.
     for line in library_provenance(cases).stated().splitlines():
-        print(f"  {line}")
+        print(f"{'' if line.startswith(' ') else '  '}{line}")
     for case in cases:
         # The bar beside the case, so an adaptive-discovered case is distinguishable
         # from an authored one by reading the report (ADR-0012).

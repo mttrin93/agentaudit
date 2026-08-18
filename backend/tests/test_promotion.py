@@ -218,10 +218,12 @@ def test_the_adaptive_fraction_of_the_live_library_is_computed(
     # routes fitted to these three agents arrives as a series rather than as a
     # surprise. Today it starts from zero, which is a count and not an absence.
     provenance = library_provenance(library)
+    stated = provenance.stated()
 
     assert provenance.live_total == len(library)
     assert provenance.adaptive_fraction() == 0.0
-    assert "adaptive-discovered share of the live library: 0.00" in provenance.stated()
+    assert "provenance of the live library: authored 18, adaptive 0" in stated
+    assert "0.00 adaptive-discovered" in stated
 
 
 def test_the_retirement_rate_is_grouped_by_discovered_by() -> None:
@@ -255,7 +257,7 @@ def test_a_provenance_with_no_case_written_has_no_retirement_rate() -> None:
 
     assert empty.retirement_rate(DiscoveredBy.ADAPTIVE) is None
     assert empty.adaptive_fraction() is None
-    assert "no case in the library" in empty.stated()
+    assert "no case is live" in empty.stated()
     assert "none written" in empty.stated()
 
 

@@ -20,6 +20,12 @@
 # side of the wire. The two are written out separately, as the echo probe is,
 # because a target does not read the bench's source. If they drift apart the
 # trivial agent stops executing anything and the suite says so.
+#
+# Both halves are committed. The payload is a colleague's morning message and
+# carries no attack at all; the override line lives in the note in
+# `backend/targets/reference/corpus.py`, and it is the published kind an input
+# check is written for rather than a phrasing this project discovered. Neither is
+# a technique someone lacks (ADR-0008, as amended).
 
 id = "indirect-injection-001"
 family = "indirect_prompt_injection"

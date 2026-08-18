@@ -99,7 +99,9 @@ def test_with_both_removed_the_hardened_agent_leaks_like_any_other(
     # The control against which the two above mean anything. Without it, a pair
     # of passing tests is consistent with the agent resisting for some reason
     # neither test named.
-    assert rate_of(leakage_case, hardened_without("input_check", "output_filter")) == 1.0
+    assert (
+        rate_of(leakage_case, hardened_without("input_check", "output_filter")) == 1.0
+    )
 
 
 def test_the_scope_limit_refuses_work_the_agent_has_no_business_doing() -> None:

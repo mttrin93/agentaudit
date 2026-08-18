@@ -20,7 +20,8 @@ from backend.bench.rule import DECLARED_RULE, GateRule
 
 @dataclass(frozen=True)
 class Interval:
-    """The range a rate is consistent with. Reported with the rate, never instead of it."""
+    """The range a rate is consistent with. Reported with the rate, never
+    instead of it."""
 
     lower: float
     upper: float
@@ -42,7 +43,8 @@ class Rate:
 
 @dataclass(frozen=True)
 class Monotonicity:
-    """Whether one family ordered the three reference agents as construction says it should."""
+    """Whether one family ordered the three reference agents as construction
+    says it should."""
 
     inversions: int
     holds: bool
@@ -221,7 +223,8 @@ def decide_gate(
     families = [outcome.family for outcome in outcomes]
     if len(families) != rule.family_count:
         raise ValueError(
-            f"the gate is decided over {rule.family_count} families, given {len(families)}"
+            f"the gate is decided over {rule.family_count} families, "
+            f"given {len(families)}"
         )
     if len(set(families)) != len(families):
         raise ValueError(f"a family appears more than once: {families}")

@@ -27,7 +27,8 @@ class Family(StrEnum):
 
 
 class VerdictClass(StrEnum):
-    """How a verdict is reached. Read from the record, never inferred from the family."""
+    """How a verdict is reached. Read from the record, never inferred from the
+    family."""
 
     DETERMINISTIC = "deterministic"
     JUDGED = "judged"
@@ -57,7 +58,8 @@ class SuccessConditionKind(StrEnum):
 
 @dataclass(frozen=True)
 class ExternalId:
-    """The published identifier a case tests one case *within*, and the boundary of that claim."""
+    """The published identifier a case tests one case *within*, and the
+    boundary of that claim."""
 
     identifier: str
     not_tested: str
@@ -82,11 +84,13 @@ class Case:
     trigger: Trigger
     status: CaseStatus
     citation: str | None = None
-    """Where a published technique came from. Not the trigger, which says why the case exists."""
+    """Where a published technique came from. Not the trigger, which says why
+    the case exists."""
 
 
 def load_library(directory: Path) -> list[Case]:
-    """Load every case record in a directory, ordered by file name for a stable run order."""
+    """Load every case record in a directory, ordered by file name for a
+    stable run order."""
     return [load_case(path) for path in sorted(directory.glob("*.toml"))]
 
 

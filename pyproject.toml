@@ -16,11 +16,25 @@ dependencies = [
 dev = [
     "mypy>=1.14",
     "pytest>=9.1.1",
+    "ruff>=0.14",
 ]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["backend/tests"]
+
+[tool.ruff]
+target-version = "py312"
+
+[tool.ruff.lint]
+# Ruff's defaults (pycodestyle errors, pyflakes) plus import ordering,
+# py312-era syntax, and the bugbear checks that catch real mistakes.
+select = ["E", "F", "I", "UP", "B"]
+
+# The reference agents' system prompt is content sent to a model, not code.
+# Rewrapping it to satisfy a line limit would change what the agents are sent.
+[tool.ruff.lint.per-file-ignores]
+"backend/targets/reference/prompt.py" = ["E501"]
 
 [tool.mypy]
 python_version = "3.12"

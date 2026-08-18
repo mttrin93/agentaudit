@@ -15,7 +15,8 @@ from backend.bench.library import Family
 
 @dataclass(frozen=True)
 class Attempt:
-    """One execution of one case against one target, with the evidence behind its verdict."""
+    """One execution of one case against one target, with the evidence behind
+    its verdict."""
 
     case_id: str
     family: Family

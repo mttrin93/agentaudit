@@ -61,10 +61,11 @@ from backend.api.runs import (
     RunStatus,
 )
 from backend.bench.admission import admitted_library
-from backend.bench.contract import RetryPolicy, TargetConfig
+from backend.bench.contract import NOT_A_SECURITY_RESULT, RetryPolicy, TargetConfig
 from backend.bench.registration import ECHO_PROBE, Attestation
 from backend.graph.approval import Approval
 from backend.graph.budget import BudgetPayload, CallPrice, Layer
+from backend.graph.runstate import RunState
 
 CASES_DIR = Path(__file__).resolve().parents[1] / "cases"
 """The case library a bench serves when it was not given one.
@@ -248,11 +249,12 @@ def response_for(record: RunRecord) -> RunResponse:
     )
 
 
-SCORED_NOT_STARTED = (
-    "the scored layer has not started: nothing has been sent to the target, so "
-    "there is no case in flight and no attempt to report. Its findings so far are "
-    "absent rather than zero — a zero would read as a suite that ran and found "
-    "nothing"
+SCORED_NO_ATTEMPT_YET = (
+    "the scored layer has attempted nothing: no case is in flight and no attempt "
+    "has been made. Calls spent here may already be one — the registration probe "
+    "is charged to this layer and is the first thing a run sends — and the "
+    "attempts that succeeded are absent rather than zero, because a zero would "
+    "read as a suite that ran and found nothing"
 )
 
 ADAPTIVE_NOT_REACHED = (
@@ -260,12 +262,6 @@ ADAPTIVE_NOT_REACHED = (
     "scored suite has finished (ADR-0010), so there is no episode and no turn yet. "
     "Its findings so far are absent rather than zero — a zero would read as an "
     "attacker that ran and found nothing"
-)
-
-NOT_A_SECURITY_RESULT = (
-    "No attempt is recorded and nothing here is a security result: an endpoint "
-    "having a bad minute and an agent that defended itself are the same silence on "
-    "the wire and opposite facts about the target"
 )
 
 
@@ -302,19 +298,42 @@ class ScoredProgress(BaseModel):
     """What the scored layer has reached, spent and found so far."""
 
     reached: bool
+    """Whether this layer has started, stated rather than left to be inferred.
+
+    It is `position is not None` said out loud, and it is said because the caller
+    is a poller: a screen that had to infer *not started* from a null would be one
+    null away from drawing a layer that ran and found nothing. It does not follow
+    the count below — a layer can have reached an attempt that has not come back —
+    which is the case the count is absent for.
+    """
+
     statement: str
     position: ScoredPosition | None
     calls_spent: int
     """Calls this layer has put on the wire. Its own figure, beside the other
-    layer's and never added to it."""
+    layer's and never added to it.
+
+    A number even before the layer has attempted anything, and that is not the
+    zero the ticket forbids: nothing spent is a fact about the wire, checkable
+    against the endpoint, where nothing *found* by a layer that never ran is not a
+    fact about the target. The registration probe is charged here, so this figure
+    is often one while there is still no attempt to report.
+    """
 
     succeeded_attempts: int | None
-    """The attempts that succeeded so far, or `None` for a layer that has not run.
+    """The attempts that succeeded so far, or `None` while none has been recorded.
 
     Not called findings, on `RunState.succeeded_attempts`' own reasoning: a
     **finding** is a verdict *plus* its narrative, and this is a count of verdicts.
-    It is `None` rather than `0` before the layer starts, because those are two
-    different facts and only one of them is about a suite that ran.
+
+    It is `None` rather than `0` until at least one attempt has produced one,
+    because the two are different facts: a count over an empty population is not a
+    small number, and the run that most needs the difference is the one killed on
+    the wire inside its first attempt — a position in flight beside a zero would
+    read as a target that resisted, which is the reading `TargetUnreachable` is
+    raised to prevent. A layer with attempts on the record reports the count, zero
+    included: nothing has succeeded *yet* is a measurement once something was
+    measured.
     """
 
 
@@ -332,8 +351,14 @@ class AdaptiveProgress(BaseModel):
     position: AdaptivePosition | None
     calls_spent: int
     adaptive_findings: int | None
-    """The episodes that found a route, or `None` for a layer this run has not
-    reached."""
+    """The episodes that found a route, or `None` while none has been recorded.
+
+    Absent rather than zero on the same reasoning as the scored layer's count, and
+    an episode is recorded when it ends: a first episode still under way has
+    broken nothing *yet*, and a zero beside it would read as an attacker that ran
+    out of ideas — which is the reading **censored** exists to keep apart
+    (ADR-0011).
+    """
 
 
 class TransportOutcome(BaseModel):
@@ -352,7 +377,13 @@ class TransportOutcome(BaseModel):
 
 
 class ReportLocation(BaseModel):
-    """Where a finished run's report is served, for a caller that was polling."""
+    """Where a finished run's report is served, for a caller that was polling.
+
+    The path is the one the spec names — `GET /report/{id}`, the signed payload
+    with the rendered view alongside it — and the route that serves it is #56. A
+    completed run says where to go next rather than leaving a poller to guess that
+    it is finished with it.
+    """
 
     path: str
     statement: str
@@ -393,21 +424,20 @@ def progress_for(record: RunRecord) -> RunProgress:
         run_id=record.run_id,
         status=str(record.status),
         statement=record.statement,
-        scored=_scored_progress(record),
-        adaptive=_adaptive_progress(record),
+        scored=_scored_progress(record.run_state),
+        adaptive=_adaptive_progress(record.run_state),
         transport=_transport(record),
         report=_report(record),
     )
 
 
-def _scored_progress(record: RunRecord) -> ScoredProgress:
-    state = record.run_state
+def _scored_progress(state: RunState) -> ScoredProgress:
     spent = state.spent_in(Layer.SCORED)
     at = state.position
     if at is None:
         return ScoredProgress(
             reached=False,
-            statement=SCORED_NOT_STARTED,
+            statement=SCORED_NO_ATTEMPT_YET,
             position=None,
             calls_spent=spent,
             succeeded_attempts=None,
@@ -426,12 +456,13 @@ def _scored_progress(record: RunRecord) -> ScoredProgress:
             attempt=at.attempt_index + 1,
         ),
         calls_spent=spent,
-        succeeded_attempts=len(state.succeeded_attempts),
+        # Over the attempts on the record, and absent while there are none: the
+        # position may name an attempt that never came back.
+        succeeded_attempts=(len(state.succeeded_attempts) if state.attempts else None),
     )
 
 
-def _adaptive_progress(record: RunRecord) -> AdaptiveProgress:
-    state = record.run_state
+def _adaptive_progress(state: RunState) -> AdaptiveProgress:
     spent = state.spent_in(Layer.ADAPTIVE)
     at = state.episode_position
     if at is None:
@@ -452,7 +483,7 @@ def _adaptive_progress(record: RunRecord) -> AdaptiveProgress:
             family=str(at.family), episode=at.index, turn=at.turn
         ),
         calls_spent=spent,
-        adaptive_findings=len(state.broken_episodes),
+        adaptive_findings=len(state.broken_episodes) if state.episodes else None,
     )
 
 
@@ -471,8 +502,8 @@ def _report(record: RunRecord) -> ReportLocation | None:
     return ReportLocation(
         path=f"/report/{record.run_id}",
         statement=(
-            "the run finished: its report is served here, as the signed payload "
-            "with the rendered view alongside it"
+            "the run finished: its report is served at this path, as the signed "
+            "payload with the rendered view alongside it"
         ),
     )
 

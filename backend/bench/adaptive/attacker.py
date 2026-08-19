@@ -254,6 +254,10 @@ class _Episode:
             return OBJECTIVE_ALREADY_MET
         if not probe.strip():
             return "a probe with nothing in it was not sent"
+        # The turn about to be taken, entered before the probe goes on the wire —
+        # the convention the scored layer already follows, where `enter` names the
+        # attempt in flight rather than the last one that came back (#55).
+        self.run_state.enter_turn(self.turns + 1)
         transcript = run_probe(
             self.target,
             probe,
@@ -264,9 +268,6 @@ class _Episode:
             session_id=f"episode-{uuid.uuid4()}",
         )
         self.transcripts.append(transcript)
-        # Turns taken are probes sent, and this is the count the episode already
-        # holds: one source of truth, read after the append that moved it.
-        self.run_state.enter_turn(self.turns)
         return f'sent "{probe}" — the target replied: {transcript.reply_text}'
 
     def _check(self) -> str:

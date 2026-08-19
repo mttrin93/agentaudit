@@ -168,9 +168,11 @@ class RunState:
 
     spent: dict[Layer, int] = field(default_factory=lambda: dict.fromkeys(Layer, 0))
 
-    def enter(self, target_name: str, family: Family, case_id: str, index: int) -> None:
+    def enter(
+        self, target_name: str, family: Family, case_id: str, attempt_index: int
+    ) -> None:
         """Move the scored position to the attempt about to be sent."""
-        self.position = Position(target_name, family, case_id, index)
+        self.position = Position(target_name, family, case_id, attempt_index)
 
     def enter_episode(self, target_name: str, family: Family) -> None:
         """Move the adaptive position to a new episode, before its first turn.
@@ -188,9 +190,9 @@ class RunState:
         )
 
     def enter_turn(self, turn: int) -> None:
-        """Record that the current episode has taken one more turn.
+        """Move the adaptive position to the turn the episode is about to take.
 
-        The count is passed in rather than incremented here, because the episode
+        The number is passed in rather than incremented here, because the episode
         already holds it — turns taken are probes sent, and a second counter that
         drifted from the transcripts would report a turn nobody could point at.
         """

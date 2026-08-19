@@ -728,7 +728,7 @@ def test_progress_in_the_scored_layer_is_family_case_and_attempt(
         nonce = registered(client, watched)
         started = client.post("/runs", json=a_request(watched.target, nonce)).json()
         record = _record(bench, started)
-        _approve(client, started)
+        _approve(client, started["run_id"])
         try:
             body = progress_when(client, started["run_id"], "scored")
         finally:
@@ -746,7 +746,9 @@ def test_progress_in_the_scored_layer_is_family_case_and_attempt(
     # The registration probe, and not the attempt being held: a call is counted
     # when it comes back, and this one has not.
     assert scored["calls_spent"] == 1
-    assert scored["succeeded_attempts"] == 0
+    # Absent rather than zero, because no attempt has come back: a position in
+    # flight beside a zero would read as a target that resisted it.
+    assert scored["succeeded_attempts"] is None
 
 
 def test_progress_in_the_adaptive_layer_is_family_episode_and_turn(
@@ -756,9 +758,9 @@ def test_progress_in_the_adaptive_layer_is_family_episode_and_turn(
 
     Held at message twelve — one registration probe and ten attempts is the whole
     scored layer for one case — so the first adaptive probe is the one on the
-    doorstep. What the position says there is *episode one, turn zero*, which is a
-    started episode that has reached the model and not yet the endpoint: a turn is
-    a probe sent, and none has been.
+    doorstep. What the position says there is *episode one, turn one*: the turn in
+    flight, on the convention the scored layer already follows, where the attempt
+    being sent is the attempt the position names.
 
     Then the run is let go, and the position is checked against the episodes the
     run actually recorded. An episode is not an attempt and a turn is not one
@@ -770,7 +772,7 @@ def test_progress_in_the_adaptive_layer_is_family_episode_and_turn(
         nonce = registered(client, watched)
         started = client.post("/runs", json=a_request(watched.target, nonce)).json()
         record = _record(bench, started)
-        _approve(client, started)
+        _approve(client, started["run_id"])
         try:
             in_flight = progress_when(client, started["run_id"], "adaptive")
         finally:
@@ -783,9 +785,12 @@ def test_progress_in_the_adaptive_layer_is_family_episode_and_turn(
     assert in_flight["adaptive"]["position"] == {
         "family": str(leakage_case.family),
         "episode": 1,
-        "turn": 0,
+        "turn": 1,
     }
     assert in_flight["scored"]["calls_spent"] == 11
+    # No episode has ended, so the layer has found nothing *yet*, which is not the
+    # same fact as an attacker that ran and found nothing.
+    assert in_flight["adaptive"]["adaptive_findings"] is None
 
     last = record.run_state.episodes[-1]
     assert finished["adaptive"]["position"] == {
@@ -820,6 +825,37 @@ def test_a_run_that_has_not_reached_the_adaptive_layer_says_so_rather_than_zero(
     assert "has not reached the adaptive layer" in halted["adaptive"]["statement"]
     assert "absent rather than zero" in halted["adaptive"]["statement"]
     assert "absent rather than zero" in halted["scored"]["statement"]
+    assert halted["scored"]["calls_spent"] == 0
+
+
+def test_a_refused_registration_has_spent_a_call_and_attempted_nothing(
+    leakage_case: Case,
+) -> None:
+    """The one run where *attempted nothing* is a lasting state rather than a moment.
+
+    The nonce is issued and never planted, so the registration probe — charged to
+    the scored layer, and the first thing any run sends — comes back without it and
+    no attempt follows. The layer has spent a call and attempted nothing, and the
+    statement has to carry both: a progress route that said *nothing has been sent*
+    here would be describing away a call the operator was billed for.
+    """
+    with watched_reference() as watched, api([leakage_case]) as (client, bench):
+        nonce = str(client.post("/nonces").json()["nonce"])
+        started = client.post("/runs", json=a_request(watched.target, nonce)).json()
+        record = _record(bench, started)
+        _approve(client, started["run_id"])
+        settled(record)
+        body = _progress(client, started["run_id"])
+
+    assert body["status"] == "registration_refused"
+    assert body["scored"]["reached"] is False
+    assert body["scored"]["position"] is None
+    assert body["scored"]["calls_spent"] == 1 == watched.ledger.hits
+    assert body["scored"]["succeeded_attempts"] is None
+    assert "nothing has been sent" not in body["scored"]["statement"]
+    assert "registration probe" in body["scored"]["statement"]
+    assert body["adaptive"]["reached"] is False
+    assert body["report"] is None
 
 
 def test_calls_spent_and_findings_are_per_layer_and_never_blended(
@@ -837,7 +873,7 @@ def test_calls_spent_and_findings_are_per_layer_and_never_blended(
         nonce = registered(client, watched)
         started = client.post("/runs", json=a_request(watched.target, nonce)).json()
         record = _record(bench, started)
-        _approve(client, started)
+        _approve(client, started["run_id"])
         settled(record)
         body = _progress(client, started["run_id"])
 
@@ -913,17 +949,15 @@ def test_a_transport_outcome_surfaces_under_its_own_name_and_never_as_a_finding(
             price=None,
             note_planted=False,
         )
-        client.post(
-            f"/runs/{record.run_id}/approval",
-            json={"confirmed": True, "identity": "operator"},
-        )
+        _approve(client, record.run_id)
         settled(record)
         body = _progress(client, record.run_id)
 
     assert body["status"] == "failed"
     assert body["transport"]["failure"] == str(named)
     assert "nothing here is a security result" in body["transport"]["statement"]
-    assert body["scored"]["succeeded_attempts"] in (None, 0)
+    assert body["scored"]["position"] is None
+    assert body["scored"]["succeeded_attempts"] is None
     assert body["adaptive"]["adaptive_findings"] is None
     assert body["report"] is None
     assert record.run_state.attempts == []
@@ -955,7 +989,7 @@ def test_a_completed_run_reports_completion_and_where_its_report_is_served(
         nonce = registered(client, watched)
         started = client.post("/runs", json=a_request(watched.target, nonce)).json()
         record = _record(bench, started)
-        _approve(client, started)
+        _approve(client, started["run_id"])
         settled(record)
         body = _progress(client, started["run_id"])
 
@@ -1008,9 +1042,9 @@ def test_a_run_state_counting_against_another_ceiling_is_refused() -> None:
 # --- helpers ---------------------------------------------------------------------
 
 
-def _approve(client: TestClient, started: dict[str, Any]) -> None:
+def _approve(client: TestClient, run_id: str) -> None:
     client.post(
-        f"/runs/{started['run_id']}/approval",
+        f"/runs/{run_id}/approval",
         json={"confirmed": True, "identity": "operator"},
     )
 

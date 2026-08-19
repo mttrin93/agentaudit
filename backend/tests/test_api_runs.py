@@ -31,7 +31,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from starlette.types import ASGIApp, Receive, Scope, Send
 
-from backend.api.app import create_app
+from backend.api.app import ReportRefusal, create_app
 from backend.api.report import ReportConfig
 from backend.api.runs import (
     BenchConfig,
@@ -46,7 +46,13 @@ from backend.bench.calibration import run_calibration
 from backend.bench.contract import TargetConfig, TargetFailure
 from backend.bench.library import Case, Family, LibraryVersion
 from backend.bench.registration import Attestation
-from backend.bench.signing import generate
+from backend.bench.signing import (
+    SIGNING_KEY_VARIABLE,
+    NoSigningKey,
+    encoded_private,
+    fingerprint,
+    generate,
+)
 from backend.graph.approval import Approval
 from backend.graph.budget import Layer, RunBudget
 from backend.graph.runstate import RunState
@@ -374,9 +380,18 @@ def test_the_estimate_is_two_figures_and_nothing_in_it_is_an_average(
 
 
 def test_a_run_nobody_priced_says_not_priced_rather_than_zero(
-    leakage_case: Case,
+    leakage_case: Case, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """An unknown cost and a free run are different facts."""
+    """An unknown cost and a free run are different facts, and neither is a default.
+
+    The environment is set here as well as in the refusal below, because the two
+    halves of the prohibition fail differently. A *missing* field is caught by the
+    request model before anything could fill it in; a declared `null` reaches the
+    code that turns it into a price, which is where a default would go. So this is
+    the case in which a figure read from the environment would present as the
+    caller's own — priced, plausible and never agreed to (ADR-0007).
+    """
+    monkeypatch.setenv("AGENTAUDIT_PRICE_PER_CALL", "0.02")
     with watched_reference() as watched, api([leakage_case]) as (client, bench):
         nonce = registered(client, watched)
         started = client.post(
@@ -410,16 +425,111 @@ def test_a_price_the_caller_did_not_declare_is_refused(
     assert watched.ledger.hits == 0
 
 
-def test_no_module_of_the_api_reads_the_environment() -> None:
-    """The prohibition as an import test rather than as a rule to remember.
+def test_no_module_of_the_api_reads_an_environment_of_its_own() -> None:
+    """The prohibition as an import test rather than as a rule to remember, narrowed
+    to the half of it that is still true.
 
     In the pattern the repository already uses for a constraint that would fail
     silently: a figure defaulted from the environment would present exactly like a
-    declared one, and the first time anybody found out would be a bill.
+    declared one, and the first time anybody found out would be a bill (ADR-0007).
+    That half is untouched, and the test above is its behavioural counterpart.
+
+    What ADR-0020 lifted is narrower than this test used to claim. The deployed
+    factory now reads one variable — `AGENTAUDIT_SIGNING_KEY` — and it reads it
+    *through* `signing.signing_key`, which is still the only line in this repository
+    that touches the environment for it. So the assertion is unchanged and its claim
+    is not: no module of the API is itself an environment reader, which is what
+    would have to change for a price, a target URL or a bearer token to arrive that
+    way. `app.py` importing `os` fails here even to read the key it is now required
+    to have.
     """
     for source in sorted(API_DIR.glob("*.py")):
         assert "os" not in _imports_of(source), f"{source.name} imports os"
         assert "dotenv" not in _imports_of(source), f"{source.name} imports dotenv"
+
+
+def test_the_one_environment_value_the_api_needs_is_read_through_signing() -> None:
+    """The single exception, pinned to the one function that is allowed to be it.
+
+    An import-level assertion and nothing more, which is the whole of what it
+    claims: that the *only* environment reader `app.py` can reach is the one
+    `signing.py` owns. It does not assert that the factory calls it — the test above
+    does that, by comparing the key the bench holds against the key that was
+    exported — and it would stay green against a factory that imported the name and
+    never used it. What it catches is the other half: a second route to the
+    environment, a helper of `app.py`'s own, a `dotenv` load, an `os.environ` read
+    behind a default. Those are new readers rather than this one, and the two
+    assertions together say there is exactly one.
+    """
+    factory = API_DIR / "app.py"
+
+    assert "backend.bench.signing" in _imports_of(factory)
+    assert "signing_key" in _imported_names_of(factory)
+    assert "os" not in _imports_of(factory)
+
+
+def test_the_deployed_factory_signs_with_the_key_in_the_environment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A factory given no configuration takes its key from the environment.
+
+    The assertion is over the key the app actually holds rather than over the
+    absence of an exception: a factory that read the variable, discarded it and
+    built a `ReportConfig()` would boot without raising and would still refuse every
+    report it produced. So the fingerprint of the key on the bench is compared with
+    the fingerprint of the key that was exported.
+    """
+    key = generate()
+    monkeypatch.setenv(SIGNING_KEY_VARIABLE, encoded_private(key))
+
+    app = create_app()
+    config = cast(BenchRuns, app.state.bench).config
+    signs_with = config.report.signing_key
+
+    assert signs_with is not None
+    assert fingerprint(signs_with.public_key()) == fingerprint(key.public_key())
+    assert config.cases, "the deployed factory serves the admitted library"
+
+
+def test_the_deployed_factory_refuses_to_boot_with_no_key(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """No key is a refusal at startup, not a bench whose every report is refused.
+
+    The failure a booting factory would ship is not visible until a run has
+    finished: the suite spends the operator's endpoint for many minutes and then has
+    no document to hand them (ADR-0020, `report.py`). So the refusal is here,
+    before an app exists, and it names the variable and the command that makes one —
+    the two things the person reading the traceback needs.
+    """
+    monkeypatch.delenv(SIGNING_KEY_VARIABLE, raising=False)
+
+    with pytest.raises(NoSigningKey) as refused:
+        create_app()
+
+    statement = str(refused.value)
+    assert SIGNING_KEY_VARIABLE in statement
+    assert "scripts.keygen" in statement
+    assert ReportRefusal.NEVER_SIGNED in statement
+
+
+def test_a_bench_handed_its_own_configuration_reads_no_environment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The environment is the default path and not the only one.
+
+    A caller that hands in a `BenchConfig` has said what this bench signs with,
+    including that it signs with nothing — which is what most of this suite does,
+    and what a bench under test should be able to do without exporting a private
+    key. The refusal above belongs to the deployment, which declared nothing.
+    """
+    monkeypatch.delenv(SIGNING_KEY_VARIABLE, raising=False)
+
+    app = create_app(BenchConfig(cases=[]))
+    config = cast(BenchRuns, app.state.bench).config
+
+    assert config.report.signing_key is None
+    assert list(config.cases) == []
 
 
 # --- the halt --------------------------------------------------------------------
@@ -1141,4 +1251,13 @@ def _imports_of(source: Path) -> set[str]:
             names.update(alias.name for alias in node.names)
         elif isinstance(node, ast.ImportFrom):
             names.add(node.module or "")
+    return names
+
+
+def _imported_names_of(source: Path) -> set[str]:
+    """Every name the given module imports *from* somewhere, undotted."""
+    names: set[str] = set()
+    for node in ast.walk(ast.parse(source.read_text(encoding="utf-8"))):
+        if isinstance(node, ast.ImportFrom):
+            names.update(alias.name for alias in node.names)
     return names

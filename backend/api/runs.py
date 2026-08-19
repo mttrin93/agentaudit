@@ -49,9 +49,10 @@ awaiting an answer, which is the v1 the spec licensed; a queue is P1.
 or the run is *not priced*: the caller's confirmation is the liability record, and
 a figure the bench filled in from its own configuration is a figure nobody agreed
 to. An unpriced run is a stated fact and never a zero. The signing key arrives the
-same way, in `BenchConfig.report`, for the same reason and one more: there is one
-line in this repository that reads `AGENTAUDIT_SIGNING_KEY` and it is in
-`signing.py`.
+same way, in `BenchConfig.report`, and it is still true here that there is one line
+in this repository that reads `AGENTAUDIT_SIGNING_KEY` and it is in `signing.py` —
+what changed with ADR-0020 is that `app.py`'s factory *calls* that line when it was
+handed no configuration, and refuses to boot when it comes back empty.
 
 **The artefact is built by the run, once, before the run is called completed.** A
 report assembled per request would be bytes that depend on when they were asked
@@ -462,6 +463,18 @@ class BenchRuns:
         self._runs: dict[str, RunRecord] = {}
         self._pending: dict[str, PendingApproval] = {}
         self._lock = threading.Lock()
+
+    @property
+    def config(self) -> BenchConfig:
+        """What this bench measures and signs with, readable and frozen.
+
+        Readable because the factory's boot-time contract is about *this* object: a
+        deployment that must not start without a signing key (ADR-0020) is checkable
+        only by asking the bench the factory returned what it holds, and a check
+        against the function that built it would be a check on a call nobody proved
+        was made. Frozen, so reading it is not a way to change it.
+        """
+        return self._config
 
     def issue(self) -> str:
         """Issue a nonce for a target the caller is about to register.

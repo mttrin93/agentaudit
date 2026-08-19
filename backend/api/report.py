@@ -17,7 +17,10 @@ read of the same bytes (#56).
 and nothing generates one: a report signed by a key nobody has published is a valid
 signature over unknown provenance (ADR-0017, `signing.NoSigningKey`). A run on such a
 bench still runs and is still measured — what it does not have is an artefact, which
-the route reports under its own name rather than by serving an unsigned payload.
+the route reports under its own name rather than by serving an unsigned payload. That
+state stays reachable on purpose, for a caller that declares it; what may not reach it
+is a deployment that configured nothing, which is refused at the factory instead
+(ADR-0020, `app.deployed_bench`).
 
 **The three model identifiers are declared beside the instruments they name.** A
 default naming a model would be this module asserting which instrument decided a
@@ -86,13 +89,17 @@ class ReportConfig:
     """The key this bench signs with, or nothing.
 
     Handed in rather than read here: `signing.signing_key` is the one line in this
-    repository that reads `AGENTAUDIT_SIGNING_KEY`, and the API layer reads no
-    environment of its own (ADR-0007's cost figures are the reason the prohibition
-    exists, and a second reader would be the first exception to it).
+    repository that reads `AGENTAUDIT_SIGNING_KEY`, and no module of the API layer
+    is an environment reader of its own — ADR-0007's cost figures are why that
+    prohibition exists, and it is intact.
 
-    `None` is a bench that cannot sign. Its runs complete and are measured; their
-    reports are refused by name rather than served unsigned, because the word
-    *signed* has to mean one thing.
+    `None` is a bench that cannot sign, and it is a state a caller has to ask for.
+    Its runs complete and are measured; their reports are refused by name rather
+    than served unsigned, because the word *signed* has to mean one thing. What a
+    deployment may not do is arrive here by omission: `app.py`'s factory calls
+    `signing.signing_key` when it was handed no configuration and refuses to boot
+    without one, so a bench that cannot sign is one somebody declared rather than
+    one nobody configured (ADR-0020).
     """
 
     models: DeclaredModels = UNDECLARED_MODELS

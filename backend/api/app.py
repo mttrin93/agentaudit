@@ -52,11 +52,23 @@ and never averaged": there is no arithmetic here to blend anything with.
 **Cost is declared, and declared explicitly.** `price_per_call` has no default: a
 caller who has not priced their endpoint says so by sending `null` and gets a run
 whose cost reads *not priced*, and a caller who omits the field gets a refusal
-rather than a number. Nothing reads the environment — the confirmation is the
-liability record, so the figures in it have to be the caller's own.
+rather than a number. **No cost figure is ever read from the environment** — the
+confirmation is the liability record, so the figures in it have to be the caller's
+own (ADR-0007).
 
-Served with a factory, because the case library is read when the app is built and
-an import-time read would make importing this module a filesystem question::
+**One value does come from the environment, and the factory will not start without
+it.** `AGENTAUDIT_SIGNING_KEY`, read through `signing.signing_key` and by nothing
+here, because a deployment that booted without a key would run the whole suite
+against somebody's endpoint and then refuse every report it produced as
+`never_signed`. The signature is what makes a report portable and portable evidence
+is the claim (ADR-0001, ADR-0017), so the absence is a loud failure at startup
+rather than a quiet one an operator meets after paying for a run (ADR-0020). It is
+the *default* path and not the only one: a caller that hands in a `BenchConfig` has
+declared what its bench signs with, including that it signs with nothing.
+
+Served with a factory, because the case library and the signing key are read when
+the app is built and an import-time read would make importing this module a
+filesystem and environment question::
 
     uv run uvicorn backend.api.app:create_app --factory
 """
@@ -72,7 +84,7 @@ from fastapi import Body, FastAPI, HTTPException, Response, status
 from fastapi import Path as PathParam
 from pydantic import BaseModel, Field
 
-from backend.api.report import Unsigned
+from backend.api.report import ReportConfig, Unsigned
 from backend.api.runs import (
     BenchConfig,
     BenchRuns,
@@ -86,7 +98,13 @@ from backend.bench.admission import admitted_library
 from backend.bench.contract import NOT_A_SECURITY_RESULT, RetryPolicy, TargetConfig
 from backend.bench.registration import ECHO_PROBE, Attestation
 from backend.bench.rendering import REPORT_MARKDOWN, REPORT_PAYLOAD
-from backend.bench.signing import SIGNATURE_FILE, SignedArtefact, encoded
+from backend.bench.signing import (
+    SIGNATURE_FILE,
+    NoSigningKey,
+    SignedArtefact,
+    encoded,
+    signing_key,
+)
 from backend.graph.approval import Approval
 from backend.graph.budget import BudgetPayload, CallPrice, Layer
 from backend.graph.runstate import RunState
@@ -655,14 +673,51 @@ class ApprovalRequest(BaseModel):
     reason: str = ""
 
 
+NO_KEY_NO_BOOT = (
+    "This factory does not start without one. A bench with no key attempts the whole "
+    "library against the operator's endpoint and then refuses every report it "
+    f"produced as {ReportRefusal.NEVER_SIGNED} (`report.py`) — an instrument that "
+    "measures and cannot testify. The signature is what makes a report portable, and "
+    "portable evidence a recipient can check is the claim this project is making "
+    "(ADR-0001, ADR-0017), so a missing key fails here rather than after somebody "
+    "has paid for a run (ADR-0020). Hand in a `BenchConfig` instead to say "
+    "deliberately that this bench does not sign."
+)
+"""Why the missing key is fatal at startup, appended to the refusal that names it.
+
+`signing.signing_key` already says what is absent and how to make one. What it
+cannot say is what *this* caller was about to do with it, which is the half that
+makes the absence fatal rather than a degraded mode.
+"""
+
+
+def deployed_bench(cases: Path = CASES_DIR) -> BenchConfig:
+    """What a bench is when the deployment declared nothing: the admitted library,
+    and the signing key from the environment or no bench at all.
+
+    The key is fetched through `signing.signing_key`, which stays the only line in
+    this repository that reads `AGENTAUDIT_SIGNING_KEY`; the refusal it raises is
+    re-raised with what booting anyway would have cost, and its type is unchanged so
+    that a deployment catching `NoSigningKey` still catches this one.
+    """
+    try:
+        key = signing_key()
+    except NoSigningKey as missing:
+        raise NoSigningKey(f"{missing}. {NO_KEY_NO_BOOT}") from missing
+    return BenchConfig(
+        cases=admitted_library(cases), report=ReportConfig(signing_key=key)
+    )
+
+
 def create_app(config: BenchConfig | None = None) -> FastAPI:
     """The API over one bench, over one library.
 
     The bench is a constructor argument rather than a module global so that a run
     is estimated against the same library it is attempted against — and so that a
-    test can hold both ends of that.
+    test can hold both ends of that. Given none, the bench is the deployed one,
+    which reads a signing key and refuses to exist without it.
     """
-    bench = BenchRuns(config or BenchConfig(cases=admitted_library(CASES_DIR)))
+    bench = BenchRuns(config if config is not None else deployed_bench())
     app = FastAPI(title="AgentAudit", version="0.1.0")
     app.state.bench = bench
 

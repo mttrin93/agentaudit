@@ -38,6 +38,15 @@ The bench runs from something other than a terminal too. Start it with the app f
 uv run uvicorn backend.api.app:create_app --factory
 ```
 
+**It will not start without a signing key.** The factory reads `AGENTAUDIT_SIGNING_KEY` and refuses to boot when it is empty, naming the variable and the command that makes a pair. A bench with no key runs the whole library against your endpoint and then has no document to give you — every report refused as `never_signed` — and the signature is what makes a report portable, which is the only thing this bench claims to produce ([ADR-0020](./docs/adr/0020-a-factory-with-no-signing-key-refuses-to-boot.md)). For a local run, generate a pair and export the private half in the shell you start the server from:
+
+```
+uv run python -m scripts.keygen --public /tmp/dev-signing.pub
+export AGENTAUDIT_SIGNING_KEY=<the value printed once, base64, one line>
+```
+
+Point `--public` somewhere outside the repository, as above: `keygen` refuses to replace the committed public key, and a report signed by a dev key verifies only against the dev public half — pass it to `scripts/verify.py` with `--pubkey`. Export the private half in the shell and nowhere else. It never goes into a file this repository can see: `.env` is gitignored, and nothing in the codebase writes a private key to disk. A deployed instance gets a real key set in its environment, and its public half is the committed one whose fingerprint is published below.
+
 Three calls start a run, and both of the controls that make one authorised are in them:
 
 1. **`POST /nonces`** issues the value you plant in the target's configuration. Only somebody who can edit that configuration can plant it, which is what makes the echo proof that you control the endpoint.

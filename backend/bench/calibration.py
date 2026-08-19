@@ -236,6 +236,8 @@ def run_calibration(
     rule: GateRule = DECLARED_RULE,
     adaptive: AdaptiveBudget = DECLARED_ADAPTIVE_BUDGET,
     budget: RunBudget | None = None,
+    run_state: RunState | None = None,
+    planted_nonces: Mapping[str, str] | None = None,
 ) -> CalibrationResult:
     """Run the given cases against the given targets and return what was measured.
 
@@ -249,6 +251,21 @@ def run_calibration(
     recomputed later against whatever the library holds by then. It defaults to
     being declared from these inputs, which is the case where the two cannot
     differ.
+
+    `run_state` is the same argument one level down. A run started over HTTP is
+    watched while it happens — position, findings so far, calls spent per layer —
+    and the only record that holds any of that is this one, so the caller has to be
+    able to hand in the state it will read rather than be given it back when the
+    run is over. It must count against the same ceiling the run is held to, and a
+    state that counts against another one is refused: a run whose counter and whose
+    limit disagree is a run with no limit.
+
+    `planted_nonces` is for a target whose nonce was issued before the run began.
+    The bench issues the value and the operator plants it by hand, and over HTTP
+    those happen in an earlier request — so a run that issued a fresh one here
+    would check for a value nobody has planted and refuse every registration. Empty
+    for the terminal path, where the run issues its own and `plant_nonce` puts it
+    in place.
     """
     unscorable = [
         case.id for case in cases if case.verdict_class is VerdictClass.JUDGED
@@ -261,7 +278,13 @@ def run_calibration(
     declared = budget or RunBudget.declare(
         cases=cases, targets=targets, rule=rule, adaptive=adaptive
     )
-    run_state = RunState(budget=declared, library=LibraryVersion.of(cases))
+    state = run_state or RunState(budget=declared, library=LibraryVersion.of(cases))
+    if state.budget != declared:
+        raise ValueError(
+            "the run state handed in counts against a different ceiling than the "
+            "one this run is held to. A counter and a limit that disagree are a "
+            "run with no limit (ADR-0007)"
+        )
     target_runs: list[TargetRun] = []
 
     def run_suite() -> None:
@@ -271,10 +294,11 @@ def run_calibration(
                     target=target,
                     cases=cases,
                     attestation=attestation,
-                    run_state=run_state,
+                    run_state=state,
                     plant_nonce=plant_nonce,
                     adjudicator=adjudicator,
                     rule=rule,
+                    planted=(planted_nonces or {}).get(target.name),
                 )
             )
         # And only then the second layer, on every target that registered. After
@@ -292,7 +316,7 @@ def run_calibration(
                 if completed.registration.complete
             ],
             cases=cases,
-            run_state=run_state,
+            run_state=state,
             attacker=attacker,
             budget=adaptive,
             precedent=precedent,
@@ -301,7 +325,7 @@ def run_calibration(
     approval = run_under_approval(declared, run_suite, approve)
 
     return CalibrationResult(
-        run_state=run_state,
+        run_state=state,
         target_runs=tuple(target_runs),
         budget=declared,
         approval=approval,
@@ -316,9 +340,16 @@ def _run_target(
     plant_nonce: PlantNonce | None,
     adjudicator: Completion | None,
     rule: GateRule,
+    planted: str | None,
 ) -> TargetRun:
-    """Register one target, then run the cases that apply to it if it registered."""
-    nonce = issue_nonce()
+    """Register one target, then run the cases that apply to it if it registered.
+
+    `planted` is the nonce this target already carries, for the caller that issued
+    one before the run started. A fresh nonce is issued when there is none, which
+    is every terminal run: one value, planted by whoever can edit the target's
+    configuration, and checked by the probe below either way.
+    """
+    nonce = planted or issue_nonce()
     if plant_nonce is not None:
         plant_nonce(target, nonce)
     registration = register(target, nonce, attestation, run_state)

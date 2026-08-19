@@ -2,7 +2,7 @@
 
 **Scope:** phases 1, 2, 2b, 2d, 2e, **2f**, 3, 3b, 4 (+ reserve), 4b, 4c, **4d (+ reserve)** and 8b of the Sprint 3 line. About 47.5 hours.
 
-**47.5 hours is not the Sprint 3 total.** It covers the pre-web bench only. The remaining 16 hours of the 63.5-hour Sprint 3 line — the report and real Ed25519 signing (phase 5), the precedent store (6a), the API (6b), the React screens (7) and the reflection notes (8) — are a second spec, written once this gate has passed.
+**47.5 hours is not the Sprint 3 total.** It covers the pre-web bench only. The remaining 16 hours of the 63.5-hour Sprint 3 line — the report and real Ed25519 signing (phase 5), the precedent store (6a), the API (6b), the React screens (7) and the reflection notes (8) — are a second spec, written once this gate has passed — [signed-report-and-delivery.md](./signed-report-and-delivery.md), written after it passed on 2026-08-18 and again on 2026-08-19.
 **Governing documents:** [PLAN.md](../../PLAN.md) · [CONTEXT.md](../../CONTEXT.md) · [ADR-0001 … ADR-0012](../adr/)
 **Vocabulary:** every term below is defined in `CONTEXT.md`. **Family**, **case** and **attempt** are three different things and all arithmetic here depends on that. So are **attempt**, **episode** and **turn**, and the adaptive layer depends on *that*.
 

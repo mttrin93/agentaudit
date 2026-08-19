@@ -15,6 +15,14 @@ field, so it activates on the commit that first runs an episode rather than on t
 one that first describes one, which is #16 and is where `attacker.py` fills this
 record in.
 
+**Why an episode records that it read precedent.** The store survives a restart
+(ADR-0019), so an episode that consulted it took its route with what earlier runs
+found in front of it and an episode that did not started from nothing. Those are
+two different searches and a reader comparing them has to be able to tell which
+happened — the more so as the corpus grows, since the attacker's independence from
+earlier runs is exactly what stops shrinking. It is a flag on a record that has no
+verdict and no denominator, and it stays one: nothing divides by it.
+
 **Why an episode records the tools it had.** A target without tool-call
 visibility degrades two things, not one. The two tool-visibility families report
 *not measurable* — that is `measurability.py` — and the adaptive attacker loses
@@ -89,6 +97,27 @@ class AdaptiveEpisode:
     outcome: EpisodeOutcome
     turns: int
     tools: frozenset[AttackerTool] = ALL_ATTACKER_TOOLS
+    consulted_precedent: bool = False
+    """Whether this episode invoked `retrieve_precedent`, however the store answered.
+
+    The call and not the answer: an episode told that nothing has been filed
+    against this family still chose its route knowing that, and a flag that
+    recorded only the hits would make an empty store indistinguishable from a tool
+    the attacker never reached for.
+
+    A fact about the search, and not a measurement of anything: an episode has no
+    denominator, so this cannot become a proportion of episodes that read precedent
+    without somebody inventing one (ADR-0010).
+
+    The adaptive section does not print it, and deliberately. `stated()` is what a
+    report prints per episode, and the honest sentence this flag supports there —
+    *the attacker asked the store* — is not the sentence a reader would take from
+    it, which is *the attacker was informed by earlier runs*. Those differ every
+    time the store answers empty, which is every run until something files into it.
+    What the record owes now is that the call is on it; what the report says about
+    a corpus is a question for the phase that has one.
+    """
+
     started_at: float = field(default_factory=time.monotonic)
     """When this episode began, so the layer ordering of ADR-0010 is checkable.
 
@@ -132,6 +161,7 @@ class AdaptiveEpisode:
         transcripts: Sequence[Transcript] = (),
         proposals: Sequence[ProposedRoute] = (),
         started_at: float | None = None,
+        consulted_precedent: bool = False,
     ) -> AdaptiveEpisode:
         """Record an episode with the kit the target's registration allowed it.
 
@@ -149,6 +179,7 @@ class AdaptiveEpisode:
             outcome=outcome,
             turns=turns,
             tools=tools_against(target),
+            consulted_precedent=consulted_precedent,
             started_at=time.monotonic() if started_at is None else started_at,
             transcripts=tuple(transcripts),
             proposals=tuple(proposals),

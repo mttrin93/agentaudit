@@ -26,7 +26,11 @@ untouched.
 **`retrieve_precedent` strips identity at the point of return**, against the run's
 blinding rather than against the store's good manners. Long-term memory is the
 channel ADR-0011 names as the one that would otherwise un-blind an instrument every
-other channel was closed against.
+other channel was closed against. From 6a it reads the durable store rather than an
+empty stand-in, which is what makes the stripping load-bearing rather than
+decorative: stripping one run's findings is a formality, and a file that
+accumulates across runs is a corpus in which a target is recognisable by its
+failure pattern.
 """
 
 from __future__ import annotations
@@ -131,7 +135,31 @@ def check_canary(
 def retrieve_precedent(
     store: PrecedentStore, family: Family, blinding: Blinding
 ) -> str:
-    """What has worked on this failure before, with every target identity removed."""
+    """What has worked on this failure before, with every target identity removed.
+
+    Identity is removed twice over, and the two halves defend different things,
+    which is why neither is enough alone. The record carries no target at all —
+    `Precedent` has no such field — so nothing the store accumulates can name one
+    however many runs file into it, and that is the half that defends a *corpus*.
+    The run's blinding then covers what this run put in front of the model: a
+    target that named itself in a reply, quoted into a narrative and filed, is
+    caught on the way back out.
+
+    The blinding is deliberately not claimed to do more than that. `Blinding` is
+    built from the targets of *this* run, so prose an earlier run filed about some
+    other agent is beyond its reach — which is exactly why the record having no
+    target on it is the load-bearing half rather than the belt to redaction's
+    braces (ADR-0011; `precedent.py` says the same from the writing side).
+
+    The failure and never the remediation. The attacker is shown what an agent did
+    wrong, because that is what informs a route; the fix written for it is
+    `suggest_remediation`'s business and telling the attacker how the failure was
+    closed would be handing it the defence with the weakness.
+
+    An empty store answers rather than fails. A first run has nothing filed against
+    any family, and an attacker told so has learned something true — the tool is not
+    missing, and the run is not degraded.
+    """
     recorded: Sequence[Precedent] = store.for_family(family)
     if not recorded:
         return f"no precedent recorded against {family} yet"

@@ -39,7 +39,7 @@ from backend.bench.adaptive.episode import (
     EpisodeOutcome,
     tools_against,
 )
-from backend.bench.adaptive.precedent import NO_PRECEDENT, PrecedentStore
+from backend.bench.adaptive.precedent import DURABLE_PRECEDENT, PrecedentStore
 from backend.bench.adaptive.prompt import ATTACKER_SYSTEM_PROMPT, episode_brief
 from backend.bench.adaptive.proposal import ProposedRoute, proposed_from
 from backend.bench.adaptive.tools import (
@@ -102,7 +102,7 @@ def run_episode(
     attacker: AttackerCompletion,
     blinding: Blinding,
     budget: AdaptiveBudget = DECLARED_ADAPTIVE_BUDGET,
-    precedent: PrecedentStore = NO_PRECEDENT,
+    precedent: PrecedentStore = DURABLE_PRECEDENT,
 ) -> AdaptiveEpisode:
     """Run one episode and record it on the run state, however it ended.
 
@@ -154,6 +154,7 @@ class _Episode:
         self.transcripts: list[Transcript] = []
         self.proposals: list[ProposedRoute] = []
         self.broken = False
+        self.consulted_precedent = False
 
     @property
     def turns(self) -> int:
@@ -192,6 +193,7 @@ class _Episode:
             transcripts=self.transcripts,
             proposals=self.proposals,
             started_at=self.started_at,
+            consulted_precedent=self.consulted_precedent,
         )
         self.run_state.record_episode(episode)
         return episode
@@ -234,9 +236,7 @@ class _Episode:
             case AttackerTool.CHECK_CANARY:
                 return self._check()
             case AttackerTool.RETRIEVE_PRECEDENT:
-                return retrieve_precedent(
-                    self.precedent, self.objective.family, self.blinding
-                )
+                return self._precedent()
             case AttackerTool.PROPOSE_CASE:
                 return self._propose(argument)
 
@@ -275,6 +275,18 @@ class _Episode:
         )
         self.broken = verdict is Verdict.SUCCEEDED
         return str(verdict)
+
+    def _precedent(self) -> str:
+        """What earlier runs found on this family, with this run's names removed.
+
+        The flag is set on the call rather than on a non-empty answer: an episode
+        that asked the store and was told nothing has been filed against this
+        family still took its route knowing that, and a flag that only recorded
+        the hits would make an empty store indistinguishable from a tool nobody
+        reached for.
+        """
+        self.consulted_precedent = True
+        return retrieve_precedent(self.precedent, self.objective.family, self.blinding)
 
     def _propose(self, description: str) -> str:
         if self._last is None:

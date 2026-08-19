@@ -26,7 +26,9 @@ untouched.
 **`retrieve_precedent` strips identity at the point of return**, against the run's
 blinding rather than against the store's good manners. Long-term memory is the
 channel ADR-0011 names as the one that would otherwise un-blind an instrument every
-other channel was closed against.
+other channel was closed against. It reads the durable store from 6a, which is what
+makes the stripping load-bearing: one run's findings would be a formality, and a
+file that accumulates is a corpus.
 """
 
 from __future__ import annotations
@@ -131,7 +133,25 @@ def check_canary(
 def retrieve_precedent(
     store: PrecedentStore, family: Family, blinding: Blinding
 ) -> str:
-    """What has worked on this failure before, with every target identity removed."""
+    """What has worked on this failure before, with every target identity removed.
+
+    Identity is removed twice over, and the two halves defend different things. The
+    record carries no target at all — `Precedent` has no such field, so nothing the
+    store accumulates can name one however many runs file into it — and this
+    function then puts the prose through the run's blinding, which is what catches a
+    name that reached the prose by some other route. Redaction alone would be a
+    defence for one lookup and none for a corpus (ADR-0011); a record without a
+    target field alone would leave this run's own identities to chance.
+
+    The failure and never the remediation. The attacker is shown what an agent did
+    wrong, because that is what informs a route; the fix written for it is
+    `suggest_remediation`'s business and telling the attacker how the failure was
+    closed would be handing it the defence with the weakness.
+
+    An empty store answers rather than fails. A first run has nothing filed against
+    any family, and an attacker told so has learned something true — the tool is not
+    missing, and the run is not degraded.
+    """
     recorded: Sequence[Precedent] = store.for_family(family)
     if not recorded:
         return f"no precedent recorded against {family} yet"

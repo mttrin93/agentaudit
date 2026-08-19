@@ -44,7 +44,7 @@ from dataclasses import dataclass, field
 from backend.bench.adaptive.attacker import AttackerCompletion
 from backend.bench.adaptive.budget import DECLARED_ADAPTIVE_BUDGET, AdaptiveBudget
 from backend.bench.adaptive.layer import AttackableTarget, run_adaptive_layer
-from backend.bench.adaptive.precedent import NO_PRECEDENT, PrecedentStore
+from backend.bench.adaptive.precedent import DURABLE_PRECEDENT, PrecedentStore
 from backend.bench.adaptive.scripted import SCRIPTED_ATTACKER
 from backend.bench.adjudication import Completion, NoAdjudicator
 from backend.bench.applicability import SkippedCase, applicable, skipped_cases
@@ -232,7 +232,7 @@ def run_calibration(
     approve: Approve | None = None,
     adjudicator: Completion | None = None,
     attacker: AttackerCompletion = SCRIPTED_ATTACKER,
-    precedent: PrecedentStore = NO_PRECEDENT,
+    precedent: PrecedentStore = DURABLE_PRECEDENT,
     rule: GateRule = DECLARED_RULE,
     adaptive: AdaptiveBudget = DECLARED_ADAPTIVE_BUDGET,
     budget: RunBudget | None = None,

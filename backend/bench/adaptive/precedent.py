@@ -452,10 +452,28 @@ class RecordedPrecedents:
         return tuple(entry for entry in self.entries if entry.family is family)
 
 
+DURABLE_PRECEDENT = DurablePrecedents.at()
+"""The store a run reads: the file, at the one location, declared once.
+
+The default of `run_calibration`, of `run_adaptive_layer` and of `run_episode`, so
+that a run reads the real store without being handed one — which is the whole of
+what phase 6a's second half changes, since `retrieve_precedent` had the store's
+interface from #16 and an empty stand-in behind it.
+
+Shared rather than constructed per run, and safe to share because `JsonFileStore`
+holds no state: the file is the authority and every batch re-reads it, so two
+callers against this object cannot disagree any more than two objects against the
+file could. A run that wants a different location says so, which is what every
+test does and what a second tenant would need long before it needed a constructor
+argument (PLAN §11).
+"""
+
 NO_PRECEDENT = RecordedPrecedents()
-"""An empty store, for a run that is not given one.
+"""An empty store, for a caller that must read nothing. Test equipment.
 
 Empty rather than absent, so `retrieve_precedent` is a tool that answers rather
 than a tool that is missing: an attacker that spent a turn discovering nothing has
-been filed against this family has learned something true.
+been filed against this family has learned something true. That answer is now also
+what the durable store gives on a fresh install, which is the case a run against an
+empty file has to survive rather than fail.
 """

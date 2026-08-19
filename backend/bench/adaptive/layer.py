@@ -38,7 +38,7 @@ from backend.bench.adaptive.attacker import (
 from backend.bench.adaptive.blinding import Blinding
 from backend.bench.adaptive.budget import DECLARED_ADAPTIVE_BUDGET, AdaptiveBudget
 from backend.bench.adaptive.episode import AdaptiveEpisode
-from backend.bench.adaptive.precedent import NO_PRECEDENT, PrecedentStore
+from backend.bench.adaptive.precedent import DURABLE_PRECEDENT, PrecedentStore
 from backend.bench.applicability import applicable
 from backend.bench.contract import TargetConfig
 from backend.bench.library import Case, Family, VerdictClass
@@ -66,7 +66,7 @@ def run_adaptive_layer(
     run_state: RunState,
     attacker: AttackerCompletion,
     budget: AdaptiveBudget = DECLARED_ADAPTIVE_BUDGET,
-    precedent: PrecedentStore = NO_PRECEDENT,
+    precedent: PrecedentStore = DURABLE_PRECEDENT,
     rng: random.Random | None = None,
 ) -> tuple[AdaptiveEpisode, ...]:
     """Run `k` episodes per family per target, and record every one of them."""

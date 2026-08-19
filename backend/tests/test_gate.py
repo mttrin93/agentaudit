@@ -15,7 +15,6 @@ to fail a working bench, and a lucky one must not pass a broken one.
 import argparse
 import ast
 import itertools
-import shutil
 from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import fields, replace
 from pathlib import Path
@@ -53,6 +52,7 @@ from backend.tests.conftest import (
     CASES_DIR,
     CONFIRMING,
     adjudicating,
+    authored_library,
     served_references,
 )
 from scripts.console import EXIT_WITHHELD
@@ -587,8 +587,10 @@ def test_the_entry_point_writes_the_document_rather_than_only_being_able_to(
     monkeypatch.setattr("scripts.gate.attest", lambda identity: BENCH_ATTESTATION)
     monkeypatch.setattr("scripts.gate.terminal_approval", lambda identity: CONFIRMING)
     monkeypatch.setattr("scripts.gate.completion_for", _bench_stand_in)
-    cases = tmp_path / "cases"
-    shutil.copytree(CASES_DIR, cases)
+    # Authored copies: this run stores a reading on every record it reads, and the
+    # assertion below counts them, so the copy must not arrive carrying the series a
+    # real gate run already wrote (`authored_library`).
+    cases = authored_library(tmp_path / "cases")
 
     code = main(
         [

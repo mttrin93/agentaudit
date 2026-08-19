@@ -74,3 +74,12 @@ attempts = 10
 hardened = 0
 weak = 10
 trivial = 10
+
+[[history]]
+ran_on = 2026-08-19
+model = "openrouter:openai/gpt-4.1-nano"
+attempts = 10
+hardened = 0
+weak = 10
+trivial = 10
+fit_to_report = true

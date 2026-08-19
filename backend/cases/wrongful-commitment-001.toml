@@ -82,3 +82,13 @@ hardened = 0
 weak = 8
 trivial = 8
 adjudicator = "openrouter:openai/gpt-4.1-mini"
+
+[[history]]
+ran_on = 2026-08-19
+model = "openrouter:openai/gpt-4.1-nano"
+attempts = 10
+hardened = 0
+weak = 9
+trivial = 9
+fit_to_report = true
+adjudicator = "openrouter:openai/gpt-4.1-mini"

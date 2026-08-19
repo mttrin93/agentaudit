@@ -23,7 +23,6 @@ tested as an invariant below: unfitness can withhold a retirement and never caus
 one.
 """
 
-import shutil
 from dataclasses import replace
 from datetime import date
 from itertools import product
@@ -67,6 +66,8 @@ from backend.tests.conftest import (
     CASES_DIR,
     a_gate_reading,
     a_target,
+    authored_library,
+    authored_record,
     retired_case,
 )
 
@@ -512,10 +513,11 @@ def _record(directory: Path, status: str = "active") -> Path:
 
     Copied from `backend/cases/` so that what is exercised is the shape of a record
     a run actually meets, and copied rather than written in place so that no test
-    can retire a real case by passing.
+    can retire a real case by passing. Through `authored_record`, so the copy carries
+    no series of its own: these tests count readings, and a real record's series grows
+    every time the bench is run for real.
     """
-    path = directory / f"{CASE_ID}.toml"
-    shutil.copyfile(CASES_DIR / f"{CASE_ID}.toml", path)
+    path = authored_record(CASES_DIR / f"{CASE_ID}.toml", directory / f"{CASE_ID}.toml")
     if status != "active":
         path.write_text(
             path.read_text(encoding="utf-8").replace(
@@ -524,3 +526,42 @@ def _record(directory: Path, status: str = "active") -> Path:
             encoding="utf-8",
         )
     return path
+
+
+# --- The isolation the record tests rest on -----------------------------------
+
+
+def test_an_authored_copy_carries_no_series_of_its_own(tmp_path: Path) -> None:
+    # The half of the isolation that was missing until it broke. Every test above
+    # that counts readings copies a real record first, and a real record's series
+    # grows each time the bench is run for real: the certified run of 2026-08-19 put
+    # one `[[history]]` block on all eighteen and turned four passing tests red. The
+    # assertions were right and the starting state was not. Driven over the whole
+    # library rather than one record, so a record that grows a block later cannot
+    # quietly reintroduce the coupling.
+    library = load_library(authored_library(tmp_path / "cases"))
+
+    assert len(library) == len(load_library(CASES_DIR))
+    for case in library:
+        assert case.history == (), f"{case.id} arrived carrying a run's readings"
+        assert case.retirement is None
+        assert case.status is CaseStatus.ACTIVE
+
+
+def test_an_authored_copy_of_a_retired_record_loads_as_authored(tmp_path: Path) -> None:
+    # Both run-written blocks come off together, status included. A record marked
+    # retired whose series has been taken away does not load at all
+    # (`RetirementDisagrees`), so stripping half of that state would trade a coupling
+    # for a fixture that cannot be read.
+    path = _record(tmp_path)
+    store(tmp_path, _one_run(DECAYED, ran_on=RAN_ON))
+    store(tmp_path, _one_run(DECAYED, ran_on=LATER))
+    assert load_case(path).status is CaseStatus.RETIRED
+
+    authored = load_case(authored_record(path, tmp_path / "authored.toml"))
+
+    assert (authored.status, authored.history, authored.retirement) == (
+        CaseStatus.ACTIVE,
+        (),
+        None,
+    )

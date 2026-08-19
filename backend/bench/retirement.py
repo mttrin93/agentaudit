@@ -18,15 +18,16 @@ and stays in the library: `live_library` is what a run scores, and `load_library
 `admitted_library` and `admission.library_provenance` still see the retired ones, so
 the history is queryable from a library on disk and from no run at all.
 
-**One question is left open on purpose, and this module declines it rather than
-answering it by default.** ADR-0015 excludes a family the bench cannot vouch for
-from the gate decision and states explicitly that whether the retirement rule may
-operate on such a family's cases is *not* settled there — it needs its own
-decision, and #14 has not taken one. So a
-case whose two low readings were taken on an excluded family is `NOT_DECIDED`: the
-readings are stored, the rule is not applied, and the line says which decision is
-missing. Retiring it would resolve the open question silently in one direction, and
-so would quietly ignoring the readings.
+**The rule declines on a family the bench cannot vouch for** (ADR-0016). A case
+whose two low readings were taken on a family excluded from the gate decision is
+`NOT_DECIDED`: the readings are stored, the rule is not applied, and the line says
+which reliability figure stopped it. Retirement is a *claim* that discrimination
+decayed, and that claim cannot rest on a number the report refuses to print —
+ADR-0015's exclusion read one level down, at the second consumer of the same `D`.
+The failure it closes has a direction: non-differential adjudicator error attenuates
+`D` toward zero, so an adjudicator that degrades would otherwise become a machine for
+retiring cases that work. Both readings in the window must be fit, so unfitness can
+only *withhold* a retirement and never cause one.
 """
 
 from collections.abc import Collection, Iterable, Mapping, Sequence
@@ -113,9 +114,9 @@ class RetirementOutcome(StrEnum):
             case RetirementOutcome.NOT_DECIDED:
                 return (
                     "not decided — the readings that would retire it were taken on a "
-                    "family the bench could not vouch for, and whether the rule may "
-                    "operate on one is the question ADR-0015 left open for its own "
-                    "decision. Stored, not applied"
+                    "family the bench could not vouch for, and ADR-0016 declines the "
+                    "rule there: decay cannot be claimed on a number the report will "
+                    "not print (ADR-0015). Stored, not applied"
                 )
 
 
@@ -265,8 +266,7 @@ def readings_of(
 
     `excluded` is the families the gate did not decide on, off `GateDecision`. It
     lands on the reading as `fit_to_report`, and what it does there is stop the rule
-    from being applied to a reading the bench cannot vouch for — see the open
-    question in the module docstring.
+    from being applied to a reading the bench cannot vouch for (ADR-0016).
     """
     readings: dict[str, GateReading] = {}
     unread: list[str] = []

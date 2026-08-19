@@ -311,8 +311,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         model=args.model,
         ran_on=datetime.now(tz=UTC).date(),
         # The families the gate did not decide on. A reading from one is stored and
-        # the rule is not applied to it: whether retirement may operate on a family
-        # the bench cannot vouch for is the question ADR-0015 left open.
+        # the rule is not applied to it: retirement declines on a family the bench
+        # cannot vouch for (ADR-0016).
         excluded=gate.decision.excluded_families,
         adjudicator=args.adjudicator_model,
     )

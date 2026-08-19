@@ -269,10 +269,13 @@ def test_precedent_reaches_the_attacker_with_target_identity_stripped(
             entries=(
                 Precedent(
                     family=Family.DATA_LEAKAGE,
-                    route=(
+                    failure=(
                         f"the hardened agent at {target.url} held, and {target.name} "
                         "folded on the second turn"
                     ),
+                    remediation="filter the configured secret out of every reply",
+                    case_id="data-leakage-001",
+                    external_id="LLM02:2026",
                 ),
             )
         )

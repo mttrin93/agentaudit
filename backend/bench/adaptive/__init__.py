@@ -20,7 +20,9 @@ What #16 added, in the order a turn passes through it:
 - `prompt.py` — everything the attacker is told, which is published (ADR-0008).
 - `tools.py` — the five tools, and the only transport this layer has.
 - `blinding.py` — the per-run handles, and the redaction that enforces them.
-- `precedent.py` — the store interface `retrieve_precedent` reads. Empty until 6a.
+- `precedent.py` — the store `retrieve_precedent` reads, durable across a
+  restart since 6a. `suggest_remediation` reads it too, and nothing else may
+  (ADR-0004, ADR-0013, ADR-0019).
 - `proposal.py` — the one edge back into the scored layer, decided by #17.
 - `scripted.py` — a deterministic stand-in attacker, so the plumbing above is
   testable without a model call. Test equipment, like `stub_models.py`.

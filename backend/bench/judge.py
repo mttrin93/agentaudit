@@ -53,7 +53,7 @@ from enum import StrEnum
 
 from backend.bench.contract import ToolTrace
 from backend.bench.evaluator import Verdict
-from backend.bench.library import Case, ExternalId, Family
+from backend.bench.library import Case, ExternalId, Family, VerdictClass
 from backend.graph.runstate import Attempt
 
 Completion = Callable[[str, str], str]
@@ -374,6 +374,17 @@ class Finding:
     family: Family
     target_name: str
     verdict: Verdict
+    verdict_class: VerdictClass
+    """How this finding's verdict was reached, copied off the attempt.
+
+    Carried for the reason `Attempt.verdict_class` is carried and against a
+    consumer this record did not have when it was written: the precedent store
+    holds deterministic findings only (ADR-0004), so whatever writes into it has
+    to be able to tell the two apart — and the one thing it may not do is work it
+    out from the family name. Read off the attempt here, which is the only place
+    that inference is impossible.
+    """
+
     narrative: Narrative
     disagreement: Disagreement | None = None
 
@@ -392,6 +403,7 @@ class Finding:
             family=attempt.family,
             target_name=attempt.target_name,
             verdict=attempt.verdict,
+            verdict_class=attempt.verdict_class,
             narrative=narrative,
             disagreement=Disagreement(
                 case_id=attempt.case_id,

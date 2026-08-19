@@ -132,7 +132,7 @@ def retrieve_precedent(
     store: PrecedentStore, family: Family, blinding: Blinding
 ) -> str:
     """What has worked on this failure before, with every target identity removed."""
-    routes: Sequence[Precedent] = store.for_family(family)
-    if not routes:
+    recorded: Sequence[Precedent] = store.for_family(family)
+    if not recorded:
         return f"no precedent recorded against {family} yet"
-    return "\n".join(f"  - {blinding.redact(route.route)}" for route in routes)
+    return "\n".join(f"  - {blinding.redact(entry.failure)}" for entry in recorded)

@@ -98,13 +98,24 @@ class AdaptiveEpisode:
     turns: int
     tools: frozenset[AttackerTool] = ALL_ATTACKER_TOOLS
     consulted_precedent: bool = False
-    """Whether this episode read the precedent store before it chose its route.
+    """Whether this episode invoked `retrieve_precedent`, however the store answered.
 
-    A fact about the search, recorded beside the outcome it qualifies, and not a
-    measurement of anything: an episode has no denominator, so this cannot become
-    a proportion of episodes that read precedent without somebody inventing one
-    (ADR-0010). What it buys a reader is the difference between an attacker that
-    started from what the bench has seen before and one that started cold.
+    The call and not the answer: an episode told that nothing has been filed
+    against this family still chose its route knowing that, and a flag that
+    recorded only the hits would make an empty store indistinguishable from a tool
+    the attacker never reached for.
+
+    A fact about the search, and not a measurement of anything: an episode has no
+    denominator, so this cannot become a proportion of episodes that read precedent
+    without somebody inventing one (ADR-0010).
+
+    The adaptive section does not print it, and deliberately. `stated()` is what a
+    report prints per episode, and the honest sentence this flag supports there —
+    *the attacker asked the store* — is not the sentence a reader would take from
+    it, which is *the attacker was informed by earlier runs*. Those differ every
+    time the store answers empty, which is every run until something files into it.
+    What the record owes now is that the call is on it; what the report says about
+    a corpus is a question for the phase that has one.
     """
 
     started_at: float = field(default_factory=time.monotonic)

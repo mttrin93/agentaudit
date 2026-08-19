@@ -466,6 +466,15 @@ callers against this object cannot disagree any more than two objects against th
 file could. A run that wants a different location says so, which is what every
 test does and what a second tenant would need long before it needed a constructor
 argument (PLAN §11).
+
+**A gate run reads it too, and nothing it decides can move.** The file is
+machine-local and git-ignored, so an instrument that read it into a scored figure
+would be an instrument whose result depended on the machine — but the only consumer
+is one adaptive tool, and ADR-0010 keeps that layer out of every rate, interval,
+band and `D` the gate is decided on. What precedent can reach is the adaptive
+section, which already declares itself recorded and not reproducible (ADR-0017).
+The hazard the ignored file would otherwise carry is closed by the layer separation
+rather than by remembering to pass an empty store to the gate.
 """
 
 NO_PRECEDENT = RecordedPrecedents()

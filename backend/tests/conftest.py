@@ -19,6 +19,7 @@ from pathlib import Path
 
 import pytest
 
+from backend.bench.adaptive import precedent
 from backend.bench.adaptive.precedent import DURABLE_PRECEDENT
 from backend.bench.adjudication import Completion
 from backend.bench.calibration import (
@@ -371,12 +372,19 @@ def precedent_elsewhere(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
     without this, every one of them would read whatever findings the engineer's own
     runs had filed — a suite whose result depends on the machine it runs on — and a
     test that recorded one would put a finding about somebody else's agent in the
-    working copy. Pointed at `tmp_path` rather than disabled, so what the tests
-    exercise is the file-backed store rather than a stand-in for it.
+    working copy (ADR-0008). Pointed at `tmp_path` rather than disabled, so what the
+    tests exercise is the file-backed store rather than a stand-in for it.
+
+    Both ends are redirected, and they have to be. The declared store object is
+    reached through the file it holds rather than replaced, because
+    `run_calibration`, `run_adaptive_layer` and `run_episode` bound it as a default
+    argument when they were imported and rebinding the module name would not reach
+    them; `DEFAULT_STORE_PATH` is patched as well, so a store any code builds
+    mid-test with `DurablePrecedents.at()` lands here too.
     """
-    monkeypatch.setattr(
-        DURABLE_PRECEDENT.store, "path", tmp_path / "precedent" / "findings.json"
-    )
+    elsewhere = tmp_path / "precedent" / "findings.json"
+    monkeypatch.setattr(precedent, "DEFAULT_STORE_PATH", elsewhere)
+    monkeypatch.setattr(DURABLE_PRECEDENT.store, "path", elsewhere)
 
 
 @dataclass(frozen=True)

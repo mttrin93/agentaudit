@@ -150,9 +150,13 @@ def test_the_digest_of_the_rendering_is_bound_into_the_payload_before_a_signatur
     )
     assert document(bound)["rendered_sha256"] == bound.rendered_sha256
 
-    # Present before anything signs it, and nothing about a signature is present yet.
+    # Present before anything signs it, and nothing about a signature is present yet:
+    # the payload names no key, and no signature material has anywhere to be. `key_id`
+    # is a field of its own from #51 and it is null until `signing.bind_key` sets it —
+    # a missing key would read as an older shape of artefact (ADR-0017).
     keys = {path for path, _ in figures(document(bound))}
-    assert not [key for key in keys if "signature" in key or "key_id" in key]
+    assert not [key for key in keys if "signature" in key]
+    assert document(bound)["key_id"] is None
 
     # The rendering does not print the digest, so binding is idempotent — a document
     # that contained its own hash could not be bound to it at all.

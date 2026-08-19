@@ -292,10 +292,16 @@ class TargetPayload:
     """One target run, ready to be serialised, signed, served and rendered.
 
     A result, the provenance of the run that produced it, the rule the figures were
-    measured under, and the digest of the document a human reads. There is no fifth
-    field, and in particular there is no field for a summary of any kind: a reader
-    who wants a single number will build one out of whatever is on the page, so the
-    page does not offer one (ADR-0005).
+    measured under, the digest of the document a human reads, and the fingerprint of
+    the key that signed these bytes. There is no sixth field, and in particular there
+    is no field for a summary of any kind: a reader who wants a single number will
+    build one out of whatever is on the page, so the page does not offer one
+    (ADR-0005).
+
+    The last two are the two ADR-0017 requires to be **inside** the signature rather
+    than beside it, and both are set by the module that can compute them rather than
+    by a caller who could supply the wrong one — `rendering.bind` and
+    `signing.bind_key`.
     """
 
     result: TargetResult
@@ -323,6 +329,23 @@ class TargetPayload:
     lets the rendering change with a new digest (ADR-0017).
     """
 
+    key_id: str | None = None
+    """Which key signed these bytes, inside them rather than beside them (ADR-0017).
+
+    A signature file that named its own key would be a signature that could be
+    re-attributed by editing the file beside it: a recipient pinning one public key
+    has to be able to tell *this document claims key A* from *this document claims
+    key B*, and that claim only means something if the signature covers it. So the
+    fingerprint travels in the payload, `signing.bind_key` is the only thing that
+    sets it, and `signing.sign` refuses a payload whose `key_id` names a key other
+    than the one it is signing with.
+
+    `None` is *unsigned* and says so rather than dropping the key. There is no state
+    in which the word *signed* applies to a payload holding `None` here, and
+    `verify.py` reports one as unsigned rather than as unverified — the two are
+    different facts.
+    """
+
 
 def document(payload: TargetPayload) -> dict[str, Any]:
     """The payload as plain data, in the shape the canonical bytes are taken over.
@@ -342,6 +365,7 @@ def document(payload: TargetPayload) -> dict[str, Any]:
         "coverage_gaps": [_gap(gap) for gap in payload.result.coverage_gaps],
         "provenance": _provenance(payload),
         "rendered_sha256": payload.rendered_sha256,
+        "key_id": payload.key_id,
     }
 
 
@@ -353,11 +377,20 @@ def canonical_json(payload: TargetPayload) -> str:
     as it was written — κ is κ — and the encoding is fixed at UTF-8 by
     `canonical_bytes`, which is what is actually signed.
     """
+    return canonical(document(payload))
+
+
+def canonical(body: Mapping[str, Any]) -> str:
+    """Any serialised document as canonical JSON — the one definition of the form.
+
+    Separate from `canonical_json` because two callers need the form over plain data
+    rather than over a `TargetPayload`: a recipient re-serialising a document they
+    parsed, and the tests that doctor one. A second `json.dumps` with these three
+    arguments spelled out again is a second definition of *canonical*, and the two
+    would only have to disagree once for a signature to stop checking anything.
+    """
     return json.dumps(
-        document(payload),
-        sort_keys=True,
-        separators=CANONICAL_SEPARATORS,
-        ensure_ascii=False,
+        body, sort_keys=True, separators=CANONICAL_SEPARATORS, ensure_ascii=False
     )
 
 

@@ -5,6 +5,7 @@ description = "An adversarial test bench for AI agents, with a signed evidence r
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "cryptography>=50.0.0",
     "deepeval>=4.1.8",
     "fastapi>=0.141.1",
     "httpx>=0.28.1",

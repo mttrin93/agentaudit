@@ -73,7 +73,11 @@ from cryptography.hazmat.primitives.serialization import (
 )
 
 from backend.bench.payload import TargetPayload, canonical_bytes
-from backend.bench.rendering import Published, publish
+from backend.bench.rendering import (
+    REPORT_MARKDOWN,
+    REPORT_PAYLOAD,
+    bound,
+)
 
 ALGORITHM = "ed25519"
 """The one algorithm, named in the document rather than assumed by the verifier.
@@ -269,6 +273,55 @@ def verify_bytes(signed: bytes, signature: bytes, public: Ed25519PublicKey) -> b
 
 
 @dataclass(frozen=True)
+class SignedArtefact:
+    """One signed report as bytes, before anything decides where to put it.
+
+    The three files of `publish_signed` without the disk: the canonical bytes that
+    were signed, the document those bytes are bound to by digest, and the detached
+    signature over them. It exists because the artefact leaves this process two ways
+    now — written to a directory, and served over HTTP (#56) — and a route that
+    re-assembled it on the way out would be a second chance to re-serialise the bytes
+    a signature covers. What a recipient downloads is this record, field for field.
+    """
+
+    payload: TargetPayload
+    """The bound, keyed payload these bytes are of — never the one a caller passed
+    in, which is missing both of the fields the signature covers."""
+
+    canonical: bytes
+    """The bytes that were signed, kept rather than recomputed on demand.
+
+    A second `canonical_bytes` call would produce the same bytes today and is the
+    line somebody edits when a field needs adding "just for the response". Held once,
+    there is nothing downstream that could serialise a different document.
+    """
+
+    rendering: str
+    """The Markdown `payload.rendered_sha256` is the digest of."""
+
+    signature: bytes
+    """The detached signature. `encoded` is what a file or a response body holds."""
+
+
+def signed(payload: TargetPayload, key: Ed25519PrivateKey) -> SignedArtefact:
+    """That payload, keyed, bound to its rendering and signed — in that order.
+
+    The one order available, and the reason it is written down once: the key's
+    fingerprint goes in first, then the rendering's digest is taken over a document
+    that already names the key, and only then are there bytes worth signing. Binding
+    the key second would digest a document the signature does not describe, and the
+    failure would surface as an unverifiable report on a recipient's machine.
+    """
+    binding = bound(bind_key(payload, key))
+    return SignedArtefact(
+        payload=binding.payload,
+        canonical=canonical_bytes(binding.payload),
+        rendering=binding.markdown,
+        signature=sign(binding.payload, key),
+    )
+
+
+@dataclass(frozen=True)
 class SignedReport:
     """What one signed run left on disk: three files that cannot disagree.
 
@@ -289,22 +342,33 @@ def publish_signed(
 ) -> SignedReport:
     """Write the rendering, the payload and the signature, in that order.
 
-    The order is the dependency order and there is no other available: the key's
-    fingerprint goes in first, then the rendering's digest, then the bytes are
-    serialised with both inside them, and only then is there something to sign. The
-    signature is written last on purpose — an interrupted publication leaves an
-    unsigned artefact, which fails verification as *unsigned*, rather than a
-    signature over a payload that never reached the disk.
+    The artefact is built by `signed` and this writes it down: the order the three
+    fields were made in is decided there and in one place, so a directory on disk
+    and a body on the wire cannot be two different assemblies of one report (#56).
+
+    The order these are *written* is the second half of the same care. The signature
+    goes last on purpose — an interrupted publication leaves an unsigned artefact,
+    which fails verification as *unsigned*, rather than a signature over a payload
+    that never reached the disk.
+
+    The payload is written as the bytes that were signed rather than re-serialised
+    from the record, for the reason the whole module exists: a verifier's first act
+    is reading the file, and a file that is a second serialisation of the document
+    is a file the signature does not cover.
     """
-    published: Published = publish(bind_key(payload, key), directory)
-    signature = sign(published.payload, key)
+    artefact = signed(payload, key)
+    rendering_path = directory / REPORT_MARKDOWN
+    rendering_path.parent.mkdir(parents=True, exist_ok=True)
+    rendering_path.write_text(artefact.rendering, encoding="utf-8")
+    payload_path = directory / REPORT_PAYLOAD
+    payload_path.write_bytes(artefact.canonical)
     signature_path = directory / SIGNATURE_FILE
-    signature_path.write_text(encoded(signature), encoding="utf-8")
+    signature_path.write_text(encoded(artefact.signature), encoding="utf-8")
     return SignedReport(
-        payload=published.payload,
-        signature=signature,
-        payload_path=published.payload_path,
-        rendering_path=published.rendering_path,
+        payload=artefact.payload,
+        signature=artefact.signature,
+        payload_path=payload_path,
+        rendering_path=rendering_path,
         signature_path=signature_path,
     )
 

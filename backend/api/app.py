@@ -1,10 +1,30 @@
-"""The HTTP surface: a nonce, a run, and the answer to the run's interrupt.
+"""The HTTP surface: a nonce, a run, the answer to the run's interrupt, and the
+artefact it produced.
 
-Four routes. `POST /nonces` issues the value an operator plants to prove they
+Seven routes. `POST /nonces` issues the value an operator plants to prove they
 control the endpoint; `POST /runs` records the attestation, declares the estimate
 and halts; `POST /runs/{id}/approval` answers the halt; `GET /runs/{id}` says where
-the run has got to. The report route is #56 and reads records this module already
-keeps.
+the run has got to; and three under `/report/{id}` serve the three files one signed
+run leaves — the payload, the rendering and the detached signature.
+
+**The report routes copy bytes and never build them.** What `GET /report/{id}`
+returns is the exact byte string that was signed, held on the record since the run
+that made it (`report.py`): a route that handed a parsed payload back to the
+framework would have it re-serialised on the way out, under whatever that
+framework's encoder decides about key order, separators and non-ASCII, and every
+signature it served would be over a document the recipient never received. So the
+payload is a `Response` over bytes rather than a model, and the assertion that says
+so is over bytes rather than over a decoded dict — a test that compared
+dictionaries would pass on exactly the document that fails for a recipient (#56).
+
+**Three files under three paths, under the names a verifier already knows.**
+`report.json`, `report.md` and `report.sig` are what `scripts/verify.py` reads out
+of one directory, so a client that saves the three responses under the filenames
+they arrive with can verify the artefact with no further processing — which is the
+whole of what *portable* means here. The rendering is served beside the payload
+rather than inside it because the digest that binds them is taken over the
+document's own bytes: an envelope carrying both would have to re-encode one of
+them.
 
 **Progress is reported per layer, and there is no figure that spans them.**
 Position in the scored layer is family, case and attempt; in the adaptive layer it
@@ -44,13 +64,15 @@ an import-time read would make importing this module a filesystem question::
 from __future__ import annotations
 
 from decimal import Decimal, InvalidOperation
+from enum import StrEnum
 from pathlib import Path
 from typing import Annotated
 
-from fastapi import Body, FastAPI, HTTPException, status
+from fastapi import Body, FastAPI, HTTPException, Response, status
 from fastapi import Path as PathParam
 from pydantic import BaseModel, Field
 
+from backend.api.report import Unsigned
 from backend.api.runs import (
     BenchConfig,
     BenchRuns,
@@ -63,6 +85,8 @@ from backend.api.runs import (
 from backend.bench.admission import admitted_library
 from backend.bench.contract import NOT_A_SECURITY_RESULT, RetryPolicy, TargetConfig
 from backend.bench.registration import ECHO_PROBE, Attestation
+from backend.bench.rendering import REPORT_MARKDOWN, REPORT_PAYLOAD
+from backend.bench.signing import SIGNATURE_FILE, SignedArtefact, encoded
 from backend.graph.approval import Approval
 from backend.graph.budget import BudgetPayload, CallPrice, Layer
 from backend.graph.runstate import RunState
@@ -84,6 +108,61 @@ PLANT_STATEMENT = (
     "below verbatim, and a target that does not answer it with the nonce is not "
     "attempted."
 )
+
+
+REPORT_ROUTE = "/report/{run_id}"
+"""Where the artefact is served. One definition, formatted by both ends.
+
+The routes are declared from it and `ReportLocation` fills it in, so the path a
+completed run advertises cannot drift from the path that serves it.
+"""
+
+RENDERING_ROUTE = f"{REPORT_ROUTE}/rendering"
+SIGNATURE_ROUTE = f"{REPORT_ROUTE}/signature"
+
+
+def report_paths(run_id: str) -> tuple[str, str, str]:
+    """The three paths one run's artefact is served at, in the order it is read."""
+    return (
+        REPORT_ROUTE.format(run_id=run_id),
+        RENDERING_ROUTE.format(run_id=run_id),
+        SIGNATURE_ROUTE.format(run_id=run_id),
+    )
+
+
+class ReportRefusal(StrEnum):
+    """Why a report is not being served, as a name rather than as a status code.
+
+    Four members and four different facts, kept apart for the reason every other
+    outcome in this bench is named. Three of them share a status code and none of
+    the three is readable from it, and the difference that matters most is between
+    the second and the third: one is a run to ask again about and the other is a run
+    that will never have a report, and a caller that could not tell them apart
+    would poll for the lifetime of the process.
+    """
+
+    NO_SUCH_RUN = "no_such_run"
+    IN_FLIGHT = "in_flight"
+    DID_NOT_COMPLETE = "did_not_complete"
+    NEVER_SIGNED = "never_signed"
+
+
+class Refusal(BaseModel):
+    """A refusal that names itself, beside the sentence that explains it.
+
+    The name is the field a caller branches on and the sentence is the one a person
+    reads. A bare string would carry the second and not the first, and a status code
+    carries neither.
+    """
+
+    outcome: ReportRefusal
+    statement: str
+
+
+def _refused(refusal: ReportRefusal, statement: str) -> dict[str, str]:
+    """That refusal as the body of a `detail`, which is plain data by the time it
+    reaches FastAPI."""
+    return Refusal(outcome=refusal, statement=statement).model_dump(mode="json")
 
 
 class TargetRequest(BaseModel):
@@ -379,13 +458,23 @@ class TransportOutcome(BaseModel):
 class ReportLocation(BaseModel):
     """Where a finished run's report is served, for a caller that was polling.
 
-    The path is the one the spec names — `GET /report/{id}`, the signed payload
-    with the rendered view alongside it — and the route that serves it is #56. A
+    Three paths rather than one, because the artefact is three files and a
+    recipient needs all three: `verify.py` reads a payload, a rendering and a
+    detached signature out of one directory, so a caller told only where the
+    payload is has been handed the part that cannot be checked on its own. A
     completed run says where to go next rather than leaving a poller to guess that
     it is finished with it.
     """
 
     path: str
+    """The signed canonical payload — the bytes that were signed."""
+
+    rendering: str
+    """The Markdown the payload's `rendered_sha256` is the digest of."""
+
+    signature: str
+    """The detached signature over the payload's bytes."""
+
     statement: str
 
 
@@ -497,15 +586,65 @@ def _transport(record: RunRecord) -> TransportOutcome | None:
 
 
 def _report(record: RunRecord) -> ReportLocation | None:
-    if record.status is not RunStatus.COMPLETED:
+    """Where this run's report is, or `None` when there is no report to point at.
+
+    Read off the artefact rather than off the status, because the two can disagree:
+    a completed run on a bench with no signing key has finished and has nothing to
+    serve, and a location advertised for it would send a caller to three paths that
+    all refuse. Why there is none is on the run's own statement, so the absence here
+    is a stated one rather than a blank (`runs.py`).
+    """
+    if record.status is not RunStatus.COMPLETED or isinstance(record.report, Unsigned):
         return None
+    payload, rendering, signature = report_paths(record.run_id)
     return ReportLocation(
-        path=f"/report/{record.run_id}",
+        path=payload,
+        rendering=rendering,
+        signature=signature,
         statement=(
-            "the run finished: its report is served at this path, as the signed "
-            "payload with the rendered view alongside it"
+            "the run finished: its report is served at these three paths, as the "
+            "signed payload with the rendered view and the detached signature "
+            "alongside it. Saved under the names they arrive with — "
+            f"{REPORT_PAYLOAD}, {REPORT_MARKDOWN} and {SIGNATURE_FILE} — the three "
+            "are what `scripts/verify.py` reads out of one directory"
         ),
     )
+
+
+def _no_report_for(record: RunRecord) -> tuple[ReportRefusal, str]:
+    """Which of the two *no report* facts this run is, and the sentence for it.
+
+    A run still going is a run to ask about again. A run that stopped without
+    completing — declined, unanswered, refused at registration, aborted by its own
+    ceiling, or stopped on the wire — will never have a report, and telling its
+    caller to poll would be telling them to wait for something that is not coming.
+    Both carry the run's own statement, which is where the reason already is.
+    """
+    if record.status.in_flight:
+        return (
+            ReportRefusal.IN_FLIGHT,
+            f"this run is {record.status} and has not finished: a report is served "
+            f"for a completed run only. {record.statement}. Nothing partial is "
+            "served in its place — half a report reads as a finished one, and the "
+            "figures in it would be over attempts the run has not made",
+        )
+    return (
+        ReportRefusal.DID_NOT_COMPLETE,
+        f"this run stopped as {record.status} and produced no report, and it will "
+        f"not produce one: a report is made by a run that completed. "
+        f"{record.statement}. Nothing is served in its place, and nothing here is a "
+        "finding about the target",
+    )
+
+
+def _attachment(filename: str) -> dict[str, str]:
+    """Serve this body as the file a verifier expects to find on disk.
+
+    The three fixed names are `verify.py`'s own contract with a recipient — it is
+    handed a directory and is told nothing else — so a browser saving these three
+    responses lands them under the names that make the directory verifiable.
+    """
+    return {"Content-Disposition": f'attachment; filename="{filename}"'}
 
 
 class ApprovalRequest(BaseModel):
@@ -621,5 +760,81 @@ def create_app(config: BenchConfig | None = None) -> FastAPI:
                 detail=f"no run {run_id} was started by this bench",
             )
         return progress_for(record)
+
+    def servable(run_id: str) -> SignedArtefact:
+        """This run's signed artefact, or the named reason there is none to serve.
+
+        Four refusals and four different facts, and the caller is told which: a run
+        id this bench never issued, a run still in flight, a run that stopped
+        without completing, and a run that finished without a signed report. A
+        single *no report* would send a poller into a loop over three runs, two of
+        which are never going to have one.
+        """
+        record = bench.record(run_id)
+        if record is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=_refused(
+                    ReportRefusal.NO_SUCH_RUN,
+                    f"no run {run_id} was started by this bench",
+                ),
+            )
+        if record.status is not RunStatus.COMPLETED:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=_refused(*_no_report_for(record)),
+            )
+        if isinstance(record.report, Unsigned):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=_refused(ReportRefusal.NEVER_SIGNED, record.report.reason),
+            )
+        return record.report
+
+    @app.get(REPORT_ROUTE)
+    def serve_the_signed_payload(run_id: Annotated[str, PathParam()]) -> Response:
+        """The canonical payload, as the exact bytes that were signed.
+
+        A `Response` over bytes and never a model: the signature is over one byte
+        string, and a payload handed back to the framework would be re-encoded on
+        the way out — same document, different bytes, and no signature this route
+        ever served would verify. Nothing is added here and nothing is summarised;
+        what is in the body is what `payload.py` built and `signing.py` covered.
+        """
+        return Response(
+            content=servable(run_id).canonical,
+            media_type="application/json",
+            headers=_attachment(REPORT_PAYLOAD),
+        )
+
+    @app.get(RENDERING_ROUTE)
+    def serve_the_rendering(run_id: Annotated[str, PathParam()]) -> Response:
+        """The Markdown a human reads, still hashing to the digest in the payload.
+
+        Served beside the payload rather than inside it: `rendered_sha256` is taken
+        over these bytes, so a document delivered inside a JSON envelope would have
+        to be re-encoded to get there and would arrive no longer matching the field
+        that binds it (ADR-0017).
+        """
+        return Response(
+            content=servable(run_id).rendering.encode("utf-8"),
+            media_type="text/markdown; charset=utf-8",
+            headers=_attachment(REPORT_MARKDOWN),
+        )
+
+    @app.get(SIGNATURE_ROUTE)
+    def serve_the_signature(run_id: Annotated[str, PathParam()]) -> Response:
+        """The detached signature, in the hex form the file on disk holds.
+
+        Detached and naming no key: which key signed a report is stated once, in
+        the payload where the signature covers it, so a signature file that carried
+        its own key id would be re-attributable by editing the file beside it
+        (`signing.py`).
+        """
+        return Response(
+            content=encoded(servable(run_id).signature).encode("utf-8"),
+            media_type="text/plain; charset=utf-8",
+            headers=_attachment(SIGNATURE_FILE),
+        )
 
     return app

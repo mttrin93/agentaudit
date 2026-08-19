@@ -48,7 +48,17 @@ awaiting an answer, which is the v1 the spec licensed; a queue is P1.
 **Nothing here reads the environment.** The price per call arrives in the request
 or the run is *not priced*: the caller's confirmation is the liability record, and
 a figure the bench filled in from its own configuration is a figure nobody agreed
-to. An unpriced run is a stated fact and never a zero.
+to. An unpriced run is a stated fact and never a zero. The signing key arrives the
+same way, in `BenchConfig.report`, for the same reason and one more: there is one
+line in this repository that reads `AGENTAUDIT_SIGNING_KEY` and it is in
+`signing.py`.
+
+**The artefact is built by the run, once, before the run is called completed.** A
+report assembled per request would be bytes that depend on when they were asked
+for, and a signature is over one document rather than over a recipe for making one
+(`report.py`, #56). A run whose artefact could not be made is still a completed
+run — the suite ran and the target was measured — and what it lacks is stated by
+name rather than made good with an unsigned payload.
 """
 
 from __future__ import annotations
@@ -56,9 +66,10 @@ from __future__ import annotations
 import threading
 import uuid
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import StrEnum
 
+from backend.api.report import ReportConfig, Unsigned, artefact_for
 from backend.bench.adaptive.attacker import AttackerCompletion
 from backend.bench.adaptive.budget import DECLARED_ADAPTIVE_BUDGET, AdaptiveBudget
 from backend.bench.adaptive.scripted import SCRIPTED_ATTACKER
@@ -68,6 +79,7 @@ from backend.bench.contract import TargetConfig, TargetFailure, TargetUnreachabl
 from backend.bench.library import Case, Family, LibraryVersion, VerdictClass
 from backend.bench.registration import Attestation, issue_nonce
 from backend.bench.rule import DECLARED_RULE, GateRule
+from backend.bench.signing import SignedArtefact
 from backend.graph.approval import Approval, Approve
 from backend.graph.budget import (
     BudgetExceeded,
@@ -117,6 +129,18 @@ class RunStatus(StrEnum):
     REGISTRATION_REFUSED = "registration_refused"
     ABORTED = "aborted"
     FAILED = "failed"
+
+    @property
+    def in_flight(self) -> bool:
+        """Whether a run in this state is still going, or has stopped for good.
+
+        Asked by anything that has to tell *not yet* from *not ever*: a caller told
+        to poll a run that ended without a report would poll for the lifetime of the
+        process. Written as the two states a run can leave rather than as the six it
+        cannot, so that a seventh terminal state is terminal on the day it is added
+        rather than on the day somebody remembers this list.
+        """
+        return self in {RunStatus.AWAITING_APPROVAL, RunStatus.RUNNING}
 
 
 class DeclaredGap(StrEnum):
@@ -193,6 +217,17 @@ class BenchConfig:
     explains why. A run that reached its first judged attempt before discovering
     it had no instrument would have spent the operator's budget on attempts
     nothing can score.
+    """
+
+    report: ReportConfig = field(default_factory=ReportConfig)
+    """The key this bench signs a finished run's report with, and what it declares
+    beside the figures.
+
+    Its own record rather than three more fields here, because none of it changes
+    what a run does to a target: a bench with the default of every one of them
+    attempts the same suite and produces no artefact. What that costs is stated at
+    the route rather than absorbed — a run with no signed report is refused by name
+    (`report.py`).
     """
 
     approval_wait_seconds: float = APPROVAL_WAIT_SECONDS
@@ -295,6 +330,20 @@ class RunRecord:
     )
     confirmed_by: str = ""
     result: CalibrationResult | None = None
+    report: SignedArtefact | Unsigned = field(default_factory=Unsigned)
+    """The signed report this run produced, or the reason it has none.
+
+    Built once, by the thread that ran the run, and read by every request for it:
+    what a recipient downloads has to be the bytes that were signed, and bytes
+    re-assembled per request are bytes nobody signed (#56).
+
+    One of two records rather than a nullable one, so *why there is no report* is
+    carried by the thing that stands in for it: `Unsigned` is served as that under
+    its own name, and it is never made good by serving an unsigned payload in its
+    place. It is not a failed run either — the suite ran and the target was
+    measured.
+    """
+
     failure: TargetFailure | None = None
     """The named transport outcome that stopped this run, if one did.
 
@@ -612,10 +661,39 @@ def _execute(record: RunRecord, config: BenchConfig, pending: PendingApproval) -
         )
         return
 
-    record.settle(
-        RunStatus.COMPLETED,
-        (
-            f"the run finished inside the ceiling that was confirmed by "
-            f"{record.confirmed_by}"
-        ),
+    record.report = _published(record, result, config)
+    finished = (
+        f"the run finished inside the ceiling that was confirmed by "
+        f"{record.confirmed_by}"
     )
+    if isinstance(record.report, Unsigned):
+        # Said here rather than left to the report route, because this is the
+        # sentence a poller reads: a run whose status says completed and whose
+        # report location is empty would otherwise read as one to keep polling.
+        finished = f"{finished}, and it has no signed report — {record.report.reason}"
+    record.settle(RunStatus.COMPLETED, finished)
+
+
+def _published(
+    record: RunRecord, result: CalibrationResult, config: BenchConfig
+) -> SignedArtefact | Unsigned:
+    """This run's signed artefact, built before the run is called completed.
+
+    Before, and in this order, so that a caller polling for `completed` and then
+    fetching the report never meets a run that is finished and has nothing to serve.
+
+    A failure here does not fail the run. The suite ran and the target was measured;
+    what did not happen is the document, and a run marked failed for it would be
+    reporting a publication fault as a fact about somebody's agent. Every exception
+    is caught for that reason and for one more: this runs on the run's own thread,
+    where anything that escaped would leave the record saying *running* for the
+    lifetime of the process.
+    """
+    try:
+        return artefact_for(result, record.plan.cases, config.rule, config.report)
+    except Exception as unpublished:
+        return Unsigned(
+            "this run has no signed report: the run finished and its artefact could "
+            f"not be assembled or signed — {unpublished}. The measurement happened "
+            "and is on the record; nothing unsigned is served in its place"
+        )

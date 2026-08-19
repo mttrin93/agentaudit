@@ -252,6 +252,53 @@ def retired_case(case: Case, on: date = date(2026, 8, 19)) -> Case:
     )
 
 
+RUN_WRITTEN_BLOCKS = ("[[history]]", "[retirement]")
+"""The blocks a gate run writes onto a case record, rather than a human.
+
+`retirement.store` appends both, so their contents grow every time the bench is run
+for real. A test that copies a live record and then counts them is a test coupled to
+how many gate runs this repository has made, which is why `authored_record` takes
+them off — see its docstring.
+"""
+
+
+def authored_record(source: Path, destination: Path) -> Path:
+    """One real case record copied as its author wrote it, with no run-written state.
+
+    Copied from `backend/cases/` so that what a test exercises is the shape of a
+    record a run actually meets, and copied into a directory the test owns so that no
+    test can retire a real case by passing. The blocks a *run* wrote are then removed,
+    which is the half that isolation was missing: the first certified gate run to
+    store a series (2026-08-19) put one `[[history]]` block on all eighteen records
+    and broke four tests that had assumed an empty one. Their assertions were right
+    and their starting state was not — a fixture must not depend on how often the
+    bench has been run.
+
+    The status line is returned to `active` with the retirement, because a record
+    marked retired whose series has been taken away does not load
+    (`RetirementDisagrees`), and stripping half of a state is worse than either whole.
+    """
+    text = source.read_text(encoding="utf-8")
+    cuts = [
+        at
+        for at in (text.find(f"\n{block}") for block in RUN_WRITTEN_BLOCKS)
+        if at != -1
+    ]
+    if cuts:
+        text = text[: min(cuts)].rstrip() + "\n"
+    text = text.replace('status = "retired"', 'status = "active"')
+    destination.write_text(text, encoding="utf-8")
+    return destination
+
+
+def authored_library(destination: Path) -> Path:
+    """The whole case library copied as authored, with no run-written state."""
+    destination.mkdir(parents=True, exist_ok=True)
+    for record in sorted(CASES_DIR.glob("*.toml")):
+        authored_record(record, destination / record.name)
+    return destination
+
+
 @dataclass(frozen=True)
 class ServedReference:
     """A running reference agent, described the way any target is described."""

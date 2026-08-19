@@ -28,9 +28,15 @@ from backend.bench.adaptive.discrimination import NoFamiliesInScope, measure
 from backend.bench.adaptive.episode import AdaptiveEpisode
 from backend.bench.admission import library_provenance, outcome_for
 from backend.bench.calibration import CalibrationResult
-from backend.bench.library import Case, bar_for
+from backend.bench.library import Case, bar_for, trigger_counts
 from backend.bench.registration import Attestation
-from backend.bench.rule import DECLARED_RULE
+from backend.bench.retirement import (
+    RetirementDecision,
+    RunHistory,
+    retired_cases,
+    stated_retirement,
+)
+from backend.bench.rule import DECLARED_RULE, GateRule
 from backend.bench.scorer import Rate
 from backend.graph.approval import Approval, Approve
 from backend.graph.budget import BudgetPayload, CallPrice
@@ -249,3 +255,52 @@ def provenance_section(cases: Sequence[Case]) -> str:
             *(f"  {outcome_for(case).stated()}" for case in cases),
         )
     )
+
+
+def print_retirement(
+    run: RunHistory,
+    decisions: Sequence[RetirementDecision],
+    cases: Sequence[Case],
+) -> None:
+    """The retirement section, printed."""
+    print(retirement_section(run, decisions, cases))
+
+
+def retirement_section(
+    run: RunHistory,
+    decisions: Sequence[RetirementDecision],
+    cases: Sequence[Case],
+    rule: GateRule = DECLARED_RULE,
+) -> str:
+    """The decay series this run stored, what the rule made of it, and what has retired.
+
+    Its own block, below the decision and beside the provenance series, because none
+    of it decides the gate: a case retires on what two runs measured and the run
+    printing it has already been decided. The rule is printed above the readings for
+    the reason `GateRule.stated()` is printed above the decision — a threshold nobody
+    can read beside its result is a threshold that can be moved (ADR-0003).
+
+    The retired cases are listed with the date and the final score they retired on,
+    whatever their number, because "kept, never deleted" is a claim a reader should be
+    able to check rather than take from a sentence (spec story 74).
+    """
+    retired = retired_cases(cases)
+    lines = [
+        "",
+        "retirement — D stored for every case on this run, and nothing here decides "
+        "the gate",
+        f"  the rule: a case below D {rule.retirement_floor:.2f} on two consecutive "
+        "gate runs is marked retired, kept with its retirement date and its final "
+        "score, and never deleted (ADR-0003)",
+        f"  {run.stated()}",
+        *(f"  {decision.stated()}" for decision in decisions),
+        f"  retired so far: {len(retired)} of {len(cases)} ever written",
+        *(f"    {stated_retirement(case, rule)}" for case in retired),
+        "  why these cases exist — the closed set of six triggers, and how much of "
+        "the library each accounts for:",
+        *(
+            f"    {trigger}: {count} — {trigger.stated()}"
+            for trigger, count in trigger_counts(cases).items()
+        ),
+    ]
+    return "\n".join(lines)

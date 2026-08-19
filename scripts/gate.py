@@ -33,6 +33,15 @@ has to exist before the first user does, and a gate answer that lived only in a
 terminal is a gate answer nobody can check (spec story 80). The curated narrative
 stays in `docs/validation.md`; what is written here is the run itself.
 
+**It writes the decay series it measured back onto the case records.** `D` for every
+case it read, appended to that case's own `[[history]]` (spec story 72), and a case
+below the declared floor on two consecutive gate runs marked retired with its date
+and its final score — kept and never deleted, because a case the field caught up with
+is evidence that the field moved. `--cases` says which library that is. Nothing here
+retires a case on one run, and a case whose two low readings came from a family the
+gate could not vouch for is left *not decided* rather than retired: ADR-0015 leaves
+that question open on purpose.
+
 **It asks before it sends anything**, on the same terms as every other entry point:
 the three attestation statements one at a time, then the estimated cost at the
 approval interrupt. Answering no to any of them spends nothing, and nothing here
@@ -65,6 +74,7 @@ from backend.bench.contract import TargetConfig
 from backend.bench.gate import GateResult, NotAGateRun, read_gate
 from backend.bench.goldset import load_gold_sets, measure_reliability
 from backend.bench.library import Case
+from backend.bench.retirement import live_library, readings_of, store
 from backend.bench.rule import DECLARED_RULE
 from backend.bench.scorer import GateOutcome
 from backend.graph.budget import BudgetExceeded, Layer, RunBudget
@@ -89,7 +99,9 @@ from scripts.console import (
     price,
     print_episodes,
     print_provenance,
+    print_retirement,
     provenance_section,
+    retirement_section,
     terminal_approval,
 )
 
@@ -168,6 +180,17 @@ def main(argv: Sequence[str] | None = None) -> int:
         "--currency", default="USD", help="the currency --price-per-call is in"
     )
     parser.add_argument(
+        "--cases",
+        default=str(CASES_DIR),
+        help=(
+            "the directory the case records are read from, and written back to: "
+            "this run appends its D for every case it read, and marks retired any "
+            "case the rule retires. The library is the store, because a decay "
+            "series kept anywhere else is a series that can drift from the case "
+            "it describes"
+        ),
+    )
+    parser.add_argument(
         "--record",
         default=str(GATE_RUNS_DIR),
         help=(
@@ -185,17 +208,22 @@ def main(argv: Sequence[str] | None = None) -> int:
         return EXIT_WITHHELD
 
     model = ModelConfig.parse(args.model)
+    cases_dir = Path(args.cases)
     try:
         # The admitted library, never the raw one: a case that has not separated
         # the three reference agents has not earned a place in the run that decides
-        # whether the bench measures anything (#12, spec story 69).
-        cases = admitted_library(CASES_DIR)
+        # whether the bench measures anything (#12, spec story 69). Then the live
+        # half of it, because a retired case is kept and not scored (#14) — and
+        # `RetirementDisagrees`, a ValueError, is how a record whose status and own
+        # series disagree stops the run rather than being quietly corrected.
+        library = admitted_library(cases_dir)
+        cases = live_library(library)
         gold_sets = load_gold_sets(GOLDSET_DIR, cases)
     except (NotAdmitted, ValueError, KeyError) as unusable:
         print(f"The gate cannot run against this library:\n{unusable}")
         return EXIT_WITHHELD
 
-    print_declared(cases, model, args, len(gold_sets))
+    print_declared(cases, model, args, len(gold_sets), library)
 
     try:
         # Both built before the attestation, so a misconfigured instrument is a
@@ -268,6 +296,32 @@ def main(argv: Sequence[str] | None = None) -> int:
         return EXIT_WITHHELD
 
     print_gate(gate, result)
+
+    # The decay series, after the decision and never before it: what a case scored
+    # is stored whatever the gate answered, and the rule that retires one is read
+    # over two runs rather than over this one (spec stories 72 to 74). Written to
+    # the case records by the run that measured them, so the series a retirement is
+    # re-derived from is the case's own.
+    runs = {run.target.name: run for run in result.target_runs}
+    history = readings_of(
+        cases,
+        hardened=runs[HARDENED.name],
+        weak=runs[WEAK.name],
+        trivial=runs[TRIVIAL.name],
+        model=args.model,
+        ran_on=datetime.now(tz=UTC).date(),
+        # The families the gate did not decide on. A reading from one is stored and
+        # the rule is not applied to it: whether retirement may operate on a family
+        # the bench cannot vouch for is the question ADR-0015 left open.
+        excluded=gate.decision.excluded_families,
+        adjudicator=args.adjudicator_model,
+    )
+    decisions = store(cases_dir, history)
+    # Reloaded, so the retired cases listed are the ones the library now holds —
+    # including any this run retired a moment ago.
+    library = admitted_library(cases_dir)
+    print_retirement(history, decisions, library)
+
     # After everything is printed and before the exit code is read, so the document
     # holds the run the operator just saw rather than a subset of it. Written on all
     # three answers, because passed, failed and not decided are all gate runs and a
@@ -275,7 +329,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     # be a history that cannot show the bench ever failed its own stop (spec story
     # 80). A withheld, declined or aborted run returned above this line: it sent
     # nothing and produced no gate, so there is no run to record.
-    written = record_run(gate, result, cases, Path(args.record), args)
+    written = record_run(
+        gate,
+        result,
+        library,
+        Path(args.record),
+        args,
+        retirement_section(history, decisions, library),
+    )
     print(f"\nthis run's own document: {written}")
     return exit_code(gate)
 
@@ -286,6 +347,7 @@ def record_run(
     cases: Sequence[Case],
     directory: Path,
     args: argparse.Namespace,
+    retirement: str = "",
 ) -> Path:
     """Write this run to a dated document, in the sections it was printed in.
 
@@ -328,6 +390,7 @@ def record_run(
                 ).strip(),
                 "",
                 provenance_section(cases),
+                retirement,
                 "```",
                 "",
             )
@@ -377,6 +440,7 @@ def print_declared(
     model: ModelConfig,
     args: argparse.Namespace,
     gold_sets: int,
+    library: Sequence[Case],
 ) -> None:
     """Everything this run declared before it made a call, printed before it does.
 
@@ -387,10 +451,13 @@ def print_declared(
     print(f"reference agent model: {model}")
     print(f"adjudicating model:    {args.adjudicator_model}  (judged families only)")
     print(f"attacking model:       {args.attacker_model}  (adaptive layer only)")
-    print(f"cases loaded:          {len(cases)}")
+    print(f"cases loaded:          {len(cases)} live of {len(library)} written")
     print(f"gold sets loaded:      {gold_sets}")
     print(f"attempts per case:     {DECLARED_RULE.attempts_per_case}")
-    print_provenance(cases)
+    # The whole library and not the live half: the retirement rate by provenance is
+    # a figure over every case ever written, and one read on the live cases alone
+    # would report that nothing has ever retired (ADR-0012).
+    print_provenance(library)
     print()
     print(DECLARED_RULE.stated())
     print()

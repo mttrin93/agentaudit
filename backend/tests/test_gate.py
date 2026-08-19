@@ -15,6 +15,7 @@ to fail a working bench, and a lucky one must not pass a broken one.
 import argparse
 import ast
 import itertools
+import shutil
 from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import fields, replace
 from pathlib import Path
@@ -26,7 +27,13 @@ from backend.bench.adjudication import Completion
 from backend.bench.calibration import CalibrationResult, TargetRun, run_calibration
 from backend.bench.evaluator import Verdict
 from backend.bench.gate import GateResult, NotAGateRun, read_gate
-from backend.bench.library import Case, Family, LibraryVersion, load_library
+from backend.bench.library import (
+    Case,
+    CaseStatus,
+    Family,
+    LibraryVersion,
+    load_library,
+)
 from backend.bench.measurability import NotMeasurable
 from backend.bench.rule import DECLARED_RULE, GateRule
 from backend.bench.scorer import (
@@ -572,10 +579,16 @@ def test_the_entry_point_writes_the_document_rather_than_only_being_able_to(
     terminal. The three consent statements and the interrupt are answered the way
     the calibration fixture answers them — a run that skipped them would exercise a
     path no operator's run takes (ADR-0007).
+
+    Against a **copy** of the library, because this run stores its `D` on the case
+    records it read (#14) and a test that passed by retiring a real case would be a
+    test that breaks the bench to prove itself.
     """
     monkeypatch.setattr("scripts.gate.attest", lambda identity: BENCH_ATTESTATION)
     monkeypatch.setattr("scripts.gate.terminal_approval", lambda identity: CONFIRMING)
     monkeypatch.setattr("scripts.gate.completion_for", _bench_stand_in)
+    cases = tmp_path / "cases"
+    shutil.copytree(CASES_DIR, cases)
 
     code = main(
         [
@@ -587,6 +600,8 @@ def test_the_entry_point_writes_the_document_rather_than_only_being_able_to(
             ADJUDICATOR_STAND_IN,
             "--attacker-model",
             ATTACKER_STAND_IN,
+            "--cases",
+            str(cases),
             "--record",
             str(tmp_path),
         ]
@@ -618,6 +633,21 @@ def test_the_entry_point_writes_the_document_rather_than_only_being_able_to(
     # And no payload reached it, on either side (ADR-0008).
     for case in load_library(CASES_DIR):
         assert case.payload not in written
+
+    # The decay series, stored by the run that measured it: D for every case it read,
+    # on that case's own record (spec story 72). And every case still live, because
+    # this is one run and the rule needs two — the run below the floor that does not
+    # retire anything is the one that proves the two-run rule is wired up.
+    stored = load_library(cases)
+    assert len(stored) == len(load_library(CASES_DIR))
+    for case in stored:
+        assert len(case.history) == 1, (
+            f"{case.id} came out of a gate run with no stored D. A series the "
+            "command does not write is a decay chart nobody has"
+        )
+        assert case.status is CaseStatus.ACTIVE
+    assert "retirement — D stored for every case" in printed
+    assert "retirement — D stored for every case" in written
 
 
 ADJUDICATOR_STAND_IN = "the suite's stub — no model is reached"

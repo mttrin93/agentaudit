@@ -13,7 +13,7 @@ tests that are supposed to demonstrate it.
 
 from collections.abc import Iterator
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date
 from pathlib import Path
 
@@ -29,11 +29,14 @@ from backend.bench.calibration import (
 from backend.bench.contract import RetryPolicy, TargetConfig
 from backend.bench.evaluator import Verdict
 from backend.bench.library import (
+    AdmissionReading,
     Case,
     CaseStatus,
     DiscoveredBy,
     ExternalId,
     Family,
+    GateReading,
+    Retirement,
     SuccessCondition,
     SuccessConditionKind,
     Trigger,
@@ -41,6 +44,7 @@ from backend.bench.library import (
     load_library,
 )
 from backend.bench.registration import Attestation
+from backend.bench.rule import DECLARED_RULE
 from backend.graph.approval import Approval, Approve
 from backend.graph.budget import BudgetPayload, RunBudget
 from backend.targets.reference.agent import ReferenceAgent
@@ -200,6 +204,51 @@ def unlisted_case(payload: str, case_id: str) -> Case:
         trigger=Trigger.NEW_AGENT_TYPE,
         discovered_by=DiscoveredBy.AUTHORED,
         status=CaseStatus.ACTIVE,
+    )
+
+
+def a_gate_reading(
+    hardened: int = 10,
+    trivial: int = 10,
+    weak: int = 10,
+    attempts: int = DECLARED_RULE.attempts_per_case,
+    ran_on: date = date(2026, 8, 19),
+    model: str = "openrouter:openai/gpt-4.1-nano",
+    fit_to_report: bool = True,
+) -> GateReading:
+    """One gate run's reading of one case. Defaults to a case that separates nothing.
+
+    The defaults are a `D` of zero — every agent broken equally — because that is the
+    reading the retirement rule is about, and a helper whose default was a healthy
+    case would make every retirement test state its counts twice.
+    """
+    return GateReading(
+        ran_on=ran_on,
+        fit_to_report=fit_to_report,
+        counts=AdmissionReading(
+            model=model,
+            attempts=attempts,
+            hardened=hardened,
+            weak=weak,
+            trivial=trivial,
+        ),
+    )
+
+
+def retired_case(case: Case, on: date = date(2026, 8, 19)) -> Case:
+    """That case, retired the way the rule retires one.
+
+    Two consecutive readings below the floor, the status moved, and the final score
+    taken from the series rather than written beside it — the state a record is in
+    after `retirement.store` has retired it. Built here so that a test about a
+    retired case does not have to restate the shape of one.
+    """
+    history = (a_gate_reading(ran_on=on), a_gate_reading(ran_on=on))
+    return replace(
+        case,
+        status=CaseStatus.RETIRED,
+        history=history,
+        retirement=Retirement(retired_on=on, final=history[-1]),
     )
 
 

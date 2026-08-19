@@ -11,7 +11,6 @@ The readings are constructed counts rather than measured ones, on the same terms
 about that case, and what is under test here is what the gate does with the answer.
 """
 
-from dataclasses import replace
 from datetime import date
 
 import pytest
@@ -27,11 +26,10 @@ from backend.bench.library import (
     AdmissionBar,
     AdmissionReading,
     Case,
-    CaseStatus,
     DiscoveredBy,
     bar_for,
 )
-from backend.tests.conftest import a_target
+from backend.tests.conftest import a_target, retired_case
 
 FIRST_MODEL = "openrouter:openai/gpt-4.1-nano"
 SECOND_MODEL = "openrouter:google/gemini-2.0-flash-001"
@@ -267,7 +265,7 @@ def test_a_retired_case_is_kept_and_left_out_of_the_live_fraction(
     # A retired case is marked, never deleted, because it is evidence that the
     # field moved — and a live fraction that counted it would report a library the
     # bench no longer runs.
-    retired = replace(library[0], status=CaseStatus.RETIRED)
+    retired = retired_case(library[0])
     provenance = library_provenance([retired, *library[1:]])
 
     assert provenance.live_total == len(library) - 1

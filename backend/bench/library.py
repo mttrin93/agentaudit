@@ -17,7 +17,7 @@ a consumer reads the class off the record and never infers it from the family na
 import hashlib
 import tomllib
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from datetime import date
 from enum import StrEnum
 from pathlib import Path
@@ -44,7 +44,18 @@ class VerdictClass(StrEnum):
 
 
 class Trigger(StrEnum):
-    """Why a case exists. One of six, so the library's growth is auditable."""
+    """Why a case exists. One of six, so the library's growth is auditable.
+
+    A closed set of exactly the six reasons PLAN §6 states, and closed is the
+    whole of the point: a library whose motives are free text can be grown by
+    anybody who can think of a sentence, and "why does this case exist" then has as
+    many answers as it has authors. Every member says what it means in `stated()`,
+    so the answer a case gives is the same answer whoever reads the record.
+
+    Distinct from `DiscoveredBy`, which says *who* found the case. A case can be
+    triggered by a published technique and still have been found by the adaptive
+    attacker, and the two answers are not interchangeable.
+    """
 
     FAMILY_STOPPED_DISCRIMINATING = "family_stopped_discriminating"
     TARGET_PASSED_EVERYTHING = "target_passed_everything"
@@ -53,8 +64,56 @@ class Trigger(StrEnum):
     NEW_TECHNIQUE_PUBLISHED = "new_technique_published"
     SCAN_CHECKLIST_GREW = "scan_checklist_grew"
 
+    def stated(self) -> str:
+        """The reason in the words PLAN §6 states it in.
+
+        The match has no fallback branch on purpose: a seventh trigger must fail the
+        type check rather than exist as a member no reader can be given a reason for.
+        """
+        match self:
+            case Trigger.FAMILY_STOPPED_DISCRIMINATING:
+                return (
+                    "a family stopped discriminating — providers added defences, "
+                    "and an attack that separated careful from careless in January "
+                    "is refused by default in June"
+                )
+            case Trigger.TARGET_PASSED_EVERYTHING:
+                return (
+                    "a target passed everything — either the agent is excellent "
+                    "or the attacks are weak, and the adaptive layer is the only "
+                    "source that can tell the two apart by demonstration"
+                )
+            case Trigger.USER_REPORTED_GAP:
+                return (
+                    "a user reported a gap — a case_gap override from the person "
+                    "who knows their own exposure"
+                )
+            case Trigger.NEW_AGENT_TYPE:
+                return (
+                    "a new agent type arrived — a voice agent needs different "
+                    "payloads from a document agent, so the family stays and the "
+                    "cases change"
+                )
+            case Trigger.NEW_TECHNIQUE_PUBLISHED:
+                return (
+                    "a new technique was published — the library was behind the field"
+                )
+            case Trigger.SCAN_CHECKLIST_GREW:
+                return (
+                    "the scan checklist grew — a new declared control needs an "
+                    "attack that checks it works"
+                )
+
 
 class CaseStatus(StrEnum):
+    """Whether a case is still run, or kept as the record of one that was.
+
+    Two members and no third: retirement is marked, never deleted, because a case
+    that stopped discriminating is evidence that the field moved (CONTEXT.md). A
+    retired case leaves the live library and stays queryable in it, which is why
+    this is a status on the record rather than a file somebody moved.
+    """
+
     ACTIVE = "active"
     RETIRED = "retired"
 
@@ -315,6 +374,63 @@ class AdmissionRecord:
 
 
 @dataclass(frozen=True)
+class GateReading:
+    """What one gate run measured for one case — the reading a decay series is made of.
+
+    One per case per gate run, appended to `Case.history` by the run that made it,
+    so that decay arrives as a series rather than as a surprise (spec story 72).
+
+    **Counts and not a stored `D`**, on the same terms and for the same reason as
+    `AdmissionReading` — which is the type the counts are held in, because a reading
+    of one case against the three reference agents on one model over one denominator
+    is the same measurement whether admission or retirement is the question being
+    put to it. Reusing it keeps one arithmetic: `D` here is computed by the function
+    the gate and the admission bar compute it with, and a record cannot carry a `D`
+    its own counts contradict.
+    """
+
+    ran_on: date
+    """The date of the gate run this reading was taken on."""
+
+    counts: AdmissionReading
+    """What the three reference agents did, on one model, over one denominator."""
+
+    fit_to_report: bool
+    """Whether the case's family was fit to report on the run that read this.
+
+    Recorded rather than inferred later, because the fitness of a family is a fact
+    about the run and not about the library: κ is measured per run, and a reading
+    taken while the adjudicator was below the floor stays a reading taken then.
+
+    It is here because ADR-0015 leaves one question open on purpose — whether the
+    retirement rule may operate on an excluded family's cases — and assigns it to
+    #14's own decision. Until that decision exists, `retirement.py` declines to
+    decide such a case either way rather than resolving the question by default in
+    code. The flag is what lets it decline; it is not itself the answer.
+    """
+
+
+@dataclass(frozen=True)
+class Retirement:
+    """When a case stopped discriminating, and the reading it stopped on.
+
+    The retirement half of `status` (PLAN §6): a retired case is kept with its date
+    and its last discrimination score, never deleted, because a case the field
+    outgrew is evidence that the field moved.
+
+    `final` is the last entry of the case's own history rather than a number written
+    beside it — enforced by `Case.__post_init__` — so the recorded final score is
+    the reading that retired the case and cannot drift from it. There is no
+    `discrimination` field for the same reason `AdmissionReading` has no rate:
+    `retirement.py` derives the score from these counts, and a stored one could
+    contradict them.
+    """
+
+    retired_on: date
+    final: GateReading
+
+
+@dataclass(frozen=True)
 class Case:
     id: str
     family: Family
@@ -370,6 +486,27 @@ class Case:
     cannot be loaded into a run and cannot reach a user (spec story 69).
     """
 
+    history: tuple[GateReading, ...] = ()
+    """What this case has measured on every gate run, oldest reading first.
+
+    The decay series (spec story 72). Ordered by the run that took each reading and
+    never by date, because two runs can share a day and the retirement rule is read
+    over *consecutive runs*: a series sorted by a field that can tie is a series
+    whose "previous run" depends on who sorted it.
+
+    Empty on a case no gate run has read yet, which is every case on the run that
+    first stores one. The readings are appended by the run that made them
+    (`retirement.py`), never transcribed by hand.
+    """
+
+    retirement: Retirement | None = None
+    """When this case stopped discriminating, on a case that has.
+
+    `None` on an active case, and present on exactly the retired ones — the pairing
+    with `status` is enforced below, so a record cannot say *retired* without saying
+    when and on what reading, and cannot carry a retirement while still being run.
+    """
+
     def __post_init__(self) -> None:
         """A case declares one route to its verdict, and the one its class names.
 
@@ -389,6 +526,16 @@ class Case:
         cross-model bar may not record having entered under the single-model one —
         the bar is selected by `discovered_by` (ADR-0012), so a record that
         disagrees with its own provenance is a case that got in on the wrong test.
+
+        The last pair is about retirement, and it keeps `status` and the retirement
+        block from ever saying different things. A retired case has to carry the date
+        and the reading it retired on, an active one may not carry either, and the
+        recorded final score has to *be* the last reading in the case's own history —
+        so "kept with its retirement date and final score" (spec story 74) is a
+        property of the record rather than of whoever wrote it. Whether the
+        retirement *rule* is satisfied is not checked here: the floor is declared in
+        `GateRule` and this module holds no threshold, so that check is
+        `retirement.py`'s (`live_library`).
         """
         if not self.applies_to:
             raise ValueError(
@@ -403,6 +550,30 @@ class Case:
                 f"{self.admission.bar} bar, where that provenance requires "
                 f"{required}. An adaptive-discovered case is graded on a model it "
                 "was not discovered on (ADR-0012)"
+            )
+
+        retired = self.status is CaseStatus.RETIRED
+        if retired and self.retirement is None:
+            raise ValueError(
+                f"{self.id} is marked retired and records no retirement. A retired "
+                "case is kept with its date and its final score, because it is "
+                "evidence that the field moved rather than a case somebody deleted "
+                "(spec story 74)"
+            )
+        if not retired and self.retirement is not None:
+            raise ValueError(
+                f"{self.id} records a retirement and is still {self.status}. One of "
+                "the two is wrong, and a case that is scored while carrying a "
+                "retirement is the one the library must not hold"
+            )
+        if self.retirement is not None and (
+            not self.history or self.retirement.final != self.history[-1]
+        ):
+            raise ValueError(
+                f"{self.id} records a final score that is not the last reading in "
+                "its own history. The final score is the reading the case retired "
+                "on, and a number written beside the series rather than taken from "
+                "it is a score that can drift from what was measured"
             )
 
         match self.verdict_class:
@@ -447,10 +618,19 @@ class LibraryVersion:
 
     **Read off the records rather than declared beside them.** A hand-kept version
     string is a version string somebody forgets to raise on the run where it
-    mattered, and the digest is over what actually ran: every field of every case,
-    including its payload and its criterion, so a payload edited without a rename
-    moves the version. It is a hash and not the records, so nothing here publishes
-    a payload (ADR-0008).
+    mattered, and the digest is over what actually ran: every field of every case
+    that decides what the case does, including its payload and its criterion, so a
+    payload edited without a rename moves the version. It is a hash and not the
+    records, so nothing here publishes a payload (ADR-0008).
+
+    **The record of past runs is not part of the case that ran.** `history` and
+    `retirement` are excluded from the digest — the two fields a gate run *writes*
+    (spec story 72). A digest that moved when a reading was appended would report
+    two runs of the identical eighteen cases as incomparable, which is the opposite
+    of what this version exists to say, and it would do it on every run by
+    construction. Everything a case is *asked* stays in, `status` included: a
+    library one of whose cases has retired is a different library, and it is one a
+    live run no longer holds at all.
     """
 
     cases: int
@@ -465,7 +645,7 @@ class LibraryVersion:
         """
         recorded = sorted(cases, key=lambda case: case.id)
         digest = hashlib.sha256(
-            "\n".join(repr(case) for case in recorded).encode("utf-8")
+            "\n".join(_versioned(case) for case in recorded).encode("utf-8")
         )
         return cls(cases=len(recorded), digest=digest.hexdigest()[:12])
 
@@ -493,6 +673,48 @@ disagreed about the empty case would put two different digests on the same fact.
 """
 
 
+RUN_RECORD_FIELDS = frozenset({"history", "retirement"})
+"""The fields of a case a gate run writes, and so the ones a version leaves out.
+
+Named here rather than inlined in `LibraryVersion.of` because it is the whole of
+the exception: every other field is versioned, including any field added later,
+which is the direction the default has to point in.
+"""
+
+
+def _versioned(case: Case) -> str:
+    """The case as it was asked, without the record of the runs that asked it.
+
+    Built from `dataclasses.fields` rather than from a list of names, so that a
+    field added to `Case` is versioned unless somebody deliberately adds it to
+    `RUN_RECORD_FIELDS`. A digest over a hand-written list of fields is a digest
+    that silently stops covering the next payload-bearing field somebody writes.
+    """
+    return ", ".join(
+        f"{field.name}={getattr(case, field.name)!r}"
+        for field in fields(case)
+        if field.name not in RUN_RECORD_FIELDS
+    )
+
+
+def trigger_counts(cases: Iterable[Case]) -> dict[Trigger, int]:
+    """How many of these cases each trigger accounts for.
+
+    The counterpart to `admission.provenance_counts`, over the closed set that says
+    *why* a case exists rather than who found it. It makes the library's growth
+    auditable rather than anecdotal (spec story 15): a run prints the census, so a
+    library filling up with one trigger's cases is visible in the run that made it.
+
+    Every member is present whether or not it is used, for the reason every other
+    census here is total — a missing key reads as an absence of the thing rather
+    than as a count of zero.
+    """
+    counts = dict.fromkeys(Trigger, 0)
+    for case in cases:
+        counts[case.trigger] += 1
+    return counts
+
+
 def load_library(directory: Path) -> list[Case]:
     """Load every case record in a directory, ordered by file name for a
     stable run order."""
@@ -504,6 +726,7 @@ def load_case(path: Path) -> Case:
     external_id = record["external_id"]
     success = record.get("success_condition")
     judged = record.get("judged_condition")
+    history = tuple(_reading(entry) for entry in record.get("history", ()))
     return Case(
         id=record["id"],
         family=Family(record["family"]),
@@ -534,6 +757,8 @@ def load_case(path: Path) -> Case:
         status=CaseStatus(record["status"]),
         citation=record.get("citation"),
         admission=_admission(record.get("admission")),
+        history=history,
+        retirement=_retirement(record.get("retirement"), history),
     )
 
 
@@ -556,6 +781,48 @@ def _admission(block: dict[str, Any] | None) -> AdmissionRecord | None:
             for reading in block["readings"]
         ),
     )
+
+
+def _reading(entry: dict[str, Any]) -> GateReading:
+    """One entry of a case's decay series, as the run that made it wrote it.
+
+    `fit_to_report` is read rather than defaulted. A missing flag would make the
+    answer a record acquires by silence the one that lets the retirement rule
+    operate, and that is exactly the question ADR-0015 leaves open.
+    """
+    return GateReading(
+        ran_on=entry["ran_on"],
+        fit_to_report=entry["fit_to_report"],
+        counts=AdmissionReading(
+            model=entry["model"],
+            attempts=entry["attempts"],
+            hardened=entry["hardened"],
+            weak=entry["weak"],
+            trivial=entry["trivial"],
+            adjudicator=entry.get("adjudicator"),
+        ),
+    )
+
+
+def _retirement(
+    block: dict[str, Any] | None, history: tuple[GateReading, ...]
+) -> Retirement | None:
+    """The retirement block of a record, or `None` for a case still being run.
+
+    The final score is taken from the series rather than read off the block, so a
+    record cannot state a final score its own history does not contain. A record
+    that claims a retirement with no reading behind it is refused here rather than
+    reaching `Case`, where the message would be about a list index.
+    """
+    if block is None:
+        return None
+    if not history:
+        raise ValueError(
+            f"a retirement on {block['retired_on']} with no reading behind it is an "
+            "assertion, not a measurement: a case is retired by two consecutive "
+            "readings below the floor, and this record holds none"
+        )
+    return Retirement(retired_on=block["retired_on"], final=history[-1])
 
 
 def bar_for(discovered_by: DiscoveredBy) -> AdmissionBar:

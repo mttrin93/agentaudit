@@ -587,8 +587,12 @@ over real HTTP on `stub:obedient`, with the two judged families adjudicated by t
 suite's deterministic stub and **no κ measured in the run**. The adaptive layer ran
 after the fixed suite against the same three agents, on the scripted stand-in
 attacker, `T = 8`, `k = 2`. Library version `18 cases, sha256:a10ab0c566aa`. The
-run's own document is [`gate-runs/gate-2026-08-18T21-20-11Z.md`](./gate-runs/gate-2026-08-18T21-20-11Z.md), written by the
-entry point; what follows is a reading of it.
+run's own document is [`gate-runs/fixture-gate-2026-08-18T21-20-11Z.md`](./gate-runs/fixture-gate-2026-08-18T21-20-11Z.md), written by the
+entry point; what follows is a reading of it. **The `fixture-` prefix is the
+convention for a run made on stub models**, here and in `swap-runs/`: it exercised
+the whole path and it certifies nothing, so a directory listing shows which records
+are evidence about an agent and which are evidence about the pipeline. The prefix is
+applied by hand — the entry point names its own document from the timestamp alone.
 
 ##### The scored layer, which decided the gate
 
@@ -884,7 +888,7 @@ so what follows includes the family it cost.
 
 **The run, and exactly what equipment made it.** The entry point is
 `scripts/swap.py`, and it made both runs and wrote them to their own document,
-[`swap-runs/swap-2026-08-19T08-28-35Z.md`](./swap-runs/swap-2026-08-19T08-28-35Z.md).
+[`swap-runs/fixture-swap-2026-08-19T08-28-35Z.md`](./swap-runs/fixture-swap-2026-08-19T08-28-35Z.md).
 Everything below is a reading of that file; a figure here that is not in it is a
 mistake on this page. The whole eighteen-case admitted library against all three
 reference agents at ten attempts per case — **540 attempts per model, 1,080 in

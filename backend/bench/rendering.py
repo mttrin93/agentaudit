@@ -35,10 +35,16 @@ follows from the same record as the figures do. **No third label was invented**:
 genuinely third evidentiary class would have to extend the claim list rather than pick
 the nearer of two, which is ADR-0017's own consequence and not this module's to spend.
 
-**The gate is named in one section and nowhere else** (ADR-0018). It appears in
-provenance, in the bench's own words — *the bench passed its gate* — and there is no
-sentence anywhere in this document in which the target passes or fails anything. The
-target has rates, intervals and bands.
+**The gate's result is cited in one section and its answer reaches no other**
+(ADR-0018). The citation sits in provenance, in the bench's own words — *the bench
+passed its gate* — and no other section carries one of the gate's three answers, so no
+re-rendering can put `PASSED` beside this target's name. The word *gate* appears once
+more, in the per-family `D` line, because `D` is a reading taken **at** a gate run and
+a figure with no provenance is worse than one with an awkward provenance. Every such
+line says in the same breath that it is a fact about the instrument and not a figure
+about this target, and a test holds it to that. There is no sentence anywhere in this
+document in which the target passes or fails anything: the target has rates, intervals
+and bands.
 
 **The reference agents are not named here, and the band still says what it means.**
 `Band.stated()` and `BandCuts.stated()` name the hardened and weak agents, which is
@@ -65,8 +71,17 @@ from backend.bench.payload import TargetPayload, document, write
 from backend.bench.reproducibility import Reproducibility
 from backend.bench.scorer import Band
 
-MARKDOWN_SUFFIX = ".md"
-PAYLOAD_SUFFIX = ".json"
+REPORT_MARKDOWN = "report.md"
+"""The name of the document a human reads."""
+
+REPORT_PAYLOAD = "report.json"
+"""The name of the artefact a machine verifies.
+
+Two fixed names in one directory per run, rather than a caller-chosen stem: a
+recipient handed a directory has to know which file `verify.py` reads and which one
+the digest was taken over, and a name that varies by call site is a name they have to
+be told.
+"""
 
 FORMAT_UNVALIDATED = (
     "**The format of this report has never been validated against a real "
@@ -74,14 +89,25 @@ FORMAT_UNVALIDATED = (
     "documentation order (Annex IV), which is a defensible default and not a "
     "finding: ADR-0001 records that the format is a question for the readers this "
     "document is shaped for, and none has been asked. A reader who needs it in "
-    "another shape — a questionnaire template, SOC 2, ISO 42001 — is reading a "
-    "limitation of this bench and not a claim about their expectations. The same "
+    "another shape — a questionnaire template, SOC 2, ISO 42001 — is reading "
+    "something this bench has not done, and not a claim about what they should "
+    "expect. The same "
     "statement is recorded in `docs/validation.md`."
 )
 """The label ADR-0001 requires, in the document rather than only in the repository.
 
 Stated because the alternative is silence, and silence is indistinguishable from
 having asked a reader and been told this shape was right.
+"""
+
+"""ADR-0017's first claim, printed beside the second and never alone.
+
+*This reached you unaltered*, stated for the whole artefact including the adaptive
+section, because a security report with an unprotected region would be a worse
+artefact for a strictly worse reason. It deliberately does not say the document **is**
+signed: an unsigned run must be impossible to present as signed, so this paragraph
+describes what the binding makes checkable and `verify.py` is what answers whether it
+checks out.
 """
 
 INTEGRITY_CLAIM = (
@@ -94,6 +120,14 @@ INTEGRITY_CLAIM = (
     "answered by `scripts/verify.py`, not by this sentence."
 )
 
+"""ADR-0017's second claim, and the reason the first one is not enough on its own.
+
+A valid signature over `A_break = +0.25` invites the reading that the figure is
+reproducible, and it is not: the same declared configuration produced +0.00 and +0.25
+on two certified runs a day apart. So the scope of re-derivability is stated in the
+document rather than left to be inferred from the presence of a signature.
+"""
+
 RE_DERIVABILITY_CLAIM = (
     "**Re-derivability, for the scored layer only.** Every figure in the scored "
     "sections follows from the recorded attempts, the case records and the rule "
@@ -103,6 +137,15 @@ RE_DERIVABILITY_CLAIM = (
     "stating one of them alone would be claiming the stochastic half was reproducible "
     "by omission (ADR-0010, ADR-0017)."
 )
+
+"""What this document refuses to be, printed in section 1 and again in section 8.
+
+Twice on purpose, and not by an accident of reuse: a reader who arrives looking for a
+badge turns to the declaration-of-conformity section, and a refusal placed only in an
+introduction they skipped would tell them nothing. The most likely way this report
+fails is by reading like a grade, and no one sentence is the safeguard — the safeguard
+is that the page never makes a single figure easy to construct.
+"""
 
 NOT_A_CLAIM_OF_CONFORMITY = (
     "This document is evidence, not a certificate. It carries no claim of "
@@ -159,6 +202,18 @@ ANNEX_IV_POINTS: Mapping[int, str] = {
 Held as data so that the order is a property of this module rather than of the order
 somebody wrote the functions in, and so a test can read it.
 """
+
+
+def _listed(rows: Iterable[str], absence: str) -> tuple[str, ...]:
+    """Those rows, or one line saying the list is empty and what that reads as.
+
+    One shape for every list in this document, because the alternative is four
+    variations on the same branch and a fifth that quietly drops the empty case — and
+    a dropped empty case is a section that reads as having had nothing to declare when
+    it had something to declare and no way to declare it.
+    """
+    listed = tuple(rows)
+    return listed or (absence,)
 
 
 @dataclass(frozen=True)
@@ -263,7 +318,7 @@ class Published:
     rendering_path: Path
 
 
-def publish(payload: TargetPayload, directory: Path, stem: str = "report") -> Published:
+def publish(payload: TargetPayload, directory: Path) -> Published:
     """Write the Markdown report beside the canonical JSON, bound to it by digest.
 
     In this order, and it is the only order available: the rendering exists, its
@@ -285,12 +340,12 @@ def publish(payload: TargetPayload, directory: Path, stem: str = "report") -> Pu
             "`rendered_sha256` cannot be bound to it: the digest is taken over the "
             "document, so the document cannot contain it (ADR-0017)"
         )
-    rendering_path = directory / f"{stem}{MARKDOWN_SUFFIX}"
+    rendering_path = directory / REPORT_MARKDOWN
     rendering_path.parent.mkdir(parents=True, exist_ok=True)
     rendering_path.write_text(markdown, encoding="utf-8")
     return Published(
         payload=bound,
-        payload_path=write(bound, directory / f"{stem}{PAYLOAD_SUFFIX}"),
+        payload_path=write(bound, directory / REPORT_PAYLOAD),
         rendering_path=rendering_path,
     )
 
@@ -347,7 +402,8 @@ def _masthead(body: Mapping[str, Any], ordered: Sequence[Section]) -> tuple[str,
         f"`{body['artefact']}`, artefact version {body['artefact_version']}. "
         "One run against one target.",
         "",
-        "**Contents** — the nine points of Annex IV, in the Act's order:",
+        "**Contents** — the nine points of Annex IV in the Act's order, point 5 "
+        "answered in two sections:",
         "",
         *(f"- {section.number} — {section.title}" for section in ordered),
         "",
@@ -432,10 +488,10 @@ def _headline(declared: Mapping[str, Any]) -> tuple[str, ...]:
 def _how_the_run_was_made(body: Mapping[str, Any]) -> Section:
     """Provenance: who attested, on which models, against which library, at what cost.
 
-    The bench's own gate is cited here and in no other section (ADR-0018). This is
-    the part of a document that says *how this was made*, which is where a reader
-    looks for the ruler's certification — not in the section carrying what the ruler
-    measured.
+    The bench's gate **result** is cited here and in no other section (ADR-0018).
+    This is the part of a document that says *how this was made*, which is where a
+    reader looks for the ruler's certification — not in the section carrying what the
+    ruler measured.
     """
     provenance = body["provenance"]
     attestation = provenance["attestation"]
@@ -521,23 +577,16 @@ def _controls(declared: Mapping[str, Any]) -> Section:
             "",
             "### Declared",
             "",
-            *(f"- {control['stated']}" for control in declared["controls"]),
-            *(
-                ()
-                if declared["controls"]
-                else ("- Nothing was declared, so nothing here was examined.",)
+            *_listed(
+                (f"- {control['stated']}" for control in declared["controls"]),
+                "- Nothing was declared, so nothing here was examined.",
             ),
             "",
             "### Not declared",
             "",
-            *(f"- {absent['stated']}" for absent in declared["absent"]),
-            *(
-                ()
-                if declared["absent"]
-                else (
-                    "- The checklist asks about no control this target left "
-                    "undeclared.",
-                )
+            *_listed(
+                (f"- {absent['stated']}" for absent in declared["absent"]),
+                "- The checklist asks about no control this target left undeclared.",
             ),
         ),
     )
@@ -552,6 +601,11 @@ def _figures(measured: Mapping[str, Any]) -> Section:
     Every family stands alone. Nothing here reads two of them, which is why a reader
     who wants to compare two families reads two blocks and a reader who wants one
     number does not get one (ADR-0005).
+
+    The per-family coverage note (ADR-0002) is printed for the families whose figures
+    this report publishes, and for those only: a withheld or unmeasurable family has no
+    figure for the note to qualify, and the boundary of a claim printed beside an
+    absent claim would read as the claim having been made.
     """
     cuts = measured["cuts"]
     return Section(
@@ -598,9 +652,11 @@ def _family_blocks(measured: Mapping[str, Any]) -> tuple[str, ...]:
         return (
             "### No family's rate is published in this report",
             "",
-            "Every family was either not measurable against this target or is "
-            "withheld for a stated reason. Both are listed below, and neither is a "
-            "rate of zero.",
+            "This run produced no rate this report may publish. What it did produce "
+            "is below — the families this target could not be measured on, and the "
+            "families whose rate is withheld with the reading that barred it. "
+            "Neither of those is a rate of zero, and neither says the target "
+            "resisted anything.",
             "",
         )
     return tuple(line for entry in entries for line in _family_block(entry))
@@ -700,12 +756,11 @@ def _withheld(withheld: Sequence[Mapping[str, Any]]) -> tuple[str, ...]:
     The reason travels with the absence, because a withheld family with no reading
     beside it is indistinguishable from a family the bench forgot to run (ADR-0015).
     """
-    if not withheld:
-        return (
-            "- None. Every judged family in this run reached the declared κ floor, "
-            "so no family's rate is withheld.",
-        )
-    return tuple(f"- {one['stated']}." for one in withheld)
+    return _listed(
+        (f"- {one['stated']}." for one in withheld),
+        "- None. Every judged family in this run reached the declared κ floor, so no "
+        "family's rate is withheld.",
+    )
 
 
 def _not_measurable(unanswerable: Sequence[Mapping[str, Any]]) -> tuple[str, ...]:
@@ -715,15 +770,14 @@ def _not_measurable(unanswerable: Sequence[Mapping[str, Any]]) -> tuple[str, ...
     zero: a target the bench never measured has to stay distinguishable from one that
     resisted everything.
     """
-    if not unanswerable:
-        return (
-            "- None. Every family's precondition was met by this target, so no "
-            "family is unmeasured.",
-        )
-    return tuple(
-        f"- **{one['family']}**: {one['stated']}. This is not a rate of zero — "
-        "nothing was measured, so there is no rate to read."
-        for one in unanswerable
+    return _listed(
+        (
+            f"- **{one['family']}**: {one['stated']}. This is not a rate of zero — "
+            "nothing was measured, so there is no rate to read."
+            for one in unanswerable
+        ),
+        "- None. Every family's precondition was met by this target, so no family is "
+        "unmeasured.",
     )
 
 
@@ -743,9 +797,13 @@ def _not_tested_at_all(gaps: Sequence[Mapping[str, Any]]) -> Section:
         title="What this bench does not test at all",
         body=(
             "The boundary of the claim, stated rather than left to be inferred from "
-            "the labels above. These are listed and not closed: new families to "
-            "cover them are the lowest priority this project holds, and a gap is not "
-            "a defect in this run.",
+            "the labels above. The published lists these categories are read against "
+            "are the **OWASP GenAI LLM Top 10 2026** and the **OWASP Top 10 for "
+            "Agentic Applications 2026** — the same lists the identifiers in section "
+            "4 come from (ADR-0002) — so this section uses a public list as a "
+            "coverage checklist and not only as a label. These are listed and not "
+            "closed: new families to cover them are the lowest priority this project "
+            "holds, and a gap is not a defect in this run.",
             "",
             *(f"- {gap['stated']}." for gap in gaps),
             "",
@@ -787,19 +845,14 @@ def _adaptive(adaptive: Mapping[str, Any]) -> Section:
             "beat this target is a working unpublished exploit, and this document is "
             "the one that leaves the building (ADR-0008).",
             "",
-            *(
-                f"- {episode['stated']} (over {episode['turns']} turns)."
-                for episode in episodes
-            ),
-            *(
-                ()
-                if episodes
-                else (
-                    "- No episode was recorded. That is not the same reading as an "
-                    "attacker that stopped without breaking the target: the first "
-                    "says this layer did not run, and neither says the target "
-                    "resisted.",
-                )
+            *_listed(
+                (
+                    f"- {episode['stated']} (over {episode['turns']} turns)."
+                    for episode in episodes
+                ),
+                "- No episode was recorded. That is not the same reading as an "
+                "attacker that stopped without breaking the target: the first says "
+                "this layer did not run, and neither says the target resisted.",
             ),
             "",
             "**Families some episode broke**: "

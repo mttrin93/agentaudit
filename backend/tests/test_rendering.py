@@ -51,7 +51,6 @@ from backend.bench.scorer import Band, GateOutcome
 from backend.tests.test_payload import (
     FORBIDDEN_IN_A_KEY,
     a_payload,
-    a_provenance,
     a_result,
     an_entry,
 )
@@ -133,9 +132,9 @@ def test_every_section_states_its_own_reproducibility_and_three_read_the_payload
 # --- The binding: the digest is inside the payload, before any signature ------
 
 
-def test_the_digest_of_the_rendering_is_bound_into_the_payload_before_a_signature(
-    tmp_path: Path,
-) -> None:
+def test_the_digest_of_the_rendering_is_bound_into_the_payload_before_a_signature() -> (
+    None
+):
     payload = a_payload()
     assert payload.rendered_sha256 is None
     assert document(payload)["rendered_sha256"] is None
@@ -272,6 +271,11 @@ def test_the_negative_coverage_list_is_printed_with_a_reason_for_every_gap() -> 
         assert gap.reason in text
     assert "listed and not closed" in " ".join(gaps_section.body)
 
+    # And the list it is read against is named, so a reader is not left to guess which
+    # published categories these four are missing from (ADR-0002, spec story 11).
+    assert "OWASP GenAI LLM Top 10 2026" in text
+    assert "OWASP Top 10 for Agentic Applications 2026" in text
+
 
 # --- Each family's own boundary, beside its own figure (ADR-0002) ------------
 
@@ -361,6 +365,20 @@ def test_the_gate_is_cited_as_provenance_and_its_answer_reaches_no_other_section
                 f"section {section.number} carries a gate answer: {line}"
             )
 
+    # The word reaches one other line — `D`, which is a reading taken at a gate run —
+    # and that line says what it is in the same breath, because a figure whose
+    # correctness depends on an adjacent caption is one that will eventually be read
+    # without it (ADR-0018's rejected option four).
+    for section in ordered:
+        if section.number == "2":
+            continue
+        for line in section.body:
+            if "gate" in line:
+                assert "`D`" in line and "not a figure about this target" in line, (
+                    f"section {section.number} names the gate outside the citation: "
+                    f"{line}"
+                )
+
     # And there is no sentence anywhere in which this target passes or fails: the
     # vocabulary of pass and fail belongs to the gate.
     text = render(payload)
@@ -385,6 +403,10 @@ def test_the_band_is_stated_by_construction_and_names_no_reference_agent() -> No
     assert (
         f"{cuts['holds_at_or_below']:.2f} and {cuts['fails_at_or_above']:.2f}" in text
     )
+
+    # Every band, not only the ones this run drew: a band with no words beside it
+    # would render as a bare grade, and a new member would render as a `KeyError`.
+    assert set(BAND_IN_A_TARGET_REPORT) == set(Band)
 
     bands = {
         entry["band"]
@@ -511,10 +533,7 @@ def _measuring(*entries: FamilyEntry) -> TargetPayload:
     """
     result = a_result()
     return a_payload(
-        result=replace(
-            result, measured=replace(result.measured, deterministic=entries)
-        ),
-        provenance=a_provenance(),
+        result=replace(result, measured=replace(result.measured, deterministic=entries))
     )
 
 

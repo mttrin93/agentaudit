@@ -64,7 +64,7 @@ from backend.bench.adaptive.budget import DECLARED_ADAPTIVE_BUDGET, AdaptiveBudg
 from backend.bench.adaptive.scripted import SCRIPTED_ATTACKER
 from backend.bench.adjudication import Completion
 from backend.bench.calibration import CalibrationResult, run_calibration
-from backend.bench.contract import TargetConfig, TargetUnreachable
+from backend.bench.contract import TargetConfig, TargetFailure, TargetUnreachable
 from backend.bench.library import Case, Family, LibraryVersion, VerdictClass
 from backend.bench.registration import Attestation, issue_nonce
 from backend.bench.rule import DECLARED_RULE, GateRule
@@ -295,6 +295,16 @@ class RunRecord:
     )
     confirmed_by: str = ""
     result: CalibrationResult | None = None
+    failure: TargetFailure | None = None
+    """The named transport outcome that stopped this run, if one did.
+
+    Kept as the enum the transport raised rather than folded into `statement`,
+    because the four the spec names are four different jobs for the person reading
+    the run and a reporting surface has to be able to name the one it got. `None`
+    for every run that was not stopped by the wire — and a failure here is never a
+    verdict, never an attempt and never a finding: `TargetUnreachable` is raised
+    precisely so that no counter has anywhere to put it.
+    """
 
     @property
     def spent(self) -> dict[Layer, int]:
@@ -570,6 +580,10 @@ def _execute(record: RunRecord, config: BenchConfig, pending: PendingApproval) -
         )
         return
     except TargetUnreachable as unreachable:
+        # The outcome under its own name, beside the sentence that says what it is
+        # not. A run that reported only the sentence would leave a caller parsing
+        # prose to tell a quota from an outage.
+        record.failure = unreachable.failure
         record.settle(RunStatus.FAILED, str(unreachable))
         return
     except Exception as failure:

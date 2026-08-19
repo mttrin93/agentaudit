@@ -13,9 +13,9 @@ allowance.
 """
 
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
-from backend.bench.adaptive.episode import AdaptiveEpisode
+from backend.bench.adaptive.episode import AdaptiveEpisode, EpisodeOutcome
 from backend.bench.contract import Transcript
 from backend.bench.evaluator import Verdict
 from backend.bench.library import EMPTY_LIBRARY, Family, LibraryVersion, VerdictClass
@@ -65,11 +65,55 @@ class Attempt:
 
 @dataclass(frozen=True)
 class Position:
-    """Where the run is in the library."""
+    """Where the run is in the library: family, case and attempt.
+
+    The three units of the scored layer, in the order CONTEXT.md keeps them apart
+    in, and the family is on the record rather than looked up from the case later
+    for the reason `Attempt.family` is: a position that had to be joined back to a
+    case to say which family it belonged to is a position a reader can join to the
+    wrong one.
+    """
 
     target_name: str
+    family: Family
     case_id: str
     attempt_index: int
+    """Which of the case's attempts is in flight, counted from zero.
+
+    An attempt is the unit of the denominator, so this is an index into the ten
+    of one case and never a count of anything — the run has made
+    `len(attempts)` of them, which is a different number and lives elsewhere.
+    """
+
+
+@dataclass(frozen=True)
+class EpisodePosition:
+    """Where the adaptive layer is: family, episode and turn.
+
+    A second type rather than a wider `Position`, on ADR-0010's own reasoning. The
+    two layers report their position in different units — case and attempt against
+    episode and turn — and a single record carrying both would be the one place a
+    reader could read an episode index as an attempt index. Neither field here is
+    a denominator: `index` counts the episodes this run has started, and `turn`
+    counts the probes sent inside the current one, and no rate is computed over
+    either (CONTEXT.md).
+    """
+
+    target_name: str
+    family: Family
+    index: int
+    """Which episode of this run is running, counted from one.
+
+    An ordinal, not a sample size. An episode has no denominator, so this may not
+    become one by being divided into anything.
+    """
+
+    turn: int
+    """Turns taken in this episode so far — probes sent, and nothing else.
+
+    Zero while the attacker is deciding what to do first, which is a true
+    statement about an episode that has reached the model and not the endpoint.
+    """
 
 
 @dataclass
@@ -93,6 +137,23 @@ class RunState:
     """
 
     position: Position | None = None
+    """Where the scored layer is, or `None` for a run that has attempted nothing.
+
+    `None` rather than a zeroed position, because a run holding an interrupt and a
+    run on the first attempt of the first case are different facts and only one of
+    them has sent anything.
+    """
+
+    episode_position: EpisodePosition | None = None
+    """Where the adaptive layer is, or `None` for a run that has not reached it.
+
+    The second layer runs strictly after the whole scored suite (ADR-0010), so
+    this is `None` for most of a run's life — and it stays `None` rather than
+    becoming a zeroed episode, because a layer that has not started and a layer
+    that has found nothing are the two readings a reporting surface must never
+    merge.
+    """
+
     attempts: list[Attempt] = field(default_factory=list)
     episodes: list[AdaptiveEpisode] = field(default_factory=list)
     """What the adaptive layer did, in a field of its own.
@@ -107,8 +168,39 @@ class RunState:
 
     spent: dict[Layer, int] = field(default_factory=lambda: dict.fromkeys(Layer, 0))
 
-    def enter(self, target_name: str, case_id: str, attempt_index: int) -> None:
-        self.position = Position(target_name, case_id, attempt_index)
+    def enter(self, target_name: str, family: Family, case_id: str, index: int) -> None:
+        """Move the scored position to the attempt about to be sent."""
+        self.position = Position(target_name, family, case_id, index)
+
+    def enter_episode(self, target_name: str, family: Family) -> None:
+        """Move the adaptive position to a new episode, before its first turn.
+
+        A method of its own, and it writes to a field of its own: an adaptive
+        layer that could move `position` would put an episode where the scored
+        layer's case is, and `backend/tests/test_adaptive_attacker.py` asserts it
+        does not (ADR-0010).
+        """
+        started = (
+            1 if self.episode_position is None else self.episode_position.index + 1
+        )
+        self.episode_position = EpisodePosition(
+            target_name=target_name, family=family, index=started, turn=0
+        )
+
+    def enter_turn(self, turn: int) -> None:
+        """Record that the current episode has taken one more turn.
+
+        The count is passed in rather than incremented here, because the episode
+        already holds it — turns taken are probes sent, and a second counter that
+        drifted from the transcripts would report a turn nobody could point at.
+        """
+        if self.episode_position is None:
+            raise ValueError(
+                "a turn belongs to an episode, and this run state has entered "
+                "none. A turn recorded outside an episode is a turn with no "
+                "family and no episode to be reported under"
+            )
+        self.episode_position = replace(self.episode_position, turn=turn)
 
     @property
     def calls_spent(self) -> int:
@@ -190,3 +282,16 @@ class RunState:
         and the judge that produces the narrative arrives in #8.
         """
         return [a for a in self.attempts if a.verdict is Verdict.SUCCEEDED]
+
+    @property
+    def broken_episodes(self) -> list[AdaptiveEpisode]:
+        """The episodes that found a route. The adaptive layer's findings so far.
+
+        An **adaptive finding** and never a `Finding`, and a second property rather
+        than a `findings` that spans both lists: these carry no rate, no interval,
+        no band and no `D`, and the one thing a reporting surface must not be able
+        to do is add them to `succeeded_attempts` (CONTEXT.md, ADR-0010). The
+        remainder are **censored** — the attacker stopped — which is not the same
+        reading as a target that held, so nothing here counts the other outcome.
+        """
+        return [e for e in self.episodes if e.outcome is EpisodeOutcome.BROKEN]

@@ -72,7 +72,7 @@ def run_attempt(
     # visible as having started after it.
     began = time.monotonic()
     run_state.authorise_call(Layer.SCORED, target.retry.sends)
-    run_state.enter(target.name, case.id, index)
+    run_state.enter(target.name, case.family, case.id, index)
     transcript = send_message(
         target, case.payload, session_id=f"{case.id}-{index}-{uuid.uuid4()}"
     )

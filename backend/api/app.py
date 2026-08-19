@@ -1,10 +1,20 @@
 """The HTTP surface: a nonce, a run, and the answer to the run's interrupt.
 
-Three routes and nothing else yet. `POST /nonces` issues the value an operator
-plants to prove they control the endpoint; `POST /runs` records the attestation,
-declares the estimate and halts; `POST /runs/{id}/approval` answers the halt. The
-progress route is #55 and the report route is #56 — both read records this module
-already keeps, and neither is written here.
+Four routes. `POST /nonces` issues the value an operator plants to prove they
+control the endpoint; `POST /runs` records the attestation, declares the estimate
+and halts; `POST /runs/{id}/approval` answers the halt; `GET /runs/{id}` says where
+the run has got to. The report route is #56 and reads records this module already
+keeps.
+
+**Progress is reported per layer, and there is no figure that spans them.**
+Position in the scored layer is family, case and attempt; in the adaptive layer it
+is family, episode and turn — different units, different models, and no field
+anywhere that adds the two (CONTEXT.md, ADR-0010). Calls spent and findings so far
+are per layer for the reason the estimate is two figures: a blended number hides
+which half of a run is consuming the operator's budget. A layer the run has not
+reached says so, because a zero there would read as a layer that ran and found
+nothing — and a run stopped on the wire reports its named transport outcome under
+its own name, never as a security result.
 
 **The interrupt is a route rather than a request field, and that is the whole
 point.** A `confirmed: true` field on the start request would be a form, answered
@@ -48,6 +58,7 @@ from backend.api.runs import (
     NoLongerWaiting,
     NonceNotIssued,
     RunRecord,
+    RunStatus,
 )
 from backend.bench.admission import admitted_library
 from backend.bench.contract import RetryPolicy, TargetConfig
@@ -237,6 +248,235 @@ def response_for(record: RunRecord) -> RunResponse:
     )
 
 
+SCORED_NOT_STARTED = (
+    "the scored layer has not started: nothing has been sent to the target, so "
+    "there is no case in flight and no attempt to report. Its findings so far are "
+    "absent rather than zero — a zero would read as a suite that ran and found "
+    "nothing"
+)
+
+ADAPTIVE_NOT_REACHED = (
+    "the run has not reached the adaptive layer: it starts only once the whole "
+    "scored suite has finished (ADR-0010), so there is no episode and no turn yet. "
+    "Its findings so far are absent rather than zero — a zero would read as an "
+    "attacker that ran and found nothing"
+)
+
+NOT_A_SECURITY_RESULT = (
+    "No attempt is recorded and nothing here is a security result: an endpoint "
+    "having a bad minute and an agent that defended itself are the same silence on "
+    "the wire and opposite facts about the target"
+)
+
+
+class ScoredPosition(BaseModel):
+    """Where the scored layer is: family, case and attempt.
+
+    Three fields because they are three things (CONTEXT.md). The attempt is
+    counted from one, so `attempt: 1` is the first of the case's ten — an ordinal
+    a reader is watching go by, and never a count of what the run has done.
+    """
+
+    family: str
+    case_id: str
+    attempt: int
+
+
+class AdaptivePosition(BaseModel):
+    """Where the adaptive layer is: family, episode and turn.
+
+    A separate model from `ScoredPosition` rather than a shared one with a layer
+    label, because the units differ and a reader who could compare the two fields
+    would be comparing an attempt with a turn — the arithmetic CONTEXT.md keeps
+    apart and ADR-0010 forbids. `episode` counts the episodes this run has started
+    and `turn` counts the probes sent inside the current one; neither is a
+    denominator, and nothing divides by either.
+    """
+
+    family: str
+    episode: int
+    turn: int
+
+
+class ScoredProgress(BaseModel):
+    """What the scored layer has reached, spent and found so far."""
+
+    reached: bool
+    statement: str
+    position: ScoredPosition | None
+    calls_spent: int
+    """Calls this layer has put on the wire. Its own figure, beside the other
+    layer's and never added to it."""
+
+    succeeded_attempts: int | None
+    """The attempts that succeeded so far, or `None` for a layer that has not run.
+
+    Not called findings, on `RunState.succeeded_attempts`' own reasoning: a
+    **finding** is a verdict *plus* its narrative, and this is a count of verdicts.
+    It is `None` rather than `0` before the layer starts, because those are two
+    different facts and only one of them is about a suite that ran.
+    """
+
+
+class AdaptiveProgress(BaseModel):
+    """What the adaptive layer has reached, spent and found so far.
+
+    A model of its own for the reason the positions are two models: this layer's
+    findings are **adaptive findings** — routes an episode found — which carry no
+    rate, no interval, no band and no `D`, and may never be added to the scored
+    layer's count (ADR-0010).
+    """
+
+    reached: bool
+    statement: str
+    position: AdaptivePosition | None
+    calls_spent: int
+    adaptive_findings: int | None
+    """The episodes that found a route, or `None` for a layer this run has not
+    reached."""
+
+
+class TransportOutcome(BaseModel):
+    """The named outcome that stopped a run on the wire, and what it is not.
+
+    One of the four the spec names — timeout, auth failure, malformed reply, rate
+    limit — plus the three the contract keeps beside them, each under its own name
+    rather than collapsed into one *unreachable*: a timeout is capacity, a rejected
+    token is configuration, a malformed body is a contract breach and a rate limit
+    is a quota, and one word for all four sends every one of them to the same wrong
+    place.
+    """
+
+    failure: str
+    statement: str
+
+
+class ReportLocation(BaseModel):
+    """Where a finished run's report is served, for a caller that was polling."""
+
+    path: str
+    statement: str
+
+
+class RunProgress(BaseModel):
+    """One run in flight, reported per layer.
+
+    There is no figure here that spans the two layers, and that is structural
+    rather than editorial: calls spent and findings so far live inside `scored` and
+    `adaptive` and nowhere else, so a caller reading this cannot be handed a
+    blended number that hides which half of the run is spending their budget
+    (ADR-0007). Anything that wanted a total would have to add two fields itself,
+    in front of the two labels saying what it was adding.
+    """
+
+    run_id: str
+    status: str
+    statement: str
+    scored: ScoredProgress
+    adaptive: AdaptiveProgress
+    transport: TransportOutcome | None
+    """The named transport outcome that stopped this run, or `None`.
+
+    Never a verdict and never a finding: a run that failed on the wire reports
+    here, and its findings stay where they were when the endpoint stopped
+    answering.
+    """
+
+    report: ReportLocation | None
+    """Where to fetch the report, once there is one. `None` until the run
+    completes."""
+
+
+def progress_for(record: RunRecord) -> RunProgress:
+    """One run as a caller polling it sees it, per layer and with no blend."""
+    return RunProgress(
+        run_id=record.run_id,
+        status=str(record.status),
+        statement=record.statement,
+        scored=_scored_progress(record),
+        adaptive=_adaptive_progress(record),
+        transport=_transport(record),
+        report=_report(record),
+    )
+
+
+def _scored_progress(record: RunRecord) -> ScoredProgress:
+    state = record.run_state
+    spent = state.spent_in(Layer.SCORED)
+    at = state.position
+    if at is None:
+        return ScoredProgress(
+            reached=False,
+            statement=SCORED_NOT_STARTED,
+            position=None,
+            calls_spent=spent,
+            succeeded_attempts=None,
+        )
+    return ScoredProgress(
+        reached=True,
+        statement=(
+            f"family {at.family}, case {at.case_id}, attempt "
+            f"{at.attempt_index + 1}: the position the scored layer has reached"
+        ),
+        position=ScoredPosition(
+            family=str(at.family),
+            case_id=at.case_id,
+            # One-based on the way out, because a caller reads it as "the third
+            # attempt" and the record holds it as an index into the case's ten.
+            attempt=at.attempt_index + 1,
+        ),
+        calls_spent=spent,
+        succeeded_attempts=len(state.succeeded_attempts),
+    )
+
+
+def _adaptive_progress(record: RunRecord) -> AdaptiveProgress:
+    state = record.run_state
+    spent = state.spent_in(Layer.ADAPTIVE)
+    at = state.episode_position
+    if at is None:
+        return AdaptiveProgress(
+            reached=False,
+            statement=ADAPTIVE_NOT_REACHED,
+            position=None,
+            calls_spent=spent,
+            adaptive_findings=None,
+        )
+    return AdaptiveProgress(
+        reached=True,
+        statement=(
+            f"family {at.family}, episode {at.index}, turn {at.turn}: the position "
+            "the adaptive layer has reached. Nothing in this layer is scored"
+        ),
+        position=AdaptivePosition(
+            family=str(at.family), episode=at.index, turn=at.turn
+        ),
+        calls_spent=spent,
+        adaptive_findings=len(state.broken_episodes),
+    )
+
+
+def _transport(record: RunRecord) -> TransportOutcome | None:
+    if record.failure is None:
+        return None
+    return TransportOutcome(
+        failure=str(record.failure),
+        statement=f"{record.failure.stated()}. {NOT_A_SECURITY_RESULT}",
+    )
+
+
+def _report(record: RunRecord) -> ReportLocation | None:
+    if record.status is not RunStatus.COMPLETED:
+        return None
+    return ReportLocation(
+        path=f"/report/{record.run_id}",
+        statement=(
+            "the run finished: its report is served here, as the signed payload "
+            "with the rendered view alongside it"
+        ),
+    )
+
+
 class ApprovalRequest(BaseModel):
     """The answer to one run's interrupt. A yes is the only thing that spends."""
 
@@ -332,5 +572,23 @@ def create_app(config: BenchConfig | None = None) -> FastAPI:
                 status_code=status.HTTP_409_CONFLICT, detail=str(closed)
             ) from closed
         return response_for(record)
+
+    @app.get("/runs/{run_id}")
+    def report_progress(run_id: Annotated[str, PathParam()]) -> RunProgress:
+        """Where a run has got to, per layer, while it is still happening.
+
+        Read from the run state the run is filling rather than from a result that
+        does not exist until the run is over, which is what `run_calibration`'s
+        `run_state` argument is for. An unknown id is a named refusal rather than
+        an empty run: a caller polling a run id that this bench never issued has a
+        bug to find, and a `200` describing a run with nothing in it would hide it.
+        """
+        record = bench.record(run_id)
+        if record is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"no run {run_id} was started by this bench",
+            )
+        return progress_for(record)
 
     return app

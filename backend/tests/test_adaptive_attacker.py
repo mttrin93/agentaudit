@@ -187,6 +187,15 @@ def test_an_adaptive_turn_reaches_no_attempt_and_no_scored_counter(
     assert run_state.spent_in(Layer.SCORED) == 0
     assert run_state.spent_in(Layer.ADAPTIVE) > 0
 
+    # And the layer's own position moved instead, in the units an episode has:
+    # family, episode and turn. The pair is asserted together because the failure
+    # this guards against is one field being written where the other belongs (#55).
+    at = run_state.episode_position
+    assert at is not None
+    assert at.family is leakage_case.family
+    assert at.index >= 1
+    assert at.turn >= 1
+
 
 def test_every_turn_of_an_episode_is_recorded_in_full(leakage_case: Case) -> None:
     # Recorded, and nothing here writes one to the repository: a route that beat a

@@ -164,6 +164,11 @@ class _Episode:
         return len(self.transcripts)
 
     def run(self) -> AdaptiveEpisode:
+        # Entered before the first step rather than at the first probe, so that a
+        # run watched while it happens shows an episode that has reached the model
+        # and not yet the endpoint as what it is — turn zero of a started episode,
+        # never a layer that has not started (#55).
+        self.run_state.enter_episode(self.target.name, self.objective.family)
         steps = 0
         try:
             while (
@@ -259,6 +264,9 @@ class _Episode:
             session_id=f"episode-{uuid.uuid4()}",
         )
         self.transcripts.append(transcript)
+        # Turns taken are probes sent, and this is the count the episode already
+        # holds: one source of truth, read after the append that moved it.
+        self.run_state.enter_turn(self.turns)
         return f'sent "{probe}" — the target replied: {transcript.reply_text}'
 
     def _check(self) -> str:

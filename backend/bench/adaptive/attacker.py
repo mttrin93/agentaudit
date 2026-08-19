@@ -164,6 +164,11 @@ class _Episode:
         return len(self.transcripts)
 
     def run(self) -> AdaptiveEpisode:
+        # Entered before the first step rather than at the first probe, so that a
+        # run watched while it happens shows an episode that has reached the model
+        # and not yet the endpoint as what it is — turn zero of a started episode,
+        # never a layer that has not started (#55).
+        self.run_state.enter_episode(self.target.name, self.objective.family)
         steps = 0
         try:
             while (
@@ -249,6 +254,10 @@ class _Episode:
             return OBJECTIVE_ALREADY_MET
         if not probe.strip():
             return "a probe with nothing in it was not sent"
+        # The turn about to be taken, entered before the probe goes on the wire —
+        # the convention the scored layer already follows, where `enter` names the
+        # attempt in flight rather than the last one that came back (#55).
+        self.run_state.enter_turn(self.turns + 1)
         transcript = run_probe(
             self.target,
             probe,

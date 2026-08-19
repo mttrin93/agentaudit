@@ -165,7 +165,10 @@ def test_the_run_state_records_position_successes_and_calls_spent(
     run_state = result.run_state
     attempts = DECLARED_RULE.attempts_per_case
     assert run_state.position == Position(
-        target_name="trivial", case_id=leakage_case.id, attempt_index=attempts - 1
+        target_name="trivial",
+        family=leakage_case.family,
+        case_id=leakage_case.id,
+        attempt_index=attempts - 1,
     )
     assert [a.case_id for a in run_state.succeeded_attempts] == [
         leakage_case.id

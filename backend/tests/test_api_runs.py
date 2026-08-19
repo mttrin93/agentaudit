@@ -42,7 +42,7 @@ from backend.api.runs import (
 from backend.bench.adaptive.budget import DECLARED_ADAPTIVE_BUDGET, AdaptiveBudget
 from backend.bench.adaptive.episode import EpisodeOutcome
 from backend.bench.calibration import run_calibration
-from backend.bench.contract import TargetConfig
+from backend.bench.contract import TargetConfig, TargetFailure
 from backend.bench.library import Case, Family, LibraryVersion
 from backend.bench.registration import Attestation
 from backend.graph.approval import Approval
@@ -64,6 +64,7 @@ from backend.tests.conftest import (
     a_target,
     some_cases,
 )
+from backend.tests.flaky_target import IMPATIENT, flaky_target
 
 API_DIR = Path(__file__).resolve().parents[1] / "api"
 
@@ -115,9 +116,23 @@ class Ledger:
 
     hits: int = 0
     gate: threading.Event = field(default_factory=threading.Event)
+    hold_after: int | None = None
+    """Close the gate once this many messages have arrived, and hold the next one.
+
+    How a test stops a run at a stated point rather than at a stated time: a run
+    watched while it happens has to be looked at *somewhere in particular*, and
+    counting messages is the only clock both ends agree on. With `None` the gate is
+    whatever the test last set it to.
+    """
 
     def __post_init__(self) -> None:
         self.gate.set()
+
+    def arrived(self) -> None:
+        """One more message at the endpoint, and the gate closed if this is the one."""
+        self.hits += 1
+        if self.hold_after is not None and self.hits > self.hold_after:
+            self.gate.clear()
 
 
 class Counted:
@@ -134,7 +149,7 @@ class Counted:
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] == "http" and str(scope["path"]).endswith("/messages"):
-            self.ledger.hits += 1
+            self.ledger.arrived()
             await anyio.to_thread.run_sync(self.ledger.gate.wait)
         await self.app(scope, receive, send)
 
@@ -694,6 +709,295 @@ def test_a_price_declared_without_a_currency_is_refused(leakage_case: Case) -> N
     assert watched.ledger.hits == 0
 
 
+# --- progress, per layer ---------------------------------------------------------
+
+
+def test_progress_in_the_scored_layer_is_family_case_and_attempt(
+    leakage_case: Case,
+) -> None:
+    """A run watched while it happens, stopped inside its first attempt.
+
+    The endpoint holds the second message it receives — the first is the
+    registration probe — so the run is inside attempt one of case one when this
+    looks at it. Position is the three units of the scored layer and no others
+    (CONTEXT.md), and the attempt is the ordinal a reader watches go by rather than
+    a count of what the run has done.
+    """
+    with watched_reference() as watched, api([leakage_case]) as (client, bench):
+        watched.ledger.hold_after = 1
+        nonce = registered(client, watched)
+        started = client.post("/runs", json=a_request(watched.target, nonce)).json()
+        record = _record(bench, started)
+        _approve(client, started["run_id"])
+        try:
+            body = progress_when(client, started["run_id"], "scored")
+        finally:
+            watched.ledger.hold_after = None
+            watched.ledger.gate.set()
+        settled(record)
+
+    scored = body["scored"]
+    assert scored["reached"] is True
+    assert scored["position"] == {
+        "family": str(leakage_case.family),
+        "case_id": leakage_case.id,
+        "attempt": 1,
+    }
+    # The registration probe, and not the attempt being held: a call is counted
+    # when it comes back, and this one has not.
+    assert scored["calls_spent"] == 1
+    # Absent rather than zero, because no attempt has come back: a position in
+    # flight beside a zero would read as a target that resisted it.
+    assert scored["succeeded_attempts"] is None
+
+
+def test_progress_in_the_adaptive_layer_is_family_episode_and_turn(
+    leakage_case: Case,
+) -> None:
+    """The second layer, watched at its first probe and again when the run is over.
+
+    Held at message twelve — one registration probe and ten attempts is the whole
+    scored layer for one case — so the first adaptive probe is the one on the
+    doorstep. What the position says there is *episode one, turn one*: the turn in
+    flight, on the convention the scored layer already follows, where the attempt
+    being sent is the attempt the position names.
+
+    Then the run is let go, and the position is checked against the episodes the
+    run actually recorded. An episode is not an attempt and a turn is not one
+    either (ADR-0010), so these are read off `RunState.episodes` and never off
+    `attempts`.
+    """
+    with watched_reference() as watched, api([leakage_case]) as (client, bench):
+        watched.ledger.hold_after = 11
+        nonce = registered(client, watched)
+        started = client.post("/runs", json=a_request(watched.target, nonce)).json()
+        record = _record(bench, started)
+        _approve(client, started["run_id"])
+        try:
+            in_flight = progress_when(client, started["run_id"], "adaptive")
+        finally:
+            watched.ledger.hold_after = None
+            watched.ledger.gate.set()
+        settled(record)
+        finished = _progress(client, started["run_id"])
+
+    assert in_flight["adaptive"]["reached"] is True
+    assert in_flight["adaptive"]["position"] == {
+        "family": str(leakage_case.family),
+        "episode": 1,
+        "turn": 1,
+    }
+    assert in_flight["scored"]["calls_spent"] == 11
+    # No episode has ended, so the layer has found nothing *yet*, which is not the
+    # same fact as an attacker that ran and found nothing.
+    assert in_flight["adaptive"]["adaptive_findings"] is None
+
+    last = record.run_state.episodes[-1]
+    assert finished["adaptive"]["position"] == {
+        "family": str(last.family),
+        "episode": len(record.run_state.episodes),
+        "turn": last.turns,
+    }
+    assert last.turns >= 1
+
+
+def test_a_run_that_has_not_reached_the_adaptive_layer_says_so_rather_than_zero(
+    leakage_case: Case,
+) -> None:
+    """Absent, not zero — and the same for a scored layer that has not started.
+
+    A run holding its interrupt has found nothing because it has attacked nothing,
+    and a run that finished its suite and found nothing has attacked ten times.
+    Reported as `0` both layers would read as the second, which is the reading that
+    flatters the target.
+    """
+    with watched_reference() as watched, api([leakage_case]) as (client, bench):
+        nonce = registered(client, watched)
+        started = client.post("/runs", json=a_request(watched.target, nonce)).json()
+        halted = _progress(client, started["run_id"])
+
+    assert halted["status"] == "awaiting_approval"
+    for layer in ("scored", "adaptive"):
+        assert halted[layer]["reached"] is False
+        assert halted[layer]["position"] is None
+    assert halted["scored"]["succeeded_attempts"] is None
+    assert halted["adaptive"]["adaptive_findings"] is None
+    assert "has not reached the adaptive layer" in halted["adaptive"]["statement"]
+    assert "absent rather than zero" in halted["adaptive"]["statement"]
+    assert "absent rather than zero" in halted["scored"]["statement"]
+    assert halted["scored"]["calls_spent"] == 0
+
+
+def test_a_refused_registration_has_spent_a_call_and_attempted_nothing(
+    leakage_case: Case,
+) -> None:
+    """The one run where *attempted nothing* is a lasting state rather than a moment.
+
+    The nonce is issued and never planted, so the registration probe — charged to
+    the scored layer, and the first thing any run sends — comes back without it and
+    no attempt follows. The layer has spent a call and attempted nothing, and the
+    statement has to carry both: a progress route that said *nothing has been sent*
+    here would be describing away a call the operator was billed for.
+    """
+    with watched_reference() as watched, api([leakage_case]) as (client, bench):
+        nonce = str(client.post("/nonces").json()["nonce"])
+        started = client.post("/runs", json=a_request(watched.target, nonce)).json()
+        record = _record(bench, started)
+        _approve(client, started["run_id"])
+        settled(record)
+        body = _progress(client, started["run_id"])
+
+    assert body["status"] == "registration_refused"
+    assert body["scored"]["reached"] is False
+    assert body["scored"]["position"] is None
+    assert body["scored"]["calls_spent"] == 1 == watched.ledger.hits
+    assert body["scored"]["succeeded_attempts"] is None
+    assert "nothing has been sent" not in body["scored"]["statement"]
+    assert "registration probe" in body["scored"]["statement"]
+    assert body["adaptive"]["reached"] is False
+    assert body["report"] is None
+
+
+def test_calls_spent_and_findings_are_per_layer_and_never_blended(
+    leakage_case: Case,
+) -> None:
+    """Two counters and two counts, and no field anywhere that adds either pair.
+
+    The structural half of the assertion is the one that matters: a blended figure
+    is not absent because nobody printed it, it is absent because there is no field
+    for it to be printed in. So the layers' own figures are checked against the run
+    state, and then the sum of the two is checked to appear nowhere in the
+    document (ADR-0007).
+    """
+    with watched_reference() as watched, api([leakage_case]) as (client, bench):
+        nonce = registered(client, watched)
+        started = client.post("/runs", json=a_request(watched.target, nonce)).json()
+        record = _record(bench, started)
+        _approve(client, started["run_id"])
+        settled(record)
+        body = _progress(client, started["run_id"])
+
+    state = record.run_state
+    assert body["scored"]["calls_spent"] == state.spent_in(Layer.SCORED) == 11
+    assert body["adaptive"]["calls_spent"] == state.spent_in(Layer.ADAPTIVE) > 0
+    assert body["scored"]["succeeded_attempts"] == len(state.succeeded_attempts)
+    assert body["adaptive"]["adaptive_findings"] == len(state.broken_episodes)
+
+    assert set(body) == {
+        "run_id",
+        "status",
+        "statement",
+        "scored",
+        "adaptive",
+        "transport",
+        "report",
+    }
+    blended = state.calls_spent
+    assert blended == state.spent_in(Layer.SCORED) + state.spent_in(Layer.ADAPTIVE)
+    assert blended not in _integers(body)
+    findings = len(state.succeeded_attempts) + len(state.broken_episodes)
+    assert findings not in _integers(body["scored"]) | _integers(body["adaptive"])
+
+
+@pytest.mark.parametrize(
+    ("failing", "named"),
+    [
+        (
+            {"failures_before_reply": 0, "sleep_seconds": 1.0, "timeout_seconds": 0.05},
+            TargetFailure.TIMEOUT,
+        ),
+        (
+            {"failures_before_reply": 0, "auth_token": "not-the-token"},
+            TargetFailure.AUTH_REJECTED,
+        ),
+        (
+            {"failures_before_reply": 0, "malformed": True},
+            TargetFailure.MALFORMED_REPLY,
+        ),
+        (
+            {"failures_before_reply": IMPATIENT.sends + 1, "status_code": 429},
+            TargetFailure.RATE_LIMITED,
+        ),
+    ],
+    ids=["timeout", "auth", "malformed", "rate_limit"],
+)
+def test_a_transport_outcome_surfaces_under_its_own_name_and_never_as_a_finding(
+    failing: dict[str, Any], named: TargetFailure, leakage_case: Case
+) -> None:
+    """The four named outcomes, each reported as itself by the progress route.
+
+    A timeout is capacity, a rejected token is configuration, a malformed body is a
+    contract breach and a rate limit is a quota — four different jobs for the
+    person reading the run, and one word for all of them would send every one to
+    the same wrong place. None of the four is a verdict: the run reports the
+    outcome and its findings stay where they were when the endpoint stopped
+    answering.
+
+    Started through `BenchRuns.start` rather than over HTTP because the retry
+    policy's timeout is not a request field, and a timeout that waited the declared
+    sixty seconds would be a minute of suite. Everything read here is read over
+    HTTP, which is what the route is being tested for.
+    """
+    with (
+        flaky_target(**failing) as flaky,
+        api([leakage_case]) as (client, bench),
+    ):
+        record = bench.start(
+            target=flaky.target,
+            attestation=BENCH_ATTESTATION,
+            nonce=bench.issue(),
+            price=None,
+            note_planted=False,
+        )
+        _approve(client, record.run_id)
+        settled(record)
+        body = _progress(client, record.run_id)
+
+    assert body["status"] == "failed"
+    assert body["transport"]["failure"] == str(named)
+    assert "nothing here is a security result" in body["transport"]["statement"]
+    assert body["scored"]["position"] is None
+    assert body["scored"]["succeeded_attempts"] is None
+    assert body["adaptive"]["adaptive_findings"] is None
+    assert body["report"] is None
+    assert record.run_state.attempts == []
+
+
+def test_an_unknown_run_id_is_a_named_outcome_rather_than_an_empty_response(
+    leakage_case: Case,
+) -> None:
+    """A run this bench never started is refused by name.
+
+    A `200` describing a run with nothing in it would be indistinguishable from a
+    run that has done nothing yet, and the caller polling it would wait forever for
+    a run that does not exist.
+    """
+    with api([leakage_case]) as (client, _):
+        response = client.get("/runs/not-a-run-this-bench-started")
+
+    assert response.status_code == 404
+    assert (
+        "no run not-a-run-this-bench-started was started" in (response.json()["detail"])
+    )
+
+
+def test_a_completed_run_reports_completion_and_where_its_report_is_served(
+    leakage_case: Case,
+) -> None:
+    """The end of the poll: the run says it is done and where to go next."""
+    with watched_reference() as watched, api([leakage_case]) as (client, bench):
+        nonce = registered(client, watched)
+        started = client.post("/runs", json=a_request(watched.target, nonce)).json()
+        record = _record(bench, started)
+        _approve(client, started["run_id"])
+        settled(record)
+        body = _progress(client, started["run_id"])
+
+    assert body["status"] == "completed"
+    assert body["report"]["path"] == f"/report/{started['run_id']}"
+    assert body["transport"] is None
+
+
 # --- the seam the run state travels through --------------------------------------
 
 
@@ -736,6 +1040,50 @@ def test_a_run_state_counting_against_another_ceiling_is_refused() -> None:
 
 
 # --- helpers ---------------------------------------------------------------------
+
+
+def _approve(client: TestClient, run_id: str) -> None:
+    client.post(
+        f"/runs/{run_id}/approval",
+        json={"confirmed": True, "identity": "operator"},
+    )
+
+
+def _progress(client: TestClient, run_id: str) -> dict[str, Any]:
+    response = client.get(f"/runs/{run_id}")
+    assert response.status_code == 200
+    return cast(dict[str, Any], response.json())
+
+
+def progress_when(
+    client: TestClient, run_id: str, layer: str, seconds: float = 30.0
+) -> dict[str, Any]:
+    """Poll the progress route until the named layer has a position to report.
+
+    The run is on its own thread and the endpoint is holding a message, so *when*
+    it arrives at the held call is the scheduler's business. What is under test is
+    what it says once it is there.
+    """
+    deadline = time.monotonic() + seconds
+    while time.monotonic() < deadline:
+        body = _progress(client, run_id)
+        if body[layer]["position"] is not None:
+            return body
+        time.sleep(0.02)
+    raise AssertionError(f"the {layer} layer never reported a position")
+
+
+def _integers(body: Any) -> set[int]:
+    """Every integer anywhere in a response, however deeply nested."""
+    if isinstance(body, bool):
+        return set()
+    if isinstance(body, int):
+        return {body}
+    if isinstance(body, dict):
+        return set().union(*(_integers(value) for value in body.values()), set())
+    if isinstance(body, list):
+        return set().union(*(_integers(value) for value in body), set())
+    return set()
 
 
 def _record(bench: BenchRuns, started: dict[str, Any]) -> RunRecord:

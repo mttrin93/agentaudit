@@ -135,6 +135,15 @@ class TargetFailure(StrEnum):
                 )
 
 
+NOT_A_SECURITY_RESULT = "No attempt is recorded and nothing here is a security result"
+"""What every report of a transport failure says beside the outcome it names.
+
+One sentence in one place, because it is said twice — once by the exception a run
+stops on and once by the surface that reports the run — and two copies of a
+statement this load-bearing are two statements that drift.
+"""
+
+
 class TargetUnreachable(RuntimeError):
     """One named transport outcome, raised instead of being scored.
 
@@ -160,7 +169,7 @@ class TargetUnreachable(RuntimeError):
         super().__init__(
             f"{url} after {sends} "
             f"{'send' if sends == 1 else 'sends'}{status}: {failure.stated()}. "
-            "No attempt is recorded and nothing here is a security result"
+            f"{NOT_A_SECURITY_RESULT}"
         )
 
 

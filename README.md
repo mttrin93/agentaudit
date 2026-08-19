@@ -30,6 +30,30 @@ The bench also carries an **adaptive attacker** — an agent that, after the fix
 
 If you are a researcher who wants a withheld payload for defensive work, open an issue describing the use; the answer may still be no.
 
+## Verifying a report
+
+A report is three files under fixed names: `report.json` — the canonical JSON payload, which is the artefact — `report.md`, the document a human reads, and `report.sig`, a detached Ed25519 signature over the payload's bytes. Check them with no network and no credential:
+
+```
+uv run python -m scripts.verify path/to/report
+```
+
+It prints **three results, always all three**: whether the signature is valid over the payload, whether `report.md` hashes to the digest inside the payload, and whether the arithmetic re-derives — every rate, Wilson interval, band and κ floor recomputed from the counts the payload carries, through the same functions the bench used. The third is the one that is a check on the bench rather than on the transport, and it is what makes *re-derivable* something you established rather than something the document asserted. Each failure has its own named outcome, so you learn *which* property failed. See [ADR-0017](./docs/adr/0017-the-signature-covers-the-document-and-carries-two-claims.md).
+
+**A valid signature is not a quality claim.** It says these bytes are the ones that were produced and that nothing has altered them — the adaptive section included, since the signature covers the whole payload. It says nothing whatsoever about whether the agent is safe, and the report carries no score, no grade and no declaration of conformity.
+
+### The signing key
+
+The public key is committed at [`keys/agentaudit-signing.pub`](./keys/agentaudit-signing.pub) and `scripts/verify.py` pins it by default; `--pubkey` takes another. Its fingerprint, which is also the `key_id` inside every payload it signs:
+
+```
+sha256:dcfa72c1b118550a6f35b96f457d24429e10d3308d5780ff8ec5a042ffa72a93
+```
+
+Compare that against the `key_id` in a report you receive. A valid signature over a key you have not seen published is not provenance — it only proves that whoever sent the document also sent the key — which is why a report signed by any other key is reported under its own outcome rather than as tampering.
+
+**The private half is never committed.** It is read from `AGENTAUDIT_SIGNING_KEY` and from nowhere else, so publishing this repository does not publish the ability to forge its reports. `uv run python -m scripts.keygen` generates a pair, writes the public half and prints the private half once; it refuses to replace a committed public key, because rotation invalidates every signature ever issued under the old one and has to be a deliberate act with the fingerprint above updated in the same commit.
+
 ## Safety
 
 The bench makes an agent take unauthorised actions and defeat its own stop control. **Against a production endpoint it causes the damage it measures.**

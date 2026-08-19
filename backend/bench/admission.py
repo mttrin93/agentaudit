@@ -14,6 +14,14 @@ what makes the two-bar rule a property of the record rather than a convention of
 the caller — and it is why the mapping has no default: a provenance nobody has
 thought about must fail the type check rather than inherit the weaker test.
 
+**A rejection is counted, and which kind of rejection it was is counted apart.**
+`RejectionKind` is the closed set of ways a decided proposal can come out, and
+`CrossModelRejections` counts them on one denominator — because ADR-0012 asks for the
+count of *cross-model* rejections specifically, and a route that separated on one
+model is a different finding from one that separated nowhere. It sits here beside
+`LibraryProvenance` because both are that ADR's accounting of how the library got its
+cases, and neither is a comparison of two runs (`crossmodel.py`).
+
 **Rejection is discard, not deferral.** Nothing here parks a case. A case that
 does not clear its bar has no admitted state to be written into, and
 `admitted_library` refuses to load a record whose own recorded reading does not
@@ -29,6 +37,7 @@ gate has and the reason a case's `[admission]` block records counts rather than 
 
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
+from enum import StrEnum
 from pathlib import Path
 
 from backend.bench.evaluator import Verdict
@@ -62,18 +71,22 @@ adds is a second model to face it on.
 __all__ = [
     "MODELS_REQUIRED",
     "AdmissionOutcome",
+    "CrossModelRejections",
     "LibraryProvenance",
     "NotAdmitted",
     "ReadingOutcome",
+    "RejectionKind",
     "UnevenReading",
     "admitted_library",
     "bar_for",
     "counted",
     "decide",
+    "kind_of",
     "library_provenance",
     "outcome_for",
     "provenance_counts",
     "read",
+    "rejections",
 ]
 """`bar_for` is re-exported rather than defined here.
 
@@ -176,6 +189,22 @@ class AdmissionOutcome:
         return tuple(dict.fromkeys(reading.model for reading in self.readings))
 
     @property
+    def models_required(self) -> int:
+        """How many distinct models the bar this case faces is separation on."""
+        return MODELS_REQUIRED[self.bar]
+
+    @property
+    def read_on_enough_models(self) -> bool:
+        """Whether this case was read on as many models as its bar names.
+
+        Half of `admitted`, named so that a reader of a *rejection* can tell the two
+        halves apart: a case that cleared every reading it has and was read on one
+        model has not been shown to separate on a model it was not discovered on,
+        which is a different finding from a case that separated nowhere.
+        """
+        return len(self.models) >= self.models_required
+
+    @property
     def admitted(self) -> bool:
         """Whether the case is in.
 
@@ -193,7 +222,7 @@ class AdmissionOutcome:
         return (
             bool(self.readings)
             and all(reading.clears for reading in self.readings)
-            and len(self.models) >= MODELS_REQUIRED[self.bar]
+            and self.read_on_enough_models
         )
 
     def stated(self) -> str:
@@ -207,8 +236,8 @@ class AdmissionOutcome:
         lines = [
             f"{self.case_id}: {decision} — provenance {self.discovered_by}, "
             f"bar {self.bar} "
-            f"({MODELS_REQUIRED[self.bar]} model"
-            f"{'s' if MODELS_REQUIRED[self.bar] > 1 else ''} required, "
+            f"({self.models_required} model"
+            f"{'s' if self.models_required > 1 else ''} required, "
             f"{len(self.models)} read)"
         ]
         lines.extend(f"    {reading.stated()}" for reading in self.readings)
@@ -451,6 +480,154 @@ def library_provenance(cases: Iterable[Case]) -> LibraryProvenance:
         counted = retired if case.status is CaseStatus.RETIRED else live
         counted[case.discovered_by] += 1
     return LibraryProvenance(live=live, retired=retired)
+
+
+class RejectionKind(StrEnum):
+    """How one decided proposal came out, and the four ways it can fail to enter.
+
+    A closed enum rather than three booleans, because ADR-0012 asks for **the count
+    of cross-model rejections** and a count means nothing unless the other ways of
+    failing are counted apart from it. Every decided proposal lands on exactly one
+    member, so the counts sum to the proposals decided and a reader can check that
+    they do — which three overlapping predicates could not promise.
+    """
+
+    ADMITTED = "admitted"
+    CROSS_MODEL = "cross-model rejection"
+    SEPARATED_NOWHERE = "separated on no model"
+    UNREAD = "not read on enough models"
+    NOT_MEASURED = "not measured at all"
+
+    def stated(self) -> str:
+        """What this outcome says about the route, in the words ADR-0012 uses.
+
+        The member's own name is *not* repeated here: the caller prints it with the
+        count, and this is the gloss beside it. The match has no fallback branch —
+        a sixth member must fail the type check rather than print as a name with
+        nothing said about it.
+        """
+        match self:
+            case RejectionKind.ADMITTED:
+                return (
+                    "it separated the three reference agents on every model its bar "
+                    "asked for"
+                )
+            case RejectionKind.CROSS_MODEL:
+                return (
+                    "it separated on one model and not on another, which is direct "
+                    "evidence that what the attacker found was a property of that "
+                    "model rather than of the agents' defences. Discarded, and the "
+                    "discard is the finding (ADR-0012)"
+                )
+            case RejectionKind.SEPARATED_NOWHERE:
+                return (
+                    "a finding about the case rather than about any model. Discarded "
+                    "on the same bar every authored case faces (ADR-0003)"
+                )
+            case RejectionKind.UNREAD:
+                return (
+                    "every reading it has cleared, and it has not been read on a "
+                    "model it was not discovered on. That is a run that did not "
+                    "happen the way the bar needs it to, and it is not evidence "
+                    "about the route"
+                )
+            case RejectionKind.NOT_MEASURED:
+                return (
+                    "no reading exists, so nothing about this proposal has been "
+                    "measured and nothing may be concluded from it"
+                )
+
+
+def kind_of(outcome: AdmissionOutcome) -> RejectionKind:
+    """Which of the five answers one decided proposal landed on.
+
+    Ordered from the outside in, so that each member means what its name says: an
+    admitted case first, then the two refusals that are findings about a route or a
+    case, then the two that are facts about the run rather than about either.
+    """
+    if outcome.admitted:
+        return RejectionKind.ADMITTED
+    if not outcome.readings:
+        return RejectionKind.NOT_MEASURED
+    if not any(reading.clears for reading in outcome.readings):
+        return RejectionKind.SEPARATED_NOWHERE
+    if all(reading.clears for reading in outcome.readings):
+        return RejectionKind.UNREAD
+    return RejectionKind.CROSS_MODEL
+
+
+@dataclass(frozen=True)
+class CrossModelRejections:
+    """What the cross-model admission bar admitted and refused, counted and told apart.
+
+    ADR-0012 calls a cross-model discard a finding in its own right: a route that
+    separates the three reference agents on one model and not on another is direct
+    evidence that what the attacker found was a property of that model rather than of
+    the agents' defences. So the count is kept, and it is kept **apart** from the
+    other ways a proposal fails to enter the library. One number over all of them
+    would report a route that beat one model as a route that beat none.
+
+    The second half of the series `LibraryProvenance` starts: that one says how far
+    the library has drifted towards routes fitted to these three agents, and this one
+    says what the bar stopped on the way.
+    """
+
+    outcomes: tuple[AdmissionOutcome, ...]
+
+    def of(self, kind: RejectionKind) -> tuple[AdmissionOutcome, ...]:
+        """The decided proposals that landed on one answer, in the order decided."""
+        return tuple(outcome for outcome in self.outcomes if kind_of(outcome) is kind)
+
+    @property
+    def counts(self) -> Mapping[RejectionKind, int]:
+        """How many proposals each answer accounts for.
+
+        Every member present whether or not it is used, for the reason
+        `provenance_counts` includes every provenance: a count of zero is a fact, and
+        a missing key reads as the absence of the thing.
+        """
+        counted = dict.fromkeys(RejectionKind, 0)
+        for outcome in self.outcomes:
+            counted[kind_of(outcome)] += 1
+        return counted
+
+    @property
+    def admitted(self) -> tuple[AdmissionOutcome, ...]:
+        return self.of(RejectionKind.ADMITTED)
+
+    @property
+    def cross_model(self) -> tuple[AdmissionOutcome, ...]:
+        """The rejections this bar exists for: cleared somewhere, not everywhere."""
+        return self.of(RejectionKind.CROSS_MODEL)
+
+    def stated(self) -> str:
+        """The counts on one denominator, then each proposal with its own readings."""
+        facing = tuple(
+            outcome
+            for outcome in self.outcomes
+            if outcome.bar is AdmissionBar.CROSS_MODEL
+        )
+        counts = self.counts
+        lines = [
+            "the cross-model admission bar — an adaptive-discovered case has to "
+            "separate on a model it was not discovered on (ADR-0012)",
+            f"  {len(self.outcomes)} proposal(s) decided, {len(facing)} of them "
+            "facing the cross-model bar",
+        ]
+        lines.extend(
+            f"  {kind}: {counts[kind]} — {kind.stated()}" for kind in RejectionKind
+        )
+        lines.extend(
+            f"  {line}"
+            for outcome in self.outcomes
+            for line in outcome.stated().splitlines()
+        )
+        return "\n".join(lines)
+
+
+def rejections(outcomes: Iterable[AdmissionOutcome]) -> CrossModelRejections:
+    """Count what the bar admitted and what it refused, by which way it refused."""
+    return CrossModelRejections(outcomes=tuple(outcomes))
 
 
 def _successes(verdicts: Sequence[Verdict]) -> int:

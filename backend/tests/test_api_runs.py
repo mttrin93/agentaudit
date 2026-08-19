@@ -32,13 +32,20 @@ from fastapi.testclient import TestClient
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from backend.api.app import create_app
-from backend.api.runs import BenchConfig, BenchRuns, RunRecord, RunStatus
+from backend.api.runs import (
+    BenchConfig,
+    BenchRuns,
+    PendingApproval,
+    RunRecord,
+    RunStatus,
+)
 from backend.bench.adaptive.budget import DECLARED_ADAPTIVE_BUDGET, AdaptiveBudget
 from backend.bench.adaptive.episode import EpisodeOutcome
 from backend.bench.calibration import run_calibration
 from backend.bench.contract import TargetConfig
-from backend.bench.library import Case, LibraryVersion
+from backend.bench.library import Case, Family, LibraryVersion
 from backend.bench.registration import Attestation
+from backend.graph.approval import Approval
 from backend.graph.budget import Layer, RunBudget
 from backend.graph.runstate import RunState
 from backend.targets.reference.model import ModelConfig
@@ -50,7 +57,13 @@ from backend.targets.reference.server import (
 )
 from backend.targets.reference.serving import serve
 from backend.targets.reference.tools import DECLARED_TOOL_NAMES
-from backend.tests.conftest import AUTH_TOKEN, BENCH_ATTESTATION, a_target, some_cases
+from backend.tests.conftest import (
+    AUTH_TOKEN,
+    BENCH_ATTESTATION,
+    a_budget,
+    a_target,
+    some_cases,
+)
 
 API_DIR = Path(__file__).resolve().parents[1] / "api"
 
@@ -307,7 +320,7 @@ def test_a_target_that_does_not_echo_the_nonce_is_never_attempted(
 def test_the_estimate_is_two_figures_and_nothing_in_it_is_an_average(
     leakage_case: Case,
 ) -> None:
-    """The fixed suite exactly, the adaptive layer as a ceiling, and no blend.
+    """The scored layer exactly, the adaptive layer as a ceiling, and no blend.
 
     The two are asserted on their *kind* rather than on their value, because that
     is what a caller reads: a fact and a bound, with the arithmetic printed under
@@ -590,6 +603,95 @@ def test_an_abort_mid_episode_records_that_episode_as_censored(
         for episode in record.run_state.episodes
     )
     assert record.spent[Layer.ADAPTIVE] <= record.budget.adaptive_ceiling
+
+
+def test_a_nonce_starts_one_run_and_no_more(leakage_case: Case) -> None:
+    """One nonce, one run: the value is spent by the run it authorises.
+
+    A nonce that stayed valid would be a proof of control with no expiry — planted
+    once, quoted forever, against any endpoint the caller cared to name. A terminal
+    run already issues a fresh one every time, so this is the same protocol rather
+    than a stricter one.
+    """
+    with watched_reference() as watched, api([leakage_case]) as (client, bench):
+        nonce = registered(client, watched)
+        first = client.post("/runs", json=a_request(watched.target, nonce))
+        second = client.post("/runs", json=a_request(watched.target, nonce))
+
+    assert first.status_code == 202
+    assert second.status_code == 422
+    assert "never issued that nonce" in second.json()["detail"]
+
+
+def test_a_family_whose_note_is_not_planted_is_not_run_and_says_why(
+    leakage_case: Case, injection_case: Case
+) -> None:
+    """The estimate covers what will run, and names what will not.
+
+    Indirect injection reads whether a planted instruction was *carried out*, and
+    the instruction lives in third-party content the bench does not serve and
+    cannot check. Run without it, the family reports a clean zero that reads as a
+    defence; charged for in the estimate, it is an operator paying for attempts
+    the run is going to skip. So the caller declares it, and the family is
+    reported as not run rather than measured.
+    """
+    cases = [leakage_case, injection_case]
+    with watched_reference() as watched, api(cases) as (client, bench):
+        without = client.post(
+            "/runs",
+            json=a_request(watched.target, registered(client, watched)),
+        ).json()
+        with_note = client.post(
+            "/runs",
+            json=a_request(
+                watched.target, registered(client, watched), note_planted=True
+            ),
+        ).json()
+
+    gap = without["families_not_run"][str(Family.INDIRECT_PROMPT_INJECTION)]
+    assert "not run" in gap
+    assert "third-party note" in gap
+    assert without["cases"] == 1
+    assert without["estimate"]["scored"]["calls"] == 11
+
+    assert with_note["families_not_run"] == {}
+    assert with_note["cases"] == 2
+    assert with_note["estimate"]["scored"]["calls"] == 21
+
+
+def test_an_answer_that_arrives_after_the_wait_ran_out_is_refused() -> None:
+    """The instant between a wait running out and the run being settled.
+
+    The graph has already been told nobody answered by then, so a confirmation
+    landing there cannot start anything — and a bench that took it would answer a
+    caller that their run was running when it never would be. Driven at the seam
+    rather than through a request, because the window is a race and a test that
+    tried to hit it over HTTP would be asserting on the scheduler.
+    """
+    pending = PendingApproval(wait_seconds=0.01)
+
+    unanswered = pending.approve(a_budget(targets=1).as_payload())
+
+    assert unanswered.confirmed is False
+    assert "never answered" in unanswered.reason
+    assert pending.answer(Approval(confirmed=True, identity="late")) is False
+
+
+def test_a_price_declared_without_a_currency_is_refused(leakage_case: Case) -> None:
+    """An amount is not a price until it says what it is in.
+
+    The one part of a cost display that cannot be inferred, and the bench choosing
+    it would put a figure in the liability record that the caller did not state.
+    """
+    with watched_reference() as watched, api([leakage_case]) as (client, bench):
+        nonce = registered(client, watched)
+        request = a_request(watched.target, nonce)
+        del request["cost"]["currency"]
+        response = client.post("/runs", json=request)
+
+    assert response.status_code == 422
+    assert "what currency" in response.json()["detail"]
+    assert watched.ledger.hits == 0
 
 
 # --- the seam the run state travels through --------------------------------------

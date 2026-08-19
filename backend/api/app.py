@@ -42,10 +42,10 @@ from fastapi import Path as PathParam
 from pydantic import BaseModel, Field
 
 from backend.api.runs import (
-    AlreadyAnswered,
     BenchConfig,
     BenchRuns,
     NeverPresented,
+    NoLongerWaiting,
     NonceNotIssued,
     RunRecord,
 )
@@ -53,9 +53,15 @@ from backend.bench.admission import admitted_library
 from backend.bench.contract import RetryPolicy, TargetConfig
 from backend.bench.registration import ECHO_PROBE, Attestation
 from backend.graph.approval import Approval
-from backend.graph.budget import CallPrice, Layer
+from backend.graph.budget import BudgetPayload, CallPrice, Layer
 
-CASES_DIR = Path(__file__).resolve().parents[2] / "backend" / "cases"
+CASES_DIR = Path(__file__).resolve().parents[1] / "cases"
+"""The case library a bench serves when it was not given one.
+
+The admitted library, never the raw one: a case that has not separated the three
+reference agents may not be sent to somebody's endpoint on the strength of nobody
+having checked (`admission.py`).
+"""
 
 PLANT_STATEMENT = (
     "Plant this value in the target's configuration before starting a run. Only "
@@ -66,37 +72,6 @@ PLANT_STATEMENT = (
     "below verbatim, and a target that does not answer it with the nonce is not "
     "attempted."
 )
-
-
-class LayerFigureResponse(BaseModel):
-    """One layer's figure: how many calls, what kind of number it is, and why."""
-
-    calls: int
-    kind: str
-    """`exact` or `ceiling`, carried rather than inferred. A reader who cannot
-    tell a fact from a bound has been shown one number, not two."""
-
-    basis: str
-    cost: str
-
-
-class EstimateResponse(BaseModel):
-    """The consent surface, as `RunBudget.as_payload()` produced it.
-
-    Field for field the record the approval interrupt presented. There is no
-    combined figure here that the budget did not build and mark as a bound, and
-    no average of any kind: `CallFigure.__add__` makes a fact plus a bound a bound,
-    so the total is a ceiling by arithmetic rather than by convention.
-    """
-
-    scored: LayerFigureResponse
-    adaptive: LayerFigureResponse
-    total: LayerFigureResponse
-    hard_ceiling: LayerFigureResponse
-    scored_ceiling: int
-    adaptive_ceiling: int
-    currency: str
-    presented: list[str]
 
 
 class TargetRequest(BaseModel):
@@ -172,7 +147,14 @@ class CostRequest(BaseModel):
     """
 
     price_per_call: str | None
-    currency: str = "USD"
+    currency: str = ""
+    """What currency the price is in, when there is a price.
+
+    Empty by default and refused when a price is declared without it, by
+    `CallPrice`'s own guard: an amount with a currency the bench chose is a figure
+    the caller did not state, and it is the one part of a cost display that cannot
+    be inferred from anywhere.
+    """
 
     def price(self) -> CallPrice | None:
         if self.price_per_call is None:
@@ -206,6 +188,8 @@ class StartRunRequest(BaseModel):
 
 
 class NonceIssued(BaseModel):
+    """The value to plant, the probe that will check it, and what both are for."""
+
     nonce: str
     echo_probe: str
     statement: str
@@ -222,18 +206,29 @@ class RunResponse(BaseModel):
     run_id: str
     status: str
     statement: str
-    estimate: EstimateResponse
+    estimate: BudgetPayload
+    """The consent surface exactly as the approval interrupt presented it.
+
+    `BudgetPayload` itself rather than a model restating its fields, because a
+    restatement is a second place for the figures to be described and the first
+    thing anybody would edit to add a friendlier summary. There is no combined
+    figure here the budget did not build and mark as a bound, and no average of
+    any kind: `CallFigure.__add__` makes a fact plus a bound a bound, so the total
+    is a ceiling by arithmetic rather than by convention (ADR-0007).
+    """
+
     spent: dict[str, int]
     cases: int
     families_not_run: dict[str, str]
 
 
 def response_for(record: RunRecord) -> RunResponse:
+    """One run as it stands, built in one place so every route says the same thing."""
     return RunResponse(
         run_id=record.run_id,
         status=str(record.status),
         statement=record.statement,
-        estimate=EstimateResponse.model_validate(record.presented),
+        estimate=record.presented,
         spent={str(layer): record.spent[layer] for layer in Layer},
         cases=len(record.plan.cases),
         families_not_run={
@@ -332,10 +327,10 @@ def create_app(config: BenchConfig | None = None) -> FastAPI:
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"no run {run_id} was started by this bench",
             ) from unknown
-        except AlreadyAnswered as answered:
+        except NoLongerWaiting as closed:
             raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT, detail=str(answered)
-            ) from answered
+                status_code=status.HTTP_409_CONFLICT, detail=str(closed)
+            ) from closed
         return response_for(record)
 
     return app

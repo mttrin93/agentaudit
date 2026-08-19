@@ -340,7 +340,7 @@ def _run_target(
     plant_nonce: PlantNonce | None,
     adjudicator: Completion | None,
     rule: GateRule,
-    planted: str | None = None,
+    planted: str | None,
 ) -> TargetRun:
     """Register one target, then run the cases that apply to it if it registered.
 

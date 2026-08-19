@@ -37,6 +37,14 @@ what the graph is holding. The suite is on the far side of the edge the answer
 decides, and it is held to the ceiling on the record — never one re-declared later
 against whatever the library holds by then.
 
+**A thread rather than a background task, and the reason is the halt.** A FastAPI
+background task starts after its response has been sent, and this run has to be
+*already halted* when the response is built — otherwise the figures returned would
+be a second computation of the estimate rather than the one the graph is holding,
+and there would be nobody to answer. So the run starts on its own thread and the
+request rendezvouses with it at the interrupt. The cost is a thread per run
+awaiting an answer, which is the v1 the spec licensed; a queue is P1.
+
 **Nothing here reads the environment.** The price per call arrives in the request
 or the run is *not priced*: the caller's confirmation is the liability record, and
 a figure the bench filled in from its own configuration is a figure nobody agreed
@@ -121,6 +129,14 @@ class DeclaredGap(StrEnum):
     no attempt is skipped for them, and the family is not run at all rather than
     measured at zero. A family missing from a run with no reason beside it is a
     reader guessing which of three answers it was.
+
+    Two enums rather than one shared one, and the duplication is the smaller cost.
+    `OperatorGap` says *pass `--adjudicator-model`* and *this was a
+    `--deterministic-only` run*: its prose names command-line flags, which is right
+    for the surface it was written for and wrong in an HTTP response. It also
+    carries two members about reading a rate that was measured, which is a thing
+    this surface does not do yet. Sharing them would mean rewriting a script's
+    user-facing text to fit a caller who is not at a terminal.
     """
 
     NO_ADJUDICATOR = "no_adjudicator"
@@ -273,7 +289,9 @@ class RunRecord:
     statement: str = (
         "halted at the approval interrupt: nothing has been sent to the target "
         "and nothing has been spent, and nothing will be until this estimate is "
-        "answered"
+        "answered. The nonce is checked by the run's own registration probe, "
+        "which is the first call it makes — a target that does not echo it is "
+        "not attempted"
     )
     confirmed_by: str = ""
     result: CalibrationResult | None = None
@@ -310,6 +328,8 @@ class PendingApproval:
         self._answered = threading.Event()
         self._payload: BudgetPayload | None = None
         self._answer: Approval | None = None
+        self._closed = False
+        self._lock = threading.Lock()
 
     @property
     def answered(self) -> bool:
@@ -322,24 +342,41 @@ class PendingApproval:
         The payload is published before the wait, so the request that started the
         run returns the figures the interrupt is holding rather than a recomputed
         copy of them.
+
+        When the wait runs out this closes: an answer arriving afterwards has
+        nothing to answer, because the graph has already been told nobody did. The
+        close and the answer take the same lock, so a confirmation landing in that
+        instant is either taken or refused and never both.
         """
         self._payload = presented
         self._halted.set()
-        if not self._answered.wait(self._wait) or self._answer is None:
-            return Approval(
-                confirmed=False,
-                identity="",
-                reason=(
-                    "the approval interrupt was never answered, so the run never "
-                    "started"
-                ),
-            )
-        return self._answer
+        answered = self._answered.wait(self._wait)
+        with self._lock:
+            if not answered or self._answer is None:
+                self._closed = True
+                return Approval(
+                    confirmed=False,
+                    identity="",
+                    reason=(
+                        "the approval interrupt was never answered, so the run "
+                        "never started"
+                    ),
+                )
+            return self._answer
 
-    def answer(self, approval: Approval) -> None:
-        """The human's answer, from the request that carried it."""
-        self._answer = approval
-        self._answered.set()
+    def answer(self, approval: Approval) -> bool:
+        """Record the human's answer, if this interrupt is still waiting on one.
+
+        False when it is not — answered already, or closed because the wait ran
+        out. A caller that took that for a yes would be telling somebody their run
+        had started when the graph had already been told it would not.
+        """
+        with self._lock:
+            if self._closed or self._answer is not None:
+                return False
+            self._answer = approval
+            self._answered.set()
+            return True
 
     def halted(self, timeout: float) -> BudgetPayload:
         """The estimate the graph is holding, once it is holding one."""
@@ -367,18 +404,21 @@ class BenchRuns:
         self._pending: dict[str, PendingApproval] = {}
         self._lock = threading.Lock()
 
-    @property
-    def config(self) -> BenchConfig:
-        return self._config
-
     def issue(self) -> str:
-        """Issue a nonce for a target the caller is about to register."""
+        """Issue a nonce for a target the caller is about to register.
+
+        One nonce, one run: `start` spends it, so a second run needs a value the
+        caller has planted again. That is what a terminal run already does — it
+        issues a fresh nonce every time — and it is what keeps the echo evidence
+        about *this* run rather than about a value that proved control once.
+        """
         nonce = issue_nonce()
         with self._lock:
             self._issued.add(nonce)
         return nonce
 
     def record(self, run_id: str) -> RunRecord | None:
+        """One run's record, or `None` for an id this bench never issued."""
         with self._lock:
             return self._runs.get(run_id)
 
@@ -398,6 +438,7 @@ class BenchRuns:
         """
         with self._lock:
             issued = nonce in self._issued
+            self._issued.discard(nonce)
         if not issued:
             raise NonceNotIssued(nonce)
 
@@ -445,8 +486,13 @@ class BenchRuns:
             pending = self._pending.get(run_id)
         if record is None or pending is None:
             raise KeyError(run_id)
-        if record.status is not RunStatus.AWAITING_APPROVAL:
-            raise AlreadyAnswered(record)
+        if record.status is not RunStatus.AWAITING_APPROVAL or not pending.answer(
+            approval
+        ):
+            # Both, and in this order. The status catches the second request; the
+            # pending catches the request that arrives in the instant the wait runs
+            # out, which no status has moved for yet.
+            raise NoLongerWaiting(record)
 
         if approval.confirmed:
             record.confirmed_by = approval.identity
@@ -460,22 +506,22 @@ class BenchRuns:
             )
         else:
             record.settle(RunStatus.DECLINED, _declined(approval.reason))
-        pending.answer(approval)
         return record
 
 
-class AlreadyAnswered(RuntimeError):
-    """A second answer to an interrupt that has already been answered once.
+class NoLongerWaiting(RuntimeError):
+    """An answer to an interrupt that is not waiting for one any more.
 
-    Refused rather than applied. The first answer is the one a human gave in front
-    of the figures, and a second request arriving after the suite has started
-    would be consent recorded for a spend that is already happening.
+    Refused rather than applied, whichever of the two it is. A second answer would
+    be consent recorded for a spend that is already happening; an answer arriving
+    after the wait ran out would be consent for a run the graph has already been
+    told nobody authorised.
     """
 
     def __init__(self, record: RunRecord) -> None:
         super().__init__(
-            f"run {record.run_id} is {record.status} and its approval interrupt "
-            "has already been answered. An answer is recorded once"
+            f"run {record.run_id} is {record.status} and is no longer waiting on "
+            "an answer. An interrupt is answered once"
         )
 
 

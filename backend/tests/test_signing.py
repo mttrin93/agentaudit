@@ -47,6 +47,7 @@ from backend.bench.signing import (
 from backend.tests.test_payload import a_payload, an_episode
 
 README = Path(__file__).resolve().parents[2] / "README.md"
+ENV_EXAMPLE = Path(__file__).resolve().parents[2] / ".env.example"
 """Where the signing key's fingerprint is published for a recipient to compare."""
 
 
@@ -131,6 +132,32 @@ def test_the_private_key_is_read_from_the_environment_and_not_from_the_repositor
         "the ability to forge its own reports."
     )
     assert fingerprint(public_key()).startswith("sha256:")
+
+
+def test_the_committed_example_environment_names_the_key_and_carries_no_value() -> None:
+    # `.env` is gitignored and `.env.example` is not, which is the whole point of the
+    # pair and also the way a private key gets committed by accident: the file exists
+    # to be filled in, and a filled-in copy is one `git add` away from publishing the
+    # ability to forge this repository's reports (ADR-0017, ADR-0020). The variable is
+    # named here so a reader knows what to set; its value is empty here forever.
+    example = ENV_EXAMPLE.read_text(encoding="utf-8")
+
+    assert f"{SIGNING_KEY_VARIABLE}=" in example, (
+        f"{ENV_EXAMPLE.name} does not name {SIGNING_KEY_VARIABLE}, so the one "
+        "variable without which the factory refuses to boot is undiscoverable."
+    )
+    for line in example.splitlines():
+        if line.startswith(f"{SIGNING_KEY_VARIABLE}="):
+            assert line == f"{SIGNING_KEY_VARIABLE}=", (
+                f"{ENV_EXAMPLE.name} carries a value for {SIGNING_KEY_VARIABLE}. A "
+                "committed private key is a forgeable bench, and this file is "
+                "committed."
+            )
+    assert "-----BEGIN" not in example, (
+        f"{ENV_EXAMPLE.name} holds a PEM block. Nothing in an environment file is "
+        "key material; the private half is base64 on one line and lives outside "
+        "every committed path."
+    )
 
 
 def test_the_committed_keys_fingerprint_is_the_one_published_in_the_readme() -> None:

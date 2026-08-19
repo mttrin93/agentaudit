@@ -45,6 +45,8 @@ uv run python -m scripts.keygen --public /tmp/dev-signing.pub
 export AGENTAUDIT_SIGNING_KEY=<the value printed once, base64, one line>
 ```
 
+`.env.example` lists every variable this repository reads, with placeholders and the defaults that apply when one is left unset; copy it to the gitignored `.env`. The signing key is the exception it names: the scripts read `.env`, the API does not, so a key that lives only there starts `scripts/` and leaves the factory refusing to boot.
+
 Point `--public` somewhere outside the repository, as above: `keygen` refuses to replace the committed public key, and a report signed by a dev key verifies only against the dev public half — pass it to `scripts/verify.py` with `--pubkey`. The private half goes in the environment and nowhere a commit can reach: the shell, or the gitignored `.env` the scripts load — base64 on one line, which is the format for exactly that reason. Nothing in this codebase writes a private key to disk; `keygen` prints it once. A deployed instance gets a real key set in its environment, and its public half is the committed one whose fingerprint is published below.
 
 Three calls start a run, and both of the controls that make one authorised are in them:

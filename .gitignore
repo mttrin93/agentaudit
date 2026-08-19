@@ -17,3 +17,9 @@ wheels/
 # (backend/bench/goldset.py) and recorded in docs/validation.md.
 .deepeval/
 .deepeval-cache.json
+
+# The precedent store: deterministic findings about somebody else's agent, kept
+# durable across restarts (ADR-0019) and never committed (ADR-0008). A directory
+# rather than a file name, so an export or an editor's swap file beside it cannot
+# become the first finding about a real target this repository carries.
+/precedent/

@@ -69,7 +69,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import StrEnum
 
-from backend.api.report import NEVER_SIGNED_NO_KEY, ReportConfig, artefact_for
+from backend.api.report import ReportConfig, Unsigned, artefact_for
 from backend.bench.adaptive.attacker import AttackerCompletion
 from backend.bench.adaptive.budget import DECLARED_ADAPTIVE_BUDGET, AdaptiveBudget
 from backend.bench.adaptive.scripted import SCRIPTED_ATTACKER
@@ -129,6 +129,18 @@ class RunStatus(StrEnum):
     REGISTRATION_REFUSED = "registration_refused"
     ABORTED = "aborted"
     FAILED = "failed"
+
+    @property
+    def in_flight(self) -> bool:
+        """Whether a run in this state is still going, or has stopped for good.
+
+        Asked by anything that has to tell *not yet* from *not ever*: a caller told
+        to poll a run that ended without a report would poll for the lifetime of the
+        process. Written as the two states a run can leave rather than as the six it
+        cannot, so that a seventh terminal state is terminal on the day it is added
+        rather than on the day somebody remembers this list.
+        """
+        return self in {RunStatus.AWAITING_APPROVAL, RunStatus.RUNNING}
 
 
 class DeclaredGap(StrEnum):
@@ -318,24 +330,18 @@ class RunRecord:
     )
     confirmed_by: str = ""
     result: CalibrationResult | None = None
-    artefact: SignedArtefact | None = None
-    """The signed report this run produced, or nothing at all.
+    report: SignedArtefact | Unsigned = field(default_factory=Unsigned)
+    """The signed report this run produced, or the reason it has none.
 
     Built once, by the thread that ran the run, and read by every request for it:
     what a recipient downloads has to be the bytes that were signed, and bytes
     re-assembled per request are bytes nobody signed (#56).
 
-    `None` is **never signed** and is served as that under its own name. It is not a
-    failed run — the suite ran and the target was measured — and it is never made
-    good by serving an unsigned payload in its place.
-    """
-
-    unsigned_because: str = NEVER_SIGNED_NO_KEY
-    """Why there is no artefact, for a run that has none.
-
-    Read only when `artefact` is `None`, and defaulted to the one reason a correctly
-    configured bench ever has. A refusal that could not say which of the two it was
-    would send an operator looking for a key when the artefact failed to assemble.
+    One of two records rather than a nullable one, so *why there is no report* is
+    carried by the thing that stands in for it: `Unsigned` is served as that under
+    its own name, and it is never made good by serving an unsigned payload in its
+    place. It is not a failed run either — the suite ran and the target was
+    measured.
     """
 
     failure: TargetFailure | None = None
@@ -655,33 +661,38 @@ def _execute(record: RunRecord, config: BenchConfig, pending: PendingApproval) -
         )
         return
 
-    _publish(record, result, config)
-    record.settle(
-        RunStatus.COMPLETED,
-        (
-            f"the run finished inside the ceiling that was confirmed by "
-            f"{record.confirmed_by}"
-        ),
+    record.report = _published(record, result, config)
+    finished = (
+        f"the run finished inside the ceiling that was confirmed by "
+        f"{record.confirmed_by}"
     )
+    if isinstance(record.report, Unsigned):
+        # Said here rather than left to the report route, because this is the
+        # sentence a poller reads: a run whose status says completed and whose
+        # report location is empty would otherwise read as one to keep polling.
+        finished = f"{finished}, and it has no signed report — {record.report.reason}"
+    record.settle(RunStatus.COMPLETED, finished)
 
 
-def _publish(record: RunRecord, result: CalibrationResult, config: BenchConfig) -> None:
-    """Build this run's signed artefact, before the run is called completed.
+def _published(
+    record: RunRecord, result: CalibrationResult, config: BenchConfig
+) -> SignedArtefact | Unsigned:
+    """This run's signed artefact, built before the run is called completed.
 
     Before, and in this order, so that a caller polling for `completed` and then
     fetching the report never meets a run that is finished and has nothing to serve.
 
     A failure here does not fail the run. The suite ran and the target was measured;
     what did not happen is the document, and a run marked failed for it would be
-    reporting a publication fault as a fact about somebody's agent. The reason is
-    kept where the route can say it.
+    reporting a publication fault as a fact about somebody's agent. Every exception
+    is caught for that reason and for one more: this runs on the run's own thread,
+    where anything that escaped would leave the record saying *running* for the
+    lifetime of the process.
     """
     try:
-        record.artefact = artefact_for(
-            result, record.plan.cases, config.rule, config.report
-        )
+        return artefact_for(result, record.plan.cases, config.rule, config.report)
     except Exception as unpublished:
-        record.unsigned_because = (
+        return Unsigned(
             "this run has no signed report: the run finished and its artefact could "
             f"not be assembled or signed — {unpublished}. The measurement happened "
             "and is on the record; nothing unsigned is served in its place"

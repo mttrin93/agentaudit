@@ -73,7 +73,11 @@ from cryptography.hazmat.primitives.serialization import (
 )
 
 from backend.bench.payload import TargetPayload, canonical_bytes
-from backend.bench.rendering import Published, bound, publish
+from backend.bench.rendering import (
+    REPORT_MARKDOWN,
+    REPORT_PAYLOAD,
+    bound,
+)
 
 ALGORITHM = "ed25519"
 """The one algorithm, named in the document rather than assumed by the verifier.
@@ -308,12 +312,12 @@ def signed(payload: TargetPayload, key: Ed25519PrivateKey) -> SignedArtefact:
     the key second would digest a document the signature does not describe, and the
     failure would surface as an unverifiable report on a recipient's machine.
     """
-    joined = bound(bind_key(payload, key))
+    binding = bound(bind_key(payload, key))
     return SignedArtefact(
-        payload=joined.payload,
-        canonical=canonical_bytes(joined.payload),
-        rendering=joined.markdown,
-        signature=sign(joined.payload, key),
+        payload=binding.payload,
+        canonical=canonical_bytes(binding.payload),
+        rendering=binding.markdown,
+        signature=sign(binding.payload, key),
     )
 
 
@@ -338,22 +342,33 @@ def publish_signed(
 ) -> SignedReport:
     """Write the rendering, the payload and the signature, in that order.
 
-    The order is the dependency order and there is no other available: the key's
-    fingerprint goes in first, then the rendering's digest, then the bytes are
-    serialised with both inside them, and only then is there something to sign. The
-    signature is written last on purpose — an interrupted publication leaves an
-    unsigned artefact, which fails verification as *unsigned*, rather than a
-    signature over a payload that never reached the disk.
+    The artefact is built by `signed` and this writes it down: the order the three
+    fields were made in is decided there and in one place, so a directory on disk
+    and a body on the wire cannot be two different assemblies of one report (#56).
+
+    The order these are *written* is the second half of the same care. The signature
+    goes last on purpose — an interrupted publication leaves an unsigned artefact,
+    which fails verification as *unsigned*, rather than a signature over a payload
+    that never reached the disk.
+
+    The payload is written as the bytes that were signed rather than re-serialised
+    from the record, for the reason the whole module exists: a verifier's first act
+    is reading the file, and a file that is a second serialisation of the document
+    is a file the signature does not cover.
     """
-    published: Published = publish(bind_key(payload, key), directory)
-    signature = sign(published.payload, key)
+    artefact = signed(payload, key)
+    rendering_path = directory / REPORT_MARKDOWN
+    rendering_path.parent.mkdir(parents=True, exist_ok=True)
+    rendering_path.write_text(artefact.rendering, encoding="utf-8")
+    payload_path = directory / REPORT_PAYLOAD
+    payload_path.write_bytes(artefact.canonical)
     signature_path = directory / SIGNATURE_FILE
-    signature_path.write_text(encoded(signature), encoding="utf-8")
+    signature_path.write_text(encoded(artefact.signature), encoding="utf-8")
     return SignedReport(
-        payload=published.payload,
-        signature=signature,
-        payload_path=published.payload_path,
-        rendering_path=published.rendering_path,
+        payload=artefact.payload,
+        signature=artefact.signature,
+        payload_path=payload_path,
+        rendering_path=rendering_path,
         signature_path=signature_path,
     )
 

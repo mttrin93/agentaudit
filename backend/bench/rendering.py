@@ -305,7 +305,7 @@ def bind(payload: TargetPayload) -> TargetPayload:
 
 
 @dataclass(frozen=True)
-class Bound:
+class Binding:
     """A payload and the rendering its own digest covers, checked to agree.
 
     The artefact before anybody has decided where to put it. Two things carry it out
@@ -322,7 +322,7 @@ class Bound:
     """The rendering that digest is over, so the pair cannot be assembled apart."""
 
 
-def bound(payload: TargetPayload) -> Bound:
+def bound(payload: TargetPayload) -> Binding:
     """That payload bound to its own rendering, or a refusal if the two disagree.
 
     The binding and the check in one place, because they are one step: the digest
@@ -333,16 +333,16 @@ def bound(payload: TargetPayload) -> Bound:
     that would otherwise fail silently, leaving every verification of the pair to
     fail on the recipient's side instead.
     """
-    joined = bind(payload)
-    markdown = render(joined)
-    if digest(markdown) != joined.rendered_sha256:
+    keyed = bind(payload)
+    markdown = render(keyed)
+    if digest(markdown) != keyed.rendered_sha256:
         raise ValueError(
             "the rendering does not hash to the digest bound into the payload, so "
             "the two would travel disagreeing. A rendering that prints "
             "`rendered_sha256` cannot be bound to it: the digest is taken over the "
             "document, so the document cannot contain it (ADR-0017)"
         )
-    return Bound(payload=joined, markdown=markdown)
+    return Binding(payload=keyed, markdown=markdown)
 
 
 @dataclass(frozen=True)
@@ -370,13 +370,13 @@ def publish(payload: TargetPayload, directory: Path) -> Published:
     Raises rather than writing if the two disagree — `bound` is where that refusal
     lives, so the check is the same one the served artefact faces (#56).
     """
-    joined = bound(payload)
+    binding = bound(payload)
     rendering_path = directory / REPORT_MARKDOWN
     rendering_path.parent.mkdir(parents=True, exist_ok=True)
-    rendering_path.write_text(joined.markdown, encoding="utf-8")
+    rendering_path.write_text(binding.markdown, encoding="utf-8")
     return Published(
-        payload=joined.payload,
-        payload_path=write(joined.payload, directory / REPORT_PAYLOAD),
+        payload=binding.payload,
+        payload_path=write(binding.payload, directory / REPORT_PAYLOAD),
         rendering_path=rendering_path,
     )
 

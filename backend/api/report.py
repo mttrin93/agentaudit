@@ -36,7 +36,6 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
-from enum import StrEnum
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
@@ -147,39 +146,6 @@ def payload_for(
     )
 
 
-def artefact_for(
-    result: CalibrationResult,
-    cases: Sequence[Case],
-    rule: GateRule,
-    config: ReportConfig,
-) -> SignedArtefact | None:
-    """The signed artefact for one completed run, or `None` on a bench with no key.
-
-    `None` is *never signed* and is a fact the route states under its own name. It is
-    not an error and not a failed run: the suite ran, the target was measured, and
-    what this bench cannot do is produce a document that travels.
-    """
-    key = config.signing_key
-    if key is None:
-        return None
-    return signed(payload_for(result, cases, rule, config), key)
-
-
-class ReportRefusal(StrEnum):
-    """Why a report is not being served, as a name rather than as a status code.
-
-    Three members and three different facts, kept apart for the reason every other
-    outcome in this bench is named: a caller that learned only *no report* would have
-    to guess between a run it should poll again, a run that will never have one, and
-    a run id it invented. Two of them share a status code and neither is readable
-    from it.
-    """
-
-    NO_SUCH_RUN = "no_such_run"
-    NOT_COMPLETED = "not_completed"
-    NEVER_SIGNED = "never_signed"
-
-
 NEVER_SIGNED_NO_KEY = (
     "this run has no signed report: the bench that ran it holds no signing key, so "
     "nothing signed the artefact and there is nothing to serve. An unsigned payload "
@@ -194,11 +160,37 @@ correctly working bench ever has.
 """
 
 
-def not_completed(status: str, statement: str) -> str:
-    """What a run that has no report *yet* says, in its own current words."""
-    return (
-        f"this run is {status} and a report is served for a completed run only. "
-        f"{statement}. Nothing partial is served in its place: half a report reads "
-        "as a finished one, and the figures in it would be over attempts the run "
-        "has not made"
-    )
+@dataclass(frozen=True)
+class Unsigned:
+    """A run with no signed report, and the reason there is none.
+
+    The other half of `SignedArtefact`, and a record rather than a `None`: a run
+    either has an artefact or has this, so there is no state in which a reader has
+    to know that one field is only meaningful while another is empty. What the route
+    serves is the first; what it states by name is the second.
+    """
+
+    reason: str = NEVER_SIGNED_NO_KEY
+    """Why this run has no artefact, in the words a caller is given.
+
+    Defaulted to the one reason a correctly configured bench ever has. A refusal
+    that could not say which of the two it was would send an operator looking for a
+    key when what happened is that the artefact could not be assembled.
+    """
+
+
+def artefact_for(
+    result: CalibrationResult,
+    cases: Sequence[Case],
+    rule: GateRule,
+    config: ReportConfig,
+) -> SignedArtefact | Unsigned:
+    """The signed artefact for one completed run, or the reason there is none.
+
+    `Unsigned` is not an error and not a failed run: the suite ran, the target was
+    measured, and what this bench cannot do is produce a document that travels.
+    """
+    key = config.signing_key
+    if key is None:
+        return Unsigned()
+    return signed(payload_for(result, cases, rule, config), key)

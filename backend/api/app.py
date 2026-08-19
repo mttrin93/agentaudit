@@ -64,6 +64,7 @@ an import-time read would make importing this module a filesystem question::
 from __future__ import annotations
 
 from decimal import Decimal, InvalidOperation
+from enum import StrEnum
 from pathlib import Path
 from typing import Annotated
 
@@ -71,7 +72,7 @@ from fastapi import Body, FastAPI, HTTPException, Response, status
 from fastapi import Path as PathParam
 from pydantic import BaseModel, Field
 
-from backend.api.report import ReportRefusal, not_completed
+from backend.api.report import Unsigned
 from backend.api.runs import (
     BenchConfig,
     BenchRuns,
@@ -110,17 +111,58 @@ PLANT_STATEMENT = (
 
 
 REPORT_ROUTE = "/report/{run_id}"
-"""Where the artefact is served, with the rendering and the signature under it."""
+"""Where the artefact is served. One definition, formatted by both ends.
+
+The routes are declared from it and `ReportLocation` fills it in, so the path a
+completed run advertises cannot drift from the path that serves it.
+"""
+
+RENDERING_ROUTE = f"{REPORT_ROUTE}/rendering"
+SIGNATURE_ROUTE = f"{REPORT_ROUTE}/signature"
 
 
-def _refused(refusal: ReportRefusal, statement: str) -> dict[str, str]:
+def report_paths(run_id: str) -> tuple[str, str, str]:
+    """The three paths one run's artefact is served at, in the order it is read."""
+    return (
+        REPORT_ROUTE.format(run_id=run_id),
+        RENDERING_ROUTE.format(run_id=run_id),
+        SIGNATURE_ROUTE.format(run_id=run_id),
+    )
+
+
+class ReportRefusal(StrEnum):
+    """Why a report is not being served, as a name rather than as a status code.
+
+    Four members and four different facts, kept apart for the reason every other
+    outcome in this bench is named. Three of them share a status code and none of
+    the three is readable from it, and the difference that matters most is between
+    the second and the third: one is a run to ask again about and the other is a run
+    that will never have a report, and a caller that could not tell them apart
+    would poll for the lifetime of the process.
+    """
+
+    NO_SUCH_RUN = "no_such_run"
+    IN_FLIGHT = "in_flight"
+    DID_NOT_COMPLETE = "did_not_complete"
+    NEVER_SIGNED = "never_signed"
+
+
+class Refusal(BaseModel):
     """A refusal that names itself, beside the sentence that explains it.
 
     The name is the field a caller branches on and the sentence is the one a person
-    reads. A status code carries neither: two of these three share one, and a
-    client that had only the code would be guessing which fact it met.
+    reads. A bare string would carry the second and not the first, and a status code
+    carries neither.
     """
-    return {"outcome": str(refusal), "statement": statement}
+
+    outcome: ReportRefusal
+    statement: str
+
+
+def _refused(refusal: ReportRefusal, statement: str) -> dict[str, str]:
+    """That refusal as the body of a `detail`, which is plain data by the time it
+    reaches FastAPI."""
+    return Refusal(outcome=refusal, statement=statement).model_dump(mode="json")
 
 
 class TargetRequest(BaseModel):
@@ -544,12 +586,21 @@ def _transport(record: RunRecord) -> TransportOutcome | None:
 
 
 def _report(record: RunRecord) -> ReportLocation | None:
-    if record.status is not RunStatus.COMPLETED:
+    """Where this run's report is, or `None` when there is no report to point at.
+
+    Read off the artefact rather than off the status, because the two can disagree:
+    a completed run on a bench with no signing key has finished and has nothing to
+    serve, and a location advertised for it would send a caller to three paths that
+    all refuse. Why there is none is on the run's own statement, so the absence here
+    is a stated one rather than a blank (`runs.py`).
+    """
+    if record.status is not RunStatus.COMPLETED or isinstance(record.report, Unsigned):
         return None
+    payload, rendering, signature = report_paths(record.run_id)
     return ReportLocation(
-        path=report_path(record.run_id),
-        rendering=f"{report_path(record.run_id)}/rendering",
-        signature=f"{report_path(record.run_id)}/signature",
+        path=payload,
+        rendering=rendering,
+        signature=signature,
         statement=(
             "the run finished: its report is served at these three paths, as the "
             "signed payload with the rendered view and the detached signature "
@@ -560,9 +611,30 @@ def _report(record: RunRecord) -> ReportLocation | None:
     )
 
 
-def report_path(run_id: str) -> str:
-    """Where one run's payload is served. One definition, used by both ends."""
-    return f"/report/{run_id}"
+def _no_report_for(record: RunRecord) -> tuple[ReportRefusal, str]:
+    """Which of the two *no report* facts this run is, and the sentence for it.
+
+    A run still going is a run to ask about again. A run that stopped without
+    completing — declined, unanswered, refused at registration, aborted by its own
+    ceiling, or stopped on the wire — will never have a report, and telling its
+    caller to poll would be telling them to wait for something that is not coming.
+    Both carry the run's own statement, which is where the reason already is.
+    """
+    if record.status.in_flight:
+        return (
+            ReportRefusal.IN_FLIGHT,
+            f"this run is {record.status} and has not finished: a report is served "
+            f"for a completed run only. {record.statement}. Nothing partial is "
+            "served in its place — half a report reads as a finished one, and the "
+            "figures in it would be over attempts the run has not made",
+        )
+    return (
+        ReportRefusal.DID_NOT_COMPLETE,
+        f"this run stopped as {record.status} and produced no report, and it will "
+        f"not produce one: a report is made by a run that completed. "
+        f"{record.statement}. Nothing is served in its place, and nothing here is a "
+        "finding about the target",
+    )
 
 
 def _attachment(filename: str) -> dict[str, str]:
@@ -692,10 +764,11 @@ def create_app(config: BenchConfig | None = None) -> FastAPI:
     def servable(run_id: str) -> SignedArtefact:
         """This run's signed artefact, or the named reason there is none to serve.
 
-        Three refusals and three different facts, and the caller is told which:
-        a run id this bench never issued, a run that has not finished, and a run
-        that finished without a signed report. A single *no report* would send a
-        poller into a loop over a run that will never have one.
+        Four refusals and four different facts, and the caller is told which: a run
+        id this bench never issued, a run still in flight, a run that stopped
+        without completing, and a run that finished without a signed report. A
+        single *no report* would send a poller into a loop over three runs, two of
+        which are never going to have one.
         """
         record = bench.record(run_id)
         if record is None:
@@ -709,17 +782,14 @@ def create_app(config: BenchConfig | None = None) -> FastAPI:
         if record.status is not RunStatus.COMPLETED:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail=_refused(
-                    ReportRefusal.NOT_COMPLETED,
-                    not_completed(str(record.status), record.statement),
-                ),
+                detail=_refused(*_no_report_for(record)),
             )
-        if record.artefact is None:
+        if isinstance(record.report, Unsigned):
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail=_refused(ReportRefusal.NEVER_SIGNED, record.unsigned_because),
+                detail=_refused(ReportRefusal.NEVER_SIGNED, record.report.reason),
             )
-        return record.artefact
+        return record.report
 
     @app.get(REPORT_ROUTE)
     def serve_the_signed_payload(run_id: Annotated[str, PathParam()]) -> Response:
@@ -737,7 +807,7 @@ def create_app(config: BenchConfig | None = None) -> FastAPI:
             headers=_attachment(REPORT_PAYLOAD),
         )
 
-    @app.get(f"{REPORT_ROUTE}/rendering")
+    @app.get(RENDERING_ROUTE)
     def serve_the_rendering(run_id: Annotated[str, PathParam()]) -> Response:
         """The Markdown a human reads, still hashing to the digest in the payload.
 
@@ -752,7 +822,7 @@ def create_app(config: BenchConfig | None = None) -> FastAPI:
             headers=_attachment(REPORT_MARKDOWN),
         )
 
-    @app.get(f"{REPORT_ROUTE}/signature")
+    @app.get(SIGNATURE_ROUTE)
     def serve_the_signature(run_id: Annotated[str, PathParam()]) -> Response:
         """The detached signature, in the hex form the file on disk holds.
 

@@ -30,12 +30,18 @@ from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
 
 from backend.api.app import REPORT_ROUTE, create_app
-from backend.api.report import ReportConfig
+from backend.api.report import ReportConfig, Unsigned
 from backend.api.runs import BenchConfig, BenchRuns, RunRecord, RunStatus
 from backend.bench.library import Case
 from backend.bench.payload import canonical, document
 from backend.bench.rendering import REPORT_MARKDOWN, REPORT_PAYLOAD
-from backend.bench.signing import SIGNATURE_FILE, encoded, generate, public_pem
+from backend.bench.signing import (
+    SIGNATURE_FILE,
+    SignedArtefact,
+    encoded,
+    generate,
+    public_pem,
+)
 from backend.bench.verification import (
     BindingOutcome,
     ReDerivationOutcome,
@@ -93,6 +99,11 @@ class Served:
     def fetch(self, suffix: str = "") -> Any:
         return self.client.get(f"/report/{self.run_id}{suffix}")
 
+    def artefact(self) -> SignedArtefact:
+        """What this run signed, for the tests that compare the wire against it."""
+        assert isinstance(self.record.report, SignedArtefact), self.record.statement
+        return self.record.report
+
 
 # --- the bytes -------------------------------------------------------------------
 
@@ -107,8 +118,7 @@ def test_the_payload_served_is_the_bytes_that_were_signed(leakage_case: Case) ->
     with completed([leakage_case], generate()) as served:
         response = served.fetch()
 
-    artefact = served.record.artefact
-    assert artefact is not None
+    artefact = served.artefact()
     assert response.status_code == 200
     assert response.content == artefact.canonical
     # And a second time without reference to the record, because the first assertion
@@ -212,8 +222,7 @@ def test_no_response_adds_a_figure_or_a_wrapper_the_payload_does_not_carry(
         rendering = served.fetch("/rendering")
         signature = served.fetch("/signature")
 
-    artefact = served.record.artefact
-    assert artefact is not None
+    artefact = served.artefact()
     body = json.loads(payload.content)
     for key in _keys(body):
         assert not [word for word in FORBIDDEN_IN_A_KEY if word in key], (
@@ -246,7 +255,7 @@ def test_a_run_that_has_not_completed_is_a_named_outcome_rather_than_a_partial_r
 
     detail = response.json()["detail"]
     assert response.status_code == 409
-    assert detail["outcome"] == "not_completed"
+    assert detail["outcome"] == "in_flight"
     assert "awaiting_approval" in detail["statement"]
     # Nothing partial came back with the refusal: no payload, no rendering, no
     # figure of any kind.
@@ -269,12 +278,91 @@ def test_a_run_whose_report_was_never_signed_cannot_be_served_as_a_report(
         rendering = served.fetch("/rendering")
         signature = served.fetch("/signature")
 
-    assert served.record.artefact is None
+    assert isinstance(served.record.report, Unsigned)
     for response in (payload, rendering, signature):
         assert response.status_code == 409
         assert response.json()["detail"]["outcome"] == "never_signed"
         assert "no signing key" in response.json()["detail"]["statement"]
         assert "rendered_sha256" not in response.text
+
+
+def test_a_run_that_stopped_without_completing_will_never_have_a_report(
+    leakage_case: Case,
+) -> None:
+    """Declined at the interrupt, and told so rather than told to poll.
+
+    *Not yet* and *not ever* are two facts and only one of them is worth waiting on.
+    A run that stopped — declined, unanswered, refused at registration, aborted by
+    its own ceiling, or stopped on the wire — has no report coming, and a caller
+    handed the poll-again outcome would wait for the lifetime of the process.
+    """
+    app = create_app(
+        BenchConfig(cases=[leakage_case], report=ReportConfig(signing_key=generate()))
+    )
+    with watched_reference() as watched, TestClient(app) as client:
+        nonce = registered(client, watched)
+        started = client.post("/runs", json=a_request(watched.target, nonce)).json()
+        run_id = str(started["run_id"])
+        client.post(
+            f"/runs/{run_id}/approval",
+            json={"confirmed": False, "identity": "operator", "reason": "too costly"},
+        )
+        response = client.get(f"/report/{run_id}")
+
+    detail = response.json()["detail"]
+    assert response.status_code == 409
+    assert detail["outcome"] == "did_not_complete"
+    assert "declined" in detail["statement"]
+    assert "will not produce one" in detail["statement"]
+
+
+def test_an_artefact_that_could_not_be_assembled_is_a_completed_run_with_no_report(
+    leakage_case: Case, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A publication that fails does not fail the run, and does not hide either.
+
+    The suite ran and the target was measured, so a run marked *failed* for this
+    would be reporting a publication fault as a fact about somebody's agent. What it
+    must not do is go quiet: the reason is on the run's own statement, where a poller
+    reads it, and the route names it.
+    """
+
+    def unbuildable(*_: object, **__: object) -> None:
+        raise ValueError("no episode belongs to this target")
+
+    monkeypatch.setattr("backend.api.runs.artefact_for", unbuildable)
+
+    with completed([leakage_case], generate()) as served:
+        response = served.fetch()
+        progress = served.client.get(f"/runs/{served.run_id}").json()
+
+    detail = response.json()["detail"]
+    assert response.status_code == 409
+    assert detail["outcome"] == "never_signed"
+    assert "no episode belongs to this target" in detail["statement"]
+    # The run completed, said so, and said what it does not have. And it advertises
+    # no report location, because there is no report at the end of it.
+    assert progress["status"] == "completed"
+    assert progress["report"] is None
+    assert "no signed report" in progress["statement"]
+
+
+def test_a_completed_run_with_no_key_advertises_no_report_to_fetch(
+    leakage_case: Case,
+) -> None:
+    """The location is read off the artefact, not off the status.
+
+    A completed run on a bench that cannot sign has finished and has nothing to
+    serve. A location advertised for it would send a caller to three paths that all
+    refuse, which is a report presented as existing — the reading story 8 forbids.
+    """
+    with completed([leakage_case], None) as served:
+        progress = served.client.get(f"/runs/{served.run_id}").json()
+
+    assert progress["status"] == "completed"
+    assert progress["report"] is None
+    assert "no signed report" in progress["statement"]
+    assert "no signing key" in progress["statement"]
 
 
 def test_an_unknown_run_id_is_refused_by_its_own_name(leakage_case: Case) -> None:

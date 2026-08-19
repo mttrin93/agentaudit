@@ -32,6 +32,7 @@ from fastapi.testclient import TestClient
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from backend.api.app import create_app
+from backend.api.report import ReportConfig
 from backend.api.runs import (
     BenchConfig,
     BenchRuns,
@@ -45,6 +46,7 @@ from backend.bench.calibration import run_calibration
 from backend.bench.contract import TargetConfig, TargetFailure
 from backend.bench.library import Case, Family, LibraryVersion
 from backend.bench.registration import Attestation
+from backend.bench.signing import generate
 from backend.graph.approval import Approval
 from backend.graph.budget import Layer, RunBudget
 from backend.graph.runstate import RunState
@@ -201,13 +203,21 @@ def api(
     cases: list[Case],
     adaptive: AdaptiveBudget = DECLARED_ADAPTIVE_BUDGET,
     approval_wait_seconds: float = 60.0,
+    report: ReportConfig | None = None,
 ) -> Iterator[tuple[TestClient, BenchRuns]]:
-    """The API over one bench, and the registry the run records live in."""
+    """The API over one bench, and the registry the run records live in.
+
+    The default bench holds no signing key, which is what most of these tests want:
+    they are about what a run does to a target, and a run that signs nothing runs
+    exactly the same suite. The one test that asks where a report is served has to
+    hand in a key, because a bench that cannot sign has no report to point at.
+    """
     app = create_app(
         BenchConfig(
             cases=cases,
             adaptive=adaptive,
             approval_wait_seconds=approval_wait_seconds,
+            report=report or ReportConfig(),
         )
     )
     with TestClient(app) as client:
@@ -984,8 +994,19 @@ def test_an_unknown_run_id_is_a_named_outcome_rather_than_an_empty_response(
 def test_a_completed_run_reports_completion_and_where_its_report_is_served(
     leakage_case: Case,
 ) -> None:
-    """The end of the poll: the run says it is done and where to go next."""
-    with watched_reference() as watched, api([leakage_case]) as (client, bench):
+    """The end of the poll: the run says it is done and where to go next.
+
+    Signed, because the location is read off the artefact and not off the status: a
+    completed run with no signed report has nowhere to send anybody, and #56 is
+    where that is asserted.
+    """
+    with (
+        watched_reference() as watched,
+        api([leakage_case], report=ReportConfig(signing_key=generate())) as (
+            client,
+            bench,
+        ),
+    ):
         nonce = registered(client, watched)
         started = client.post("/runs", json=a_request(watched.target, nonce)).json()
         record = _record(bench, started)
@@ -995,6 +1016,8 @@ def test_a_completed_run_reports_completion_and_where_its_report_is_served(
 
     assert body["status"] == "completed"
     assert body["report"]["path"] == f"/report/{started['run_id']}"
+    assert body["report"]["rendering"] == f"/report/{started['run_id']}/rendering"
+    assert body["report"]["signature"] == f"/report/{started['run_id']}/signature"
     assert body["transport"] is None
 
 

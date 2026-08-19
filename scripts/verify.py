@@ -50,10 +50,20 @@ tampering would report a version mismatch as an attack.
 """
 
 EXIT_DID_NOT_VERIFY = 3
-"""Exit code when one or more of the three results did not hold.
+"""Exit code when one or more of the three results was contradicted.
 
 One code for the three, because all three outcomes are always printed by name and the
 shell's answer to *should I trust this document* is the same in each case: no.
+"""
+
+EXIT_NOT_ESTABLISHED = 4
+"""Exit code when nothing was contradicted and one result was never established.
+
+A third answer, on `scripts/gate.py`'s own precedent: it exits *passed*, *failed* and
+*not decided* under three codes because collapsing the third into the second would
+report a claim the run never measured. A report stating no per-family figure gives the
+re-derivation nothing to recompute — which is neither an agreement nor a disagreement,
+and reporting it as either would be a stated absence read as a result.
 """
 
 
@@ -102,6 +112,14 @@ def main(argv: Sequence[str] | None = None) -> int:
             "None of that says the agent is safe."
         )
         return 0
+    if not verification.contradicted:
+        print(
+            "Nothing here was contradicted, and not all three were established: the "
+            "result above that neither agreed nor disagreed had nothing to check. That "
+            "is a third answer and not a pass — read which one it was rather than "
+            "reading this as verified."
+        )
+        return EXIT_NOT_ESTABLISHED
     print(
         "This artefact did not verify. The result that failed is named above; nothing "
         "was changed on disk, and no figure here was corrected into agreement."

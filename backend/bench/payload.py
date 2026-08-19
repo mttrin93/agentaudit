@@ -377,11 +377,20 @@ def canonical_json(payload: TargetPayload) -> str:
     as it was written — κ is κ — and the encoding is fixed at UTF-8 by
     `canonical_bytes`, which is what is actually signed.
     """
+    return canonical(document(payload))
+
+
+def canonical(body: Mapping[str, Any]) -> str:
+    """Any serialised document as canonical JSON — the one definition of the form.
+
+    Separate from `canonical_json` because two callers need the form over plain data
+    rather than over a `TargetPayload`: a recipient re-serialising a document they
+    parsed, and the tests that doctor one. A second `json.dumps` with these three
+    arguments spelled out again is a second definition of *canonical*, and the two
+    would only have to disagree once for a signature to stop checking anything.
+    """
     return json.dumps(
-        document(payload),
-        sort_keys=True,
-        separators=CANONICAL_SEPARATORS,
-        ensure_ascii=False,
+        body, sort_keys=True, separators=CANONICAL_SEPARATORS, ensure_ascii=False
     )
 
 

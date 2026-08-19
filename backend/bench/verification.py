@@ -10,7 +10,9 @@ strongest claim from the weakest (ADR-0017 point 3):
    the payload, so the document a human reads is the one a machine verified;
 3. **the arithmetic re-derives** — every rate, interval and band the payload states is
    recomputed here from the counts printed beside it, through the same functions the
-   bench used, and compared.
+   bench used, and compared; and the rule and cut points it says those were read
+   against are compared with the ones this repository declares, because a bar read out
+   of the document is a bar a forger can move.
 
 **The third is the point of the exercise.** The first two check the transport: they
 say the artefact arrived as it left. Only the third checks the *bench*. It is what
@@ -47,7 +49,7 @@ and this is the only check that would notice; it is compared and never printed.
 
 import json
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import StrEnum
 from hashlib import sha256
 from pathlib import Path
@@ -57,8 +59,15 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 
 from backend.bench.payload import ARTEFACT, ARTEFACT_VERSION
 from backend.bench.rendering import REPORT_MARKDOWN, REPORT_PAYLOAD
-from backend.bench.rule import GateRule
-from backend.bench.scorer import BandCuts, Rate, band_for, failure_rate, reaches
+from backend.bench.rule import DECLARED_RULE, GateRule
+from backend.bench.scorer import (
+    DECLARED_BAND_CUTS,
+    BandCuts,
+    Rate,
+    band_for,
+    failure_rate,
+    reaches,
+)
 from backend.bench.signing import (
     ALGORITHM,
     SIGNATURE_FILE,
@@ -85,6 +94,7 @@ INTEGRITY_CLAIM = (
     "unprotected (ADR-0017). It says nothing whatsoever about whether the agent is "
     "safe."
 )
+"""ADR-0017's first claim, printed beside the second and never alone."""
 
 RE_DERIVABILITY_CLAIM = (
     "Re-derivability, for the scored layer only. Every figure in the scored sections "
@@ -94,12 +104,12 @@ RE_DERIVABILITY_CLAIM = (
     "valid signature over it is a claim about its bytes and never about its figures "
     "(ADR-0010, ADR-0017)."
 )
-"""The two claims, printed together and never one of them.
+"""ADR-0017's second claim, and the reason the first is not enough on its own.
 
-Stated in the verifier's own voice rather than quoted out of the rendering, because
-these two sentences are about what this run just checked, where the document's are
-about what it carries. Both say the same two things, which is the point: a recipient
-who reads only one of the two files is told the same pair.
+Both are stated in the verifier's own voice rather than quoted out of the rendering,
+because these two sentences are about what this run just checked where the document's
+are about what it carries. They say the same two things, which is the point: a
+recipient who reads only one of the two files is told the same pair.
 """
 
 
@@ -180,21 +190,28 @@ class SignatureResult:
                     "history of rather than one that arrived with the document"
                 )
             case SignatureOutcome.UNSIGNED:
+                named = (
+                    f"the payload names {self.claimed} as its signing key and no "
+                    f"{SIGNATURE_FILE} sits beside it"
+                    if self.claimed is not None
+                    else "the payload names no signing key at all"
+                )
                 return (
-                    "there is no signature here. The payload names no signing key, or "
-                    f"no {SIGNATURE_FILE} sits beside it — and an unsigned report is "
-                    "not a report that failed verification, it is one that was never "
-                    "signed. Nothing about these bytes is vouched for by anybody"
+                    f"there is no signature here: {named}. An unsigned report is not a "
+                    "report that failed verification, it is one that was never signed, "
+                    "and nothing about these bytes is vouched for by anybody"
                 )
             case SignatureOutcome.ANOTHER_KEY:
                 return (
-                    f"this document was signed by {self.claimed}, and this "
-                    f"verification pinned {self.pinned}. The signature may be "
-                    "perfectly valid under the key it names — that is not the "
-                    "question. Nobody who has only the published fingerprint can "
-                    "tell whose key that is, so this document carries no provenance "
-                    "you can check. Pass --pubkey if you have been told to trust "
-                    "another key"
+                    f"this document claims to be signed by {self.claimed}, and this "
+                    f"verification pinned {self.pinned}. **No signature was checked**: "
+                    "the key it names is not the key in hand, so nothing here says "
+                    "whether the signature is valid under it, and this outcome is also "
+                    "what a rewritten `key_id` looks like — the field is inside the "
+                    "signature, so altering it invalidates one. Either way this "
+                    "document carries no provenance you can check against a published "
+                    "fingerprint. Pass --pubkey if you have been told to trust another "
+                    "key"
                 )
             case SignatureOutcome.INVALID:
                 return (
@@ -282,12 +299,16 @@ class ReDerivation:
 
     @property
     def held(self) -> bool:
-        """True where nothing disagreed, which includes having had nothing to check.
+        """True only where figures were recomputed and every one of them agreed.
 
-        The outcome word is what distinguishes the two: this says the payload was not
-        contradicted, and only `AGREES` says its arithmetic was checked and held.
+        **Nothing re-derived does not hold**, and that is the whole of this property.
+        A report stating no per-family figure has not established re-derivability, so
+        counting it as held would print *its arithmetic re-derives* over a check that
+        never ran — a stated absence read as a result, which is the one mistake this
+        project refuses everywhere else. It has not failed either: `Verification`
+        carries that third answer rather than collapsing it into a fail.
         """
-        return not self.disagreements
+        return self.outcome is ReDerivationOutcome.AGREES
 
     def stated(self) -> str:
         match self.outcome:
@@ -313,10 +334,12 @@ class ReDerivation:
             case ReDerivationOutcome.NOTHING_RE_DERIVED:
                 return (
                     "this report states no per-family figure, so there was no "
-                    "arithmetic to recompute. Not an agreement: a run whose every "
-                    "family was withheld or could not be measured has nothing for "
-                    "this check to disagree with, and reporting that as agreement "
-                    "would be a stated absence read as a result"
+                    f"arithmetic about a family to recompute — the {self.checked} "
+                    "comparisons made here were of the rule and the cut points against "
+                    "the declared ones. Not an agreement: a run whose every family was "
+                    "withheld or could not be measured has nothing for this check to "
+                    "disagree with, and reporting that as agreement would be a stated "
+                    "absence read as a result"
                 )
 
 
@@ -343,6 +366,23 @@ class Verification:
     def verified(self) -> bool:
         """Whether all three held. One word, and it is never printed on its own."""
         return self.signature.held and self.binding.held and self.arithmetic.held
+
+    @property
+    def contradicted(self) -> bool:
+        """Whether any result actively failed, as against not having been established.
+
+        Three answers rather than two, which is `scripts/gate.py`'s own discipline: it
+        exits *passed*, *failed* and *not decided* under three codes because collapsing
+        the third into the second would report a claim the run never measured. The same
+        shape arrives here through `NOTHING_RE_DERIVED` — a report stating no figure
+        has neither re-derived nor contradicted anything, and a verifier that called it
+        either would be telling its reader something it does not know.
+        """
+        return (
+            not self.signature.held
+            or not self.binding.held
+            or bool(self.arithmetic.disagreements)
+        )
 
     def stated(self) -> str:
         """The whole of what a recipient reads: three results, then the two claims."""
@@ -399,7 +439,7 @@ def verify(directory: Path, public: Ed25519PublicKey) -> Verification:
         target=_string(body, "target"),
         signature=_signature(body, signed, directory, public),
         binding=_binding(body, directory),
-        arithmetic=re_derive(body),
+        arithmetic=_re_derive(body),
     )
 
 
@@ -446,12 +486,17 @@ def _signature(
     pinned = fingerprint(public)
     claimed = body.get("key_id")
     path = directory / SIGNATURE_FILE
-    if claimed is None or not path.is_file():
-        return SignatureResult(SignatureOutcome.UNSIGNED, claimed=None, pinned=pinned)
-    if not isinstance(claimed, str):
+    if claimed is not None and not isinstance(claimed, str):
         raise NotThisArtefact(
             f"key_id is {type(claimed).__name__} and not a string, so this payload "
             "makes no readable claim about which key signed it"
+        )
+    if claimed is None or not path.is_file():
+        # The key the payload named is carried through even here. A payload naming a key
+        # with no signature beside it and one naming none at all are both unsigned and
+        # are not the same fact, and the reader is told which they are holding.
+        return SignatureResult(
+            SignatureOutcome.UNSIGNED, claimed=claimed, pinned=pinned
         )
     if claimed != pinned:
         return SignatureResult(
@@ -490,35 +535,157 @@ def _binding(body: Mapping[str, Any], directory: Path) -> BindingResult:
     return BindingResult(outcome, bound=bound, found=found)
 
 
-def re_derive(body: Mapping[str, Any]) -> ReDerivation:
-    """Recompute every figure the payload states from the counts printed beside it.
+@dataclass
+class _Comparisons:
+    """Every figure recomputed so far, and the ones that did not agree.
 
-    Exposed rather than private because it is the check that is about the bench, and a
-    caller holding a payload — the API of #56, a screen of #59 — has the same reason to
-    ask as a recipient with a directory does.
+    A collector rather than a list passed down and a count passed back up. The
+    alternative had each helper reporting two things by two mechanisms — appending to
+    an argument and returning a number — and the count is the one figure a
+    verification prints about itself, so a helper that forgot to add its own would
+    understate what was checked without anything failing.
+    """
+
+    checked: int = 0
+    found: list[Disagreement] = field(default_factory=list)
+
+    def same(
+        self, path: str, node: Mapping[str, Any], key: str, re_derived: float
+    ) -> None:
+        """One stated number against one re-derived one, within the stated tolerance."""
+        stated = _number(node, key)
+        self.agrees(
+            f"{path}.{key}",
+            abs(stated - re_derived) <= TOLERANCE,
+            repr(stated),
+            repr(re_derived),
+        )
+
+    def agrees(self, path: str, holds: bool, stated: str, re_derived: str) -> None:
+        """One comparison that is not between two numbers, in its own words.
+
+        The band, the wording beside it and κ against its floor are all comparisons
+        whose disagreement needs a sentence rather than two figures — and they are
+        counted here rather than beside the code, so `checked` cannot drift from the
+        number of comparisons actually made.
+        """
+        self.checked += 1
+        if not holds:
+            self.found.append(
+                Disagreement(path=path, stated=stated, re_derived=re_derived)
+            )
+
+    def outcome(self, figures: int) -> ReDerivation:
+        """What these comparisons amount to: one of three answers, never two.
+
+        `figures` is how many of them were about a **family** rather than about the bar
+        the families were read against. The distinction decides the third answer: a
+        report stating no per-family figure has had its rule and its cut points checked
+        and still re-derived nothing, and counting those against it would report an
+        agreement about figures nobody recomputed.
+        """
+        if self.found:
+            return ReDerivation(
+                ReDerivationOutcome.DISAGREES,
+                checked=self.checked,
+                disagreements=tuple(self.found),
+            )
+        if figures == 0:
+            return ReDerivation(
+                ReDerivationOutcome.NOTHING_RE_DERIVED, checked=self.checked
+            )
+        return ReDerivation(ReDerivationOutcome.AGREES, checked=self.checked)
+
+
+def _re_derive(body: Mapping[str, Any]) -> ReDerivation:
+    """Recompute every figure the payload states from the counts printed beside it.
 
     Every comparison goes through the function the bench itself used: `failure_rate`
     for the rate and its Wilson bounds, `band_for` for the band, `reaches` for the κ
     floor. Re-implementing the arithmetic here would produce a verifier that agrees
     with itself and tells a reader nothing about the bench.
+
+    **Two questions, and they are different questions.** Whether the figures follow
+    from the counts is asked against the rule and the cut points *the payload states*,
+    because those are what this run says it measured under and internal consistency is
+    what a recipient can check. Whether that stated rule is the **declared** one is
+    asked separately, against `DECLARED_RULE` and `DECLARED_BAND_CUTS` — because
+    ADR-0003's thresholds and ADR-0014's anchors are declared in the repository and
+    never tuned, so a payload carrying its own would otherwise let a forger move the
+    bar and re-derive cleanly against it.
     """
     measured = _mapping(body, "measured")
     rule = _rule(body)
     cuts = _cuts(measured)
-    found: list[Disagreement] = []
-    checked = 0
+    comparisons = _Comparisons()
+    _declared_bar(body, measured, cuts, comparisons)
+    # Counted from here, so what decides the third answer is how many figures about a
+    # family were recomputed and not how many comparisons this function happened to
+    # make. The bar is checked on every report, including one that states no figure.
+    bar = comparisons.checked
     for section in ("deterministic", "judged"):
         for index, entry in enumerate(_sequence(measured, section)):
-            checked += _entry(f"measured.{section}[{index}]", entry, rule, cuts, found)
+            _entry(f"measured.{section}[{index}]", entry, rule, cuts, comparisons)
     for index, one in enumerate(_sequence(measured, "withheld")):
-        checked += _withheld(f"measured.withheld[{index}]", one, rule, found)
-    if found:
-        return ReDerivation(
-            ReDerivationOutcome.DISAGREES, checked=checked, disagreements=tuple(found)
-        )
-    if checked == 0:
-        return ReDerivation(ReDerivationOutcome.NOTHING_RE_DERIVED, checked=0)
-    return ReDerivation(ReDerivationOutcome.AGREES, checked=checked)
+        _withheld(f"measured.withheld[{index}]", one, rule, comparisons)
+    return comparisons.outcome(figures=comparisons.checked - bar)
+
+
+def _declared_bar(
+    body: Mapping[str, Any],
+    measured: Mapping[str, Any],
+    cuts: BandCuts,
+    comparisons: _Comparisons,
+) -> None:
+    """The rule and the anchors this payload states, against the declared ones.
+
+    Not a figure about the target: it is the question of whether the bar the figures
+    were read against is the published bar. A report measured under an alternative
+    rule is a report whose numbers mean something else, and the stated absence of that
+    check is what would let a doctored `fails_at_or_above` promote a band with every
+    other comparison still agreeing (ADR-0003, ADR-0014).
+    """
+    stated_rule = _mapping(_mapping(body, "provenance"), "rule")
+    comparisons.same(
+        "provenance.rule",
+        stated_rule,
+        "interval_confidence",
+        DECLARED_RULE.interval_confidence,
+    )
+    comparisons.same(
+        "provenance.rule",
+        stated_rule,
+        "attempts_per_case",
+        DECLARED_RULE.attempts_per_case,
+    )
+    comparisons.same(
+        "provenance.rule", stated_rule, "kappa_floor", DECLARED_RULE.kappa_floor
+    )
+    stated_cuts = _mapping(measured, "cuts")
+    comparisons.same(
+        "measured.cuts",
+        stated_cuts,
+        "holds_at_or_below",
+        DECLARED_BAND_CUTS.holds_at_or_below,
+    )
+    comparisons.same(
+        "measured.cuts",
+        stated_cuts,
+        "fails_at_or_above",
+        DECLARED_BAND_CUTS.fails_at_or_above,
+    )
+    # Compared and never printed, for the reason `band_stated` is: the shared wording
+    # names the hardened and weak reference agents, and a target's report does not
+    # (ADR-0018 point 6).
+    comparisons.agrees(
+        "measured.cuts.stated",
+        stated_cuts.get("stated") == cuts.stated(),
+        "wording that does not follow from the two cut points",
+        (
+            "the wording for these cut points. Not printed here: it names the bench's "
+            "reference agents, which a target's report does not (ADR-0018)"
+        ),
+    )
 
 
 def _entry(
@@ -526,27 +693,33 @@ def _entry(
     entry: Mapping[str, Any],
     rule: GateRule,
     cuts: BandCuts,
-    found: list[Disagreement],
-) -> int:
-    """One published family: its rate, its interval, its band and its instrument.
-
-    Returns how many figures were compared, so the count a verification reports is the
-    number of comparisons it actually made rather than a number somebody maintained
-    beside the code.
-    """
+    comparisons: _Comparisons,
+) -> None:
+    """One published family: its rate, its interval, its band and its instrument."""
     successes = _integer(entry, "successes")
     attempts = _integer(entry, "attempts")
-    rate = failure_rate(successes, attempts, rule)
+    try:
+        rate = failure_rate(successes, attempts, rule)
+    except ValueError as impossible:
+        # Counts that are not a rate — no attempts, or more successes than attempts —
+        # are a disagreement and not a crash. `failure_rate` refuses them, which is
+        # right where the bench is producing a figure and wrong here: a verifier that
+        # raised on a doctored document would hand its reader a traceback in place of
+        # the one thing they came for, which is to be told what is wrong with it.
+        comparisons.agrees(
+            f"{path}.successes/attempts",
+            False,
+            f"{successes} of {attempts}",
+            f"no rate at all — {impossible}",
+        )
+        return
     interval = _mapping(entry, "interval")
-    compared = _same(path, entry, "rate", rate.value, found)
-    compared += _same(f"{path}.interval", interval, "lower", rate.interval.lower, found)
-    compared += _same(f"{path}.interval", interval, "upper", rate.interval.upper, found)
-    compared += _same(
-        path, entry, "interval_confidence", rule.interval_confidence, found
-    )
-    compared += _band(path, entry, rate, cuts, found)
-    compared += _reliability(path, entry, rule, found)
-    return compared
+    comparisons.same(path, entry, "rate", rate.value)
+    comparisons.same(f"{path}.interval", interval, "lower", rate.interval.lower)
+    comparisons.same(f"{path}.interval", interval, "upper", rate.interval.upper)
+    comparisons.same(path, entry, "interval_confidence", rule.interval_confidence)
+    _band(path, entry, rate, cuts, comparisons)
+    _reliability(path, entry, rule, comparisons)
 
 
 def _band(
@@ -554,47 +727,37 @@ def _band(
     entry: Mapping[str, Any],
     rate: Rate,
     cuts: BandCuts,
-    found: list[Disagreement],
-) -> int:
+    comparisons: _Comparisons,
+) -> None:
     """The band, re-read from the interval against the cut points the payload carries.
 
-    Two comparisons and one of them is printed: the band member, and the wording the
-    payload carries beside it. The wording names the bench's two reference agents, so
-    it is compared and never printed (ADR-0018 point 6) — but it is compared, because a
-    payload whose band says `holds` and whose prose says the other thing is a doctored
+    Two comparisons and only one of them is printable: the band member, and the wording
+    the payload carries beside it. The wording names the bench's two reference agents,
+    so it is compared and never printed (ADR-0018 point 6) — but it is compared, because
+    a payload whose band says `holds` and whose prose says the other thing is a doctored
     document and no other check here would notice.
     """
     derived = band_for(rate, cuts)
     stated = entry.get("band")
-    compared = 1
+    comparisons.agrees(
+        f"{path}.band", stated == derived.value, repr(stated), repr(derived.value)
+    )
     if stated != derived.value:
-        found.append(
-            Disagreement(
-                path=f"{path}.band",
-                stated=repr(stated),
-                re_derived=repr(derived.value),
-            )
-        )
-        return compared
-    compared += 1
-    if entry.get("band_stated") != derived.stated():
-        found.append(
-            Disagreement(
-                path=f"{path}.band_stated",
-                stated="wording that does not follow from the band",
-                re_derived=(
-                    f"the wording for {derived.value}. Not printed here: it names the "
-                    "bench's reference agents, which a target's report does not "
-                    "(ADR-0018)"
-                ),
-            )
-        )
-    return compared
+        return
+    comparisons.agrees(
+        f"{path}.band_stated",
+        entry.get("band_stated") == derived.stated(),
+        "wording that does not follow from the band",
+        (
+            f"the wording for {derived.value}. Not printed here: it names the bench's "
+            "reference agents, which a target's report does not (ADR-0018)"
+        ),
+    )
 
 
 def _reliability(
-    path: str, entry: Mapping[str, Any], rule: GateRule, found: list[Disagreement]
-) -> int:
+    path: str, entry: Mapping[str, Any], rule: GateRule, comparisons: _Comparisons
+) -> None:
     """A published judged family's κ against the floor it had to reach (ADR-0015).
 
     Re-derived because publishing the rate is itself a claim: a judged family whose
@@ -605,35 +768,25 @@ def _reliability(
     """
     reliability = entry.get("reliability")
     if reliability is None:
-        return 0
+        return
     if not isinstance(reliability, dict):
         raise NotThisArtefact(f"{path}.reliability is not an object")
-    compared = _same(
-        f"{path}.reliability", reliability, "floor", rule.kappa_floor, found
-    )
+    comparisons.same(f"{path}.reliability", reliability, "floor", rule.kappa_floor)
     kappa = _number(reliability, "kappa")
     floor = _number(reliability, "floor")
-    compared += 1
-    if not reaches(kappa, floor):
-        found.append(
-            Disagreement(
-                path=f"{path}.reliability.kappa",
-                stated=(
-                    f"{kappa} with this family's rate published beside it, against a "
-                    f"floor of {floor}"
-                ),
-                re_derived=(
-                    "a family below the declared κ floor, whose rate a report may not "
-                    "publish at all (ADR-0015)"
-                ),
-            )
-        )
-    return compared
+    comparisons.agrees(
+        f"{path}.reliability.kappa",
+        reaches(kappa, floor),
+        f"{kappa} with this family's rate published beside it, against a floor of "
+        f"{floor}",
+        "a family below the declared κ floor, whose rate a report may not publish at "
+        "all (ADR-0015)",
+    )
 
 
 def _withheld(
-    path: str, one: Mapping[str, Any], rule: GateRule, found: list[Disagreement]
-) -> int:
+    path: str, one: Mapping[str, Any], rule: GateRule, comparisons: _Comparisons
+) -> None:
     """A withheld family's floor, and that its κ really is below it.
 
     The mirror of the check above, and it matters in the other direction: a payload
@@ -641,43 +794,19 @@ def _withheld(
     hiding a figure it was entitled to publish, and the reason printed beside the
     absence would be false.
     """
-    compared = _same(path, one, "floor", rule.kappa_floor, found)
+    comparisons.same(path, one, "floor", rule.kappa_floor)
     kappa = one.get("kappa")
     if kappa is None:
-        return compared
+        return
     if not isinstance(kappa, int | float) or isinstance(kappa, bool):
         raise NotThisArtefact(f"{path}.kappa is not a number")
-    compared += 1
-    if reaches(float(kappa), _number(one, "floor")):
-        found.append(
-            Disagreement(
-                path=f"{path}.kappa",
-                stated=f"{kappa}, with this family's rate withheld for it",
-                re_derived=(
-                    "a κ that reaches the declared floor, so this family was fit to "
-                    "report and its absence has no reading behind it (ADR-0015)"
-                ),
-            )
-        )
-    return compared
-
-
-def _same(
-    path: str,
-    node: Mapping[str, Any],
-    key: str,
-    re_derived: float,
-    found: list[Disagreement],
-) -> int:
-    """One stated number against one re-derived number, within the stated tolerance."""
-    stated = _number(node, key)
-    if abs(stated - re_derived) > TOLERANCE:
-        found.append(
-            Disagreement(
-                path=f"{path}.{key}", stated=repr(stated), re_derived=repr(re_derived)
-            )
-        )
-    return 1
+    comparisons.agrees(
+        f"{path}.kappa",
+        not reaches(float(kappa), _number(one, "floor")),
+        f"{kappa}, with this family's rate withheld for it",
+        "a κ that reaches the declared floor, so this family was fit to report and its "
+        "absence has no reading behind it (ADR-0015)",
+    )
 
 
 def _rule(body: Mapping[str, Any]) -> GateRule:

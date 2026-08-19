@@ -22,13 +22,17 @@ import ast
 import json
 import socket
 from collections.abc import Callable, Iterator
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import pytest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
-from backend.bench.payload import CANONICAL_SEPARATORS
+from backend.bench.assembler import TargetResult
+from backend.bench.library import Family
+from backend.bench.measurability import NotMeasurable
+from backend.bench.payload import canonical
 from backend.bench.rendering import REPORT_MARKDOWN, REPORT_PAYLOAD, publish
 from backend.bench.signing import (
     SIGNATURE_FILE,
@@ -43,8 +47,13 @@ from backend.bench.verification import (
     ReDerivationOutcome,
     SignatureOutcome,
 )
-from backend.tests.test_payload import a_payload
-from scripts.verify import EXIT_DID_NOT_VERIFY, EXIT_UNREADABLE, main
+from backend.tests.test_payload import a_payload, a_result
+from scripts.verify import (
+    EXIT_DID_NOT_VERIFY,
+    EXIT_NOT_ESTABLISHED,
+    EXIT_UNREADABLE,
+    main,
+)
 
 CREDENTIALS = ("OPENROUTER_API_KEY", "OPENAI_API_KEY", "AGENTAUDIT_SIGNING_KEY")
 """Every credential this repository reads anywhere. None of them is read here."""
@@ -260,6 +269,92 @@ def test_the_kappa_floor_is_re_derived_in_both_directions(
     assert "measured.withheld[0].kappa" in capsys.readouterr().out
 
 
+def test_counts_that_are_not_a_rate_are_reported_rather_than_raised(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # `failure_rate` refuses counts that are not a rate, which is right where the bench
+    # is producing a figure and wrong here: a verifier that raised on a doctored
+    # document would hand its reader a traceback in place of the one thing they came
+    # for, which is to be told what is wrong with it.
+    published = _publish(tmp_path)
+
+    def impossible(body: dict[str, Any]) -> None:
+        body["measured"]["deterministic"][0]["attempts"] = 0
+
+    _doctor(tmp_path, published.key, impossible)
+
+    code = main([str(tmp_path), "--pubkey", str(published.pubkey)])
+
+    printed = capsys.readouterr().out
+    assert code == EXIT_DID_NOT_VERIFY
+    assert ReDerivationOutcome.DISAGREES.value in printed
+    assert "measured.deterministic[0].successes/attempts" in printed
+
+
+def test_a_report_with_no_figure_to_recompute_is_not_reported_as_re_derived(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # A run whose every family was withheld or could not be measured states no
+    # per-family figure, so the third check has nothing to recompute. Neither an
+    # agreement nor a disagreement — a third answer under its own exit code, on
+    # `scripts/gate.py`'s precedent, because collapsing it either way would report a
+    # claim this verification never made.
+    published = _publish(
+        tmp_path,
+        result=a_result(
+            families=(),
+            judged=(),
+            not_measurable={Family.SCOPE_CREEP: NotMeasurable.NO_TOOL_CALL_VISIBILITY},
+        ),
+    )
+
+    code = main([str(tmp_path), "--pubkey", str(published.pubkey)])
+
+    printed = capsys.readouterr().out
+    assert code == EXIT_NOT_ESTABLISHED
+    assert ReDerivationOutcome.NOTHING_RE_DERIVED.value in printed
+    assert ReDerivationOutcome.AGREES.value not in printed
+    assert "All three held" not in printed, (
+        "A report stating no figure was reported as having re-derived one. That is a "
+        "stated absence read as a result, which is the one mistake this project "
+        "refuses everywhere else."
+    )
+
+
+def test_the_bar_the_figures_were_read_against_is_checked_against_the_declared_one(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # The rule is declared in the repository (ADR-0003) and the cut points are the
+    # reference agents' constructed rates, "declared, never tuned" (ADR-0014). A
+    # verifier that read both out of the payload would re-derive cleanly against a bar
+    # a forger had moved — so the stated bar is compared against the declared one, and
+    # a promoted band arrives with the moved anchor beside it.
+    published = _publish(tmp_path)
+
+    def move_the_anchor(body: dict[str, Any]) -> None:
+        body["measured"]["cuts"]["fails_at_or_above"] = 0.99
+
+    _doctor(tmp_path, published.key, move_the_anchor)
+
+    code = main([str(tmp_path), "--pubkey", str(published.pubkey)])
+
+    printed = capsys.readouterr().out
+    assert code == EXIT_DID_NOT_VERIFY
+    assert ReDerivationOutcome.DISAGREES.value in printed
+    assert "measured.cuts.fails_at_or_above" in printed
+
+    published = _publish(tmp_path)
+
+    def lower_the_floor(body: dict[str, Any]) -> None:
+        body["provenance"]["rule"]["kappa_floor"] = 0.1
+
+    _doctor(tmp_path, published.key, lower_the_floor)
+    assert (
+        main([str(tmp_path), "--pubkey", str(published.pubkey)]) == EXIT_DID_NOT_VERIFY
+    )
+    assert "provenance.rule.kappa_floor" in capsys.readouterr().out
+
+
 def test_the_verifier_reaches_no_network_and_reads_no_credential(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -318,19 +413,19 @@ def test_an_artefact_of_another_kind_is_refused_rather_than_reported_as_unverifi
 # --- Helpers -----------------------------------------------------------------
 
 
-class Signed:
-    """One published report, its key, and the PEM a recipient would pin."""
+@dataclass(frozen=True)
+class Publication:
+    """One signed report: the key that signed it, and the PEM a recipient would pin."""
 
-    def __init__(self, key: Ed25519PrivateKey, pubkey: Path) -> None:
-        self.key = key
-        self.pubkey = pubkey
+    key: Ed25519PrivateKey
+    pubkey: Path
 
 
-def _publish(directory: Path) -> Signed:
+def _publish(directory: Path, result: TargetResult | None = None) -> Publication:
     """One signed report in that directory, under a key generated for this test."""
     key = generate()
-    publish_signed(a_payload(), directory, key)
-    return Signed(key, _pubkey(directory.parent, key))
+    publish_signed(a_payload(result=result), directory, key)
+    return Publication(key, _pubkey(directory.parent, key))
 
 
 def _pubkey(directory: Path, key: Ed25519PrivateKey) -> Path:
@@ -352,9 +447,7 @@ def _doctor(
     path = directory / REPORT_PAYLOAD
     body: dict[str, Any] = json.loads(path.read_text(encoding="utf-8"))
     change(body)
-    doctored = json.dumps(
-        body, sort_keys=True, separators=CANONICAL_SEPARATORS, ensure_ascii=False
-    ).encode("utf-8")
+    doctored = canonical(body).encode("utf-8")
     path.write_bytes(doctored)
     (directory / SIGNATURE_FILE).write_text(
         encoded(key.sign(doctored)), encoding="utf-8"

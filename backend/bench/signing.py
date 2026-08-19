@@ -41,6 +41,14 @@ public half is committed, in PEM, with its fingerprint published in the README, 
 recipient checking a signature trusts a key published where they can read its history
 rather than one that arrived with the document. Publishing this repository therefore
 does not publish the ability to forge its reports.
+
+**The key's lifecycle is here too, and deliberately.** `generate`, `encoded_private`
+and `public_pem` are called by `scripts.keygen` and never by a run, which reads as a
+second concern in one module — and separating them would put the base64 the environment
+holds in one file and the code that reads it back in another. A generator and a reader
+that disagree about a format is a key that cannot be loaded, discovered at the moment
+somebody needs to sign, so both formats are decided in the module that also decides
+what a fingerprint is.
 """
 
 import base64
@@ -91,6 +99,12 @@ half is PEM, which is the format a recipient's tooling already reads.
 """
 
 KEYS_DIRECTORY = Path(__file__).resolve().parents[2] / "keys"
+"""Where the committed public half lives, at the top of the repository.
+
+Its own directory rather than beside the code, because what is in it is published
+material a recipient goes looking for — and because a directory holding only public
+keys is one whose contents can be read at a glance.
+"""
 
 PUBLIC_KEY_PATH = KEYS_DIRECTORY / "agentaudit-signing.pub"
 """The committed public key `verify.py` pins by default.
@@ -100,6 +114,12 @@ document it verifies proves that whoever sent the document also sent the key.
 """
 
 FINGERPRINT_PREFIX = "sha256:"
+"""What a fingerprint is over, written into the fingerprint.
+
+A bare hex string says nothing about what was hashed or with which digest, and a
+recipient comparing one against the README has to be told. Written down, a later
+algorithm produces a visibly different value rather than an indistinguishable one.
+"""
 
 
 class NoSigningKey(RuntimeError):

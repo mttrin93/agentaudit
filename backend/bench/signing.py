@@ -73,7 +73,7 @@ from cryptography.hazmat.primitives.serialization import (
 )
 
 from backend.bench.payload import TargetPayload, canonical_bytes
-from backend.bench.rendering import Published, publish
+from backend.bench.rendering import Published, bound, publish
 
 ALGORITHM = "ed25519"
 """The one algorithm, named in the document rather than assumed by the verifier.
@@ -266,6 +266,55 @@ def verify_bytes(signed: bytes, signature: bytes, public: Ed25519PublicKey) -> b
     except InvalidSignature:
         return False
     return True
+
+
+@dataclass(frozen=True)
+class SignedArtefact:
+    """One signed report as bytes, before anything decides where to put it.
+
+    The three files of `publish_signed` without the disk: the canonical bytes that
+    were signed, the document those bytes are bound to by digest, and the detached
+    signature over them. It exists because the artefact leaves this process two ways
+    now — written to a directory, and served over HTTP (#56) — and a route that
+    re-assembled it on the way out would be a second chance to re-serialise the bytes
+    a signature covers. What a recipient downloads is this record, field for field.
+    """
+
+    payload: TargetPayload
+    """The bound, keyed payload these bytes are of — never the one a caller passed
+    in, which is missing both of the fields the signature covers."""
+
+    canonical: bytes
+    """The bytes that were signed, kept rather than recomputed on demand.
+
+    A second `canonical_bytes` call would produce the same bytes today and is the
+    line somebody edits when a field needs adding "just for the response". Held once,
+    there is nothing downstream that could serialise a different document.
+    """
+
+    rendering: str
+    """The Markdown `payload.rendered_sha256` is the digest of."""
+
+    signature: bytes
+    """The detached signature. `encoded` is what a file or a response body holds."""
+
+
+def signed(payload: TargetPayload, key: Ed25519PrivateKey) -> SignedArtefact:
+    """That payload, keyed, bound to its rendering and signed — in that order.
+
+    The one order available, and the reason it is written down once: the key's
+    fingerprint goes in first, then the rendering's digest is taken over a document
+    that already names the key, and only then are there bytes worth signing. Binding
+    the key second would digest a document the signature does not describe, and the
+    failure would surface as an unverifiable report on a recipient's machine.
+    """
+    joined = bound(bind_key(payload, key))
+    return SignedArtefact(
+        payload=joined.payload,
+        canonical=canonical_bytes(joined.payload),
+        rendering=joined.markdown,
+        signature=sign(joined.payload, key),
+    )
 
 
 @dataclass(frozen=True)

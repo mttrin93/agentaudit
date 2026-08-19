@@ -305,6 +305,47 @@ def bind(payload: TargetPayload) -> TargetPayload:
 
 
 @dataclass(frozen=True)
+class Bound:
+    """A payload and the rendering its own digest covers, checked to agree.
+
+    The artefact before anybody has decided where to put it. Two things carry it out
+    of this process — `publish`, which writes it to a directory, and `signing.signed`,
+    which hands it to a route — and they read the same record rather than each binding
+    a payload to a rendering of its own. Two bindings could differ by one byte and
+    only one of them would be the one a signature covers.
+    """
+
+    payload: TargetPayload
+    """The **bound** payload: the one carrying the digest, and the one to sign."""
+
+    markdown: str
+    """The rendering that digest is over, so the pair cannot be assembled apart."""
+
+
+def bound(payload: TargetPayload) -> Bound:
+    """That payload bound to its own rendering, or a refusal if the two disagree.
+
+    The binding and the check in one place, because they are one step: the digest
+    goes in, the document comes out, and the two agree or nothing may be published.
+
+    Raises rather than returning if they disagree, which can only happen if the
+    renderer learned to print the digest it is being measured by — a circularity
+    that would otherwise fail silently, leaving every verification of the pair to
+    fail on the recipient's side instead.
+    """
+    joined = bind(payload)
+    markdown = render(joined)
+    if digest(markdown) != joined.rendered_sha256:
+        raise ValueError(
+            "the rendering does not hash to the digest bound into the payload, so "
+            "the two would travel disagreeing. A rendering that prints "
+            "`rendered_sha256` cannot be bound to it: the digest is taken over the "
+            "document, so the document cannot contain it (ADR-0017)"
+        )
+    return Bound(payload=joined, markdown=markdown)
+
+
+@dataclass(frozen=True)
 class Published:
     """What one run left on disk: two files that cannot disagree, and the payload.
 
@@ -326,26 +367,16 @@ def publish(payload: TargetPayload, directory: Path) -> Published:
     inside it. There is no window in which the JSON on disk describes a rendering
     other than the one beside it, and no way to write an unbound payload from here.
 
-    Raises rather than writing if the two disagree, which can only happen if the
-    renderer learned to print the digest it is being measured by — a circularity that
-    would otherwise fail silently, leaving every verification of the pair to fail on
-    the recipient's side instead.
+    Raises rather than writing if the two disagree — `bound` is where that refusal
+    lives, so the check is the same one the served artefact faces (#56).
     """
-    bound = bind(payload)
-    markdown = render(bound)
-    if digest(markdown) != bound.rendered_sha256:
-        raise ValueError(
-            "the rendering does not hash to the digest bound into the payload, so "
-            "the two would travel disagreeing. A rendering that prints "
-            "`rendered_sha256` cannot be bound to it: the digest is taken over the "
-            "document, so the document cannot contain it (ADR-0017)"
-        )
+    joined = bound(payload)
     rendering_path = directory / REPORT_MARKDOWN
     rendering_path.parent.mkdir(parents=True, exist_ok=True)
-    rendering_path.write_text(markdown, encoding="utf-8")
+    rendering_path.write_text(joined.markdown, encoding="utf-8")
     return Published(
-        payload=bound,
-        payload_path=write(bound, directory / REPORT_PAYLOAD),
+        payload=joined.payload,
+        payload_path=write(joined.payload, directory / REPORT_PAYLOAD),
         rendering_path=rendering_path,
     )
 

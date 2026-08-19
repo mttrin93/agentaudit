@@ -14,15 +14,19 @@ floor, so one bad night cannot retire a working case. And the **record**: a reti
 case is kept with its date and its final score, leaves the live library, and stays
 queryable in it — a retirement is a status, never a deletion.
 
-The fourth property is a refusal. ADR-0015 leaves open whether the rule may operate
-on a family the bench could not vouch for, and assigns the question to #14's own
-decision. Until that decision exists the outcome is *not decided*: the reading is
-stored, the rule is not applied, and the line says which decision is missing.
+The fourth property is a refusal. ADR-0016 declines the rule on a family the bench
+could not vouch for — decay cannot be claimed on a number the report will not print,
+which is ADR-0015's total exclusion read at the second consumer of the same `D`. The
+outcome is *not decided*: the reading is stored, the rule is not applied, and the line
+says which reliability figure stopped it. The refusal is one-directional, and that is
+tested as an invariant below: unfitness can withhold a retirement and never cause
+one.
 """
 
 import shutil
 from dataclasses import replace
 from datetime import date
+from itertools import product
 from pathlib import Path
 
 import pytest
@@ -194,15 +198,16 @@ def test_a_case_with_no_reading_yet_is_live_and_says_so() -> None:
     assert "no reading yet" in decision.stated()
 
 
-# --- The refusal ADR-0015 left open -------------------------------------------
+# --- The refusal ADR-0016 decides ---------------------------------------------
 
 
 def test_the_rule_is_not_applied_to_a_family_the_bench_could_not_vouch_for() -> None:
-    # ADR-0015 excludes a family below the κ floor from the gate decision and states
-    # that whether retirement may operate on one is *not* settled there. So the
-    # readings are stored and the rule is declined — a case retired here would
-    # resolve the open question silently, and so would a case whose stored readings
-    # were quietly ignored.
+    # ADR-0015 excludes a family below the κ floor from the gate decision, and
+    # ADR-0016 declines retirement there for the same reason one level down: a
+    # retirement is a claim that discrimination decayed, and the claim cannot rest on
+    # a number the report refuses to print. So the readings are stored and the rule is
+    # declined — retiring here would claim decay on unvouched verdicts, and ignoring
+    # the readings would lose the evidence that answers the question once κ is fixed.
     unfit = replace(DECAYED, fit_to_report=False)
 
     decision = decide_retirement("wrongful-commitment-001", [unfit, unfit])
@@ -210,7 +215,47 @@ def test_the_rule_is_not_applied_to_a_family_the_bench_could_not_vouch_for() -> 
     assert decision.outcome is RetirementOutcome.NOT_DECIDED
     assert not decision.retires
     assert decision.scores == (0.0, 0.0)
+    # Both ADRs are named: the one that decides, and the one whose exclusion it
+    # applies. A reader who finds a not-decided line gets the decision, not a defer.
+    assert "ADR-0016" in decision.stated()
     assert "ADR-0015" in decision.stated()
+
+
+def test_unfitness_can_only_withhold_a_retirement_and_never_cause_one() -> None:
+    # ADR-0016's invariant, and the mirror of the one ADR-0015 states for the gate.
+    # Driven over every two-run window and every fitness pattern rather than over one
+    # example, because the whole value of an invariant is that no future window gets
+    # to be the exception — including a window whose readings disagree about fitness.
+    withheld = 0
+    for shape in product((SEPARATING, DECAYED), repeat=2):
+        declared = decide_retirement(
+            "wrongful-commitment-001",
+            [replace(reading, fit_to_report=True) for reading in shape],
+        ).outcome
+        for flags in product((True, False), repeat=2):
+            series = [
+                replace(reading, fit_to_report=flag)
+                for reading, flag in zip(shape, flags, strict=True)
+            ]
+            outcome = decide_retirement("wrongful-commitment-001", series).outcome
+
+            if outcome is RetirementOutcome.RETIRED:
+                # A retirement is reachable only on a window the bench can vouch for
+                # throughout, and only where the declared rule reached it anyway.
+                assert all(flags), f"{shape} retired on {flags}"
+                assert declared is RetirementOutcome.RETIRED
+            if declared is RetirementOutcome.LIVE:
+                # Unfitness is not a second way to answer a live case: the rule did
+                # not fire, so there is no retirement for the exclusion to hold back.
+                assert outcome is RetirementOutcome.LIVE, f"{shape} moved on {flags}"
+            if declared is RetirementOutcome.RETIRED and not all(flags):
+                assert outcome is RetirementOutcome.NOT_DECIDED
+                withheld += 1
+
+    # Not vacuous. The invariant is only worth stating because the withholding really
+    # happens: one window retires under the declared rule, and each of the three ways
+    # to make it unvouched-for holds that retirement back instead of taking it.
+    assert withheld == 3
 
 
 def test_a_family_the_bench_could_not_vouch_for_still_stores_its_d(

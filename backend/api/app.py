@@ -674,8 +674,9 @@ class ApprovalRequest(BaseModel):
 
 
 NO_KEY_NO_BOOT = (
-    "This factory does not start without one. A bench with no key attempts the whole "
-    "library against the operator's endpoint and then refuses every report it "
+    "This factory does not start without a key it can sign with. A bench that cannot "
+    "sign attempts the whole library against the operator's endpoint and then refuses "
+    "every report it "
     f"produced as {ReportRefusal.NEVER_SIGNED} (`report.py`) — an instrument that "
     "measures and cannot testify. The signature is what makes a report portable, and "
     "portable evidence a recipient can check is the claim this project is making "
@@ -683,17 +684,19 @@ NO_KEY_NO_BOOT = (
     "has paid for a run (ADR-0020). Hand in a `BenchConfig` instead to say "
     "deliberately that this bench does not sign."
 )
-"""Why the missing key is fatal at startup, appended to the refusal that names it.
+"""Why an unusable key is fatal at startup, appended to the refusal that names it.
 
-`signing.signing_key` already says what is absent and how to make one. What it
-cannot say is what *this* caller was about to do with it, which is the half that
-makes the absence fatal rather than a degraded mode.
+`signing.signing_key` already says which of its three refusals this is — absent,
+not base64, not an Ed25519 key — and how to make a good one. What it cannot say is
+what *this* caller was about to do with it, which is the half that makes the
+absence fatal rather than a degraded mode. So this sentence is about the
+consequence and never about the cause, and it is appended to all three.
 """
 
 
-def deployed_bench(cases: Path = CASES_DIR) -> BenchConfig:
+def deployed_bench() -> BenchConfig:
     """What a bench is when the deployment declared nothing: the admitted library,
-    and the signing key from the environment or no bench at all.
+    and the signing key from the environment, or no bench at all.
 
     The key is fetched through `signing.signing_key`, which stays the only line in
     this repository that reads `AGENTAUDIT_SIGNING_KEY`; the refusal it raises is
@@ -705,7 +708,7 @@ def deployed_bench(cases: Path = CASES_DIR) -> BenchConfig:
     except NoSigningKey as missing:
         raise NoSigningKey(f"{missing}. {NO_KEY_NO_BOOT}") from missing
     return BenchConfig(
-        cases=admitted_library(cases), report=ReportConfig(signing_key=key)
+        cases=admitted_library(CASES_DIR), report=ReportConfig(signing_key=key)
     )
 
 

@@ -3,7 +3,7 @@
 **Scope:** phases 5, 6a, 6b, 7 and 8 of the Sprint 3 line. 16 hours.
 
 **These are the 16 hours [the first spec](./pre-web-bench.md) deliberately carved out.** That one built the bench up to and including its own calibration and stopped, because a number from an unvalidated bench is exactly as trustworthy as the questionnaire it replaces. The gate has since passed twice on the declared models — 2026-08-18 and 2026-08-19, six fit families of six, both runs recorded in [validation.md](../validation.md) — so the precondition every phase below waits on is met. What this spec adds is defined by the two things the first one did not have: **a renderer and a user**.
-**Governing documents:** [PLAN.md](../../PLAN.md) · [CONTEXT.md](../../CONTEXT.md) · [ADR-0001 … ADR-0019](../adr/)
+**Governing documents:** [PLAN.md](../../PLAN.md) · [CONTEXT.md](../../CONTEXT.md) · [ADR-0001 … ADR-0020](../adr/)
 **Vocabulary:** every term below is defined in `CONTEXT.md`. **Family**, **case** and **attempt** are three different things; so are **attempt**, **episode** and **turn**. Two more carry weight here that carried none before: a **band** summarises one target and never enters the gate ([ADR-0014](../adr/0014-band-cut-points-are-the-reference-agents-constructed-rates.md)), and a **finding** is what a user is shown.
 
 ---

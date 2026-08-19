@@ -59,7 +59,7 @@ Every one of those refusals is inside the bench, decided per run. This one is ab
 
 ## Consequences
 
-- `create_app()` with no argument raises `NoSigningKey`. Any caller relying on a keyless default breaks loudly, which is the point; the two-argument form is unchanged.
+- `create_app()` with no argument raises `NoSigningKey`. Any caller relying on a keyless default breaks loudly, which is the point; the form that hands in a `BenchConfig` is unchanged.
 - **The local development path now needs a key**, generated with `scripts.keygen` to a public path outside the repository and exported in the shell. The README's API section carries the two commands. A report signed by a dev key verifies only against that dev public half, via `scripts/verify.py --pubkey`.
 - **`.env` stays gitignored and no key is committed.** A deployed instance gets a real key set in its environment, whose public half is the committed one and whose fingerprint the README publishes.
 - **The import test that said the API reads no environment now says what is true**: no module of the API is an environment reader of its own. Beside it, a test names the single exception and pins it to `signing.signing_key`, so a second route to the environment fails there. The cost-figure test above them is unchanged.

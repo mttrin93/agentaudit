@@ -451,10 +451,15 @@ def test_no_module_of_the_api_reads_an_environment_of_its_own() -> None:
 def test_the_one_environment_value_the_api_needs_is_read_through_signing() -> None:
     """The single exception, pinned to the one function that is allowed to be it.
 
-    Named here so that the exception is a fact this suite asserts rather than a
-    sentence in a docstring: the factory's key comes from `signing.signing_key`, and
-    a second route to the environment — a helper of app.py's own, a `dotenv` load,
-    an `os.environ` read behind a default — is a new reader rather than this one.
+    An import-level assertion and nothing more, which is the whole of what it
+    claims: that the *only* environment reader `app.py` can reach is the one
+    `signing.py` owns. It does not assert that the factory calls it — the test above
+    does that, by comparing the key the bench holds against the key that was
+    exported — and it would stay green against a factory that imported the name and
+    never used it. What it catches is the other half: a second route to the
+    environment, a helper of `app.py`'s own, a `dotenv` load, an `os.environ` read
+    behind a default. Those are new readers rather than this one, and the two
+    assertions together say there is exactly one.
     """
     factory = API_DIR / "app.py"
 

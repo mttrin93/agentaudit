@@ -14,7 +14,8 @@ Do not restate these here — read them.
 | Decisions and why they were made | [docs/adr/](./docs/adr/) |
 | Scope, phases, the Sprint line | [PLAN.md](./PLAN.md) |
 | What the bench measures and what it has measured | [docs/validation.md](./docs/validation.md) |
-| The build spec | [docs/specs/pre-web-bench.md](./docs/specs/pre-web-bench.md) |
+| The build spec — the bench, through the gate | [docs/specs/pre-web-bench.md](./docs/specs/pre-web-bench.md) |
+| The build spec — the signed report and its delivery | [docs/specs/signed-report-and-delivery.md](./docs/specs/signed-report-and-delivery.md) |
 
 Terms in CONTEXT.md are load-bearing arithmetic, not synonyms. An **attempt** is
 the unit of the denominator; a turn is not an attempt.

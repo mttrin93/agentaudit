@@ -30,6 +30,22 @@ The bench also carries an **adaptive attacker** — an agent that, after the fix
 
 If you are a researcher who wants a withheld payload for defensive work, open an issue describing the use; the answer may still be no.
 
+## Running a target through the API
+
+The bench runs from something other than a terminal too. Start it with the app factory:
+
+```
+uv run uvicorn backend.api.app:create_app --factory
+```
+
+Three calls start a run, and both of the controls that make one authorised are in them:
+
+1. **`POST /nonces`** issues the value you plant in the target's configuration. Only somebody who can edit that configuration can plant it, which is what makes the echo proof that you control the endpoint.
+2. **`POST /runs`** carries the target, the three attestations, that nonce and your own price per call. It answers with a `run_id` and the estimate — **the fixed suite exactly and the adaptive layer as a ceiling, never one blended figure** — and then halts. Nothing has reached your endpoint at that point. A run whose attestation is incomplete, or whose nonce this bench never issued, is refused here; a nonce the target does not echo back is refused by the run itself, because the probe that checks it is a call on your endpoint and the halt is ahead of it.
+3. **`POST /runs/{run_id}/approval`** answers the halt. A separate request rather than a field on the one above: the halt is a real LangGraph interrupt against a checkpointer, and a decision taken in front of the figures is not a checkbox somebody scrolled past ([ADR-0007](./docs/adr/0007-canary-nonce-as-proof-of-control.md)). On a yes the suite runs in the background under the ceiling you confirmed and aborts rather than exceed it. On anything else — including no answer at all — nothing is sent and nothing is spent, and the run says which of the two happened.
+
+The price per call is yours to declare and is never defaulted from the bench's own configuration: your confirmation is the liability record, and a run you have not priced reports its cost as *not priced* rather than as zero.
+
 ## Verifying a report
 
 A report is three files under fixed names: `report.json` — the canonical JSON payload, which is the artefact — `report.md`, the document a human reads, and `report.sig`, a detached Ed25519 signature over the payload's bytes. Check them with no network and no credential:

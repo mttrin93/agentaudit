@@ -31,14 +31,19 @@ from backend.bench.adaptive.discrimination import (
 )
 from backend.bench.adaptive.scripted import SCRIPTED_ATTACKER
 from backend.bench.adjudication import Completion
-from backend.bench.admission import AdmissionOutcome, decide
+from backend.bench.admission import (
+    AdmissionOutcome,
+    RejectionKind,
+    decide,
+    rejections,
+)
+from backend.bench.calibration import CalibrationResult
 from backend.bench.crossmodel import (
     ComparisonOutcome,
     ModelReading,
     NotASwap,
     SwapReading,
     compare,
-    rejections,
 )
 from backend.bench.evaluator import Verdict
 from backend.bench.gate import GateResult
@@ -49,13 +54,16 @@ from backend.bench.library import (
     LibraryVersion,
     load_library,
 )
-from backend.bench.rule import DECLARED_RULE
+from backend.bench.rule import DECLARED_RULE, GateRule
 from backend.bench.scorer import (
     Excluded,
     ExclusionReason,
     GateDecision,
     GateOutcome,
 )
+from backend.graph.approval import ApprovalOutcome
+from backend.graph.budget import RunBudget
+from backend.graph.runstate import RunState
 from backend.tests.conftest import (
     BENCH_ATTESTATION,
     CASES_DIR,
@@ -63,9 +71,13 @@ from backend.tests.conftest import (
     adjudicating,
 )
 from backend.tests.test_adaptive_discrimination import HARDENED, TRIVIAL, grid
-from backend.tests.test_gate import ADJUDICATOR_STAND_IN, outcomes_for
+from backend.tests.test_gate import (
+    ADJUDICATOR_STAND_IN,
+    ATTACKER_STAND_IN,
+    outcomes_for,
+)
 from scripts.console import EXIT_WITHHELD
-from scripts.swap import ATTACKER_STAND_IN, main, record_swap
+from scripts.swap import ModelRun, main, record_swap
 
 CROSSMODEL_SOURCE = Path(__file__).resolve().parents[1] / "bench" / "crossmodel.py"
 ADAPTIVE_CROSSMODEL_SOURCE = (
@@ -86,6 +98,7 @@ def a_run(
     *counts: tuple[int, int, int],
     excluded: Sequence[Family] = (),
     library: LibraryVersion | None = None,
+    rule: GateRule = DECLARED_RULE,
 ) -> GateResult:
     """A recorded run of the whole library, from six sets of counts.
 
@@ -100,7 +113,7 @@ def a_run(
             families_passing=sum(1 for outcome in outcomes if outcome.passes),
             families_monotonic=len(outcomes),
             outcomes=tuple(outcomes),
-            rule=DECLARED_RULE,
+            rule=rule,
             excluded=tuple(
                 Excluded(
                     family=family,
@@ -259,6 +272,20 @@ def test_a_comparison_across_two_libraries_is_not_a_swap() -> None:
         )
 
 
+def test_a_comparison_across_two_rules_is_not_a_swap() -> None:
+    # Every family passed or did not pass under its own run's rule, so a comparison
+    # of two runs decided under different rules would print one bar and read the
+    # families against another. The comparison has no rule of its own to fall back
+    # on, which is why this is a refusal and not a choice between them.
+    with pytest.raises(NotASwap, match="different rules"):
+        compare(
+            *readings(
+                a_run(*[SEPARATES] * 6),
+                a_run(*[SEPARATES] * 6, rule=GateRule(discrimination_floor=0.9)),
+            )
+        )
+
+
 def test_the_comparison_prints_the_declared_bar_and_declares_no_new_one() -> None:
     # The bar every family is read against is ADR-0003's per-family pass, printed
     # above the table for the reason the gate prints its rule above its answer. A
@@ -303,14 +330,21 @@ def test_a_route_that_separates_on_one_model_only_is_a_cross_model_rejection() -
         )
     )
 
-    assert [outcome.case_id for outcome in counted.cross_model] == ["one-model"]
-    assert [outcome.case_id for outcome in counted.separated_nowhere] == ["no-model"]
-    assert [outcome.case_id for outcome in counted.unread] == ["unread"]
-    assert [outcome.case_id for outcome in counted.admitted] == ["both-models"]
+    landed = {
+        kind: [outcome.case_id for outcome in counted.of(kind)]
+        for kind in RejectionKind
+    }
+    assert landed[RejectionKind.CROSS_MODEL] == ["one-model"]
+    assert landed[RejectionKind.SEPARATED_NOWHERE] == ["no-model"]
+    assert landed[RejectionKind.UNREAD] == ["unread"]
+    assert landed[RejectionKind.ADMITTED] == ["both-models"]
+    # One denominator: every decided proposal lands on exactly one answer, so the
+    # counts sum to the proposals decided and a reader can check that they do.
+    assert sum(counted.counts.values()) == len(counted.outcomes)
     stated = counted.stated()
-    assert "cross-model rejections: 1" in stated
-    assert "rejected having separated on no model: 1" in stated
-    assert "rejected for want of a second reading: 1" in stated
+    assert "4 proposal(s) decided, 4 of them facing the cross-model bar" in stated
+    for kind in RejectionKind:
+        assert f"{kind}: {counted.counts[kind]}" in stated
 
 
 # --- Seam three: A_break and A_effort across the swap ------------------------
@@ -471,8 +505,10 @@ def test_the_entry_point_re_runs_the_library_on_a_second_model_and_records_both(
     assert written.count("sha256:") == 3
     # The adaptive half, in its own section and never in the table above it.
     assert "does A_break survive the model swap?" in written
-    # The cross-model admission bar, and the count ADR-0012 asks for.
-    assert "cross-model rejections:" in written
+    # The cross-model admission bar, the count ADR-0012 asks for, and the provenance
+    # series that ADR asks to be printed on every run beside it.
+    assert f"{RejectionKind.CROSS_MODEL}:" in written
+    assert "provenance of the live library:" in written
     # And no payload, on any side of it (ADR-0008).
     for case in load_library(CASES_DIR):
         assert case.payload not in written
@@ -510,7 +546,8 @@ def test_the_recorded_document_keeps_the_two_layers_in_two_sections(
     # The discipline the gate's own record follows: the scored comparison and the
     # adaptive one are two blocks, because a reader who met `A_break` inside a table
     # of `D` would have met a number that decides nothing where everything decides
-    # something (ADR-0010).
+    # something (ADR-0010). The provenance series is in the third block, beside the
+    # bar it watches (ADR-0012).
     first, second = readings(a_run(*[SEPARATES] * 6), a_run(*[FLAT] * 6))
     written = record_swap(
         swap=compare(first, second),
@@ -525,13 +562,44 @@ def test_the_recorded_document_keeps_the_two_layers_in_two_sections(
         identity=BENCH_ATTESTATION.identity,
         adjudicator_model=ADJUDICATOR_STAND_IN,
         attacker_model=ATTACKER_STAND_IN,
+        runs=[_a_model_run(first), _a_model_run(second)],
+        cases=load_library(CASES_DIR),
     ).read_text(encoding="utf-8")
 
     scored = written.index("## The scored comparison")
+    runs = written.index("## The two runs it compares")
     adaptive = written.index("## The adaptive layer, which decides nothing")
-    assert scored < adaptive
+    bar = written.index("## The cross-model admission bar")
+    assert scored < runs < adaptive < bar
     assert "COLLAPSED" in written
+    assert "provenance of the live library:" in written
     assert BENCH_ATTESTATION.identity in written
+
+
+def _a_model_run(reading: ModelReading) -> ModelRun:
+    """A model run around a scored reading, with no episode and no attempt.
+
+    Enough of one for the writer, which reads the reading and the episodes and
+    nothing else. Built rather than measured for the reason `a_run` is: where the
+    document puts a block is not a question two 540-attempt runs are needed to
+    answer.
+    """
+    budget = RunBudget.declare(cases=[], targets=[])
+    return ModelRun(
+        reading=reading,
+        result=CalibrationResult(
+            run_state=RunState(budget=budget),
+            target_runs=(),
+            budget=budget,
+            approval=ApprovalOutcome(
+                budget=budget,
+                presented=budget.as_payload(),
+                confirmed=True,
+                halted=False,
+                identity=BENCH_ATTESTATION.identity,
+            ),
+        ),
+    )
 
 
 def _proposed(case_id: str, *counts: tuple[int, int, int]) -> AdmissionOutcome:

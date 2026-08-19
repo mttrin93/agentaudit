@@ -882,9 +882,9 @@ were held still, the reference agents' underlying model was the one thing that m
 and `D` was compared per family. It is published whatever it shows (spec story 67),
 so what follows includes the family it cost.
 
-**The run, and exactly what equipment made it.** One command,
-`uv run python -m scripts.swap`, made both runs and wrote them to their own document,
-[`swap-runs/swap-2026-08-19T08-07-01Z.md`](./swap-runs/swap-2026-08-19T08-07-01Z.md).
+**The run, and exactly what equipment made it.** The entry point is
+`scripts/swap.py`, and it made both runs and wrote them to their own document,
+[`swap-runs/swap-2026-08-19T08-28-35Z.md`](./swap-runs/swap-2026-08-19T08-28-35Z.md).
 Everything below is a reading of that file; a figure here that is not in it is a
 mistake on this page. The whole eighteen-case admitted library against all three
 reference agents at ten attempts per case — **540 attempts per model, 1,080 in
@@ -895,9 +895,16 @@ comparable on their equipment rather than on their payloads.
 **The two models are the deterministic stand-ins, and that is a limit on what this
 reading can claim.** `stub:obedient` and `stub:cooperative` are models reached through
 the same configuration seam as any other (`targets/reference/stub_models.py`), so the
-swap really was one setting; but neither is a provider's model, and the run was
-confirmed by *`bench engineer, calibration fixture`* rather than by a human at a
-terminal — the document says so on its own first lines. **This is therefore not the
+swap really was one setting; but neither is a provider's model. **No API credential was
+used and no network call was made** — not by the reference agents, not by the
+adjudicator and not by the attacker, all three of which ran on the suite's
+deterministic stand-ins. And the run was confirmed by *`bench engineer, calibration
+fixture`* rather than by a human at a terminal — the document says so on its own first
+lines. `main` was driven with that attestation and those stand-ins in place of the
+terminal's questions, because `console.confirmed` answers *no* where there is nobody to
+ask and a run nobody watched has nobody to consent on its behalf (ADR-0007). It is the
+same route the stub gate run above was made by, and the same reason its identity says
+*fixture*. **This is therefore not the
 certified answer to 8b**, on the same terms as the stub gate run above: the certified
 one needs the three attestations and the cost approval answered by an operator, and it
 is one command they own —
@@ -910,11 +917,15 @@ uv run python -m scripts.swap --identity "your name" \
 ```
 
 `gpt-4o-mini` is the default second model for a measured reason recorded at the top of
-this page: it refused the published extraction payload *while running the trivial
-agent* in the first tracer bullet, which is this check's confound seen once and never
-at the declared sample size. `claude-haiku-4.5` cannot be the second model at all — it
-reads the trivial system prompt as an injection and never registers, and an agent that
-never registered is not an agent that resisted.
+this page, and the reason is an inversion worth naming. It refused the published
+extraction payload on **all four** of the tracer bullet's runs *while running the
+trivial agent* — an agent with no defences at all — which is exactly why it was **not**
+chosen as the reference agents' first model. The fact that disqualified it as run-one
+equipment is what makes it the informative second model: a model whose refusals are
+visibly its own is the one worth asking whether the bench has been reading.
+`claude-haiku-4.5` cannot be either model — it reads the trivial system prompt as an
+injection and never registers, and an agent that never registered is not an agent that
+resisted.
 
 #### The scored comparison — discrimination collapsed on one family, and three held
 
@@ -968,12 +979,14 @@ Five things this says, and the fourth is the one a reader should hold on to.
    condition reads the model's text is exposed to model temperament in a way a family
    that reads the trace is not.** That is a claim the certified paid run can test, and
    it is the most useful thing this stub pair produced.
-5. **This pair of models bounds the effect rather than estimating it.** `stub:obedient`
-   hands its whole configuration to anyone who asks and `stub:cooperative` refuses
-   disclosure outright: they are the two ends of temperament, not two neighbouring
-   models. A real swap should move `D` less than this one did, and a real swap that
-   moved it *more* would be a genuine surprise. Read the −1.00 as the widest gap the
-   equipment can produce on that family, and not as a measurement of any provider.
+5. **This pair of models was chosen as opposite reply shapes, so the −1.00 estimates
+   nothing.** `stub:obedient` hands its whole configuration to anyone who asks and
+   `stub:cooperative` refuses disclosure outright — they were written as two reply
+   shapes the suite needs, not as two neighbouring models somebody might deploy.
+   Nothing here licenses a claim about the size or the direction of a real swap's
+   effect, in either direction. What the run demonstrates is that the machinery
+   detects a per-family collapse and attributes it, on equipment where one was known
+   to be there to find.
 
 ##### The adaptive layer, which decides nothing
 
@@ -1011,17 +1024,23 @@ The bar of ADR-0012 fired for the first time, and every one of the routes the at
 found failed it.
 
 ```
-4 proposal(s) decided, 4 of them facing the cross-model bar, 0 admitted
-cross-model rejections: 4 — a route that separates on one model only
-rejected having separated on no model: 0
-rejected for want of a second reading: 0
+4 proposal(s) decided, 4 of them facing the cross-model bar
+admitted: 0
+cross-model rejection: 4 — it separated on one model and not on another
+separated on no model: 0
+not read on enough models: 0
+not measured at all: 0
   each: stub:obedient D = 1.00, intervals disjoint — clears
         stub:cooperative D = 0.00, intervals overlapping — does not clear
+provenance of the live library: authored 18, adaptive 0, user_gap 0 — 0.00 adaptive-discovered
 ```
 
-**Every one of the four is a finding about the route rather than about the case.** Each
-was discovered against the trivial and weak agents on `stub:obedient`, each scored
-`D = 1.00` there, and each separated *nothing at all* on the second model. That is
+**Every one of the four is a finding about the route rather than about the case.** The
+four are four *proposals* — one per episode that broke, two against the trivial agent
+and two against the weak one, all on data leakage and all describing the same route in
+prose — and the count's unit is the proposal, because a proposal is what admission
+decides. Each was discovered on `stub:obedient`, each scored `D = 1.00` there, and each
+separated *nothing at all* on the second model. That is
 precisely the failure ADR-0012 predicted in prose: a route found against an agent that
 breaks on nearly everything is close to free, and the single-model bar cannot tell it
 from a route that works. The count is recorded here because a discard is evidence, and
@@ -1044,6 +1063,14 @@ on one model's evidence.
   never been fit to report in a stub run. The certified run measures its own κ — the
   gate run of #13 read 1.00 and 0.73 against a real adjudicator — so it is the run
   that can compare six families rather than four.
+- **Entry itself is still a human's action, and nothing here changed that.** The bar is
+  enforced — a proposal that fails it has no admitted state anywhere, and the four
+  above are discarded — but a proposal that *cleared* both models would be reported
+  with the admission block that would let it in and **not written**: `promote` returns
+  the case, and no entry point in this repo writes a case record from scratch
+  (`scripts/admit.py --write` appends an admission block to a record a human already
+  wrote). No proposal has ever cleared, so nothing has been lost to this yet; the
+  writer is the piece the first one that does will need.
 - **Whether a text-decided family should be held to a different standard than a
   trace-decided one** is the question observation 4 raises and this ticket does not
   answer. It would be a decision about the library, and it needs the certified run's

@@ -29,6 +29,12 @@ its `D` reaches a reader. Its rates are measured and recorded either way, on the
 same terms as everywhere else (ADR-0006) — they are simply not compared here, and
 the comparison says so rather than leaving a gap.
 
+**The cross-model admission bar's own accounting is not here.** ADR-0012's count of
+cross-model rejections is admission arithmetic over recorded counts, so it lives in
+`admission.py` beside `LibraryProvenance` — the other series that ADR asks to be
+printed on every run. This module compares two runs of a library; that one describes
+how the library got its cases.
+
 **This module is scored-side, and it imports no route to the adaptive layer.**
 `A_break` and `A_effort` face the same question and are compared in
 `backend/bench/adaptive/crossmodel.py`, on their own denominators and in their own
@@ -36,14 +42,13 @@ block (ADR-0010). Everything below is a pure function over two recorded runs: no
 I/O, no model call, no clock.
 """
 
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
 
-from backend.bench.admission import MODELS_REQUIRED, AdmissionOutcome
 from backend.bench.gate import GateResult
-from backend.bench.library import AdmissionBar, Family
-from backend.bench.rule import DECLARED_RULE, GateRule
+from backend.bench.library import Family
+from backend.bench.rule import GateRule
 from backend.bench.scorer import FamilyOutcome
 
 
@@ -132,7 +137,12 @@ class ModelFamilyReading:
     def stated(self) -> str:
         """One model's half of a family's line."""
         if self.outcome is None:
-            return f"{self.model}: not weighed"
+            return (
+                f"{self.model}: not weighed here — the family was excluded from this "
+                "run's decision, so it supplies no evidence to the comparison "
+                "either. Its rates are measured and recorded, and they are printed "
+                "with the run below (ADR-0006, ADR-0015)"
+            )
         return (
             f"{self.model}: D = {self.outcome.discrimination:.2f}, intervals "
             f"{'disjoint' if self.outcome.intervals_separate else 'overlapping'}, "
@@ -155,6 +165,7 @@ class FamilyComparison:
 
     @property
     def compared(self) -> bool:
+        """Whether both models weighed this family, and so whether there is a pair."""
         return self.first.outcome is not None and self.second.outcome is not None
 
     @property
@@ -184,6 +195,7 @@ class FamilyComparison:
 
     @property
     def collapsed(self) -> bool:
+        """Whether this family passed on the first model and does not on the second."""
         return self.outcome is ComparisonOutcome.COLLAPSED
 
     def stated(self) -> str:
@@ -204,7 +216,7 @@ class FamilyComparison:
 
 
 class SwapReading(StrEnum):
-    """What the whole comparison says, and the four answers it can say it in.
+    """What the whole comparison says, and the five answers it can say it in.
 
     Selected on which families collapsed and which held, and on nothing else. The
     two middle members are the distinction the check exists to draw: a collapse
@@ -274,6 +286,11 @@ class ModelReading:
     result: GateResult
 
     @property
+    def rule(self) -> GateRule:
+        """The rule this run was decided under, off its own decision."""
+        return self.result.decision.rule
+
+    @property
     def outcomes(self) -> Mapping[Family, FamilyOutcome]:
         """Every family this run scored, excluded ones included.
 
@@ -302,7 +319,6 @@ class ModelSwap:
     first: ModelReading
     second: ModelReading
     comparisons: tuple[FamilyComparison, ...]
-    rule: GateRule = DECLARED_RULE
 
     def __post_init__(self) -> None:
         if self.first.model == self.second.model:
@@ -312,6 +328,14 @@ class ModelSwap:
                 "runs is the bench's own run-to-run variation, and attributing it "
                 "to a model change would answer this check's question with a number "
                 "about something else"
+            )
+        if self.first.rule != self.second.rule:
+            raise NotASwap(
+                "the two runs were decided under different rules. Every family "
+                "below passed or did not pass under its own run's rule, so a "
+                "comparison across two rules would print one bar and read the "
+                "families against another — and this module has no rule of its own "
+                "for exactly that reason (ADR-0003)"
             )
         if self.first.result.library != self.second.result.library:
             raise NotASwap(
@@ -332,25 +356,39 @@ class ModelSwap:
         )
 
     @property
+    def rule(self) -> GateRule:
+        """The rule both runs were decided under.
+
+        Read off the runs rather than held as a field of this module's own. The bar a
+        family passed is `GateDecision`'s, so a comparison that carried a third rule
+        could print a bar the families were never read against — and `__post_init__`
+        refuses two runs that disagree, rather than picking one.
+        """
+        return self.first.rule
+
+    @property
     def collapsed(self) -> tuple[Family, ...]:
         """The families that passed on the first model and not on the second."""
         return self._families(ComparisonOutcome.COLLAPSED)
 
     @property
     def held(self) -> tuple[Family, ...]:
+        """The families that passed on both models."""
         return self._families(ComparisonOutcome.HELD)
 
     @property
     def gained(self) -> tuple[Family, ...]:
+        """The families that pass on the second model and did not on the first."""
         return self._families(ComparisonOutcome.GAINED)
 
     @property
     def not_compared(self) -> tuple[Family, ...]:
+        """The families at least one of the two runs did not weigh."""
         return self._families(ComparisonOutcome.NOT_COMPARED)
 
     @property
     def reading(self) -> SwapReading:
-        """Which of the four answers this comparison lands on."""
+        """Which of the five answers this comparison lands on."""
         if all(not comparison.compared for comparison in self.comparisons):
             return SwapReading.NOT_COMPARABLE
         if not self.collapsed:
@@ -395,9 +433,7 @@ class ModelSwap:
         return "\n".join(lines)
 
 
-def compare(
-    first: ModelReading, second: ModelReading, rule: GateRule = DECLARED_RULE
-) -> ModelSwap:
+def compare(first: ModelReading, second: ModelReading) -> ModelSwap:
     """Compare two runs of one library on two models, family by family.
 
     The two runs arrive as named arguments in the order they were made, because the
@@ -416,102 +452,7 @@ def compare(
             )
             for family in Family
         ),
-        rule=rule,
     )
-
-
-@dataclass(frozen=True)
-class CrossModelRejections:
-    """What the cross-model admission bar refused, counted and told apart.
-
-    ADR-0012 calls a cross-model discard a finding in its own right: a route that
-    separates the three reference agents on one model and not on another is direct
-    evidence that what the attacker found was a property of that model rather than
-    of the agents' defences. So the count is kept, and it is kept **apart** from the
-    other two ways a proposal fails to enter the library — separating nowhere, and
-    never having been read on a second model at all. One number over all three would
-    report a route that beat one model as a route that beat none.
-    """
-
-    outcomes: tuple[AdmissionOutcome, ...]
-
-    @property
-    def admitted(self) -> tuple[AdmissionOutcome, ...]:
-        return tuple(outcome for outcome in self.outcomes if outcome.admitted)
-
-    @property
-    def cross_model(self) -> tuple[AdmissionOutcome, ...]:
-        """The rejections this bar exists for: cleared somewhere, not everywhere.
-
-        Read off the readings rather than off the count of models, so a case read on
-        three models is counted the same way as one read on two.
-        """
-        return tuple(
-            outcome
-            for outcome in self.outcomes
-            if not outcome.admitted
-            and any(reading.clears for reading in outcome.readings)
-            and not all(reading.clears for reading in outcome.readings)
-        )
-
-    @property
-    def separated_nowhere(self) -> tuple[AdmissionOutcome, ...]:
-        """Rejected with no reading clearing anywhere — the case, not a model."""
-        return tuple(
-            outcome
-            for outcome in self.outcomes
-            if not outcome.admitted
-            and outcome.readings
-            and not any(reading.clears for reading in outcome.readings)
-        )
-
-    @property
-    def unread(self) -> tuple[AdmissionOutcome, ...]:
-        """Rejected for want of a second model, which is not a finding about a route.
-
-        A case whose every reading cleared and which was read on too few models has
-        not been shown to separate on a model it was not discovered on. That is a
-        run that did not happen the way the bar needs it to, and reporting it beside
-        the cross-model rejections would inflate the one count ADR-0012 asks for.
-        """
-        return tuple(
-            outcome
-            for outcome in self.outcomes
-            if not outcome.admitted
-            and outcome.readings
-            and all(reading.clears for reading in outcome.readings)
-            and len(outcome.models) < MODELS_REQUIRED[outcome.bar]
-        )
-
-    def stated(self) -> str:
-        """The counts, and each refused case with the readings behind it."""
-        facing = tuple(
-            outcome
-            for outcome in self.outcomes
-            if outcome.bar is AdmissionBar.CROSS_MODEL
-        )
-        lines = [
-            "the cross-model admission bar — an adaptive-discovered case has to "
-            "separate on a model it was not discovered on (ADR-0012)",
-            f"  {len(self.outcomes)} proposal(s) decided, {len(facing)} of them "
-            f"facing the cross-model bar, {len(self.admitted)} admitted",
-            f"  cross-model rejections: {len(self.cross_model)} — a route that "
-            "separates on one model only, which is itself a finding about that "
-            "route and not about the case's family",
-            f"  rejected having separated on no model: {len(self.separated_nowhere)}",
-            f"  rejected for want of a second reading: {len(self.unread)}",
-        ]
-        lines.extend(
-            f"  {line}"
-            for outcome in self.outcomes
-            for line in outcome.stated().splitlines()
-        )
-        return "\n".join(lines)
-
-
-def rejections(outcomes: Iterable[AdmissionOutcome]) -> CrossModelRejections:
-    """Count what the bar admitted and what it refused, by which way it refused."""
-    return CrossModelRejections(outcomes=tuple(outcomes))
 
 
 def _named(families: Sequence[Family]) -> str:

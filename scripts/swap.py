@@ -41,6 +41,15 @@ against all three agents on *both* models, and `promote` admits it only if it
 separates on both. The rejections are counted and recorded, because a route that
 separates on one model only is itself a finding about that route (ADR-0012).
 
+**A proposal that clears both models is reported and not written.** `promote` returns
+the case with the admission block that would let it in, and nothing here puts it on
+disk: the decision to add a record to the library belongs to whoever owns that
+directory, and no entry point in this repo writes a case record from scratch
+(`scripts/admit.py --write` appends an admission block to a record a human already
+wrote). So the bar is enforced here — a proposal that fails it has no admitted state
+anywhere — and entry itself is still a human's action. A run that cleared a proposal
+says so and says what to do about it.
+
 **It asks before it sends anything**, on the same terms as every other entry point:
 the three attestation statements one at a time, then the estimated cost of each run
 at the approval interrupt. Nothing here has a `--yes` (ADR-0007).
@@ -69,25 +78,22 @@ from backend.bench.adaptive.discrimination import measure as measure_adaptive
 from backend.bench.adaptive.promotion import Promotion, promote
 from backend.bench.adaptive.proposal import ProposedRoute
 from backend.bench.adjudication import Completion
-from backend.bench.admission import NotAdmitted, admitted_library, counted
-from backend.bench.calibration import CalibrationResult, TargetRun, run_calibration
+from backend.bench.admission import (
+    CrossModelRejections,
+    NotAdmitted,
+    admitted_library,
+    rejections,
+)
+from backend.bench.calibration import CalibrationResult, run_calibration
 from backend.bench.completion import (
     DEFAULT_ADJUDICATOR_MODEL,
     DEFAULT_ATTACKER_MODEL,
     completion_for,
 )
-from backend.bench.crossmodel import (
-    CrossModelRejections,
-    ModelReading,
-    ModelSwap,
-    NotASwap,
-    compare,
-    rejections,
-)
-from backend.bench.evaluator import Verdict
+from backend.bench.crossmodel import ModelReading, ModelSwap, NotASwap, compare
 from backend.bench.gate import NotAGateRun, read_gate
 from backend.bench.goldset import load_gold_sets, measure_reliability
-from backend.bench.library import AdmissionReading, Case, Family, VerdictClass
+from backend.bench.library import AdmissionReading, Case, Family
 from backend.bench.registration import Attestation
 from backend.bench.retirement import live_library
 from backend.bench.rule import DECLARED_RULE
@@ -105,6 +111,7 @@ from backend.targets.reference.server import (
 from backend.targets.reference.serving import serve
 from backend.targets.reference.trivial import TRIVIAL
 from backend.targets.reference.weak import WEAK
+from scripts.admit import measure_on
 from scripts.console import (
     EXIT_ABORTED,
     EXIT_DECLINED,
@@ -112,6 +119,7 @@ from scripts.console import (
     attest,
     episodes_section,
     price,
+    provenance_section,
     terminal_approval,
 )
 from scripts.gate import CASES_DIR, DEFAULT_MODEL, GOLDSET_DIR, reference_targets
@@ -121,20 +129,16 @@ SWAP_RUNS_DIR = Path(__file__).resolve().parents[1] / "docs" / "swap-runs"
 DEFAULT_SECOND_MODEL = "openrouter:openai/gpt-4o-mini"
 """The second model, and it is a deliberate choice rather than a spare string.
 
-`gpt-4o-mini` refused the published extraction payload *while running the trivial
-agent* in the very first tracer bullet — an agent with no defences at all — which is
-the confound this check exists to measure, seen once and never at the declared sample
-size (docs/validation.md, 2026-08-17). A model that will not host the trivial agent
-at all is no use here: `claude-haiku-4.5` reads the trivial system prompt as an
-injection and declines to echo the nonce, so it never registers and nothing is
-measured against it.
-"""
+`gpt-4o-mini` refused the published extraction payload on all four of the tracer
+bullet's runs *while running the trivial agent* — an agent with no defences at all —
+which is exactly why it was not chosen as the reference agents' first model
+(docs/validation.md, 2026-08-17). The fact that disqualified it as run-one equipment
+is what makes it the informative second model: a model whose refusals are visibly its
+own is the one worth asking whether the bench has been reading.
 
-ATTACKER_STAND_IN = "backend/bench/adaptive/scripted.py — the deterministic stand-in"
-"""The name a run declares when it wants the scripted attacker rather than a model.
-
-The same string `scripts/gate.py`'s own suite uses, so a record naming it says which
-attacker produced the adaptive half rather than leaving a reader to infer it.
+A model that will not host the trivial agent at all is no use here either.
+`claude-haiku-4.5` reads the trivial system prompt as an injection and declines to
+echo the nonce, so it never registers and nothing is ever measured against it.
 """
 
 
@@ -367,8 +371,16 @@ def main(argv: Sequence[str] | None = None) -> int:
     rejected, promotions = refused
     print()
     print(rejected.stated())
+    print(provenance_section(cases))
     for promotion in promotions:
         print(promotion.stated())
+    if any(promotion.admitted for promotion in promotions):
+        print(
+            "\nA proposal cleared the cross-model bar. Nothing here wrote it to the "
+            "library: the case and the admission block that would let it in are "
+            "returned by `promote`, and adding a record to the library is the "
+            "decision of whoever owns that directory (ADR-0012)."
+        )
 
     written = record_swap(
         swap=swap,
@@ -379,6 +391,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         adjudicator_model=args.adjudicator_model,
         attacker_model=args.attacker_model,
         runs=runs,
+        cases=cases,
     )
     print(f"\nthis comparison's own document: {written}")
     return 0
@@ -522,13 +535,23 @@ def cross_model_bar(
         proposal.case.id: [] for proposal in proposals
     }
     for run in runs:
-        measured = measure_proposals(
-            proposals=proposals,
+        print(
+            f"\nputting {len(proposals)} proposed case(s) to the bar on "
+            f"{run.reading.model}"
+        )
+        # `scripts/admit.py`'s own admission run, and deliberately: a proposal is
+        # decided on counts read the way every other admission's counts are read, so
+        # nothing enters the library on an arithmetic this command invented. This
+        # run's own adaptive layer is ignored — a proposal made while measuring a
+        # proposal has had no admission run of its own, and following it would be a
+        # loop with no end.
+        measured = measure_on(
+            cases=[proposal.case for proposal in proposals],
             model=run.reading.model,
-            attestation=attestation,
-            approve=approve,
             adjudicator=adjudicator,
             adjudicator_model=adjudicator_model,
+            attestation=attestation,
+            approve=approve,
             price_per_call=price_per_call,
         )
         if isinstance(measured, int):
@@ -542,88 +565,6 @@ def cross_model_bar(
     return rejections(promotion.outcome for promotion in promotions), promotions
 
 
-def measure_proposals(
-    *,
-    proposals: Sequence[ProposedRoute],
-    model: str,
-    attestation: Attestation,
-    approve: Approve,
-    adjudicator: Completion,
-    adjudicator_model: str,
-    price_per_call: CallPrice | None,
-) -> dict[str, AdmissionReading] | int:
-    """Measure every proposed case against all three reference agents on one model.
-
-    The same shape as `scripts/admit.py`'s own admission run, and deliberately: a
-    proposal is decided on counts read the way every other admission's counts are
-    read, so nothing enters the library on an arithmetic of this command's own.
-
-    This run's own adaptive layer is ignored. A proposal made while measuring a
-    proposal is not this check's finding — it has had no admission run of its own,
-    and following it would be a loop with no end.
-    """
-    cases = [proposal.case for proposal in proposals]
-    auth_token = secrets.token_urlsafe(16)
-    app = create_reference_app(
-        ReferenceConfig(model=ModelConfig.parse(model), auth_token=auth_token)
-    )
-    with serve(app) as base_url:
-        targets = reference_targets(base_url, auth_token)
-        print(f"\nmeasuring {len(cases)} proposed case(s) on {model}")
-        try:
-            result = run_calibration(
-                cases=cases,
-                targets=targets,
-                attestation=attestation,
-                plant_nonce=nonce_planter(base_url),
-                approve=approve,
-                adjudicator=adjudicator,
-                budget=RunBudget.declare(
-                    cases=cases, targets=targets, price=price_per_call
-                ),
-            )
-        except BudgetExceeded as abort:
-            print(f"\nAdmission run aborted on budget: {abort}")
-            return EXIT_ABORTED
-
-    if not result.approval.proceeded:
-        print(f"\nAdmission run not started: {result.approval.reason}")
-        return EXIT_DECLINED
-
-    by_name = {run.target.name: run for run in result.target_runs}
-    missing = [
-        name
-        for name in (HARDENED.name, WEAK.name, TRIVIAL.name)
-        if name not in by_name or by_name[name].registration.refused
-    ]
-    if missing:
-        print(
-            f"\n{', '.join(missing)} did not register on {model}, so no proposal was "
-            "measured against them. A reading needs all three reference agents."
-        )
-        return EXIT_WITHHELD
-
-    return {
-        case.id: counted(
-            model,
-            hardened=verdicts(by_name[HARDENED.name], case),
-            weak=verdicts(by_name[WEAK.name], case),
-            trivial=verdicts(by_name[TRIVIAL.name], case),
-            adjudicator=(
-                adjudicator_model if case.verdict_class is VerdictClass.JUDGED else None
-            ),
-        )
-        for case in cases
-    }
-
-
-def verdicts(target_run: TargetRun, case: Case) -> list[Verdict]:
-    """This case's verdicts against one agent, in the order the attempts ran."""
-    return [
-        attempt.verdict for attempt in target_run.attempts if attempt.case_id == case.id
-    ]
-
-
 def record_swap(
     *,
     swap: ModelSwap,
@@ -633,7 +574,8 @@ def record_swap(
     identity: str,
     adjudicator_model: str,
     attacker_model: str,
-    runs: Sequence[ModelRun] = (),
+    runs: Sequence[ModelRun],
+    cases: Sequence[Case],
 ) -> Path:
     """Write this comparison to a dated document, in the sections it was printed in.
 
@@ -698,6 +640,11 @@ def record_swap(
                 "",
                 "```",
                 rejected.stated(),
+                # The other half of ADR-0012's accounting, on the run that put the
+                # bar to work: how far the live library has drifted towards routes
+                # fitted to these three agents, and the retirement rate by
+                # provenance beside it.
+                provenance_section(cases),
                 "```",
                 "",
             )

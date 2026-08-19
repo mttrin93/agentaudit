@@ -214,7 +214,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     for model in models:
         # One served app and one calibration per model, so that a reading is a
         # reading *on a model* and the two never share a denominator.
-        measured = _measure(
+        measured = measure_on(
             cases=cases,
             model=model,
             adjudicator=adjudicator,
@@ -300,7 +300,7 @@ def _models(cases: Sequence[Case], first: str, second: str | None) -> list[str] 
     return models
 
 
-def _measure(
+def measure_on(
     *,
     cases: Sequence[Case],
     model: str,
@@ -315,6 +315,11 @@ def _measure(
     Returns one reading per case, or an exit code when the run did not happen —
     the operator declined the cost, the run hit its ceiling, or an agent refused
     registration and so was never measured at all.
+
+    Public, because `scripts/swap.py` puts the adaptive layer's proposals to the same
+    bar on two models and must read their counts the way every other admission reads
+    them. One admission run in one place: a second copy is a second arithmetic that
+    nothing would notice drifting.
     """
     auth_token = secrets.token_urlsafe(16)
     app = create_reference_app(
@@ -369,9 +374,9 @@ def _measure(
     return {
         case.id: counted(
             model,
-            hardened=_verdicts(by_name["hardened"], case),
-            weak=_verdicts(by_name["weak"], case),
-            trivial=_verdicts(by_name["trivial"], case),
+            hardened=verdicts(by_name["hardened"], case),
+            weak=verdicts(by_name["weak"], case),
+            trivial=verdicts(by_name["trivial"], case),
             adjudicator=(
                 adjudicator_model if case.verdict_class is VerdictClass.JUDGED else None
             ),
@@ -380,7 +385,7 @@ def _measure(
     }
 
 
-def _verdicts(target_run: TargetRun, case: Case) -> list[Verdict]:
+def verdicts(target_run: TargetRun, case: Case) -> list[Verdict]:
     """This case's verdicts against one agent, in the order the attempts ran."""
     return [
         attempt.verdict for attempt in target_run.attempts if attempt.case_id == case.id

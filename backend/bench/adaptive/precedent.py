@@ -4,8 +4,8 @@ Two consumers read this store and they read it for different reasons.
 `suggest_remediation` reads it because a fix informed only by the transcript in
 front of it is the fix it would have written with no store at all, and
 `retrieve_precedent` — one of the attacker's five tools — reads it because an
-attacker with no memory rediscovers the same route every run. Nothing else reads
-it, and two things are forbidden from being able to.
+attacker starting from nothing rediscovers the same route every run. Nothing else
+reads it, and two things are forbidden from being able to.
 
 **It survives a restart, and that is the whole of the claim.** PLAN §10 answers the
 long-term-memory requirement with this store while answering short-term memory with
@@ -46,7 +46,6 @@ git-ignored, because a finding is about someone else's agent (ADR-0008).
 from __future__ import annotations
 
 import json
-import os
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -58,8 +57,6 @@ from langgraph.store.base import (
     BaseStore,
     GetOp,
     Item,
-    ListNamespacesOp,
-    MatchCondition,
     Op,
     PutOp,
     Result,
@@ -80,21 +77,17 @@ retrieval is a Sprint 4 row in PLAN §11 and a blocker before user two; until it
 exists, the honest shape is a namespace a reader can see has no tenant in it.
 """
 
-STORE_VARIABLE = "AGENTAUDIT_PRECEDENT_STORE"
-"""Where the store's file is read from, for a deployment that keeps it elsewhere.
-
-An override rather than a required setting: a bench that refused to run without it
-would make long-term memory a configuration step, and the default below is a real
-location rather than a placeholder.
-"""
-
 DEFAULT_STORE_PATH = Path(__file__).resolve().parents[3] / "precedent" / "findings.json"
-"""The default location, at the top of the repository and ignored by git.
+"""Where the store's file is, at the top of the repository and ignored by git.
 
-Its own directory so that the ignore rule covers a directory rather than a file
-name: a second file written beside this one — a backup, an export, an editor's
-swap — must not become the first finding about a real target this repository
-carries (ADR-0008).
+One location and no environment override. A configurable path is a path that can
+be configured into a tracked directory, and the acceptance criterion here is that
+no finding about anybody's agent is ever committed — which is a property of *the*
+location or of none (ADR-0008). A test asks git whether this path is ignored.
+
+Its own directory so the ignore rule covers a directory rather than a file name: a
+second file written beside this one — a backup, an export, an editor's swap — must
+not become the first finding about a real target this repository carries.
 """
 
 RETRIEVAL_LIMIT = 20
@@ -126,6 +119,14 @@ class JudgedPrecedent(ValueError):
         )
 
 
+class NoFilterOperators(NotImplementedError):
+    """A comparison filter was asked of a store that compares for equality only.
+
+    Named for the reason `NoVectorIndex` is: a comparison a caller believes ran and
+    did not is a silently wrong answer, and this store's one filter is the family.
+    """
+
+
 class NoVectorIndex(NotImplementedError):
     """A natural-language search was asked of a store that has no index.
 
@@ -141,8 +142,10 @@ class Precedent:
     """One deterministic finding, kept so the next run's fix is not reinvented.
 
     Prose and never payload text, for the reason CONTEXT.md gives under **route**:
-    a route that beat a target is a working unpublished exploit, and the
-    disclosure posture withholds exactly that (ADR-0008).
+    a path that beat a target is a working unpublished exploit, and the disclosure
+    posture withholds exactly that (ADR-0008). It is deliberately not *called* a
+    route either — a route is the sequence of probes one episode took, and what is
+    filed here is a scored deterministic finding, which took no probes at all.
 
     There is no target on this record and that is the decision, not an omission.
     `retrieve_precedent` redacts the identities it can see, and redaction is a
@@ -154,13 +157,21 @@ class Precedent:
     """
 
     family: Family
-    route: str
-    remediation: str = ""
-    """The fix that was written for it, prose. Read by `suggest_remediation` and
-    never returned to the attacker, which reads `route` alone."""
+    failure: str
+    """What the target did, in one sentence of prose. `Narrative.reason`."""
 
-    case_id: str = ""
-    external_id: str = ""
+    remediation: str
+    """The fix that was written for it, prose. Read by `suggest_remediation` and
+    never returned to the attacker, which is shown `failure` alone."""
+
+    case_id: str
+    external_id: str
+    """The published identifier the case tests one case within, as a string.
+
+    The identifier alone rather than the `ExternalId` the case record carries: the
+    other half of that type is the coverage boundary, which is a claim about the
+    *instrument* and belongs in the report rather than in a lookup about a fix.
+    """
 
     @classmethod
     def of(cls, finding: Finding) -> Precedent:
@@ -169,7 +180,7 @@ class Precedent:
             raise JudgedPrecedent(finding)
         return cls(
             family=finding.family,
-            route=finding.narrative.reason,
+            failure=finding.narrative.reason,
             remediation=finding.narrative.remediation,
             case_id=finding.case_id,
             external_id=finding.narrative.external_id.identifier,
@@ -179,7 +190,7 @@ class Precedent:
         """The record as the store holds it: JSON, and nothing that names a target."""
         return {
             "family": str(self.family),
-            "route": self.route,
+            "failure": self.failure,
             "remediation": self.remediation,
             "case_id": self.case_id,
             "external_id": self.external_id,
@@ -190,10 +201,10 @@ class Precedent:
         """One record back out of the store."""
         return cls(
             family=Family(value["family"]),
-            route=str(value.get("route", "")),
-            remediation=str(value.get("remediation", "")),
-            case_id=str(value.get("case_id", "")),
-            external_id=str(value.get("external_id", "")),
+            failure=str(value["failure"]),
+            remediation=str(value["remediation"]),
+            case_id=str(value["case_id"]),
+            external_id=str(value["external_id"]),
         )
 
     @property
@@ -202,7 +213,7 @@ class Precedent:
 
         Content-addressed rather than counted or timestamped, which buys two
         things. Writing the same finding twice is idempotent, so a re-run does not
-        multiply one route into a corpus of copies; and the key derives from no
+        multiply one finding into a corpus of copies; and the key derives from no
         clock and no target, so nothing about *when* or *against whom* leaks into
         a name the store lists.
         """
@@ -211,26 +222,18 @@ class Precedent:
 
 
 class PrecedentStore(Protocol):
-    """Where past routes are read from, and where new ones are written.
+    """What a reader of precedent needs, and nothing a writer needs.
 
-    Two methods, because a store the bench can only read is a store that never
-    reaches run two — and ADR-0019's whole argument is that precedent's value is
-    cumulative.
+    One method, and the writing side deliberately absent from it. `record` lives on
+    `DurablePrecedents` as a concrete method because the two consumers — the
+    attacker's tool and `suggest_remediation` — only ever read: a protocol that
+    also promised a write would make every read-only stand-in refuse half of what
+    it claimed to be, which is a type saying less than it appears to.
     """
 
     def for_family(self, family: Family) -> Sequence[Precedent]:
-        """The routes recorded against this family, most useful first."""
+        """The findings recorded against this family, most recently filed first."""
         ...
-
-    def record(self, finding: Finding) -> Precedent:
-        """File one deterministic finding, and refuse a judged one."""
-        ...
-
-
-def store_path() -> Path:
-    """Where the store's file is, read from the environment or defaulted."""
-    configured = os.environ.get(STORE_VARIABLE)
-    return Path(configured) if configured else DEFAULT_STORE_PATH
 
 
 class JsonFileStore(BaseStore):
@@ -258,7 +261,7 @@ class JsonFileStore(BaseStore):
     __slots__ = ("path",)
 
     def __init__(self, path: Path | None = None) -> None:
-        self.path = path if path is not None else store_path()
+        self.path = path if path is not None else DEFAULT_STORE_PATH
 
     def batch(self, ops: Iterable[Op]) -> list[Result]:
         held = self._read()
@@ -273,10 +276,13 @@ class JsonFileStore(BaseStore):
                 held = _applied(held, op)
                 wrote = True
                 results.append(None)
-            elif isinstance(op, ListNamespacesOp):
-                results.append(_namespaces(held, op))
-            else:  # pragma: no cover - `Op` is a closed union
-                raise NotImplementedError(f"{type(op).__name__} is not supported")
+            else:
+                raise NotImplementedError(
+                    f"{type(op).__name__} is not supported. This store holds one "
+                    "namespace, so enumerating them answers a question nobody "
+                    "asked, and a paginated wildcard matcher over a single "
+                    "namespace is machinery with no caller"
+                )
         if wrote:
             self._write(held)
         return results
@@ -375,7 +381,7 @@ def _passes(value: dict[str, Any], wanted: dict[str, Any] | None) -> bool:
         return True
     for field, expected in wanted.items():
         if isinstance(expected, dict):
-            raise NotImplementedError(
+            raise NoFilterOperators(
                 f"{field}={expected!r} is an operator filter and this store "
                 "compares for equality only. A comparison a caller believes ran "
                 "and did not is worse than a refusal"
@@ -383,38 +389,6 @@ def _passes(value: dict[str, Any], wanted: dict[str, Any] | None) -> bool:
         if value.get(field) != expected:
             return False
     return True
-
-
-def _namespaces(held: Sequence[Item], op: ListNamespacesOp) -> list[tuple[str, ...]]:
-    seen: set[tuple[str, ...]] = set()
-    for item in held:
-        if op.match_conditions and not all(
-            _matches(condition, item.namespace) for condition in op.match_conditions
-        ):
-            continue
-        seen.add(
-            item.namespace[: op.max_depth]
-            if op.max_depth is not None
-            else item.namespace
-        )
-    listed = sorted(seen)
-    return listed[op.offset : op.offset + op.limit]
-
-
-def _matches(condition: MatchCondition, namespace: tuple[str, ...]) -> bool:
-    path = tuple(condition.path)
-    if condition.match_type == "prefix":
-        candidate = namespace[: len(path)]
-    elif condition.match_type == "suffix":
-        candidate = namespace[len(namespace) - len(path) :]
-    else:  # pragma: no cover - the interface declares two match types
-        raise NotImplementedError(f"{condition.match_type} is not a match type")
-    if len(candidate) != len(path):
-        return False
-    return all(
-        wanted == "*" or wanted == present
-        for wanted, present in zip(path, candidate, strict=True)
-    )
 
 
 @dataclass(frozen=True)
@@ -427,21 +401,29 @@ class DurablePrecedents:
     only way out and it returns the filed prose.
     """
 
-    store: BaseStore
+    store: JsonFileStore
+    """The file-backed store, annotated as one.
+
+    Narrower than `BaseStore` on purpose. ADR-0019 point 2 says `InMemoryStore` may
+    not be the production backend, and a field typed `BaseStore` would accept one
+    from any future caller with nothing to stop it — so the prohibition is carried
+    by the annotation and mypy refuses the substitution before a test has to.
+    """
+
     namespace: tuple[str, ...] = PRECEDENT_NAMESPACE
 
     @classmethod
     def at(cls, path: Path | None = None) -> DurablePrecedents:
         """The store at that file, or at the configured one.
 
-        A classmethod rather than a default argument, because the file is read at
-        the moment a run asks for it: a module-level default would bind the
-        location at import time and a test that moved it would be moving it too
-        late.
+        A classmethod rather than a constructor argument on the dataclass,
+        because a caller asking for the store should not have to know that the
+        thing behind it is a file.
         """
         return cls(store=JsonFileStore(path))
 
     def record(self, finding: Finding) -> Precedent:
+        """File one deterministic finding, and refuse a judged one."""
         entry = Precedent.of(finding)
         self.store.put(self.namespace, entry.key, entry.stored())
         return entry
@@ -469,18 +451,11 @@ class RecordedPrecedents:
     def for_family(self, family: Family) -> Sequence[Precedent]:
         return tuple(entry for entry in self.entries if entry.family is family)
 
-    def record(self, finding: Finding) -> Precedent:
-        raise NotImplementedError(
-            "RecordedPrecedents is frozen test equipment. A run that wrote a "
-            "finding into it would be writing into something that dies with the "
-            "process, which is the claim ADR-0019 refuses"
-        )
-
 
 NO_PRECEDENT = RecordedPrecedents()
 """An empty store, for a run that is not given one.
 
 Empty rather than absent, so `retrieve_precedent` is a tool that answers rather
-than a tool that is missing: an attacker that spent a turn discovering the bench
-has no memory of this family has learned something true.
+than a tool that is missing: an attacker that spent a turn discovering nothing has
+been filed against this family has learned something true.
 """

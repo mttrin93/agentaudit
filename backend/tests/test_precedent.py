@@ -21,8 +21,10 @@ families depend on is what a leak here would contaminate, and a store that
 accumulates would contaminate more of it every run.
 
 **No target identity is written**, so the corpus cannot identify a target by its
-failure pattern however carefully one lookup redacts (ADR-0011), and the file is
-git-ignored so no finding about anybody's agent is ever committed (ADR-0008).
+failure pattern however carefully one lookup redacts (ADR-0011). The record has no
+target field and the prose it carries was written by a blinded instrument, which is
+the chain the test below checks the near end of; the file is git-ignored so no
+finding about anybody's agent is ever committed (ADR-0008).
 
 **No model is called.** `suggest_remediation` is handed a completion that answers
 with the line it was given and records what it was shown, because what the fix
@@ -34,6 +36,7 @@ import ast
 import subprocess
 from collections.abc import Iterator
 from pathlib import Path
+from typing import get_type_hints
 
 import pytest
 
@@ -157,7 +160,7 @@ def test_a_finding_outlives_the_store_object_that_wrote_it(store_file: Path) -> 
         "it is the run state's lifetime under a second name (ADR-0019)"
     )
     [recovered] = found
-    assert recovered.route == "The reply carried the configured secret back out."
+    assert recovered.failure == "The reply carried the configured secret back out."
     assert recovered.remediation == (
         "Filter the configured secret out of every outbound reply."
     )
@@ -179,11 +182,11 @@ def test_two_runs_accumulate_and_one_run_recorded_twice_does_not(
     second = DurablePrecedents.at(store_file)
     second.record(a_finding(reason="The agent read it out of a fetched page."))
 
-    routes = [
-        entry.route
+    failures = [
+        entry.failure
         for entry in DurablePrecedents.at(store_file).for_family(Family.DATA_LEAKAGE)
     ]
-    assert sorted(routes) == [
+    assert sorted(failures) == [
         "The agent read it out of a fetched page.",
         "The reply carried the secret out.",
     ]
@@ -204,10 +207,10 @@ def test_a_lookup_answers_for_one_family_and_not_for_the_others(
         )
     )
 
-    assert [entry.route for entry in store.for_family(Family.HALT_DEFEAT)] == [
+    assert [entry.failure for entry in store.for_family(Family.HALT_DEFEAT)] == [
         "It acted after the stop signal."
     ]
-    assert [entry.route for entry in store.for_family(Family.DATA_LEAKAGE)] == [
+    assert [entry.failure for entry in store.for_family(Family.DATA_LEAKAGE)] == [
         "It leaked."
     ]
     assert store.for_family(Family.DISCLOSURE_DENIAL) == ()
@@ -243,8 +246,11 @@ def test_a_judged_finding_cannot_enter_the_store(store_file: Path) -> None:
 
 def test_the_stored_record_names_no_target(store_file: Path) -> None:
     # Redaction at the point of retrieval defends one lookup; it does not defend a
-    # corpus, in which a failure pattern identifies a target on its own (ADR-0011).
-    # What is never written cannot be redacted carelessly.
+    # corpus, in which a failure pattern identifies a target on its own (ADR-0011),
+    # and `Blinding.redact` substitutes the current run's identities so prose filed
+    # by an earlier run is beyond it. What holds instead is a chain: no target field
+    # on the record, and the one prose field comes from an instrument that was never
+    # shown a target name (`JudgeBrief.about`, asserted in `test_judge.py`).
     DurablePrecedents.at(store_file).record(a_finding())
 
     written = store_file.read_text(encoding="utf-8")
@@ -362,6 +368,10 @@ def test_the_store_a_run_uses_cannot_be_the_in_memory_double() -> None:
         f"{reachable} is reachable from the precedent store. A per-process store "
         "is the run state's lifetime under a second name (ADR-0019)"
     )
+    # And the field is annotated narrowly, so the substitution is a type error
+    # before it is a test failure — the pattern the repository uses everywhere the
+    # invariant can be carried by a type rather than by a rule.
+    assert get_type_hints(DurablePrecedents)["store"] is JsonFileStore
     assert isinstance(DurablePrecedents.at().store, JsonFileStore)
 
 

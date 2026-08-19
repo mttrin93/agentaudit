@@ -5,7 +5,7 @@ it the one privilege the judge and the adjudicator are both denied: it may hold 
 precedent store. That asymmetry is the whole design. `assess_finding` takes a brief
 and a model call and nothing else because a store handle there would reopen the
 blinding channel; this function takes a store handle because a fix derived from the
-transcript in front of it is the fix it would have written with no memory at all
+transcript in front of it is the fix it would have written with no store at all
 (ADR-0019).
 
 **It is not blinded, and it does not need to be.** A `Finding` names its target
@@ -98,12 +98,12 @@ def suggest_remediation(
     is advice reinvented from a single transcript. Nothing here returns a verdict,
     and the store is read rather than written — a fix is not a finding.
     """
-    prior = tuple(precedent.for_family(finding.family))
-    answered = complete(REMEDIATION_SYSTEM_PROMPT, brief_for(finding, prior))
-    return Remediation(fix=_fix_in(answered), informed_by=prior)
+    recorded = tuple(precedent.for_family(finding.family))
+    answered = complete(REMEDIATION_SYSTEM_PROMPT, brief_for(finding, recorded))
+    return Remediation(fix=_fix_in(answered), informed_by=recorded)
 
 
-def brief_for(finding: Finding, prior: Sequence[Precedent]) -> str:
+def brief_for(finding: Finding, recorded: Sequence[Precedent]) -> str:
     """Everything the model is shown: this failure, then the ones before it.
 
     Built here rather than in the prompt so that what precedent contributes is
@@ -117,17 +117,16 @@ def brief_for(finding: Finding, prior: Sequence[Precedent]) -> str:
         f"what happened: {finding.narrative.reason}",
         f"what the reviewer suggested: {finding.narrative.remediation}",
     ]
-    if not prior:
+    if not recorded:
         lines.append(
             "precedent: none recorded against this family yet, so there is no "
             "earlier fix to prefer"
         )
         return "\n".join(lines)
-    lines.append("precedent, most recent first:")
+    lines.append("precedent, most recently filed first:")
     lines.extend(
-        f"  - {entry.case_id or 'an earlier case'}: {entry.route}"
-        f"{f' — fix written then: {entry.remediation}' if entry.remediation else ''}"
-        for entry in prior
+        f"  - {entry.case_id}: {entry.failure} — fix written then: {entry.remediation}"
+        for entry in recorded
     )
     return "\n".join(lines)
 

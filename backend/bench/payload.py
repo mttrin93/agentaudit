@@ -4,8 +4,8 @@
 and no scalar. This module is the point at which that result stops being an object
 in a process and becomes **bytes that travel**: sorted keys, fixed separators, and
 byte-identical for an identical result, because a signature covers bytes and a
-signature over an unstable serialisation certifies nothing (#50 binds the rendering
-into it, #51 signs it).
+signature over an unstable serialisation certifies nothing (`rendering.py` binds the
+Markdown view into it by digest, #51 signs it).
 
 **Counts, never a rate somebody computed once.** Every measured figure is written
 with the counts it came from: `successes` and `attempts` beside the rate, the
@@ -291,10 +291,11 @@ class Provenance:
 class TargetPayload:
     """One target run, ready to be serialised, signed, served and rendered.
 
-    A result, the provenance of the run that produced it, and the rule the figures
-    were measured under. There is no fourth field, and in particular there is no
-    field for a summary of any kind: a reader who wants a single number will build
-    one out of whatever is on the page, so the page does not offer one (ADR-0005).
+    A result, the provenance of the run that produced it, the rule the figures were
+    measured under, and the digest of the document a human reads. There is no fifth
+    field, and in particular there is no field for a summary of any kind: a reader
+    who wants a single number will build one out of whatever is on the page, so the
+    page does not offer one (ADR-0005).
     """
 
     result: TargetResult
@@ -302,6 +303,25 @@ class TargetPayload:
     rule: GateRule = DECLARED_RULE
     """The rule the rates were measured under, carried so the interval a reader
     recomputes is the interval this run measured (ADR-0003)."""
+
+    rendered_sha256: str | None = None
+    """The sha256 of the Markdown rendering, inside the payload rather than beside it.
+
+    The join between the document a machine verified and the document a human reads
+    (ADR-0017). It is set by `rendering.bind`, which is the only thing that can
+    compute it, and it is set **before** anything signs these bytes: a signature that
+    did not cover this field would leave a doctored rendering free to travel beside a
+    valid signature, which is the failure the signature exists to prevent.
+
+    `None` is *unbound* and says so in the document rather than dropping the key — a
+    payload whose rendering nobody has bound is a fact about that payload, and a
+    missing key would read as an older shape of artefact. `rendering.publish` cannot
+    write an unbound one.
+
+    Signing the Markdown directly was rejected: it makes byte-stable *rendering* a
+    permanent obligation, where this makes only the serialisation byte-stable and
+    lets the rendering change with a new digest (ADR-0017).
+    """
 
 
 def document(payload: TargetPayload) -> dict[str, Any]:
@@ -321,6 +341,7 @@ def document(payload: TargetPayload) -> dict[str, Any]:
         "adaptive": _adaptive(payload.result.adaptive),
         "coverage_gaps": [_gap(gap) for gap in payload.result.coverage_gaps],
         "provenance": _provenance(payload),
+        "rendered_sha256": payload.rendered_sha256,
     }
 
 

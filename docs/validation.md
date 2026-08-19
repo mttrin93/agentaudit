@@ -2,7 +2,9 @@
 
 Gate results, discrimination per family per run, and κ per judged family live here.
 The gate is the section at the foot of this file; everything above it is a pre-gate
-observation and none of those is a gate result.
+observation and none of those is a gate result. The first section below is neither: it
+records what this bench has **not** validated, because a validation document that only
+listed successful checks would be the least honest file in the repository.
 
 The adaptive layer is recorded in its **own section**, never in the tables above it:
 `A_break`, `A_effort` with censored counts, the sign-test result, the fraction of the
@@ -13,6 +15,39 @@ this file is public ([ADR-0008](./adr/0008-repo-disclosure-posture.md)). The two
 kinds of number are measured on different denominators and are kept apart on the
 page for the same reason they are kept apart in the code
 ([ADR-0010](./adr/0010-two-layers-in-one-run-the-adaptive-layer-is-never-scored.md)).
+
+---
+
+## What has never been validated, and is not claimed to have been
+
+### The report's format — no procurement reader has ever been asked (#50)
+
+**The Markdown rendering has never been validated against a real procurement reader,
+and the report says so in its own first section.** Its structure is the Act's own
+technical-documentation order — the nine points of Annex IV, ascending, with point 5
+carrying two sections because it holds two evidentiary classes — and that order is a
+**defensible default rather than a finding**.
+
+[ADR-0001](./adr/0001-procurement-not-regulator-is-the-buyer.md) records the format as
+an open question that must be answered by real users during recruitment and not
+assumed: procurement may want SOC 2, ISO 42001 or its own questionnaire template
+rather than an Act-mapped document, and the screening question that would settle it is
+question 4 of Track A ([PLAN §5](../PLAN.md)). Track A has not run. **No reader has
+been asked, so the question is open and is recorded here as open** rather than closed
+by the fact that something shipped.
+
+What follows from that, and what does not:
+
+- The section order is **not evidence** that a procurement reader wants this shape. It
+  is evidence that the Act names these nine points, which is a different claim.
+- A reader who needs the same evidence in another shape is reading a limitation of
+  this bench. The payload is canonical JSON carrying counts, so re-shaping the
+  document is a renderer and not a re-measurement — the digest binding
+  ([ADR-0017](./adr/0017-the-signature-covers-the-document-and-carries-two-claims.md))
+  makes byte-stable *rendering* deliberately not a permanent obligation, so a second
+  renderer costs a new digest and nothing else.
+- The label is in the document itself and not only in this file, because the document
+  is the thing that travels and this file is not.
 
 ---
 

@@ -284,6 +284,26 @@ function everyString(node: unknown): string[] {
   return []
 }
 
+/**
+ * Every number anywhere in a view.
+ *
+ * Beside `everyString`, because a blended figure does not have to be a string to be
+ * on the screen: `callsSpent` is a number, and a scan that read only the sentences
+ * would miss the one field a total would most naturally arrive in.
+ */
+function everyNumber(node: unknown): number[] {
+  if (typeof node === 'number') {
+    return [node]
+  }
+  if (Array.isArray(node)) {
+    return node.flatMap(everyNumber)
+  }
+  if (node && typeof node === 'object') {
+    return Object.values(node).flatMap(everyNumber)
+  }
+  return []
+}
+
 /** Every field name anywhere in a view, where a figure would be named. */
 function fieldsOf(node: unknown): string[] {
   if (Array.isArray(node)) {
@@ -499,8 +519,12 @@ describe('while the gate run is in flight', () => {
     // Two spends and nothing that spans them. 61 + 0 is a number this view must not
     // contain, and so is the sum of the two once both layers have spent.
     const both = gateProgress(FINISHED)
+    expect(both).toHaveLength(2)
     const blended = both[0].callsSpent + both[1].callsSpent
     expect(blended).toBe(760)
+    // As a number and as a sentence, because a spend is a number here: a scan that
+    // read only the prose would miss the field a total would arrive in.
+    expect(everyNumber(both)).not.toContain(blended)
     const said = [...everyString(both), ...fieldsOf(both)].join(' ')
     expect(said).not.toContain('760')
     expect(said.toLowerCase()).not.toContain('total')
@@ -592,9 +616,14 @@ describe('what the gate run decided', () => {
 
   it('states the figures came from the run rather than from a document', () => {
     const blocks = decidedView(FINISHED)
-    const said = everyString(blocks).join(' ')
 
-    expect(said).toMatch(/read off the attempts this gate run just made/)
+    // The bench's own sentence, carried unedited onto the decision: this screen does
+    // not compose a claim about where the figures came from, it repeats the one the
+    // route made. A sentence written here would be this app's word for it.
+    expect(block(blocks, 'decision').statement).toBe(DECIDED.read_from)
+    expect(everyString(blocks).join(' ')).toMatch(
+      /read off the attempts this gate run just made/,
+    )
     expect(block(blocks, 'written').statement).toMatch(/never deleted/)
     expect(
       block(blocks, 'written').facts.map((fact) => fact.label),

@@ -429,13 +429,17 @@ def test_the_estimate_is_two_figures_against_two_ceilings_and_no_third(
         }
         assert numbers["scored"].isdisjoint(numbers["adaptive"])
 
-        # And no third figure: no field on the estimate holds the sum, and the sum
-        # does not appear in any sentence on it either.
+        # And no third figure. Three ways, because a total arrives under a name
+        # before it arrives as a number: no field on the estimate is named for one,
+        # no field holds the sum, and the sum appears in no sentence on the response.
         blended = scored["attempt_calls"] + adaptive["turn_calls"]
-        assert "total" not in estimate
-        assert str(blended) not in response.text
+        for field in estimate:
+            assert not re.search(
+                r"total|sum|combined|both|overall|together|blended", field
+            ), f"{field} reads like a figure spanning the two layers"
         for field, value in estimate.items():
             assert value != blended, f"{field} is the two layers added together"
+        assert str(blended) not in response.text
 
         # Nothing has been spent: the gate run is holding its interrupt, and the
         # figures above are what it is holding.
@@ -555,6 +559,24 @@ def test_a_run_id_is_not_a_gate_run_id_on_either_route_family(
         assert record.status is GateRunStatus.AWAITING_APPROVAL
         assert record.spent == dict.fromkeys(Layer, 0)
 
+    # And the two families do not share an identifier, which is what keeps the two
+    # `404`s above from being an accident of which route was declared first: every
+    # route under `/runs` takes a `run_id`, every route under `/gate-runs` takes a
+    # `gate_run_id`, and no path takes both.
+    app = create_app(BenchConfig(cases=[]), GateRunBench())
+    for route in app.routes:
+        if not isinstance(route, APIRoute):
+            continue
+        if route.path.startswith(GATE_RUNS_ROUTE):
+            assert "{run_id}" not in route.path, (
+                f"{route.path} names a run id on the gate-run family. One identifier "
+                "for both records is the widening ADR-0021 asks a reader to stop at"
+            )
+        elif route.path.startswith("/runs"):
+            assert "{gate_run_id}" not in route.path, (
+                f"{route.path} names a gate run id under /runs"
+            )
+
 
 def test_the_gate_run_routes_are_their_own_family_and_bench_stays_read_only() -> None:
     """Where a gate run can be started, exactly, over the whole route table.
@@ -612,6 +634,7 @@ def test_a_bench_without_the_reference_agents_offers_no_start_control(
     with a_bench(a_library(tmp_path), agents=False) as gating:
         listed = gating.client.get(GATE_RUNS_ROUTE).json()
 
+        assert listed["start"]["available"] is False
         assert listed["start"] == {
             "available": False,
             "refusal": str(NotStartable.NO_REFERENCE_AGENTS),
@@ -656,6 +679,7 @@ def test_a_bench_with_no_writable_library_runs_no_gate() -> None:
     with a_bench(None) as gating:
         listed = gating.client.get(GATE_RUNS_ROUTE).json()
 
+        assert listed["start"]["available"] is False
         assert listed["start"]["refusal"] == str(NotStartable.NO_WRITABLE_LIBRARY)
         assert str(DEPLOYED_LIBRARY) in listed["start"]["stated"]
         assert "next redeploy" in listed["start"]["stated"]
@@ -678,6 +702,7 @@ def test_a_bench_with_no_adjudicating_instrument_runs_no_gate(tmp_path: Path) ->
     """
     with a_bench(a_library(tmp_path), adjudicating=False) as gating:
         listed = gating.client.get(GATE_RUNS_ROUTE).json()
+        assert listed["start"]["available"] is False
         assert listed["start"]["refusal"] == str(NotStartable.NO_ADJUDICATOR)
 
         refused = gating.client.post(GATE_RUNS_ROUTE, json=a_gate_request())

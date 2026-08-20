@@ -20,10 +20,11 @@
  * declare, an adaptive episode, and a cited gate.
  *
  * **The figures are chosen so that a blend could not appear by coincidence.** The
- * four published rates are 0.70, 0.20 and 0.30 over 21, 6 and 9 successes of 30
- * attempts each: 36 successes together, 90 attempts together, 1.2 summed and 0.4
- * averaged. None of those numbers is anywhere in this document, and
- * `report.test.ts` scans the whole view for them.
+ * three published rates are 0.70, 0.20 and 0.30, over 21, 6 and 9 successes of 30
+ * attempts each: 36 successes together, 1.2 summed and 0.4 averaged. `report.test.ts`
+ * looks for those three as *numbers* rather than as substrings, because `0.4` sits
+ * inside the interval bound `0.449` and a substring search would fail on a document
+ * that holds no average at all.
  */
 
 import type { TargetReport } from '../api/bench'

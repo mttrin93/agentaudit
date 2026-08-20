@@ -1,11 +1,12 @@
 /**
- * The three screens the spec asks for, of which one exists.
+ * The three screens the spec asks for, of which two exist.
  *
- * Register is here in full. The run screen is a placeholder that #58 replaces with
- * the interrupt that has to block, and the report screen arrives with #59. They
- * are routes rather than a single stateful page because registration hands off by
- * navigating: a run has an id on the bench the moment it is registered, and a
- * screen reached by URL is a screen an operator can come back to.
+ * Register is here in full, and so is the run screen: the interrupt that blocks on
+ * both figures, and then progress per layer. The report screen arrives with #59.
+ * They are routes rather than a single stateful page because registration hands off
+ * by navigating: a run has an id on the bench the moment it is registered, and a
+ * screen reached by URL is a screen an operator can come back to — which is the
+ * whole reason the run screen can be sat on for the hour the interrupt waits.
  */
 
 import { Link, Navigate, Route, Routes } from 'react-router-dom'

@@ -229,3 +229,85 @@ button:disabled {
 a {
   color: inherit;
 }
+
+/*
+ * The two cost figures, set as two blocks rather than as rows of one table.
+ *
+ * A table wants a total row; two blocks do not have a place to put one. The call
+ * count is the largest thing on the screen because it is what is being agreed to,
+ * and the arithmetic under it is set small but not grey-on-grey — it is the part
+ * that makes the number checkable rather than believable.
+ */
+.figures {
+  margin: 1.5rem 0 1rem;
+}
+
+.figure {
+  padding: 1rem 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.figure dt {
+  font-weight: 600;
+}
+
+.figure dd {
+  margin: 0.4rem 0 0;
+}
+
+.figure .calls {
+  display: inline-block;
+  margin-right: 0.8rem;
+  font-size: 1.5rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.figure .money {
+  display: inline-block;
+  margin-right: 0.8rem;
+  font-size: 1.1rem;
+}
+
+.figure .kind {
+  font-size: 0.85rem;
+  color: var(--quiet);
+}
+
+/*
+ * The two layers, side by side and never one on top of the other with a rule
+ * underneath: a stacked pair with a line under it is a table waiting for a total.
+ */
+.layers {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  gap: 1.5rem;
+  margin: 1.5rem 0;
+}
+
+.layer {
+  padding: 1rem;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  font-size: 0.95rem;
+}
+
+.layer h3 {
+  margin-top: 0;
+}
+
+.at {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.2rem 0.8rem;
+  margin: 0 0 1rem;
+  font-size: 0.9rem;
+}
+
+.at dt {
+  color: var(--quiet);
+}
+
+.at dd {
+  margin: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}

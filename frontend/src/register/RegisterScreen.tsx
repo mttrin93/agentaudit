@@ -49,6 +49,7 @@ import {
   registrationRequest,
   type Declarations,
 } from './declarations'
+import { rememberTheFigures } from '../run/interrupt'
 
 /**
  * The steps, in order, one per screen.
@@ -161,9 +162,15 @@ export function RegisterScreen() {
     const outcome: StartOutcome = await startRun(request.body)
     setBusy(false)
     if (outcome.kind === 'registered') {
-      // A real navigation, and the run id is the whole of what it carries: the
-      // run exists on the bench, holding its interrupt, and the run screen reads
-      // it from there rather than from anything this screen chose to hand over.
+      // The one thing the run screen cannot read from the bench: `GET /runs/{id}`
+      // reports progress and no figures, so the estimate the interrupt is holding
+      // arrives with this response and nowhere else. Held under the run's own id,
+      // for the screen that has to show it before anybody may confirm it.
+      rememberTheFigures(sessionStorage, outcome.run.run_id, outcome.run.estimate)
+      // A real navigation, and the run id is the whole of what the URL carries:
+      // the run exists on the bench, holding its interrupt, and the run screen
+      // reads its standing from there rather than from anything this screen chose
+      // to hand over.
       void navigate(`/runs/${outcome.run.run_id}`)
       return
     }

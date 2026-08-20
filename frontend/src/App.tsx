@@ -1,5 +1,5 @@
 /**
- * The three screens the spec asks for.
+ * The three screens the spec asks for, now inside the console shell.
  *
  * Register carries the nonce and the three attestations; the run screen carries the
  * interrupt that blocks on both figures and then progress per layer; the report
@@ -9,10 +9,23 @@
  * screen reached by URL is a screen an operator can come back to — which is the
  * whole reason the run screen can be sat on for the hour the interrupt waits, and
  * the reason a report is a link somebody can return to after the run is over.
+ *
+ * **The shell is a pathless layout route, so no path moves.** `ConsoleShell`
+ * renders the rail and the top bar around an `<Outlet />`, and the children below
+ * it keep the exact paths this app has always served — which is what a report link
+ * already sitting in somebody's inbox depends on. The patterns are the constants in
+ * `console/rail.ts`, the same ones the rail builds its links from, so the rail and
+ * the router cannot disagree about where a screen is, and `rail.test.ts` asserts
+ * their literal values.
+ *
+ * The catch-all is inside the shell as well: a mistyped path is somewhere to be
+ * lost with the rail still on screen, rather than a dead end.
  */
 
 import { Link, Navigate, Route, Routes } from 'react-router-dom'
 
+import { ConsoleShell } from './console/ConsoleShell'
+import { REGISTER_PATH, REPORT_PATTERN, RUN_PATTERN } from './console/rail'
 import { RegisterScreen } from './register/RegisterScreen'
 import { ReportScreen } from './report/ReportScreen'
 import { RunScreen } from './run/RunScreen'
@@ -20,23 +33,27 @@ import { RunScreen } from './run/RunScreen'
 export default function App() {
   return (
     <Routes>
-      <Route path="/" element={<Navigate to="/register" replace />} />
-      <Route path="/register" element={<RegisterScreen />} />
-      <Route path="/runs/:runId" element={<RunScreen />} />
-      <Route path="/runs/:runId/report" element={<ReportScreen />} />
-      <Route
-        path="*"
-        element={
-          <main className="screen">
-            <h1>No such screen</h1>
-            <p>
-              Registration is at <Link to="/register">/register</Link>. A run is at
-              <code> /runs/&lt;id&gt;</code>, and its report at
-              <code> /runs/&lt;id&gt;/report</code>.
-            </p>
-          </main>
-        }
-      />
+      <Route element={<ConsoleShell />}>
+        <Route path="/" element={<Navigate to={REGISTER_PATH} replace />} />
+        <Route path={REGISTER_PATH} element={<RegisterScreen />} />
+        <Route path={RUN_PATTERN} element={<RunScreen />} />
+        <Route path={REPORT_PATTERN} element={<ReportScreen />} />
+        <Route path="*" element={<NoSuchScreen />} />
+      </Route>
     </Routes>
+  )
+}
+
+/** A path no screen answers, said inside the shell rather than instead of it. */
+function NoSuchScreen() {
+  return (
+    <main className="screen">
+      <h1>No such screen</h1>
+      <p>
+        Registration is at <Link to={REGISTER_PATH}>/register</Link>. A run is at
+        <code> /runs/&lt;id&gt;</code>, and its report at
+        <code> /runs/&lt;id&gt;/report</code>.
+      </p>
+    </main>
   )
 }

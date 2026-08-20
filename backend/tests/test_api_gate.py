@@ -42,14 +42,19 @@ than a `≥`, a count over a denominator, an interval, a family named, an outcom
 shouted. A scan that had banned the word *hardened* would have banned the
 monotonicity clause of the rule the screen is required to print.
 
-**That there is no route that starts a gate run.** Asserted over the application's
-own route table rather than by reading this file, because the claim is about the
-whole surface: a gate run is 830-odd calls against three reference agents under a
-terminal consent flow, and the console's contribution is to have no button
-(PLAN.md §8). Twice, from two directions — no route whose path says *gate* but the
-one that reads the citation, and nothing under `/bench` that is not a read — because
-the first assertion is escapable by naming a route something else and a gate run
-started under a friendlier word would spend the same 830 calls.
+**That this route is not the one that starts a gate run, and that the one which
+does is where it says it is.** This file used to assert that no such route existed
+anywhere, on PLAN.md §8's authority. ADR-0021 reversed that decision, so the
+assertions were turned around rather than deleted: a gate run is started at
+`POST /gate-runs`, that route family is pinned by its own constants, and everything
+else about the word *gate* on this surface is still a read. Asserted from two
+directions, because the first is escapable by naming a route something else and a
+gate run started under a friendlier word would spend the same 830 calls: nothing
+whose path says *gate* is a write unless it is one of the two the gate-run family
+declares, and nothing under `/bench` is a write at all. What the reversal did not
+touch is why the pinning matters — the estimate and the three attestation statements
+are what make those 830 calls somebody's decision (ADR-0007), and they are asserted
+in `test_api_gate_runs.py`.
 """
 
 from __future__ import annotations
@@ -61,7 +66,14 @@ from pathlib import Path
 from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
 
-from backend.api.app import BENCH_GATE_ROUTE, BENCH_SETTINGS_ROUTE, create_app
+from backend.api.app import (
+    BENCH_GATE_ROUTE,
+    BENCH_SETTINGS_ROUTE,
+    GATE_RUN_APPROVAL_ROUTE,
+    GATE_RUN_ROUTE,
+    GATE_RUNS_ROUTE,
+    create_app,
+)
 from backend.api.report import ReportConfig
 from backend.api.runs import BenchConfig
 from backend.bench.library import Case, Family, LibraryVersion
@@ -244,13 +256,21 @@ def test_the_gate_document_is_named_and_never_opened() -> None:
         assert family.value not in served
 
 
-def test_no_route_on_this_bench_starts_a_gate_run() -> None:
-    """The console cites the gate and offers no way to run one (PLAN.md §8).
+def test_this_route_reads_and_the_one_that_starts_a_gate_run_is_elsewhere() -> None:
+    """Which route starts a gate run, exactly, over the whole HTTP surface.
 
-    Over the route table, so it is a claim about the whole HTTP surface: a gate run
-    attacks three reference agents, spends about 830 calls and writes back to the
-    case library, and it stays behind the terminal consent flow that asks the three
-    attestation statements one at a time.
+    The assertion this replaces said that no route did, and it was right until
+    ADR-0021: a gate run is 830-odd calls against three reference agents and a
+    write-back to every case record, and PLAN.md §8 kept it on the command line. The
+    reversal did not weaken the claim, it moved it — so this now says *where*, and
+    says it over the route table rather than by reading a file, because the useful
+    failure is a second start route appearing under a friendlier word.
+
+    Three things at once. This route is a `GET` and nothing else. The two routes that
+    write are the gate-run family's own, named by the constants that declare them, so
+    a write appearing anywhere else with *gate* in its path fails here. And the
+    citation route is not one of them: it reads what a deployment declared, which is
+    a different fact from what a gate run this bench just made decided.
     """
     app = create_app(BenchConfig(cases=[], report=ReportConfig(gate=CITED)))
     gate_routes = {
@@ -258,9 +278,21 @@ def test_no_route_on_this_bench_starts_a_gate_run() -> None:
         for route in app.routes
         if isinstance(route, APIRoute) and "gate" in route.path
         for method in route.methods or set()
+        if method != "HEAD"
     }
 
-    assert gate_routes == {(BENCH_GATE_ROUTE, "GET")}
+    assert gate_routes == {
+        (BENCH_GATE_ROUTE, "GET"),
+        (GATE_RUNS_ROUTE, "GET"),
+        (GATE_RUNS_ROUTE, "POST"),
+        (GATE_RUN_ROUTE, "GET"),
+        (GATE_RUN_APPROVAL_ROUTE, "POST"),
+    }
+    assert {(path, method) for path, method in gate_routes if method != "GET"} == {
+        (GATE_RUNS_ROUTE, "POST"),
+        (GATE_RUN_APPROVAL_ROUTE, "POST"),
+    }
+    assert (BENCH_GATE_ROUTE, "POST") not in gate_routes
 
 
 def test_nothing_under_the_bench_prefix_does_anything_but_read() -> None:
@@ -277,6 +309,12 @@ def test_nothing_under_the_bench_prefix_does_anything_but_read() -> None:
     what this bench is configured to do — and it is named here rather than allowed
     for, because the claim this test makes is about the whole set and not about how
     many are in it. `test_api_settings.py` asserts the same equality from its own end.
+
+    **ADR-0021 did not weaken this one.** A gate run can now be started over HTTP,
+    and it is started at `POST /gate-runs` — a route whose path says plainly that it
+    is not a read. Nothing moved under `/bench` to do it, and the second assertion
+    below says so from the other end: the writes on this bench are the five that are
+    named, and two of them are the gate-run family's.
     """
     app = create_app(BenchConfig(cases=[], report=ReportConfig(gate=CITED)))
     under_bench = {
@@ -290,4 +328,23 @@ def test_nothing_under_the_bench_prefix_does_anything_but_read() -> None:
     assert under_bench == {
         (BENCH_GATE_ROUTE, "GET"),
         (BENCH_SETTINGS_ROUTE, "GET"),
+    }
+
+    # And the writes on this bench are the five that are named. Two of them start
+    # something that spends — a run and a gate run — and each is behind an
+    # attestation that cannot be constructed incomplete and a halt in front of the
+    # figures (ADR-0007). A sixth appearing here is a spend nobody declared.
+    writes = {
+        (route.path, method)
+        for route in app.routes
+        if isinstance(route, APIRoute)
+        for method in route.methods or set()
+        if method not in {"GET", "HEAD"}
+    }
+    assert writes == {
+        ("/nonces", "POST"),
+        ("/runs", "POST"),
+        ("/runs/{run_id}/approval", "POST"),
+        (GATE_RUNS_ROUTE, "POST"),
+        (GATE_RUN_APPROVAL_ROUTE, "POST"),
     }

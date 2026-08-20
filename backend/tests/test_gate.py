@@ -26,6 +26,7 @@ from backend.bench.adjudication import Completion
 from backend.bench.calibration import CalibrationResult, TargetRun, run_calibration
 from backend.bench.evaluator import Verdict
 from backend.bench.gate import GateResult, NotAGateRun, read_gate
+from backend.bench.lease import take_the_library
 from backend.bench.library import (
     Case,
     CaseStatus,
@@ -522,6 +523,36 @@ def test_the_gate_entry_point_prints_the_rule_before_it_asks_for_anything(
     assert "the decision rule as applied" in printed
     assert "4 of 6 families passing" in printed
     assert "gate run" not in printed
+
+
+def test_a_terminal_gate_run_refuses_a_library_another_run_is_writing_to(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """One writer at a time on one library, and this is the terminal's half of it.
+
+    The lease this test writes is the one a gate run started from the console takes
+    (`backend/api/gate_runs.py`, ADR-0021): same file, same directory, same refusal.
+    Before ADR-0021 there was only one writer by construction and the rule was
+    unnecessary; with two entry points onto the same case records it is the thing that
+    stops a retirement being decided off a series missing a reading.
+
+    The refusal is ahead of everything — ahead of the rule being printed, ahead of the
+    attestation, ahead of any call — because the library is read before any of that
+    and the read is the start of the critical section.
+    """
+    cases = authored_library(tmp_path / "cases")
+    held = take_the_library(cases, "a gate run from the console, on another process")
+
+    code = main(["--identity", "bench engineer, lease test", "--cases", str(cases)])
+
+    printed = capsys.readouterr().out
+    assert code == EXIT_WITHHELD
+    assert "a gate run from the console" in printed
+    assert "already being written to" in printed
+    # Nothing was declared and nothing was asked: this run stopped before it read the
+    # library it would have written to.
+    assert "the decision rule as applied" not in printed
+    held.release()
 
 
 def test_the_entry_point_offers_no_way_to_gate_fewer_than_three_agents() -> None:

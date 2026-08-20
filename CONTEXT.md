@@ -185,7 +185,13 @@ _Avoid_: blind spot, limitation, exclusion
 
 **Gate**:
 The stop before the bench is trusted: the whole library run against all three reference agents, decided by a stated rule.
-_Avoid_: calibration, validation, smoke test, benchmark
+_Avoid_: calibration, validation, validate the bench, smoke test, benchmark
+
+**Gate run**:
+One execution of the gate, and the record it leaves behind — the dated document a
+run started from the command line writes, or the gate run record the bench holds
+for one started from the console.
+_Avoid_: run, job, validation run, calibration run
 
 **Admission**:
 The check a proposed case must pass against the reference agents before it may ever reach a user.

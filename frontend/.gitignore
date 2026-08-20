@@ -1,0 +1,13 @@
+# What the lockfile produces rather than what it decides. `package-lock.json` is
+# committed and `npm ci` rebuilds this from it, so a copy in the tree would only
+# ever be a stale one — and it is a large one, which the Python tooling would then
+# have to walk on its way over the repository.
+node_modules
+
+# Build output. `npm run build` writes it and nothing reads it back out of the
+# tree; a deployment builds its own.
+dist
+
+# Vite's local overrides, which are one machine's and not this project's.
+*.local
+*.log

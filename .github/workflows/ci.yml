@@ -45,3 +45,43 @@ jobs:
       # port; nothing here reaches the network or a model provider.
       - name: Test
         run: uv run pytest -q
+
+  # The frontend is a second toolchain in the same tree, so it is a second job
+  # rather than four more steps: a Python failure and a TypeScript failure are
+  # different work for different reasons, and a run that reported them under one
+  # name would make the shorter one wait for the longer.
+  frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      # `npm ci` and the committed lockfile, for the reason `uv sync --locked`
+      # is above it: a green run here means the versions a local run used.
+      - name: Install the app
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      # `npm run build` is `tsc -b` and then Vite, so this is the typecheck and
+      # the build in one step and neither passes without the other. The Python
+      # side typechecks strict and so does this one.
+      - name: Typecheck and build
+        run: npm run build
+
+      # The screens themselves are driven by hand, per the spec. What runs here
+      # is what a person cannot check faster than a test can: the guard rules
+      # and the body that goes on the wire. No browser is involved.
+      - name: Test
+        run: npm test

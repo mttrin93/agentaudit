@@ -2863,13 +2863,16 @@ def create_app(
         rather than trust it (ADR-0003). It is `DECLARED_RULE` — the record every
         scorer in this repository reads — and not a copy kept for a screen.
 
-        **There is no route that starts a gate run and this is not it.** A gate run
-        attacks all three reference agents, spends about 830 calls, and appends a
-        discrimination reading to every case record it reads while retiring the
-        cases the rule retires, behind a terminal that asks the three attestation
-        statements one at a time (PLAN.md §8, `scripts/gate.py`). The console cites
-        it and prints the command. What an operator gets here is a fact about the
-        instrument; what they do not get anywhere is a button.
+        **This route does not start a gate run, and the one that does is not under
+        `/bench`.** A gate run attacks all three reference agents, spends about 830
+        calls, and appends a discrimination reading to every case record it reads
+        while retiring the cases the rule retires. It is started at `POST /gate-runs`
+        — its own family, and a path that says plainly it is not a read — behind the
+        same three attestation statements and the same halt a terminal gate run asks
+        for (ADR-0021, `scripts/gate.py`). What this route serves is the citation the
+        *deployment* declared, which is a different fact from what a gate run this
+        bench just made decided: a completed gate run does not change what the bench
+        cites, and whether it should is a question this route does not answer.
         """
         return bench_gate(bench.config.report.gate)
 

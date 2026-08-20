@@ -123,7 +123,7 @@ export interface ConsequenceBlock {
 }
 
 /**
- * The command, and the statement that it is the only entry point.
+ * The command, the statements beside it, and the control this bench may offer.
  *
  * `command` is one line and nothing but the command — no leading prompt character,
  * no prose wrapped around it — because what an operator does with it is select it

@@ -21,9 +21,11 @@
  * move with it — a floor hard-coded in the console is a floor that can disagree with
  * `rule.py` in the flattering direction.
  *
- * **That the command is copyable and stated as the only entry point.** One line, no
- * prompt character, nothing but the command, because what happens to it is a
- * selection and a paste.
+ * **That the command is copyable, and that the copy says what the two entry points
+ * differ on.** One line, no prompt character, nothing but the command, because what
+ * happens to it is a selection and a paste — and beside it the sentences that say
+ * what a terminal gate run leaves that one started here does not, and what neither
+ * of them will do without a person answering.
  *
  * **That there is exactly one control here, and that it is described rather than
  * held.** This file used to assert that nothing on this screen could start a gate

@@ -15,6 +15,26 @@
   --line: #d8d8d4;
   --refusal: #8c2f1f;
   --refusal-paper: #fdf2ef;
+  /*
+   * The shell's surface, and the accents the charts to come are drawn in.
+   *
+   * Colour carries identity and order here, and never a judgement. The two layers
+   * of a run take two hues so that the boundary between them is visible; the three
+   * reference agents take one hue in three ordered steps, because they are ordered
+   * by construction. No band, rate, verdict or verification result is coloured —
+   * a scale over holds, weak and fails is the severity scale ADR-0005 exists to
+   * refuse, and a green tick beside somebody's agent is the badge the report
+   * refuses. `--refusal` keeps its own hue for the one thing it means, and every
+   * accent is stepped well away from it so that no accent can be read as a
+   * finding. Each is redundant with a label in words, so nothing on any screen is
+   * carried by hue alone.
+   */
+  --rail: #f2f2ee;
+  --scored: oklch(0.48 0.11 250);
+  --adaptive: oklch(0.48 0.11 305);
+  --agent-hardened: oklch(0.36 0.07 200);
+  --agent-weak: oklch(0.54 0.07 200);
+  --agent-trivial: oklch(0.72 0.07 200);
   color-scheme: light dark;
   font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
     "Helvetica Neue", sans-serif;
@@ -31,6 +51,14 @@
     --line: #333842;
     --refusal: #ffb3a2;
     --refusal-paper: #2c1a17;
+    /* The same accents against the dark surface: hue held, lightness inverted so
+     * the ordered steps keep their order against the paper they sit on. */
+    --rail: #1b1e24;
+    --scored: oklch(0.78 0.11 250);
+    --adaptive: oklch(0.78 0.11 305);
+    --agent-hardened: oklch(0.88 0.07 200);
+    --agent-weak: oklch(0.72 0.07 200);
+    --agent-trivial: oklch(0.56 0.07 200);
   }
 }
 
@@ -412,4 +440,163 @@ blockquote {
 code {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 0.9em;
+}
+
+/*
+ * The console shell: a rail that persists, and a screen that does not move.
+ *
+ * The frame is a two-column grid rather than a fixed sidebar and a margin, because
+ * the screens inside it set their prose in one 44rem column and that column has to
+ * stay centred in what is left over — the reading measure is the whole reason the
+ * stylesheet exists, and a shell that squeezed it would have taken away more than
+ * it added. `minmax(0, 1fr)` rather than `1fr` so that a wide `pre` inside a screen
+ * scrolls itself rather than widening the page.
+ *
+ * At a narrow width the rail stops being a column and becomes a strip along the
+ * top: the destinations wrap, the line under each one is dropped, and the reading
+ * column gets the whole window. That is one breakpoint and no JavaScript, so there
+ * is no width at which the console has navigation it cannot show.
+ */
+.console {
+  display: grid;
+  grid-template-columns: 15rem minmax(0, 1fr);
+  min-height: 100vh;
+}
+
+.rail {
+  padding: 1.6rem 1.2rem 3rem;
+  background: var(--rail);
+  border-right: 1px solid var(--line);
+  font-size: 0.9rem;
+}
+
+.rail .mark {
+  margin: 0;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.rail-note {
+  margin: 0.4rem 0 1.4rem;
+  font-size: 0.8rem;
+  color: var(--quiet);
+}
+
+/* The run's id stays at every width: it is how you tell one run from another. */
+.rail-id {
+  margin: 0.2rem 0 0.5rem;
+  font-size: 0.78rem;
+  color: var(--quiet);
+  word-break: break-all;
+}
+
+.rail-heading {
+  margin: 1.8rem 0 0.2rem;
+  font-size: 0.8rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--quiet);
+}
+
+.rail ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.rail li {
+  padding: 0.6rem 0;
+  border-top: 1px solid var(--line);
+}
+
+.rail li a {
+  text-decoration: none;
+  color: var(--quiet);
+}
+
+.rail li a:hover {
+  text-decoration: underline;
+}
+
+/*
+ * Where you are, marked three ways and not one: the weight, the ink and the rule
+ * down the side. A single grey-on-grey highlight is the marking a person on a
+ * screen they have sat on for an hour cannot find.
+ */
+.rail li.current {
+  border-left: 3px solid var(--ink);
+  padding-left: 0.7rem;
+  margin-left: -0.7rem;
+}
+
+.rail li.current a {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.rail .answers {
+  display: block;
+  margin-top: 0.25rem;
+  font-size: 0.78rem;
+  color: var(--quiet);
+}
+
+.console-body {
+  min-width: 0;
+}
+
+.topbar {
+  padding: 0.8rem 1.5rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.topbar .where {
+  margin: 0;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+/* Inside the frame the screen keeps its measure and loses the top margin the
+ * top bar now provides. */
+.console-body .screen {
+  padding-top: 2rem;
+}
+
+@media (max-width: 52rem) {
+  .console {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .rail {
+    padding: 1rem 1.2rem;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .rail ul {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0 1.2rem;
+  }
+
+  .rail li {
+    border-top: 0;
+  }
+
+  .rail li.current {
+    border-left: 0;
+    padding-left: 0;
+    margin-left: 0;
+    border-bottom: 2px solid var(--ink);
+  }
+
+  /* The rail's own prose is what a narrow window drops: the destinations stay. */
+  .rail .answers,
+  .rail-note {
+    display: none;
+  }
+
+  .rail-heading {
+    margin-top: 1rem;
+  }
 }

@@ -192,6 +192,7 @@ function family(
     inversions: 0,
     monotonic: true,
     passes,
+    excluded: null,
     stated: `${name}: D = ${discrimination.toFixed(2)} — ${passes ? 'passes' : 'does not pass'}`,
   }
 }

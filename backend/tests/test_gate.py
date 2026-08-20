@@ -15,6 +15,7 @@ to fail a working bench, and a lucky one must not pass a broken one.
 import argparse
 import ast
 import itertools
+import json
 from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import fields, replace
 from pathlib import Path
@@ -26,6 +27,7 @@ from backend.bench.adjudication import Completion
 from backend.bench.calibration import CalibrationResult, TargetRun, run_calibration
 from backend.bench.evaluator import Verdict
 from backend.bench.gate import GateResult, NotAGateRun, read_gate
+from backend.bench.gate_record import recorded_gate_run
 from backend.bench.lease import take_the_library
 from backend.bench.library import (
     Case,
@@ -60,6 +62,7 @@ from scripts.console import EXIT_WITHHELD
 from scripts.gate import (
     EXIT_GATE_FAILED,
     EXIT_NOT_DECIDED,
+    WrittenRun,
     exit_code,
     main,
     record_run,
@@ -67,6 +70,7 @@ from scripts.gate import (
 )
 
 GATE_SOURCE = Path(__file__).resolve().parents[1] / "bench" / "gate.py"
+RECORD_SOURCE = Path(__file__).resolve().parents[1] / "bench" / "gate_record.py"
 
 SEPARATES = (0, 15, 30)
 """Hardened, weak and trivial counts of thirty that pass the per-family rule."""
@@ -577,7 +581,7 @@ def test_a_gate_run_is_written_to_a_document_that_survives_it(
         load_library(CASES_DIR),
         tmp_path,
         _declared_models(),
-    ).read_text(encoding="utf-8")
+    ).document.read_text(encoding="utf-8")
 
     assert "The scored layer, which decides the gate" in written
     assert "The adaptive layer, which decides nothing" in written
@@ -652,6 +656,21 @@ def test_the_entry_point_writes_the_document_rather_than_only_being_able_to(
     assert str(record) in printed
     written = record.read_text(encoding="utf-8")
 
+    # And the record beside it, written by the command rather than only by the writer
+    # the suite calls: a machine-readable record no operator's gate run produces is a
+    # record nobody has, and it is named to the operator on the same terms (#84).
+    beside = list(tmp_path.glob("gate-*.json"))
+    assert beside, (
+        "the entry point wrote its document and left no record beside it. A writer "
+        "the suite calls and the command does not is the shape this bug had"
+    )
+    [machine_readable] = beside
+    assert machine_readable.stem == record.stem
+    assert str(machine_readable) in printed
+    decided = json.loads(machine_readable.read_text(encoding="utf-8"))["decision"]
+    assert decided["outcome"] == str(GateOutcome.NOT_DECIDED)
+    assert decided["stated"] in written
+
     # The document says what the shell was told, and this is the answer that most
     # needs one: a *not decided* run is recorded on the same terms as a pass, or the
     # history would only ever hold the runs that went well (ADR-0015).
@@ -697,6 +716,347 @@ def _bench_stand_in(spec: str) -> Completion:
     if spec == ATTACKER_STAND_IN:
         return SCRIPTED_ATTACKER
     return adjudicating(Verdict.SUCCEEDED)
+
+
+# --- The record beside the document ------------------------------------------
+#
+# A gate run leaves two things behind and they say the same thing twice: prose for
+# a person, fields for a machine. What these tests exist for is the property that
+# makes the pair worth having — the two cannot disagree, because they are two
+# renderings of one reading and one of them is rendered from the other (#84).
+
+
+SCORED_FENCE = "## The scored layer, which decides the gate\n\n```\n"
+"""Where the document's scored-layer section starts, off the fence not a regex."""
+
+
+def _written(gate: GateResult, run: CalibrationResult, directory: Path) -> WrittenRun:
+    """One gate run written down: the dated document, and the record beside it."""
+    return record_run(gate, run, load_library(CASES_DIR), directory, _declared_models())
+
+
+def _scored_block(document: str) -> str:
+    """The document's scored-layer section, taken off its own fences."""
+    _, _, after = document.partition(SCORED_FENCE)
+    block, _, _ = after.partition("\n```")
+    return block
+
+
+def _numbers(body: object, name: str = "") -> Iterator[tuple[str, float]]:
+    """Every number anywhere in a record, under the field name that carries it."""
+    if isinstance(body, bool):
+        return
+    if isinstance(body, int | float):
+        yield name, float(body)
+    elif isinstance(body, dict):
+        for key, value in body.items():
+            yield from _numbers(value, key)
+    elif isinstance(body, list):
+        for value in body:
+            yield from _numbers(value, name)
+
+
+def test_a_gate_run_writes_a_machine_readable_record_beside_its_document(
+    gate_run: CalibrationResult, tmp_path: Path, library: list[Case]
+) -> None:
+    """The per-family figures recoverable without parsing a sentence.
+
+    Until now the three reference agents' rates and each family's `D` existed only
+    inside the dated Markdown, and the citation the bench carries into a report holds
+    the outcome, the date and the library version and none of the per-family detail.
+    So the assertion is that every figure the decision turned on is a field: three
+    named rates with the counts and the interval they came from, the `D`, whether the
+    intervals were disjoint and whether the ordering held — and the decision, the
+    library version and the rule that was applied above them.
+    """
+    version = LibraryVersion.of(library)
+    gate = _gate(gate_run.target_runs, library=version)
+
+    written = _written(gate, gate_run, tmp_path)
+    record = json.loads(written.record.read_text(encoding="utf-8"))
+
+    # Beside the document, in the same directory and under the same stamp: one gate
+    # run, and a reader who has one file can name the other.
+    assert written.record.parent == written.document.parent
+    assert written.record.name == f"{written.document.stem}.json"
+    assert record["document"] == written.document.name
+
+    # The decision, the library version and the rule — the rule above the decision,
+    # as it is on the wire and on the screen, because an outcome read with no bar
+    # beside it is a verdict somebody trusted (ADR-0003).
+    assert list(record).index("rule") < list(record).index("decision")
+    assert record["decision"]["outcome"] == str(GateOutcome.NOT_DECIDED)
+    assert record["decision"]["library"] == {
+        "cases": version.cases,
+        "digest": version.digest,
+    }
+    assert record["decision"]["attempts"] == gate.attempts
+    assert record["decision"]["agents"] == list(gate.agents)
+    assert record["rule"]["discrimination_floor"] == DECLARED_RULE.discrimination_floor
+    assert record["rule"]["families_required"] == DECLARED_RULE.families_required
+    assert record["rule"]["minimum_fit_families"] == DECLARED_RULE.minimum_fit_families
+    for clause in ("per-family pass", "monotonicity", "not fit to report"):
+        assert clause in record["rule"]["stated"]
+
+    # Each family's own line, compared with the outcome the gate decided it on.
+    outcomes = {str(one.family): one for one in gate.decision.outcomes}
+    figures = {one["family"]: one for one in record["decision"]["families"]}
+    assert set(figures) == set(outcomes)
+    for name, figure in figures.items():
+        outcome = outcomes[name]
+        assert figure["discrimination"] == outcome.discrimination
+        assert figure["intervals_separate"] == outcome.intervals_separate
+        assert figure["inversions"] == outcome.monotonicity.inversions
+        assert figure["monotonic"] == outcome.monotonicity.holds
+        assert [rate["agent"] for rate in figure["rates"]] == [
+            "hardened",
+            "weak",
+            "trivial",
+        ]
+        for rate, measured in zip(
+            figure["rates"],
+            (outcome.rates.hardened, outcome.rates.weak, outcome.rates.trivial),
+            strict=True,
+        ):
+            assert rate["value"] == measured.value
+            assert (rate["successes"], rate["attempts"]) == (
+                measured.successes,
+                measured.attempts,
+            )
+            assert (rate["lower"], rate["upper"]) == (
+                measured.interval.lower,
+                measured.interval.upper,
+            )
+
+    # And no payload text reached it either, on the same terms as the document
+    # beside it (ADR-0008).
+    for case in library:
+        assert case.payload not in written.record.read_text(encoding="utf-8")
+
+
+def test_the_record_and_the_document_cannot_disagree_about_one_gate_run(
+    gate_run: CalibrationResult, tmp_path: Path, library: list[Case]
+) -> None:
+    """Not that the two agree — that there is nothing for them to disagree about.
+
+    The document's scored-layer section is not a second rendering of the decision. It
+    *is* `decision.stated` off the record, written into the prose by the one writer
+    that produces both, so the string in the fence and the string in the field are
+    the same string. Everything else on the record was read off the same
+    `GateResult` in the same call, and neither file is ever read back.
+    """
+    gate = _gate(gate_run.target_runs, library=LibraryVersion.of(library))
+
+    written = _written(gate, gate_run, tmp_path)
+    document = written.document.read_text(encoding="utf-8")
+    record = json.loads(written.record.read_text(encoding="utf-8"))
+
+    assert _scored_block(document) == record["decision"]["stated"]
+    # And the string both carry is the gate's own, so neither file is the source of
+    # the other's arithmetic.
+    assert record["decision"]["stated"] == gate.stated()
+    assert record["rule"]["stated"] in document
+
+    # Every figure the record carries appears in the prose beside it, in the words
+    # the gate prints it in — the counts, the intervals and the ordering included.
+    for figure in record["decision"]["families"]:
+        for line in figure["stated"].splitlines():
+            assert line.strip() in document
+        for rate in figure["rates"]:
+            assert rate["stated"] in document
+    for barred in record["decision"]["excluded"]:
+        assert barred["stated"] in document
+
+
+def test_nothing_reads_the_record_by_parsing_the_markdown(
+    gate_run: CalibrationResult, tmp_path: Path, library: list[Case]
+) -> None:
+    """The record is read off the result, and there is no route to the prose.
+
+    Two halves. A record built from the same `GateResult` with no file in existence
+    anywhere is the same record, field for field — so the one on disk cannot have
+    been recovered from the document beside it. And the module that builds it imports
+    no reader: no renderer, no `scripts`, and nothing that opens a file.
+    """
+    gate = _gate(gate_run.target_runs, library=LibraryVersion.of(library))
+
+    written = _written(gate, gate_run, tmp_path)
+    record = json.loads(written.record.read_text(encoding="utf-8"))
+
+    off_the_result = recorded_gate_run(
+        gate, decided_at=record["decided_at"], document=record["document"]
+    )
+    assert json.loads(off_the_result.model_dump_json()) == record
+
+    imported = set(_imports_of(RECORD_SOURCE))
+    assert not [name for name in imported if name.startswith("scripts")]
+    assert "backend.bench.rendering" not in imported
+    assert "re" not in imported
+    # And no reader of its own, which is the other way a figure could arrive from a
+    # document: a parse behind a helper rather than behind an import.
+    source = RECORD_SOURCE.read_text(encoding="utf-8")
+    for reader in ("read_text(", "open(", "loads("):
+        assert reader not in source, f"{reader} in gate_record.py reads something back"
+
+
+def test_the_dated_document_is_unchanged_by_the_record_written_beside_it(
+    gate_run: CalibrationResult, tmp_path: Path, library: list[Case]
+) -> None:
+    """An addition beside the document, and not a change to it.
+
+    The document's two sections are the two it has always had, its scored half is
+    `GateResult.stated()` and nothing else, and nothing of the record's shape leaked
+    into the prose: the record does not appear in it, and neither does a field name.
+    """
+    gate = _gate(gate_run.target_runs, library=LibraryVersion.of(library))
+
+    document = _written(gate, gate_run, tmp_path).document.read_text(encoding="utf-8")
+
+    assert _scored_block(document) == gate.stated()
+    assert document.count("\n## ") == 2
+    assert "The scored layer, which decides the gate" in document
+    assert "The adaptive layer, which decides nothing" in document
+    for shape in (".json", '"discrimination"', "intervals_separate", "decided_at"):
+        assert shape not in document, f"{shape} reached the document from the record"
+
+
+def test_an_excluded_family_carries_no_score_that_reads_as_deciding(
+    gate_run: CalibrationResult, tmp_path: Path, library: list[Case]
+) -> None:
+    """Marked on its own line, and absent from every count.
+
+    No κ was measured in this run, so both judged families are excluded and the fit
+    set is four. Their rates and their `D` stay on the record — the attempts were
+    made, and a measured rate stays measured (ADR-0006) — and each says on its own
+    line why it decided nothing, so a reader of one family never has to
+    cross-reference a sibling list to find out (ADR-0015).
+
+    The counts are then re-derived from the marks: four passing over the families
+    whose line says they decided, which is the arithmetic that breaks if a mark is
+    missing.
+    """
+    gate = _gate(gate_run.target_runs, library=LibraryVersion.of(library))
+
+    written = _written(gate, gate_run, tmp_path)
+    decision = json.loads(written.record.read_text(encoding="utf-8"))["decision"]
+
+    figures = {one["family"]: one for one in decision["families"]}
+    barred = {one["family"]: one for one in decision["excluded"]}
+    assert set(barred) == {
+        str(Family.WRONGFUL_COMMITMENT),
+        str(Family.DISCLOSURE_DENIAL),
+    }
+
+    for name, exclusion in barred.items():
+        assert figures[name]["excluded"] == str(ExclusionReason.UNFIT_TO_REPORT)
+        assert exclusion["kappa"] is None
+        assert "decide nothing" in exclusion["stated"]
+        # Measured and recorded, and marked: the attempts were made and their
+        # denominators are on the record, so a `D` here is a figure the run took
+        # and set aside rather than a figure it never had (ADR-0006). The other
+        # half of "absent is not zero" is the family with no line at all.
+        assert [rate["attempts"] for rate in figures[name]["rates"]] == [
+            DECLARED_RULE.attempts_per_case * 3
+        ] * 3
+
+    decided = [one for one in decision["families"] if one["excluded"] is None]
+    assert set(barred).isdisjoint(one["family"] for one in decided)
+    assert decision["fit_families"] == len(decided) == 4
+    assert decision["families_passing"] == sum(1 for one in decided if one["passes"])
+    assert decision["families_monotonic"] == sum(
+        1 for one in decided if one["monotonic"]
+    )
+
+
+def test_a_family_the_bench_could_not_measure_is_absent_rather_than_scored_zero() -> (
+    None
+):
+    """Absent is not zero, and excluded is not measured-and-failed.
+
+    The two grounds for exclusion print apart because they say different things: one
+    says the target could not answer, the other says the bench cannot vouch for the
+    answer it got. A family with no rate has no line among the figures at all —
+    there is no `D` for it and no zero standing in for one — and it is named in the
+    exclusions with its reason (ADR-0015).
+    """
+    measured = [family for family in Family if family is not Family.SCOPE_CREEP]
+    decision = decide_gate(
+        outcomes_for(*[SEPARATES] * 5, families=measured),
+        reliability=judged(),
+        not_measurable={Family.SCOPE_CREEP: NotMeasurable.NO_TOOL_CALL_VISIBILITY},
+    )
+
+    record = recorded_gate_run(
+        _result(decision), decided_at="2026-08-20T00:00:00+00:00", document="gate-x.md"
+    )
+
+    figures = {one.family: one for one in record.decision.families}
+    barred = {one.family: one for one in record.decision.excluded}
+    assert str(Family.SCOPE_CREEP) not in figures
+    assert barred[str(Family.SCOPE_CREEP)].reason == str(ExclusionReason.NOT_MEASURABLE)
+    assert barred[str(Family.SCOPE_CREEP)].kappa is None
+    assert "not measurable" in barred[str(Family.SCOPE_CREEP)].stated
+    # The other exclusion is on the other ground, and it is a family with figures.
+    assert figures[str(Family.WRONGFUL_COMMITMENT)].excluded == str(
+        ExclusionReason.UNFIT_TO_REPORT
+    )
+
+
+SIX_APART = (
+    (0, 15, 30),
+    (2, 15, 28),
+    (4, 15, 26),
+    (7, 15, 24),
+    (8, 15, 22),
+    (10, 15, 20),
+)
+"""Six families whose discrimination scores could not add up by accident.
+
+`D` comes out at 1.00, 0.87, 0.73, 0.57, 0.47 and 0.33 — sum 3.97, mean 0.66, and
+neither figure is any family's own. The served report fixture's trick, applied to
+the one record that holds six scores at once.
+"""
+
+
+def test_the_record_carries_no_figure_spanning_two_families_or_two_layers() -> None:
+    """Six families, six lines, and nothing that adds two of them.
+
+    A mean of six discrimination scores would read as a figure about the bench and it
+    is not one: the counts the rule is decided on are counts *of families*, and every
+    score belongs to the family it was measured on (ADR-0005). There is no field for
+    a composite, and no number anywhere on the record is the sum or the mean of the
+    six. Nothing adaptive appears either — `A_break` is computed over episodes and
+    decides nothing, and this record is the scored layer alone (ADR-0010).
+    """
+    fit = Reliability(
+        family=Family.WRONGFUL_COMMITMENT, kappa=0.86, agreements=14, transcripts=15
+    )
+    decision = decide_gate(outcomes_for(*SIX_APART), reliability=judged(wrongful=fit))
+
+    record = recorded_gate_run(
+        _result(decision), decided_at="2026-08-20T00:00:00+00:00", document="gate-x.md"
+    )
+
+    scores = [one.discrimination for one in record.decision.families]
+    assert (len(scores), record.decision.fit_families) == (6, 6)
+    combined = {sum(scores), sum(scores) / len(scores)}
+    assert not combined & set(scores), (
+        "this fixture's own arithmetic could pass the assertion below by coincidence"
+    )
+
+    # The three counts are counts of families — four of six passing, five of six
+    # monotonic, the fit denominator — which the rule declares and the decision is
+    # read on. Every other number is checked against the sum and the mean of the six.
+    counted = {"families_passing", "families_monotonic", "fit_families", "attempts"}
+    body = json.loads(record.model_dump_json())
+    for name, value in _numbers(body):
+        if name in counted:
+            continue
+        assert value not in combined, f"{name} combines the six families"
+
+    printed = record.model_dump_json().lower()
+    for forbidden in ("severity", "composite", "a_break", "a_effort", "episode"):
+        assert forbidden not in printed, f"{forbidden} reached a gate run's record"
 
 
 def test_the_exit_code_tells_a_failed_gate_from_one_that_was_not_decided() -> None:

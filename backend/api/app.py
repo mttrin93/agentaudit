@@ -188,14 +188,19 @@ from backend.api.runs import (
 from backend.bench.adaptive.budget import DECLARED_ADAPTIVE_BUDGET, AdaptiveBudget
 from backend.bench.admission import admitted_library
 from backend.bench.contract import NOT_A_SECURITY_RESULT, RetryPolicy, TargetConfig
-from backend.bench.gate import GateResult, stated_outcome, stated_rate
+from backend.bench.gate_record import (
+    CitedLibrary,
+    DeclaredRule,
+    GateDecided,
+    declared_rule,
+    gate_decided,
+)
 from backend.bench.library import Case, CaseStatus, LibraryVersion
 from backend.bench.payload import DeclaredModels, GateCitation, citation
 from backend.bench.registration import ECHO_PROBE, Attestation
 from backend.bench.rendering import REPORT_MARKDOWN, REPORT_PAYLOAD
 from backend.bench.retirement import retired_cases
 from backend.bench.rule import DECLARED_RULE, GateRule
-from backend.bench.scorer import FamilyOutcome, Rate
 from backend.bench.signing import (
     SIGNATURE_FILE,
     SIGNING_KEY_VARIABLE,
@@ -1272,18 +1277,6 @@ nothing here is reachable from a target's report.
 """
 
 
-class CitedLibrary(BaseModel):
-    """The library version a gate run was decided at: a count and a digest.
-
-    Both, because a citation saying only *eighteen cases* cannot tell a reader
-    whether the eighteen are the same eighteen (`library.LibraryVersion`), and the
-    digest is what makes "has the bench changed since?" a question with an answer.
-    """
-
-    cases: int
-    digest: str
-
-
 class CitedGate(BaseModel):
     """A bench citing a gate run: its outcome, its date, its version, its document.
 
@@ -1345,48 +1338,6 @@ def gate_response(cited: GateCitation | None) -> CitedGate | UncitedGate:
     return CitedGate.model_validate(body)
 
 
-class DeclaredRule(BaseModel):
-    """The rule the gate is decided under, every threshold of it, as data.
-
-    Served whole rather than summarised, and served *above* the outcome, because a
-    pass means nothing without the bar it cleared: an operator reading *passed* with
-    no rule beside it is trusting a verdict, and an operator reading the rule first
-    can re-derive one. ADR-0003 fixed these numbers before the code that evaluates
-    them existed for exactly that reason, and a threshold nobody can read is a
-    threshold that can be moved at hour 30.
-
-    **The numbers and the sentences, both.** `stated` is `GateRule.stated()` — the
-    same text the gate prints beside its answer and the same text the report's
-    provenance carries — and the fields beside it are the declared record's own, so a
-    reader gets the rule in the bench's words and a caller gets it in figures without
-    parsing them back out of prose.
-
-    **Nothing here is a measurement, and nothing here is per family.** Every field is
-    a declared threshold or a declared count; not one of them is a rate, an interval,
-    a `D` or a κ that a gate run produced. The reference agents' rates and the
-    per-family `D` live only in the gate run's document, and no route reads it (spec
-    §75, "Per-family gate figures are out"). Nothing adaptive appears either: `T` and
-    `k` are declared in `AdaptiveBudget`, and the adaptive layer decides nothing
-    (ADR-0010).
-    """
-
-    stated: str
-    """The whole rule as the gate prints it, from `rule.py` and never from a
-    document. Multi-line, one clause per line, in the order ADR-0003 states them."""
-
-    interval_confidence: float
-    attempts_per_case: int
-    discrimination_floor: float
-    retirement_floor: float
-    kappa_floor: float
-    gold_transcripts_per_family: int
-    tolerated_inversions: int
-    family_count: int
-    families_required: int
-    monotonic_families_required: int
-    minimum_fit_families: int
-
-
 class BenchGate(BaseModel):
     """The bench's own certification: the rule it is held to, then what it answered.
 
@@ -1406,29 +1357,6 @@ class BenchGate(BaseModel):
 
     rule: DeclaredRule
     citation: CitedGate | UncitedGate
-
-
-def declared_rule(rule: GateRule = DECLARED_RULE) -> DeclaredRule:
-    """The declared rule as it goes on the wire, read off the record that holds it.
-
-    `DECLARED_RULE` by default and never a literal here, so that a threshold moved in
-    `rule.py` moves here and a threshold moved here is impossible: this function has
-    no numbers in it.
-    """
-    return DeclaredRule(
-        stated=rule.stated(),
-        interval_confidence=rule.interval_confidence,
-        attempts_per_case=rule.attempts_per_case,
-        discrimination_floor=rule.discrimination_floor,
-        retirement_floor=rule.retirement_floor,
-        kappa_floor=rule.kappa_floor,
-        gold_transcripts_per_family=rule.gold_transcripts_per_family,
-        tolerated_inversions=rule.tolerated_inversions,
-        family_count=rule.family_count,
-        families_required=rule.families_required,
-        monotonic_families_required=rule.monotonic_families_required,
-        minimum_fit_families=rule.minimum_fit_families,
-    )
 
 
 def bench_gate(cited: GateCitation | None, rule: GateRule = DECLARED_RULE) -> BenchGate:
@@ -2237,181 +2165,6 @@ def gate_run_started(record: GateRunRecord, config: BenchConfig) -> GateRunStart
         library=str(record.library),
         agents=list(record.agents),
         cases=len(record.cases),
-    )
-
-
-class MeasuredRate(BaseModel):
-    """One reference agent's failure rate on one family, with what it came from.
-
-    The counts and the interval travel with the value, because a rate with no
-    denominator beside it is a number a reader has to trust: thirty attempts per
-    family per agent is the declared sample size, and it is printed rather than
-    implied (ADR-0003).
-    """
-
-    agent: str
-    value: float
-    successes: int
-    attempts: int
-    lower: float
-    upper: float
-    stated: str
-
-
-class FamilyFigures(BaseModel):
-    """One family at this gate run: three rates, its `D`, its ordering, its verdict.
-
-    Every number the per-family pass turned on, beside the verdict rather than
-    instead of it, so a reader re-derives the line rather than trusting it. There is
-    no band here and no severity: a band summarises one family for one *target*, and
-    the subject of a gate run is the bench (ADR-0014, ADR-0018).
-    """
-
-    family: str
-    rates: list[MeasuredRate]
-    """The three agents in construction order — hardened, weak, trivial — because
-    the ordering is what monotonicity is read across."""
-
-    discrimination: float
-    """`D` for this family: trivial minus hardened, from this gate run's attempts."""
-
-    intervals_separate: bool
-    inversions: int
-    monotonic: bool
-    passes: bool
-    stated: str
-
-
-class ExcludedFamily(BaseModel):
-    """One family barred from the counts, with the reason and the reading behind it.
-
-    Excluded is not scored a fail and not force-passed: its rates were measured and
-    are still recorded, and they decide nothing in either count (ADR-0015).
-    """
-
-    family: str
-    reason: str
-    kappa: float | None
-    stated: str
-
-
-class JudgedReliability(BaseModel):
-    """One judged family's κ against the gold set, or the stated absence of one."""
-
-    family: str
-    kappa: float | None
-    stated: str
-
-
-FIGURES_FROM_THE_RUN_ITSELF = (
-    "every figure here was read off the attempts this gate run just made, in the "
-    "process that made them. Nothing on this response was parsed out of a document: "
-    "the dated Markdown a command-line gate run writes is prose, and a screen that "
-    "depended on its shape would break on a rewording"
-)
-
-
-class GateDecided(BaseModel):
-    """What this gate run decided, and everything a reader needs to re-derive it.
-
-    The counts are over the fit families and the excluded ones are carried beside
-    them with their reasons. There is no composite figure here, nothing that adds two
-    families and no severity scale: the outcome is one of three answers to a stated
-    rule, and the rule is served above this on the same response (ADR-0003, ADR-0005).
-    """
-
-    outcome: str
-    """`passed`, `failed` or `not_decided` — three answers, because *not decided* is
-    not a polite fail (`scorer.GateOutcome`)."""
-
-    families_passing: int
-    families_monotonic: int
-    fit_families: int
-    families: list[FamilyFigures]
-    excluded: list[ExcludedFamily]
-    reliability: list[JudgedReliability]
-    library: CitedLibrary
-    attempts: int
-    agents: list[str]
-    stated: str
-    """The whole decision as the gate prints it, from `GateResult.stated()` — the
-    same text a command-line run puts in its document."""
-
-    read_from: str = FIGURES_FROM_THE_RUN_ITSELF
-
-
-def _rate(agent: str, rate: Rate) -> MeasuredRate:
-    """One agent's rate on one family, off the record the scorer produced."""
-    return MeasuredRate(
-        agent=agent,
-        value=rate.value,
-        successes=rate.successes,
-        attempts=rate.attempts,
-        lower=rate.interval.lower,
-        upper=rate.interval.upper,
-        stated=stated_rate(rate),
-    )
-
-
-def family_figures(outcome: FamilyOutcome) -> FamilyFigures:
-    """One family's line, read off the outcome the gate decided it on."""
-    rates = outcome.rates
-    return FamilyFigures(
-        family=str(outcome.family),
-        rates=[
-            _rate("hardened", rates.hardened),
-            _rate("weak", rates.weak),
-            _rate("trivial", rates.trivial),
-        ],
-        discrimination=outcome.discrimination,
-        intervals_separate=outcome.intervals_separate,
-        inversions=outcome.monotonicity.inversions,
-        monotonic=outcome.monotonicity.holds,
-        passes=outcome.passes,
-        stated=stated_outcome(outcome),
-    )
-
-
-def gate_decided(gate: GateResult) -> GateDecided:
-    """The decision as it goes on the wire, read off the result held in memory.
-
-    Every field is the `GateResult` this gate run produced. Nothing is recomputed
-    here — a second reading of the rates would be a second arithmetic — and nothing
-    is read from the filesystem.
-    """
-    decision = gate.decision
-    return GateDecided(
-        outcome=str(decision.outcome),
-        families_passing=decision.families_passing,
-        families_monotonic=decision.families_monotonic,
-        fit_families=decision.fit_families,
-        families=[family_figures(outcome) for outcome in decision.outcomes],
-        excluded=[
-            ExcludedFamily(
-                family=str(excluded.family),
-                reason=str(excluded.reason),
-                kappa=excluded.kappa,
-                stated=excluded.stated(),
-            )
-            for excluded in decision.excluded
-        ],
-        reliability=[
-            JudgedReliability(
-                family=str(family),
-                kappa=None if measured is None else measured.kappa,
-                stated=(
-                    measured.stated()
-                    if measured is not None
-                    else "no κ was measured against the gold set, so the family is "
-                    "not fit to report and decides nothing here"
-                ),
-            )
-            for family, measured in sorted(gate.reliability.items())
-        ],
-        library=CitedLibrary(cases=gate.library.cases, digest=gate.library.digest),
-        attempts=gate.attempts,
-        agents=list(gate.agents),
-        stated=gate.stated(),
     )
 
 

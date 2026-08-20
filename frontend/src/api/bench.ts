@@ -754,16 +754,64 @@ export async function reportVerification(path: string): Promise<Verification> {
 export const BENCH_GATE_PATH = '/bench/gate'
 
 /**
- * The gate run this bench cites, or the stated absence of one.
+ * The rule the gate is decided under, every declared threshold of it.
+ *
+ * `stated` is the whole rule as the gate prints it beside its answer — the same
+ * text `scripts/gate.py` writes into its own document — and the fields beside it
+ * are the declared record's numbers, so a sentence on a screen that needs one can
+ * name it rather than restate it in words. Not one field here is a measurement: a
+ * gate run's per-family rates and its per-family `D` are in its document and are
+ * in no response this app reads (spec §75).
+ *
+ * **Every threshold is typed and the screen prints the rule verbatim.** The
+ * numbers are carried whole because the rule is a record and half a record invites
+ * the next screen to add the other half; what the gate screen renders is `stated`
+ * plus the two floors its own sentences name, which is the same division
+ * `interrupt.ts` makes over the estimate's fields.
+ */
+export interface DeclaredRule {
+  stated: string
+  interval_confidence: number
+  attempts_per_case: number
+  discrimination_floor: number
+  retirement_floor: number
+  kappa_floor: number
+  gold_transcripts_per_family: number
+  tolerated_inversions: number
+  family_count: number
+  families_required: number
+  monotonic_families_required: number
+  minimum_fit_families: number
+}
+
+/**
+ * The bench's own certification: the rule it is held to, then what it answered.
+ *
+ * Two fields, and the order is the response's own. The rule is declared
+ * configuration and a fact about the bench whether or not a gate run was ever
+ * made; the citation is what the last one answered and is one of two shapes. So
+ * the rule is not nested inside the citation — an uncited bench is held to the
+ * same bar — and the citation is nested rather than flattened so that it stays the
+ * identical block the signed provenance carries (ADR-0018).
+ */
+export interface BenchGate {
+  rule: DeclaredRule
+  citation: GateCitation
+}
+
+/**
+ * The rule this bench is held to, and the gate run it cites under it.
  *
  * The only read in this module whose subject is the instrument rather than a
  * target, and it takes no run id because it is not about a run. There is no
  * counterpart that starts a gate run: one is 830-odd calls against three
  * reference agents behind a terminal consent flow (PLAN.md §8), so the console
- * cites it and the CLI stays the only entry point.
+ * cites it, prints the command, and the CLI stays the only entry point. This
+ * module has no function that posts anywhere under `/bench` and the API has no
+ * route that would take one.
  */
-export async function benchGate(): Promise<GateCitation> {
-  return (await fetched(BENCH_GATE_PATH, 'gate citation')) as GateCitation
+export async function benchGate(): Promise<BenchGate> {
+  return (await fetched(BENCH_GATE_PATH, 'gate citation')) as BenchGate
 }
 
 /** Where the runs on the record are listed. The path a run is started at, read. */

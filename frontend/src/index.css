@@ -567,6 +567,95 @@ code {
 }
 
 /*
+ * The declared rule, printed as the gate prints it.
+ *
+ * A list of the rule's own clauses, hanging off its own first line the way the
+ * declared text does — the indentation is part of the rule's shape, and a clause
+ * promoted to a heading by losing two spaces would read as a rule of its own. Set in
+ * the monospace face the nonce and the case ids use, because these are thresholds
+ * read digit by digit rather than prose read at speed.
+ */
+.clauses {
+  margin: 1.2rem 0;
+  padding-left: 1.2rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.85rem;
+  list-style: none;
+}
+
+.clauses li {
+  margin: 0.35rem 0;
+}
+
+.clauses li.under {
+  padding-left: 1.2rem;
+  border-left: 1px solid var(--line);
+}
+
+/*
+ * The three reference agents, in one hue's three ordered steps.
+ *
+ * The steps carry the ordering construction gives them — hardened, weak, trivial —
+ * and nothing else: there is no rate, no band and no `D` in this block, because what
+ * each agent scored is in the gate run's document and a figure beside a name here
+ * would be the per-family gate figure the spec dropped. The hue is one hue for the
+ * same reason the two layers take two: identity and order, never a judgement. Each
+ * name is written out beside its step, so nothing is carried by lightness alone.
+ */
+.agents {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  gap: 1rem;
+  margin: 1rem 0 0;
+}
+
+.agent {
+  padding: 0.2rem 0 0.2rem 0.8rem;
+  border-left: 3px solid var(--line);
+}
+
+.agent.hardened {
+  border-left-color: var(--agent-hardened);
+}
+
+.agent.weak {
+  border-left-color: var(--agent-weak);
+}
+
+.agent.trivial {
+  border-left-color: var(--agent-trivial);
+}
+
+.agent .agent-name {
+  margin: 0 0 0.2rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.agent .kind {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--quiet);
+}
+
+/*
+ * The command that starts a gate run, on its own line with nothing around it.
+ *
+ * Selecting the line has to select the command and nothing else, because that is
+ * what "copy it" means on a screen with no copy button — and there is no copy button
+ * for the same reason there is no start button: what starts a gate run is a terminal
+ * that asks three attestation statements one at a time. It scrolls itself on a narrow
+ * window rather than wrapping, so a pasted command is one command.
+ */
+.command {
+  margin: 1.2rem 0;
+  overflow-x: auto;
+  white-space: pre;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+/*
  * The console shell: a rail that persists, and a screen that does not move.
  *
  * The frame is a two-column grid rather than a fixed sidebar and a margin, because

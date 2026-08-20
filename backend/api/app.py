@@ -16,13 +16,16 @@ spent are reported per layer by both — `GET /runs/{id}` for one run in flight,
 number and no list can grow a totals row (ADR-0007, ADR-0010).
 
 **`GET /bench/gate` cites and never starts.** It is the only route here whose
-subject is the instrument: the outcome of the gate run this bench was configured to
-cite, the date it was decided, the library version it was earned at, and the path
-of the document that recorded it. A gate run is 830-odd calls from a terminal that
-asks three attestation statements one at a time (PLAN.md §8, `scripts/gate.py`), so
-there is no route that begins one and no record type for one — this route reads the
-citation the deployment declared and nothing else. The document is **named and
-never opened**: a route that parsed the bench's own prose output would break on a
+subject is the instrument: the declared rule the gate is decided under, and then the
+outcome of the gate run this bench was configured to cite, the date it was decided,
+the library version it was earned at, and the path of the document that recorded it.
+The rule is above the outcome on the wire as it is on the screen, because a pass with
+no bar beside it is a verdict to be trusted rather than an answer to be re-derived
+(ADR-0003). A gate run is 830-odd calls from a terminal that asks three attestation
+statements one at a time (PLAN.md §8, `scripts/gate.py`), so there is no route that
+begins one and no record type for one — this route reads the rule the bench declares
+and the citation the deployment declared, and nothing else. The document is **named
+and never opened**: a route that parsed the bench's own prose output would break on a
 rewording, and the citation already carries every field a reader needs.
 
 **The verification route is a reading and never a fourth file.** It runs the
@@ -132,6 +135,7 @@ from backend.bench.contract import NOT_A_SECURITY_RESULT, RetryPolicy, TargetCon
 from backend.bench.payload import GateCitation, citation
 from backend.bench.registration import ECHO_PROBE, Attestation
 from backend.bench.rendering import REPORT_MARKDOWN, REPORT_PAYLOAD
+from backend.bench.rule import DECLARED_RULE, GateRule
 from backend.bench.signing import (
     SIGNATURE_FILE,
     NoSigningKey,
@@ -1071,6 +1075,97 @@ def gate_response(cited: GateCitation | None) -> CitedGate | UncitedGate:
     return CitedGate.model_validate(body)
 
 
+class DeclaredRule(BaseModel):
+    """The rule the gate is decided under, every threshold of it, as data.
+
+    Served whole rather than summarised, and served *above* the outcome, because a
+    pass means nothing without the bar it cleared: an operator reading *passed* with
+    no rule beside it is trusting a verdict, and an operator reading the rule first
+    can re-derive one. ADR-0003 fixed these numbers before the code that evaluates
+    them existed for exactly that reason, and a threshold nobody can read is a
+    threshold that can be moved at hour 30.
+
+    **The numbers and the sentences, both.** `stated` is `GateRule.stated()` — the
+    same text the gate prints beside its answer and the same text the report's
+    provenance carries — and the fields beside it are the declared record's own, so a
+    reader gets the rule in the bench's words and a caller gets it in figures without
+    parsing them back out of prose.
+
+    **Nothing here is a measurement, and nothing here is per family.** Every field is
+    a declared threshold or a declared count; not one of them is a rate, an interval,
+    a `D` or a κ that a gate run produced. The reference agents' rates and the
+    per-family `D` live only in the gate run's document, and no route reads it (spec
+    §75, "Per-family gate figures are out"). Nothing adaptive appears either: `T` and
+    `k` are declared in `AdaptiveBudget`, and the adaptive layer decides nothing
+    (ADR-0010).
+    """
+
+    stated: str
+    """The whole rule as the gate prints it, from `rule.py` and never from a
+    document. Multi-line, one clause per line, in the order ADR-0003 states them."""
+
+    interval_confidence: float
+    attempts_per_case: int
+    discrimination_floor: float
+    retirement_floor: float
+    kappa_floor: float
+    gold_transcripts_per_family: int
+    tolerated_inversions: int
+    family_count: int
+    families_required: int
+    monotonic_families_required: int
+    minimum_fit_families: int
+
+
+class BenchGate(BaseModel):
+    """The bench's own certification: the rule it is held to, then what it answered.
+
+    Two fields and their order is the point. `rule` is declared configuration and is
+    a fact about the bench whether or not any gate run was ever made; `citation` is
+    what the last one answered, and it is one of two shapes. So the rule is not a
+    field *of* the citation — an uncited bench still has a rule, and a bench that
+    fails its gate is held to the same one — and it is the first thing on the wire
+    for the same reason it is the first thing on the screen.
+
+    **The citation stays byte-identical to the provenance block.** It is nested here
+    rather than flattened beside the rule so that `CitedGate` and `UncitedGate` keep
+    mirroring `payload.citation` exactly, field for field: one serialiser, two
+    carriers, and no field added on the way to a screen that an artefact does not
+    carry (ADR-0018).
+    """
+
+    rule: DeclaredRule
+    citation: CitedGate | UncitedGate
+
+
+def declared_rule(rule: GateRule = DECLARED_RULE) -> DeclaredRule:
+    """The declared rule as it goes on the wire, read off the record that holds it.
+
+    `DECLARED_RULE` by default and never a literal here, so that a threshold moved in
+    `rule.py` moves here and a threshold moved here is impossible: this function has
+    no numbers in it.
+    """
+    return DeclaredRule(
+        stated=rule.stated(),
+        interval_confidence=rule.interval_confidence,
+        attempts_per_case=rule.attempts_per_case,
+        discrimination_floor=rule.discrimination_floor,
+        retirement_floor=rule.retirement_floor,
+        kappa_floor=rule.kappa_floor,
+        gold_transcripts_per_family=rule.gold_transcripts_per_family,
+        tolerated_inversions=rule.tolerated_inversions,
+        family_count=rule.family_count,
+        families_required=rule.families_required,
+        monotonic_families_required=rule.monotonic_families_required,
+        minimum_fit_families=rule.minimum_fit_families,
+    )
+
+
+def bench_gate(cited: GateCitation | None, rule: GateRule = DECLARED_RULE) -> BenchGate:
+    """The rule this bench is held to, and the gate run it cites under it."""
+    return BenchGate(rule=declared_rule(rule), citation=gate_response(cited))
+
+
 class ApprovalRequest(BaseModel):
     """The answer to one run's interrupt. A yes is the only thing that spends."""
 
@@ -1340,20 +1435,29 @@ def create_app(config: BenchConfig | None = None) -> FastAPI:
         )
 
     @app.get(BENCH_GATE_ROUTE)
-    def cite_the_gate_run_this_bench_last_passed() -> CitedGate | UncitedGate:
-        """The gate run this bench cites, or the stated absence of one.
+    def cite_the_gate_run_this_bench_last_passed() -> BenchGate:
+        """The rule this bench is held to, then the gate run it cites under it.
 
-        A read of the citation the deployment declared (`ReportConfig.gate`), which
-        is the same value the provenance block of every report this bench signs
-        carries. One source of truth: the citation is not assembled here, not read
-        off the filesystem, and not parsed out of the document it names.
+        The citation is a read of what the deployment declared
+        (`ReportConfig.gate`), which is the same value the provenance block of every
+        report this bench signs carries. One source of truth: it is not assembled
+        here, not read off the filesystem, and not parsed out of the document it
+        names.
+
+        **The rule comes first, and that is not a layout preference.** A pass or a
+        fail means nothing without the bar it was decided against, so the declared
+        rule is served above the outcome and an operator can re-derive the answer
+        rather than trust it (ADR-0003). It is `DECLARED_RULE` — the record every
+        scorer in this repository reads — and not a copy kept for a screen.
 
         **There is no route that starts a gate run and this is not it.** A gate run
-        attacks all three reference agents under a terminal consent flow and writes
-        back to the case library, and the console cites it rather than offering it
-        (PLAN.md §8). What an operator gets here is a fact about the instrument;
-        what they do not get anywhere is a button.
+        attacks all three reference agents, spends about 830 calls, and appends a
+        discrimination reading to every case record it reads while retiring the
+        cases the rule retires, behind a terminal that asks the three attestation
+        statements one at a time (PLAN.md §8, `scripts/gate.py`). The console cites
+        it and prints the command. What an operator gets here is a fact about the
+        instrument; what they do not get anywhere is a button.
         """
-        return gate_response(bench.config.report.gate)
+        return bench_gate(bench.config.report.gate)
 
     return app

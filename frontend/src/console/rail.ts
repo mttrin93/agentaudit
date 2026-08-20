@@ -43,6 +43,18 @@ export const CONSOLE_PATH = '/'
 /** Where registration lives, unchanged: the path this app has always served. */
 export const REGISTER_PATH = '/register'
 
+/**
+ * The operator's gate screen: the declared rule, the last outcome, the command.
+ *
+ * `/gate` and not `/bench/gate`, for two reasons. `/bench` is the API's own prefix
+ * for the routes whose subject is the instrument, and a screen path that shadowed it
+ * would be a document request the dev server proxies to the bench. And the console
+ * is deliberately not split into a target-facing and a bench-facing route tree: with
+ * no gate verdict anywhere in the application there is nothing for a prefix to keep
+ * apart, so the distinction is carried by what the screens say (spec §75).
+ */
+export const GATE_PATH = '/gate'
+
 /** The run screen's route, as `App.tsx` declares it. */
 export const RUN_PATTERN = '/runs/:runId'
 
@@ -123,7 +135,7 @@ interface Place {
 /**
  * The console's standing destinations.
  *
- * Two, today, and the shell is the reason there can be more: a screen added to
+ * Three, today, and the shell is the reason there can be more: a screen added to
  * this list is a screen the rail names, and nothing else has to change. The three
  * screens the console already had are not all here, because two of them are a
  * run's and a run is not somewhere the console always goes.
@@ -145,6 +157,13 @@ const STANDING: readonly (Place & { path: string })[] = [
     answers:
       'Describe the endpoint, plant the nonce, and make the three attestations ' +
       'one at a time.',
+  },
+  {
+    path: GATE_PATH,
+    name: 'The gate',
+    answers:
+      'The rule this bench is held to, what the last gate run answered under it, ' +
+      'and the command that starts another. Nothing here starts one.',
   },
 ]
 

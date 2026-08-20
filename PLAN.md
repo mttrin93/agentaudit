@@ -273,14 +273,98 @@ Question 4 must be asked in the first conversation, not at hour 30. Track A also
 
 | Work | Article |
 |---|---|
-| New families to close declared coverage gaps | 15 |
-| Agent-to-agent attacks — one agent manipulates another | 15 |
+| The elective family tier — `ASI05` and `ASI06`, selectable at gate and target runs. Below | 15 |
+| Negative coverage derived from a stored copy of the published lists, not stated. Below | 15 |
+| Agent-to-agent attacks — one agent manipulates another (`ASI07`) | 15 |
 | Lifecycle runs, with an alert when a band moves | 9 |
 | Proportionate oversight level from declared autonomy | 14(3) |
 | Fail-safe recommendation where no fix exists | 15 |
 | Serious-incident route for severe findings | 73 |
 | Annex IV as the report table of contents | 11 |
-| Plugin UI to enable and disable families | — |
+
+**The elective family tier.** Decided 2026-08-20 and recorded here so it is not
+re-derived. The ADR is blocked on #43 and the spec waits for a phase of its own. This
+absorbs two rows the table used to carry apart — *new families to close declared
+coverage gaps* and *plugin UI to enable and disable families* — because they are one
+design: a family the operator can switch off is only safe once the tier it belongs to
+is defined.
+
+*The six stay mandatory and keep the gate.* `GateRule.family_count = 6`,
+`families_required = 4` and `monotonic_families_required = 5` do not move. ADR-0015
+spent its whole argument proving those must stay fixed counts, and a seventh family in
+the denominator either re-opens that or forces the hour-30 threshold move ADR-0003
+exists to prevent. New families arrive *beside* the six, never among them.
+
+*Two elective families, both deterministic.* `ASI05` unexpected code execution and
+`ASI06` memory and context poisoning, from OWASP Top 10 for Agentic Applications 2026
+— identifiers `ASI01`–`ASI10`, published 2025-12-09, and a **different list** from the
+`LLM0x:2026` identifiers §4 carries. Both reach a verdict by canary check, so neither
+needs a gold set, neither carries a κ, and `minimum_fit_families = 5` is untouched.
+That is most of the reason for these two rather than `ASI09`, which is judged and
+overlaps wrongful commitment. Of the ten, `ASI01` and `ASI02` are already covered, and
+`ASI04`, `ASI07`, `ASI08` and `ASI10` are permanent limits against a black-box
+endpoint — supply chain and cascading failure need the components and the workflow, and
+a rogue agent needs longitudinal observation rather than one run.
+
+*Gate-measured, not gate-deciding.* An elective family runs against the three reference
+agents on every gate run it is selected for, takes a `D`, faces `D ≥ 0.4` with disjoint
+intervals, and accumulates retirement history. It enters neither count. Below its floor
+it is not fit to report, on ADR-0015's terms. **Selectable is not the same as ungated:**
+a family whose discriminating power was never measured may not print in a signed report,
+which is the whole of this project's first claim about itself.
+
+*Selectable at both gate and target runs.* On a target run it is a lever on the
+dominant cost, which is the point. On a gate run it is also a way to skip a family that
+was about to fail, and one invariant closes that reading:
+
+> Skipping an elective family can never be advantageous.
+
+Two halves, and only one is free today. A skipped run must not count toward the streak
+that promotes an elective family into the six, so skipping buys no progress. And a
+skipped run must not reset the retirement window, so skipping buys no protection —
+which currently falls out of `decide_retirement` reading `history[-2:]` positionally,
+since a family that did not run writes no `GateReading` and the readings either side of
+the gap are already adjacent. **This is the open question, and the reason the ADR is
+blocked on #43:** that issue makes the window provenance-aware, and once a filter stands
+in front of it, transparency across a gap becomes a choice inside the filter rather than
+a consequence of adjacency. The invariant is ADR-0015's monotone-non-improving property
+read one level down, and it should be tested as an invariant rather than left as a
+remark.
+
+*A fifth kind of nothing.* `payload.py` keeps four absences apart and states that a
+reader must tell them apart without reading a footnote. A deselected family is **not
+requested** — not a coverage gap, which nobody tests at all, and not `NotMeasurable`,
+where the target could not answer. It is typed like the others, and the gate document
+names the elective families a run did not request, on the discipline of ADR-0015 §6,
+where the exclusion prints in the decision.
+
+*The cost is test equipment, not cases.* Neither capability exists on the reference
+agents: `backend/targets/reference/tools.py` wires document tools and out-of-scope tools
+and no code execution at all, and `backend/targets/reference/server.py` accepts
+`session_id` without reading it. Each elective family therefore needs a new capability
+on all three agents carrying a defensible hardened ≤ weak ≤ trivial gradient — without
+one, `D ≈ 0` on every reference agent and the family fails its own admission bar on its
+first gate run. Two further constraints: `ASI05`'s code tool must sit **inside**
+`DECLARED_TOOL_NAMES`, because wired-but-undeclared makes it scope creep, which is
+`ASI02` and already covered; and `ASI06` needs session retention declared at
+registration as a precondition, which is the shape #24 is already building.
+
+*Promotion, not accretion.* An elective family holding `D ≥ 0.4` across a declared
+number of consecutive gate runs becomes eligible to enter the six, and entry is a
+library-version event that re-declares the gate rule *before* the run rather than after
+it. Without a route in, the interesting attacks accumulate in the tier nobody has to
+pass while the six drift toward trigger 1. The number of runs is deliberately not
+declared here — a threshold first written in a planning table is a threshold nobody
+argued for.
+
+**Negative coverage, derived rather than stated.** Separate, cheaper work that needs
+none of the above. ADR-0002 promises the report lists "which OWASP 2026 agentic
+categories are not tested at all", and `assembler.py` confesses in its own docstring
+that `DECLARED_COVERAGE_GAPS` is "a stated list, not a derived one" because "this
+repository holds no copy" of the published lists — so the four entries it holds are
+prose limits and not one of them is an OWASP category. Storing `ASI01`–`ASI10` and
+subtracting the identifiers the library claims pays the promise and makes the checklist
+auditable. It costs one data file and a derivation, and it does not wait for the tier.
 
 ---
 

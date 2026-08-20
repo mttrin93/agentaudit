@@ -68,6 +68,7 @@ from pathlib import Path
 from typing import Any
 
 from backend.bench.payload import TargetPayload, document, write
+from backend.bench.published import EDITION as AGENTIC_EDITION
 from backend.bench.reproducibility import Reproducibility
 from backend.bench.scorer import Band
 
@@ -403,7 +404,7 @@ def _sections_of(body: Mapping[str, Any]) -> tuple[Section, ...]:
         _how_the_run_was_made(body),
         _controls(body["declared"]),
         _figures(body["measured"]),
-        _not_tested_at_all(body["coverage_gaps"]),
+        _not_tested_at_all(body["coverage_gaps"], body["untested_categories"]),
         _adaptive(body["adaptive"]),
         _lifecycle(),
         _standards(),
@@ -815,12 +816,23 @@ def _not_measurable(unanswerable: Sequence[Mapping[str, Any]]) -> tuple[str, ...
 # --- 5a. Risk management: what is not tested at all --------------------------
 
 
-def _not_tested_at_all(gaps: Sequence[Mapping[str, Any]]) -> Section:
-    """The negative-coverage list: published categories the bench does not test.
+def _not_tested_at_all(
+    gaps: Sequence[Mapping[str, Any]],
+    untested: Sequence[Mapping[str, Any]],
+) -> Section:
+    """The negative-coverage list, in two blocks, because it makes two claims.
 
     Printed in every report, and not a defect. It uses the public category list as a
     coverage checklist rather than only as a label, which is the first thing a
     security analyst looks for — and the gaps are listed rather than closed.
+
+    The two blocks are not the same claim and are not merged. The first names
+    published categories no family in the library reaches, and it is **subtracted**
+    from a stored copy of the list rather than written out by hand, so a family added
+    later shortens it without anyone editing this function. The second names limits of
+    the bench itself, which appear on no published register and can only be declared.
+    Printing them as one bulleted list would make the derived half look declared and
+    the declared half look checkable.
     """
     return Section(
         point=5,
@@ -828,22 +840,32 @@ def _not_tested_at_all(gaps: Sequence[Mapping[str, Any]]) -> Section:
         title="What this bench does not test at all",
         body=(
             "The boundary of the claim, stated rather than left to be inferred from "
-            "the labels above. The published lists these categories are read against "
-            "are the **OWASP GenAI LLM Top 10 2026** and the **OWASP Top 10 for "
-            "Agentic Applications 2026** — the same lists the identifiers in section "
-            "4 come from (ADR-0002) — so this section uses a public list as a "
-            "coverage checklist and not only as a label. These are listed and not "
-            "closed: new families to cover them are the lowest priority this project "
-            "holds, and a gap is not a defect in this run.",
+            "the labels above. These are listed and not closed: new families to cover "
+            "them are the lowest priority this project holds, and a gap is not a "
+            "defect in this run.",
+            "",
+            f"**Published categories no family reaches** — {AGENTIC_EDITION}, "
+            "subtracted from the stored copy of that list rather than written out "
+            "here, so this block shortens by itself when a family that claims one of "
+            "them is admitted (ADR-0002).",
+            "",
+            *(f"- {category['stated']}." for category in untested),
+            "",
+            "**Limits of the bench**, which no published register carries and which "
+            "are therefore declared rather than subtracted.",
             "",
             *(f"- {gap['stated']}." for gap in gaps),
             "",
-            "This list is what the plan can justify and no more. It is declared "
-            "rather than derived — the bench holds no stored copy of the published "
-            "category lists to subtract its own coverage from — so a category "
-            "published after it was written is missing from it. That is a gap in the "
-            "gap list, and the per-family notes in section 4 carry the other half of "
-            "the same disclosure (ADR-0002).",
+            "One list above is derived and one is declared, and the copy the "
+            "derivation reads is a transcription rather than the source: the OWASP "
+            "resource page refuses automated retrieval, so the identifiers and titles "
+            "were taken from two independent readings that agreed on all ten. What "
+            "that supports is agreement between two readings, and a reader who needs "
+            "the authoritative wording goes to OWASP. The **OWASP GenAI LLM Top 10 "
+            "2026** identifiers carried by section 4 have no stored copy at all, so "
+            "that list's negative coverage is not derived and a category published on "
+            "it since is missing here. The per-family notes in section 4 carry the "
+            "other half of the same disclosure (ADR-0002).",
         ),
     )
 

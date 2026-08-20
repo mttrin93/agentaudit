@@ -274,7 +274,7 @@ Question 4 must be asked in the first conversation, not at hour 30. Track A also
 | Work | Article |
 |---|---|
 | The elective family tier — `ASI05` and `ASI06`, selectable at gate and target runs. Below | 15 |
-| Negative coverage derived from a stored copy of the published lists, not stated. Below | 15 |
+| Negative coverage derived for the GenAI LLM list too — the agentic half is done. Below | 15 |
 | Agent-to-agent attacks — one agent manipulates another (`ASI07`) | 15 |
 | Lifecycle runs, with an alert when a band moves | 9 |
 | Proportionate oversight level from declared autonomy | 14(3) |
@@ -357,14 +357,22 @@ pass while the six drift toward trigger 1. The number of runs is deliberately no
 declared here — a threshold first written in a planning table is a threshold nobody
 argued for.
 
-**Negative coverage, derived rather than stated.** Separate, cheaper work that needs
-none of the above. ADR-0002 promises the report lists "which OWASP 2026 agentic
-categories are not tested at all", and `assembler.py` confesses in its own docstring
-that `DECLARED_COVERAGE_GAPS` is "a stated list, not a derived one" because "this
-repository holds no copy" of the published lists — so the four entries it holds are
-prose limits and not one of them is an OWASP category. Storing `ASI01`–`ASI10` and
-subtracting the identifiers the library claims pays the promise and makes the checklist
-auditable. It costs one data file and a derivation, and it does not wait for the tier.
+**Negative coverage, derived rather than stated — the agentic half is done.**
+`published.py` holds the transcribed copy of `ASI01`–`ASI10` and subtracts the
+categories the library's families claim, so the report now names the eight it does not
+reach instead of four prose limits that were on no published list at all. The
+subtraction is scoped to the **library's** families and never to the families one run
+measured, which is what keeps it clear of the drop-a-family invariant in `payload.py`
+and is also the honest scope: a category the bench does not test and a family this
+target could not answer are different absences.
+
+*What is left.* Only the agentic list is stored. The `LLM0x:2026` identifiers on the
+case records have no stored copy to be subtracted from, so that list's negative
+coverage is still declared, and a category published on it since is still missing.
+Deriving it needs the same treatment `published.py` gives the other — and a
+transcription of that list with the same provenance caveat, since the OWASP resource
+pages refuse automated retrieval and the stored copy can only claim agreement between
+two independent readings.
 
 ---
 

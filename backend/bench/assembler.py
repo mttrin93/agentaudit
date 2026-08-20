@@ -56,6 +56,10 @@ from backend.bench.contract import DeclaredControl
 from backend.bench.evaluator import Verdict
 from backend.bench.library import Case, ExternalId, Family, VerdictClass
 from backend.bench.measurability import NotMeasurable
+from backend.bench.published import (
+    UNTESTED_AGENTIC_CATEGORIES,
+    UntestedCategory,
+)
 from backend.bench.reproducibility import Reproducibility
 from backend.bench.scanner import Scan, family_claimed_by, scan
 from backend.bench.scorer import (
@@ -518,16 +522,24 @@ Declared data, in one place, for the reason every threshold is: a coverage
 statement assembled per call site is one that can be quietly shortened for a
 report that would read better without it.
 
-**A stated list, not a derived one, and the difference is a limit of this list.**
-Deriving the gaps would mean subtracting the identifiers the library's cases claim
-from a stored copy of the published category lists, and this repository holds no
-such copy — ADR-0002 names the two OWASP 2026 lists as the source of the secondary
-labels but does not record their contents. So this list says what the plan can
-justify and no more, and a category published after it was written is missing from
-it. That is a gap in the gap list, and it is better stated than papered over: the
-per-family `coverage` notes carry what each case does *not* test inside the
-identifier it claims, which is the other half of the same disclosure and is derived
-from the case records rather than declared here.
+**Stated, and these four stay stated.** They are limits of the *bench* rather than
+entries on anybody's published list — no register of risks carries "there is no
+ground truth for the target's domain" — so there is nothing to subtract them from and
+declaring them is the only available form. The half of this disclosure that *is* a
+published list is now derived rather than declared: `published.py` holds the copy of
+the OWASP agentic list and subtracts the categories the library's families claim, so
+`UntestedCategory` and `CoverageGap` are two different claims and print in two
+different blocks. One says the bench cannot measure this at all; the other names a
+published category no family reaches yet.
+
+**The gap that is left.** Only the agentic list is stored. The GenAI LLM Top 10 2026
+identifiers on the case records — `LLM01`, `LLM02`, `LLM03`, `LLM07`, `LLM08` — have
+no stored copy to be subtracted from, so that list's negative coverage is still not
+derived, and a category published on it after this was written is still missing.
+Deriving it needs the same treatment `published.py` gives the other, and it is
+tracked rather than absorbed here. The per-family `coverage` notes carry what each
+case does *not* test inside the identifier it claims, which is the other half of the
+same disclosure and is derived from the case records already.
 """
 
 
@@ -551,6 +563,16 @@ class TargetResult:
     declared: DeclaredSection
     adaptive: AdaptiveSection
     coverage_gaps: tuple[CoverageGap, ...] = DECLARED_COVERAGE_GAPS
+    untested_categories: tuple[UntestedCategory, ...] = UNTESTED_AGENTIC_CATEGORIES
+    """Published agentic categories no family in the library claims (`published.py`).
+
+    Derived from the library's families and never from the families this run measured,
+    so it is the same tuple on every result at a given library version. That is what
+    keeps it out of the way of the drop-a-family invariant in `payload.py`, and it is
+    also the honest scope: a category untested by the bench and a family this target
+    could not answer are two different absences, and the second one is
+    `NotMeasurable`.
+    """
 
     @property
     def headline(self) -> tuple[ScannedControl, ...]:

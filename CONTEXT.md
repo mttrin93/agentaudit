@@ -188,10 +188,28 @@ The stop before the bench is trusted: the whole library run against all three re
 _Avoid_: calibration, validation, validate the bench, smoke test, benchmark
 
 **Gate run**:
-One execution of the gate, and the record it leaves behind — the dated document a
-run started from the command line writes, or the gate run record the bench holds
-for one started from the console.
+One execution of the gate. Not a **run**: a run measures a target, a gate run
+measures the bench, and no type carries both.
 _Avoid_: run, job, validation run, calibration run
+
+**Gate document**:
+The dated Markdown a gate run started from the command line leaves behind. Prose,
+written for a person, and never parsed to recover a figure.
+_Avoid_: gate report, gate log, the gate output
+
+**Gate citation**:
+What a report carries about the gate the bench last passed: the outcome, the date,
+the library version it was earned at, and the **gate document** it points to. A fact
+about the bench, never a verdict about a target.
+_Avoid_: gate result, validation stamp, certification
+
+**Gate run record**:
+The machine-readable form of a gate run's decision, carrying each family's three
+reference-agent rates and its discrimination score. Written beside the **gate
+document** by a gate run started from the command line, and held in memory by one
+started from the console. What a reader goes to for the figures the **gate citation**
+does not carry.
+_Avoid_: sidecar, gate JSON, gate summary, the gate's data
 
 **Admission**:
 The check a proposed case must pass against the reference agents before it may ever reach a user.

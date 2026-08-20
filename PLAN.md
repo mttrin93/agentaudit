@@ -384,7 +384,10 @@ agentaudit/
 │   └── tests/               # unit: success conditions, scan, discrimination arithmetic, Wilson bounds
 │                            # plus test_layer_ordering.py — the one invariant no type can hold
 ├── frontend/                # Vite + React + TypeScript
-│   └── src/pages/           # register, run, report  (review — Sprint 4)
+│   └── src/
+│       ├── api/             # the bench's HTTP surface, typed
+│       ├── register/        # the register screen and the rules behind it
+│       └── run/             # the run screen  (report — phase 7; review — Sprint 4)
 ├── scripts/
 │   ├── gate.py              # runs the gate — no web layer needed
 │   ├── calibrate.py         # one family's worth of evidence, never a gate result

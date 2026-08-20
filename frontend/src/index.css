@@ -1,0 +1,231 @@
+/*
+ * One stylesheet, and it is deliberately plain.
+ *
+ * The screens carry a lot of prose — three attestations with their consequences
+ * spelled out, and two statements about what the bench cannot measure or verify —
+ * and prose that is skimmed is prose that was not read. So the type is set for
+ * reading in one column, and nothing here decorates a declaration into looking
+ * like a form field.
+ */
+
+:root {
+  --ink: #16181d;
+  --paper: #fbfbfa;
+  --quiet: #5b6170;
+  --line: #d8d8d4;
+  --refusal: #8c2f1f;
+  --refusal-paper: #fdf2ef;
+  color-scheme: light dark;
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", sans-serif;
+  line-height: 1.55;
+  color: var(--ink);
+  background: var(--paper);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ink: #eceef2;
+    --paper: #15171b;
+    --quiet: #9aa2b1;
+    --line: #333842;
+    --refusal: #ffb3a2;
+    --refusal-paper: #2c1a17;
+  }
+}
+
+body {
+  margin: 0;
+  background: var(--paper);
+}
+
+.screen {
+  max-width: 44rem;
+  margin: 0 auto;
+  padding: 3rem 1.5rem 6rem;
+}
+
+.eyebrow {
+  margin: 0;
+  font-size: 0.8rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--quiet);
+}
+
+h1 {
+  font-size: 1.7rem;
+  margin: 0.3rem 0 0.4rem;
+}
+
+h2 {
+  font-size: 1.1rem;
+}
+
+h3 {
+  font-size: 0.95rem;
+  margin-bottom: 0.3rem;
+}
+
+.steps {
+  margin: 0 0 2rem;
+  color: var(--quiet);
+  font-size: 0.9rem;
+}
+
+section {
+  border-top: 1px solid var(--line);
+  padding-top: 1.5rem;
+}
+
+label {
+  display: block;
+  margin: 1.1rem 0;
+  font-size: 0.9rem;
+  color: var(--quiet);
+}
+
+input,
+textarea {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  margin-top: 0.35rem;
+  padding: 0.55rem 0.6rem;
+  font: inherit;
+  font-size: 1rem;
+  color: var(--ink);
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+}
+
+textarea {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.9rem;
+}
+
+/*
+ * A declaration is a sentence somebody is making, so it is set as one: the box is
+ * beside the words at reading size rather than under a caption in small grey type.
+ */
+label.declaration {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.7rem;
+  align-items: start;
+  margin: 1.2rem 0;
+  font-size: 1rem;
+  color: var(--ink);
+}
+
+label.declaration input {
+  width: 1.1rem;
+  height: 1.1rem;
+  margin-top: 0.25rem;
+}
+
+.wording {
+  font-weight: 600;
+}
+
+.consequence {
+  font-size: 1.05rem;
+}
+
+.aside {
+  display: block;
+  margin-top: 0.4rem;
+  font-size: 0.85rem;
+  color: var(--quiet);
+}
+
+fieldset {
+  margin: 1.5rem 0;
+  padding: 0.5rem 1rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+}
+
+legend {
+  padding: 0 0.4rem;
+  font-size: 0.9rem;
+  color: var(--quiet);
+}
+
+.nonce {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 1.15rem;
+  word-break: break-all;
+  padding: 0.8rem;
+  border: 1px dashed var(--line);
+  border-radius: 3px;
+}
+
+pre {
+  white-space: pre-wrap;
+  padding: 0.8rem;
+  font-size: 0.85rem;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+}
+
+.review {
+  display: grid;
+  grid-template-columns: 12rem 1fr;
+  gap: 0.4rem 1rem;
+  font-size: 0.95rem;
+}
+
+.review dt {
+  color: var(--quiet);
+}
+
+.review dd {
+  margin: 0;
+}
+
+.refusal {
+  border: 1px solid var(--refusal);
+  border-radius: 3px;
+  background: var(--refusal-paper);
+  color: var(--refusal);
+  padding: 0.2rem 1rem 1rem;
+  margin-bottom: 2rem;
+}
+
+.blocked {
+  margin-top: 1.5rem;
+  font-size: 0.95rem;
+}
+
+.walk {
+  display: flex;
+  gap: 0.8rem;
+  margin-top: 2.5rem;
+}
+
+button {
+  font: inherit;
+  padding: 0.55rem 1.1rem;
+  color: var(--ink);
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+button.primary {
+  color: var(--paper);
+  background: var(--ink);
+  border-color: var(--ink);
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+a {
+  color: inherit;
+}

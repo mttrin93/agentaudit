@@ -1,10 +1,10 @@
 /**
  * The bench's HTTP surface as this app is allowed to see it.
  *
- * Six of the eight routes are reachable from here — `POST /nonces`, `POST
- * /runs`, `POST /runs/{id}/approval`, `GET /runs/{id}` and the two under
- * `/report/{id}` the report screen reads — and the field names are the backend's
- * own,
+ * Eight of the eleven routes are reachable from here — `POST /nonces`, `POST
+ * /runs`, `POST /runs/{id}/approval`, `GET /runs`, `GET /runs/{id}`, `GET
+ * /bench/gate`, `GET /artefacts` and the two under `/report/{id}` the report
+ * screen reads — and the field names are the backend's own,
  * `snake_case` and all, because the request body is a contract with
  * `backend/api/app.py` rather than a shape this app is free to choose. A
  * camel-cased mirror would be one rename away from posting a body the API
@@ -829,6 +829,65 @@ export const RUNS_PATH = '/runs'
  */
 export async function benchRuns(): Promise<RunList> {
   return (await fetched(RUNS_PATH, 'list of runs')) as RunList
+}
+
+/** Where every signed artefact this bench has produced is listed. */
+export const ARTEFACTS_PATH = '/artefacts'
+
+/**
+ * One of the three files an artefact is, under the name a verifier reads it by.
+ *
+ * The filename is the recipient's contract and not decoration: `scripts/verify.py`
+ * is handed a directory and told nothing else, so a client that saves these three
+ * responses under the names they arrive with has a directory that verifies.
+ */
+export interface ArtefactFile {
+  filename: string
+  path: string
+  holds: string
+}
+
+/**
+ * One signed artefact on the record, with the reading over its three files.
+ *
+ * There is no field here that marks the three results as good or bad, no band, no
+ * rate and no verdict: an artefact is a document about a target, and a figure
+ * lifted out of one onto a list would arrive without the denominator that was
+ * printed beside it.
+ */
+export interface ArtefactRow {
+  run_id: string
+  target: string
+  recorded_at: string
+  files: ArtefactFile[]
+  verification: Verification
+}
+
+/**
+ * Every signed artefact the bench has produced, and nothing computed over them.
+ *
+ * No count and no totals block: the route returns rows and never a summary of
+ * them. `verify_command` is on the list rather than on each row because the
+ * verifier takes a directory and not a run id — one command, whatever artefact was
+ * saved into it.
+ */
+export interface ArtefactList {
+  artefacts: ArtefactRow[]
+  statement: string
+  verify_command: string
+}
+
+/**
+ * The signed artefacts this bench has produced, each with its three results.
+ *
+ * A read, and a bench that has signed nothing answers with no rows rather than
+ * with a refusal: a fresh deployment is in exactly that state. Every row carries
+ * the whole reading the per-run verification route serves — three outcomes by
+ * name, both claims, and whose check it is — because a row showing one result
+ * would be a reader inferring the other two (ADR-0017).
+ */
+export async function benchArtefacts(): Promise<ArtefactList> {
+  return (await fetched(ARTEFACTS_PATH, 'list of signed artefacts')) as ArtefactList
 }
 
 /**

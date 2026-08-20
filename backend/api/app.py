@@ -1,12 +1,13 @@
 """The HTTP surface: a nonce, a run, the answer to the run's interrupt, and the
 artefact it produced.
 
-Ten routes. `POST /nonces` issues the value an operator plants to prove they
+Eleven routes. `POST /nonces` issues the value an operator plants to prove they
 control the endpoint; `POST /runs` records the attestation, declares the estimate
 and halts; `POST /runs/{id}/approval` answers the halt; `GET /runs` lists the runs on
 the record; `GET /runs/{id}` says where the run has got to; four under `/report/{id}`
 — three that serve the files one signed run leaves, the payload, the rendering and
-the detached signature, and a fourth that says what a verifier makes of them; and
+the detached signature, and a fourth that says what a verifier makes of them; `GET
+/artefacts` lists every signed artefact with that same reading beside it; and
 `GET /bench/gate`, which is about the bench rather than about any run.
 
 **Neither route under `/runs` returns a figure spanning the two layers.** Calls
@@ -27,6 +28,14 @@ begins one and no record type for one — this route reads the rule the bench de
 and the citation the deployment declared, and nothing else. The document is **named
 and never opened**: a route that parsed the bench's own prose output would break on a
 rewording, and the citation already carries every field a reader needs.
+
+**`GET /artefacts` is the same reading, once per artefact, and never a mark.** An
+engineer choosing which run to send a customer needs to learn the artefact is
+checkable before the recipient tells them it is not, so every row carries all three
+results by name, both claims stated apart, and the three files under the fixed names
+a verifier reads out of a directory. It is a list of rows: no count of artefacts, no
+figure over them, and no field on a row that reduces its three results to one word
+(ADR-0017).
 
 **The verification route is a reading and never a fourth file.** It runs the
 recipient's own three checks — `verification.checked`, the function
@@ -117,6 +126,7 @@ from pydantic import BaseModel, Field
 
 from backend.api.report import (
     CHECKED_BY_THE_BENCH_THAT_PRODUCED_IT,
+    VERIFY_COMMAND,
     ReportConfig,
     Unsigned,
     verification_of,
@@ -992,6 +1002,196 @@ def verification_response(verification: Verification) -> ReportVerification:
     )
 
 
+ARTEFACTS_ROUTE = "/artefacts"
+"""Where every signed artefact this bench has produced is listed, with its reading.
+
+Under its own prefix rather than under `/report`, because the subject is different:
+`/report/{run_id}` is one artefact's three files, and this is the answer to *which of
+these can I send*. An engineer with several runs behind them has one question here —
+is this one still checkable — and they need it answered before a recipient answers it
+for them.
+
+**The three results travel with every row, all three of them.** A list carrying one
+result per artefact would let its reader infer the strongest claim from the weakest,
+which is the inference ADR-0017 exists to prevent, so each row carries the whole
+reading the per-run verification route serves: three outcomes by name, the two claims
+stated apart, and whose check it is. There is no field on a row that reduces them to
+a mark, and no field on the list that reduces the rows to a figure.
+
+**This route computes no quantity and aggregates nothing.** It reads the artefacts
+already on the record and runs the recipient's own three checks over their bytes —
+`verification.checked`, the same function `scripts/verify.py` reaches through. There
+is no count of artefacts on it, nothing added across rows, and no rate, band or
+verdict about any target: those belong to the artefact, printed beside the
+denominator they were computed over (spec: *a list route returns rows; it does not
+return a summary of them*).
+"""
+
+THREE_FILES_AND_THREE_RESULTS = (
+    "one row per signed artefact, each with all three verification results named "
+    "individually and the two claims stated separately — integrity over the whole "
+    "document, re-derivability of the scored layer alone (ADR-0010, ADR-0017). The "
+    "three files are offered under the fixed names a verifier reads out of one "
+    f"directory: {REPORT_PAYLOAD}, {REPORT_MARKDOWN} and {SIGNATURE_FILE}. There is "
+    "no mark here that combines the three results, no figure over these artefacts, "
+    "and no rate, band or verdict about any target. A completed run that produced no "
+    f"signed artefact is not an artefact and is not listed: it is a "
+    f"{ReportRefusal.NEVER_SIGNED} on its own report route, and it is on the list of "
+    "runs with the record's own sentence for why"
+)
+"""What the list is, said on the list, because a screenshot of it travels alone."""
+
+PAYLOAD_HOLDS = (
+    "the canonical JSON payload — the exact bytes the signature covers, and the "
+    "artefact itself"
+)
+
+RENDERING_HOLDS = (
+    "the document a human reads, bound to those bytes by the digest inside them. A "
+    "rendering with no payload beside it verifies nothing"
+)
+
+SIGNATURE_HOLDS = (
+    "the detached signature over the payload's bytes, naming no key: which key "
+    "signed a report is stated inside the payload, where the signature covers it"
+)
+
+
+class ArtefactFile(BaseModel):
+    """One of the three files, under the name a verifier already reads it by.
+
+    The filename is not decoration and it is not derived from a run id: `verify.py`
+    is handed a directory and told nothing else, so a client that saves these three
+    responses under the names they arrive with has a directory that verifies. A file
+    served under a name of this route's invention would be portable evidence a
+    recipient's tooling cannot find.
+    """
+
+    filename: str
+    """`report.json`, `report.md` or `report.sig` — the verifier's own contract."""
+
+    path: str
+    """Where this bench serves it. The route that already serves it, formatted."""
+
+    holds: str
+    """What is in it, so the three are not read as three copies of one thing."""
+
+
+class ArtefactRow(BaseModel):
+    """One signed artefact on the record: what it is of, its files, its reading.
+
+    A row and never a summary of one. There is no field here that marks the three
+    results as good or bad, no band, no rate and no verdict — an artefact is a
+    document about a target, and a figure lifted out of one onto a list would arrive
+    without the denominator that was printed beside it (ADR-0005, ADR-0018).
+
+    The target is named and its URL is nowhere (ADR-0008), and the name is the
+    operator's own, which is what they will recognise when they are looking for the
+    one to send.
+    """
+
+    run_id: str
+    """The run that produced it. What a link back to the run is built from."""
+
+    target: str
+    """The operator's own name for the endpoint. Never the endpoint."""
+
+    recorded_at: datetime
+    """When the run that produced this artefact went on the record."""
+
+    files: list[ArtefactFile]
+    """The three files, in the order a verifier reads them.
+
+    Three and never two: a payload with no signature beside it is the part that
+    cannot be checked on its own, and a reading of a document a recipient never
+    downloaded is not evidence of anything. The verification route is not among
+    them — it is a reading of the artefact rather than a file of it, and the reading
+    it produces is on this row already.
+    """
+
+    verification: ReportVerification
+    """The three results over those three files, and the two claims scoping them.
+
+    The same model the per-run verification route serves, built by the same
+    function over the same bytes. Not a summary of it and not a subset: a row
+    showing one result would be a reader inferring the other two.
+    """
+
+
+class ArtefactList(BaseModel):
+    """Every signed artefact on the record, and nothing computed over them.
+
+    No count field and no totals block, for the reason `RunList` has neither. What
+    is here beside the rows is the command a recipient runs, which is the same
+    command for every artefact because the verifier is handed a directory.
+    """
+
+    artefacts: list[ArtefactRow]
+    statement: str
+    verify_command: str
+    """What a recipient runs over the three files, in the form they paste.
+
+    On the list rather than on each row, because it takes a directory and not a run
+    id: it is one command whatever artefact was saved into that directory, and a
+    per-row copy would be the same line printed once per run.
+    """
+
+
+def _files(run_id: str) -> list[ArtefactFile]:
+    """The three files of one artefact, at the paths that already serve them.
+
+    Built from `report_paths`, so the paths on this list cannot drift from the
+    routes that answer them, and named from the constants `verify.py` reads — a
+    filename written out here would be a second definition of what a recipient's
+    tooling looks for.
+    """
+    payload, rendering, signature, _ = report_paths(run_id)
+    return [
+        ArtefactFile(filename=REPORT_PAYLOAD, path=payload, holds=PAYLOAD_HOLDS),
+        ArtefactFile(filename=REPORT_MARKDOWN, path=rendering, holds=RENDERING_HOLDS),
+        ArtefactFile(filename=SIGNATURE_FILE, path=signature, holds=SIGNATURE_HOLDS),
+    ]
+
+
+def artefact_row(
+    record: RunRecord, artefact: SignedArtefact, config: ReportConfig
+) -> ArtefactRow:
+    """One signed artefact as a list of them shows it.
+
+    The artefact is passed in rather than read off the record here, so that this
+    function cannot be called for a run that has none: a row for an unsigned run
+    would have to invent a reading of a document that does not exist.
+    """
+    return ArtefactRow(
+        run_id=record.run_id,
+        target=record.target.name,
+        recorded_at=record.recorded_at,
+        files=_files(record.run_id),
+        verification=verification_response(verification_of(artefact, config)),
+    )
+
+
+def artefacts_response(
+    records: Sequence[RunRecord], config: ReportConfig
+) -> ArtefactList:
+    """The rows for the records that produced an artefact, in the order given.
+
+    A run with no signed artefact is skipped rather than listed with an empty
+    reading: *unsigned* is a fact about a run and it is stated on the run, by name,
+    where a caller polling for a report already reads it (`ReportRefusal`). A row
+    here with nothing in it would be a document a reader could go looking for.
+    """
+    return ArtefactList(
+        artefacts=[
+            artefact_row(record, record.report, config)
+            for record in records
+            if isinstance(record.report, SignedArtefact)
+        ],
+        statement=THREE_FILES_AND_THREE_RESULTS,
+        verify_command=VERIFY_COMMAND,
+    )
+
+
 BENCH_GATE_ROUTE = "/bench/gate"
 """Where the bench's own gate citation is read. About the instrument, not a run.
 
@@ -1433,6 +1633,32 @@ def create_app(config: BenchConfig | None = None) -> FastAPI:
         return verification_response(
             verification_of(servable(run_id), bench.config.report)
         )
+
+    @app.get(ARTEFACTS_ROUTE)
+    def list_the_signed_artefacts_on_the_record() -> ArtefactList:
+        """Every signed artefact this bench has produced, each with its own reading.
+
+        The answer to *which of these can I send*, for an engineer with several runs
+        behind them. A read: it starts nothing, signs nothing, and writes nothing.
+
+        **All three results on every row, and no mark over them.** Each row carries
+        the reading the per-run verification route serves — computed by
+        `verification.checked`, the function `scripts/verify.py` reaches through, over
+        the bytes this bench holds — so a failing result is named by its own outcome
+        and *unsigned* stays a different fact from *signed by a key you did not pin*.
+        The two claims travel with it and stay apart: integrity is over the whole
+        document, re-derivability is over the scored layer alone (ADR-0010, ADR-0017).
+
+        **It is the bench's own check and every row says so.** `checked_by` is
+        carried on each reading rather than once at the top, because what circulates
+        is a row: a sender's word for their own document is the thing a signature
+        exists to replace, and the command a recipient runs instead is on the list.
+
+        **A run with no artefact is not a row here.** *Never signed* is a fact about a
+        run, stated by name on its own report route and on the list of runs, and an
+        empty row on this list would be a document somebody could go looking for.
+        """
+        return artefacts_response(bench.records(), bench.config.report)
 
     @app.get(BENCH_GATE_ROUTE)
     def cite_the_gate_run_this_bench_last_passed() -> BenchGate:

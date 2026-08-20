@@ -94,7 +94,7 @@ import {
   type Questionnaire,
   type QuestionnaireAnswer,
 } from './questionnaire'
-import { GATE_PATH, REGISTER_PATH } from './rail'
+import { ARTEFACTS_PATH, GATE_PATH, REGISTER_PATH } from './rail'
 import {
   runsReading,
   TWO_COLUMNS_NEVER_ONE,
@@ -280,6 +280,11 @@ export function LandingScreen() {
       <section>
         <h2>Your runs</h2>
         <p>{TWO_COLUMNS_NEVER_ONE}</p>
+        <p className="steps">
+          The artefact a completed run left behind, with its three verification
+          results named individually and the three files a recipient checks, is on{' '}
+          <Link to={ARTEFACTS_PATH}>the signed artefacts screen</Link>.
+        </p>
 
         {runs.unavailable ? (
           <div className="citation uncited" role="alert">

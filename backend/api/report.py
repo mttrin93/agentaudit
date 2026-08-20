@@ -40,7 +40,10 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 
-from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+from cryptography.hazmat.primitives.asymmetric.ed25519 import (
+    Ed25519PrivateKey,
+    Ed25519PublicKey,
+)
 
 from backend.bench.assembler import assemble, reported_episodes
 from backend.bench.calibration import CalibrationResult
@@ -52,7 +55,8 @@ from backend.bench.payload import (
     TargetPayload,
 )
 from backend.bench.rule import GateRule
-from backend.bench.signing import SignedArtefact, signed
+from backend.bench.signing import SignedArtefact, encoded, public_key, signed
+from backend.bench.verification import Published, Verification, checked
 
 UNDECLARED_MODEL = (
     "not declared — this bench was configured without naming the model behind this "
@@ -112,6 +116,21 @@ class ReportConfig:
     certified it (ADR-0018). `None` prints `UNCITED_GATE` — an uncited instrument is
     a fact about the report, and a report that omitted the line would read as one
     with nothing to declare.
+    """
+
+    pinned: Ed25519PublicKey | None = None
+    """The public key a verification of this bench's reports is run against.
+
+    `None` is the key committed to this repository, which is the key `verify.py`
+    pins by default and whose fingerprint the README publishes — the one a recipient
+    who does not trust the sender would use. It is the default here for exactly that
+    reason: a bench that verified its own artefacts against its own signing key
+    would report *valid* on every report it ever produced, including the ones no
+    recipient can check, and the outcome that matters most would be unreachable
+    (`SignatureOutcome.ANOTHER_KEY`).
+
+    A deployment signing with a rotated key declares its published half here, which
+    is `--pubkey` in the one place the API has for it.
     """
 
 
@@ -201,3 +220,42 @@ def artefact_for(
     if key is None:
         return Unsigned()
     return signed(payload_for(result, cases, rule, config), key)
+
+
+CHECKED_BY_THE_BENCH_THAT_PRODUCED_IT = (
+    "these three results were computed here, by the bench that produced the "
+    "artefact, over the same bytes this run serves. That makes them a statement "
+    "that the artefact is checkable and internally consistent — it is not the "
+    "check a recipient makes, because a sender's word for their own document is "
+    "the thing a signature exists to replace. Download the three files and run "
+    "`uv run python -m scripts.verify` over the directory: it reaches no network, "
+    "needs no credential, and pins the key whose fingerprint this repository's "
+    "README publishes"
+)
+"""Whose check this is, said on the artefact rather than left to be assumed.
+
+The three results are the recipient's three, computed by the recipient's own code
+(`verification.checked`) — and computed by the wrong party to be evidence. Saying so
+is the difference between an interface that tells an engineer their artefact is
+checkable and one that lets them believe it has been checked.
+"""
+
+
+def verification_of(artefact: SignedArtefact, config: ReportConfig) -> Verification:
+    """The three results a recipient would get, over the bytes this bench serves.
+
+    One definition of *verifying*, and it is `verification.checked` — the same
+    function `scripts/verify.py` reaches through, over the same three byte strings.
+    A second implementation for the API would be a second definition, and the two
+    would only have to disagree once for a screen to report a property nobody
+    checked.
+    """
+    return checked(
+        Published(
+            payload=artefact.canonical,
+            rendering=artefact.rendering.encode("utf-8"),
+            signature=encoded(artefact.signature),
+        ),
+        config.pinned if config.pinned is not None else public_key(),
+        source="the payload this run signed",
+    )

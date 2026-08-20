@@ -416,6 +416,39 @@ class Verification:
         )
 
 
+@dataclass(frozen=True)
+class Published:
+    """The three files one run published, as bytes, however they were obtained.
+
+    A directory is one way an artefact arrives and it is not the only one: the same
+    three byte strings are held in memory by the run that made them and served over
+    HTTP by the route that hands them out (#56, #59). So the checks are written
+    against the bytes and the reading of a directory is one caller of them, which
+    keeps a single definition of *what verifying is* — a second implementation over
+    an in-memory artefact would be a second definition, and the two would only have
+    to disagree once for a screen to report a property nobody checked.
+
+    `rendering` and `signature` are `None` where the file is absent, which is one of
+    the outcomes rather than an error: a payload with no rendering beside it is
+    unbound, and one with no signature is unsigned, and a recipient is told which.
+    """
+
+    payload: bytes
+    """The canonical bytes a signature covers, exactly as they were read."""
+
+    rendering: bytes | None
+    """The Markdown the payload's digest is taken over, or nothing."""
+
+    signature: str | None
+    """The detached signature in its hex form, or nothing.
+
+    Text rather than bytes because that is the form the file and the response body
+    hold, and a value that is not hex is reported as an invalid signature rather
+    than raised: something between the signer and here changed the bytes, and which
+    of the two files it was is not knowable.
+    """
+
+
 def verify(directory: Path, public: Ed25519PublicKey) -> Verification:
     """Verify the report published in that directory against that pinned key.
 
@@ -431,19 +464,56 @@ def verify(directory: Path, public: Ed25519PublicKey) -> Verification:
             f"JSON payload; {REPORT_MARKDOWN} beside it is a view of it and verifies "
             "nothing on its own"
         )
-    signed = payload_path.read_bytes()
-    body = _body(signed, payload_path)
+    return checked(
+        Published(
+            payload=payload_path.read_bytes(),
+            rendering=_bytes_at(directory / REPORT_MARKDOWN),
+            signature=_text_at(directory / SIGNATURE_FILE),
+        ),
+        public,
+        source=str(payload_path),
+    )
+
+
+def checked(
+    published: Published, public: Ed25519PublicKey, source: str = "this payload"
+) -> Verification:
+    """The three results over three byte strings, whatever carried them here.
+
+    `source` names what is being checked in the refusal a document of an unknown
+    kind raises — a path for a recipient reading a directory, a run for a bench
+    checking what it is about to serve. It appears nowhere else: the three results
+    are about bytes and say nothing about where they came from.
+    """
+    signed = published.payload
+    body = _body(signed, source)
     return Verification(
         artefact=_string(body, "artefact"),
         artefact_version=_integer(body, "artefact_version"),
         target=_string(body, "target"),
-        signature=_signature(body, signed, directory, public),
-        binding=_binding(body, directory),
+        signature=_signature(body, signed, published.signature, public),
+        binding=_binding(body, published.rendering),
         arithmetic=_re_derive(body),
     )
 
 
-def _body(signed: bytes, path: Path) -> Mapping[str, Any]:
+def _bytes_at(path: Path) -> bytes | None:
+    """That file's bytes, or nothing where there is no file. Absence is an outcome."""
+    return path.read_bytes() if path.is_file() else None
+
+
+def _text_at(path: Path) -> str | None:
+    """That file as text, decoded permissively because a bad byte is a bad signature.
+
+    A signature file that is not UTF-8 is not hex either, so it reaches
+    `SignatureOutcome.INVALID` through the same path as any other unreadable
+    signature rather than raising out of the file read — which would report a
+    corrupted transport as a verifier that could not run.
+    """
+    return None if not path.is_file() else path.read_bytes().decode("utf-8", "replace")
+
+
+def _body(signed: bytes, path: str) -> Mapping[str, Any]:
     """The payload as plain data, refusing anything that is not this artefact.
 
     Checked before any signature, because a signature over a document of an unknown
@@ -474,7 +544,10 @@ def _body(signed: bytes, path: Path) -> Mapping[str, Any]:
 
 
 def _signature(
-    body: Mapping[str, Any], signed: bytes, directory: Path, public: Ed25519PublicKey
+    body: Mapping[str, Any],
+    signed: bytes,
+    detached: str | None,
+    public: Ed25519PublicKey,
 ) -> SignatureResult:
     """Whether this is the pinned key's signature over exactly these bytes.
 
@@ -485,13 +558,12 @@ def _signature(
     """
     pinned = fingerprint(public)
     claimed = body.get("key_id")
-    path = directory / SIGNATURE_FILE
     if claimed is not None and not isinstance(claimed, str):
         raise NotThisArtefact(
             f"key_id is {type(claimed).__name__} and not a string, so this payload "
             "makes no readable claim about which key signed it"
         )
-    if claimed is None or not path.is_file():
+    if claimed is None or detached is None:
         # The key the payload named is carried through even here. A payload naming a key
         # with no signature beside it and one naming none at all are both unsigned and
         # are not the same fact, and the reader is told which they are holding.
@@ -503,8 +575,8 @@ def _signature(
             SignatureOutcome.ANOTHER_KEY, claimed=claimed, pinned=pinned
         )
     try:
-        signature = decoded(path.read_text(encoding="utf-8"))
-    except (ValueError, UnicodeDecodeError):
+        signature = decoded(detached)
+    except ValueError:
         # A signature file that is not hex cannot verify, and saying so under the
         # invalid outcome is the honest report: something between the signer and here
         # changed the bytes, and which of the two files it was is not knowable.
@@ -517,8 +589,8 @@ def _signature(
     return SignatureResult(outcome, claimed=claimed, pinned=pinned)
 
 
-def _binding(body: Mapping[str, Any], directory: Path) -> BindingResult:
-    """Whether the Markdown on disk hashes to the digest inside the payload."""
+def _binding(body: Mapping[str, Any], rendering: bytes | None) -> BindingResult:
+    """Whether the Markdown beside the payload hashes to the digest inside it."""
     bound = body.get("rendered_sha256")
     if bound is None:
         return BindingResult(BindingOutcome.UNBOUND, bound=None, found=None)
@@ -527,10 +599,9 @@ def _binding(body: Mapping[str, Any], directory: Path) -> BindingResult:
             f"rendered_sha256 is {type(bound).__name__} and not a digest, so this "
             "payload makes no readable claim about the document beside it"
         )
-    path = directory / REPORT_MARKDOWN
-    if not path.is_file():
+    if rendering is None:
         return BindingResult(BindingOutcome.MISSING, bound=bound, found=None)
-    found = sha256(path.read_bytes()).hexdigest()
+    found = sha256(rendering).hexdigest()
     outcome = BindingOutcome.MATCHES if found == bound else BindingOutcome.ALTERED
     return BindingResult(outcome, bound=bound, found=found)
 

@@ -1,11 +1,20 @@
 """The HTTP surface: a nonce, a run, the answer to the run's interrupt, and the
 artefact it produced.
 
-Seven routes. `POST /nonces` issues the value an operator plants to prove they
+Eight routes. `POST /nonces` issues the value an operator plants to prove they
 control the endpoint; `POST /runs` records the attestation, declares the estimate
 and halts; `POST /runs/{id}/approval` answers the halt; `GET /runs/{id}` says where
-the run has got to; and three under `/report/{id}` serve the three files one signed
-run leaves — the payload, the rendering and the detached signature.
+the run has got to; and four under `/report/{id}` — three that serve the files one
+signed run leaves, the payload, the rendering and the detached signature, and a
+fourth that says what a verifier makes of them.
+
+**The verification route is a reading and never a fourth file.** It runs the
+recipient's own three checks — `verification.checked`, the function
+`scripts/verify.py` reaches through, over the same bytes — because a browser cannot
+pin a key and an engineer has to learn the artefact is checkable before sending it
+to a customer (spec §34). What it may not become is a substitute for the check: it
+is computed by the party that produced the document, and it says so in the response
+(`report.CHECKED_BY_THE_BENCH_THAT_PRODUCED_IT`).
 
 **The report routes copy bytes and never build them.** What `GET /report/{id}`
 returns is the exact byte string that was signed, held on the record since the run
@@ -84,7 +93,12 @@ from fastapi import Body, FastAPI, HTTPException, Response, status
 from fastapi import Path as PathParam
 from pydantic import BaseModel, Field
 
-from backend.api.report import ReportConfig, Unsigned
+from backend.api.report import (
+    CHECKED_BY_THE_BENCH_THAT_PRODUCED_IT,
+    ReportConfig,
+    Unsigned,
+    verification_of,
+)
 from backend.api.runs import (
     BenchConfig,
     BenchRuns,
@@ -104,6 +118,11 @@ from backend.bench.signing import (
     SignedArtefact,
     encoded,
     signing_key,
+)
+from backend.bench.verification import (
+    INTEGRITY_CLAIM,
+    RE_DERIVABILITY_CLAIM,
+    Verification,
 )
 from backend.graph.approval import Approval
 from backend.graph.budget import BudgetPayload, CallPrice, Layer
@@ -137,14 +156,28 @@ completed run advertises cannot drift from the path that serves it.
 
 RENDERING_ROUTE = f"{REPORT_ROUTE}/rendering"
 SIGNATURE_ROUTE = f"{REPORT_ROUTE}/signature"
+VERIFICATION_ROUTE = f"{REPORT_ROUTE}/verification"
+"""The three results over the three files, for a caller that cannot run a script.
+
+Not a fourth file and not part of the artefact: what is downloaded is still three
+files, and this route computes nothing that is not recomputable from them. It exists
+because the interface has to be able to say *this artefact is checkable* before an
+engineer sends it to a customer (spec §34), and a browser cannot pin a key.
+"""
 
 
-def report_paths(run_id: str) -> tuple[str, str, str]:
-    """The three paths one run's artefact is served at, in the order it is read."""
+def report_paths(run_id: str) -> tuple[str, str, str, str]:
+    """The paths one run's artefact is served at, in the order they are read.
+
+    Three files and the verification over them. The three come first because they
+    are the artefact: the fourth is a reading of it, and a caller that saved all
+    four under the names they arrive with would still verify from the three.
+    """
     return (
         REPORT_ROUTE.format(run_id=run_id),
         RENDERING_ROUTE.format(run_id=run_id),
         SIGNATURE_ROUTE.format(run_id=run_id),
+        VERIFICATION_ROUTE.format(run_id=run_id),
     )
 
 
@@ -493,6 +526,14 @@ class ReportLocation(BaseModel):
     signature: str
     """The detached signature over the payload's bytes."""
 
+    verification: str
+    """The three results over those three files, for a caller with no shell.
+
+    Beside the three rather than among them: it is not a file of the artefact and
+    it is not what a recipient checks with. A caller that fetched only this one
+    would have a reading of a document it never downloaded.
+    """
+
     statement: str
 
 
@@ -614,11 +655,12 @@ def _report(record: RunRecord) -> ReportLocation | None:
     """
     if record.status is not RunStatus.COMPLETED or isinstance(record.report, Unsigned):
         return None
-    payload, rendering, signature = report_paths(record.run_id)
+    payload, rendering, signature, verification = report_paths(record.run_id)
     return ReportLocation(
         path=payload,
         rendering=rendering,
         signature=signature,
+        verification=verification,
         statement=(
             "the run finished: its report is served at these three paths, as the "
             "signed payload with the rendered view and the detached signature "
@@ -663,6 +705,86 @@ def _attachment(filename: str) -> dict[str, str]:
     responses lands them under the names that make the directory verifiable.
     """
     return {"Content-Disposition": f'attachment; filename="{filename}"'}
+
+
+class CheckResult(BaseModel):
+    """One of the three results: what it found, under its own name, and the words.
+
+    `outcome` is the name a caller branches on — four for the signature, four for
+    the binding, three for the arithmetic — and `statement` is the verifier's own
+    sentence, carried unedited. A boolean would carry neither: *unsigned* and
+    *signed by a key you did not pin* are different facts about the sender, and a
+    screen that showed one cross for both would send its reader looking for the
+    wrong thing.
+    """
+
+    outcome: str
+    statement: str
+
+
+class ReportVerification(BaseModel):
+    """The three results over one run's artefact, and the two claims scoping them.
+
+    All three, always, in the order `verification.CHECKS` names them. A response
+    that carried only the signature would let its reader infer re-derivability from
+    integrity, which is the inference ADR-0017 exists to prevent — so the two claims
+    travel with the results here exactly as they do in the verifier's own output,
+    and `re_derivability` is stated for the scored layer alone.
+
+    There is no field here that summarises the three into one word for a badge.
+    `verified` and `contradicted` are the verifier's own two properties and they are
+    not the same question: nothing contradicted with one result never established is
+    a third answer, and collapsing it would report a claim the run never made.
+    """
+
+    artefact: str
+    artefact_version: int
+    target: str
+    signature: CheckResult
+    binding: CheckResult
+    arithmetic: CheckResult
+    verified: bool
+    """Whether all three held. Never shown on its own — see `checked_by`."""
+
+    contradicted: bool
+    """Whether any result actively failed, as against not having been established."""
+
+    integrity: str
+    """The claim for the whole document, printed beside the second and never alone."""
+
+    re_derivability: str
+    """The claim for the scored layer only. The adaptive layer is recorded and not
+    reproducible, and a valid signature over it is a claim about its bytes
+    (ADR-0010, ADR-0017)."""
+
+    checked_by: str
+    """Whose check this is: the bench that produced the artefact, not a recipient."""
+
+
+def verification_response(verification: Verification) -> ReportVerification:
+    """The verifier's own record as the wire carries it. Nothing computed here."""
+    return ReportVerification(
+        artefact=verification.artefact,
+        artefact_version=verification.artefact_version,
+        target=verification.target,
+        signature=CheckResult(
+            outcome=str(verification.signature.outcome),
+            statement=verification.signature.stated(),
+        ),
+        binding=CheckResult(
+            outcome=str(verification.binding.outcome),
+            statement=verification.binding.stated(),
+        ),
+        arithmetic=CheckResult(
+            outcome=str(verification.arithmetic.outcome),
+            statement=verification.arithmetic.stated(),
+        ),
+        verified=verification.verified,
+        contradicted=verification.contradicted,
+        integrity=INTEGRITY_CLAIM,
+        re_derivability=RE_DERIVABILITY_CLAIM,
+        checked_by=CHECKED_BY_THE_BENCH_THAT_PRODUCED_IT,
+    )
 
 
 class ApprovalRequest(BaseModel):
@@ -893,6 +1015,27 @@ def create_app(config: BenchConfig | None = None) -> FastAPI:
             content=encoded(servable(run_id).signature).encode("utf-8"),
             media_type="text/plain; charset=utf-8",
             headers=_attachment(SIGNATURE_FILE),
+        )
+
+    @app.get(VERIFICATION_ROUTE)
+    def verify_the_artefact_this_run_produced(
+        run_id: Annotated[str, PathParam()],
+    ) -> ReportVerification:
+        """What a verifier makes of the three files above. Three results, always.
+
+        Run over the bytes this bench serves, through the same function
+        `scripts/verify.py` reaches — a second implementation would be a second
+        definition of *verifying*, and the two would only have to disagree once for
+        a caller to be shown a property nobody checked.
+
+        **This is not the recipient's check and the response says so.** It is
+        computed by the party that produced the document, against the public key
+        this bench was told to pin, and the answer it is worth acting on is a
+        signature that does *not* verify: a report an engineer cannot send is one
+        they find out about here rather than after a customer runs the script.
+        """
+        return verification_response(
+            verification_of(servable(run_id), bench.config.report)
         )
 
     return app

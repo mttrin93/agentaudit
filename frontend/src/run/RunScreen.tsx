@@ -193,7 +193,7 @@ export function RunScreen() {
       ) : null}
 
       {at !== null && progress !== null && at.kind !== 'holding' ? (
-        <Progress at={at} progress={progress} />
+        <Progress at={at} progress={progress} runId={runId} />
       ) : null}
 
       {progress?.status === REGISTRATION_REFUSED ? (
@@ -351,7 +351,15 @@ function TheInterrupt({
  * stopped it — and the two panels under it are two panels rather than one table
  * with a total row, which is the arrangement a total gets added to.
  */
-function Progress({ at, progress }: { at: Standing; progress: RunProgress }) {
+function Progress({
+  at,
+  progress,
+  runId,
+}: {
+  at: Standing
+  progress: RunProgress
+  runId: string
+}) {
   return (
     <>
       <section>
@@ -394,6 +402,10 @@ function Progress({ at, progress }: { at: Standing; progress: RunProgress }) {
         <section>
           <h2>The report</h2>
           <p>{progress.report.statement}</p>
+          <p className="consequence">
+            <Link to={`/runs/${runId}/report`}>Read the report</Link> — the finding,
+            the per-family figures and whether the artefact verifies.
+          </p>
           <ul>
             <li>
               <a href={progress.report.path}>the signed payload</a>

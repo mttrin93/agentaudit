@@ -24,7 +24,10 @@ from pathlib import Path
 from typing import Any, cast, get_type_hints
 
 import pytest
-from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+from cryptography.hazmat.primitives.asymmetric.ed25519 import (
+    Ed25519PrivateKey,
+    Ed25519PublicKey,
+)
 from fastapi import Response
 from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
@@ -39,10 +42,13 @@ from backend.bench.signing import (
     SIGNATURE_FILE,
     SignedArtefact,
     encoded,
+    fingerprint,
     generate,
+    public_key,
     public_pem,
 )
 from backend.bench.verification import (
+    CHECKS,
     BindingOutcome,
     ReDerivationOutcome,
     SignatureOutcome,
@@ -58,18 +64,26 @@ from scripts.verify import main
 
 
 @contextmanager
-def completed(cases: list[Case], key: Ed25519PrivateKey | None) -> Iterator[Served]:
+def completed(
+    cases: list[Case],
+    key: Ed25519PrivateKey | None,
+    pinned: Ed25519PublicKey | None = None,
+) -> Iterator[Served]:
     """One run taken through the API to completion, against a served reference agent.
 
     The whole flow rather than a record built by hand: what is under test is the
     artefact a *run* produced, and a payload assembled inside a test would be a
     payload nothing signed.
+
+    `pinned` is the key a verification of that artefact is run against. Left out, it
+    is the key committed to this repository — which is what a recipient pins, and so
+    what a bench signing with a test key is honestly reported against.
     """
     app = create_app(
         BenchConfig(
             cases=cases,
             approval_wait_seconds=60.0,
-            report=ReportConfig(signing_key=key),
+            report=ReportConfig(signing_key=key, pinned=pinned),
         )
     )
     bench = cast(BenchRuns, app.state.bench)
@@ -233,6 +247,169 @@ def test_no_response_adds_a_figure_or_a_wrapper_the_payload_does_not_carry(
     assert signature.content == encoded(artefact.signature).encode("utf-8")
 
 
+# --- the three results over those bytes ------------------------------------------
+
+
+def test_the_verification_route_reports_all_three_results_and_both_claims(
+    leakage_case: Case,
+) -> None:
+    """Three results, always all three, and the two claims that scope them.
+
+    A response carrying the signature alone would let its reader infer
+    re-derivability from integrity, which is the inference ADR-0017 exists to
+    prevent. The third result is the one about the bench rather than about the
+    transport, and it is the reason this is not a padlock icon.
+    """
+    key = generate()
+    with completed([leakage_case], key, pinned=key.public_key()) as served:
+        body = served.fetch("/verification").json()
+
+    assert body["signature"]["outcome"] == SignatureOutcome.VALID.value
+    assert body["binding"]["outcome"] == BindingOutcome.MATCHES.value
+    assert body["arithmetic"]["outcome"] == ReDerivationOutcome.AGREES.value
+    assert body["verified"] is True
+    assert body["contradicted"] is False
+    assert body["target"] == served.artefact().payload.result.target_name
+
+    # Both claims, in the verifier's own words, and the second scoped to the layer
+    # it is true of: the adaptive layer is recorded and not reproducible (ADR-0010).
+    assert "Integrity, for the whole document" in body["integrity"]
+    assert "Re-derivability, for the scored layer only" in body["re_derivability"]
+    assert "recorded and not reproducible" in body["re_derivability"]
+
+    # And whose check this is. A sender's word for their own document is the thing a
+    # signature exists to replace, so the response says who computed it and what the
+    # recipient runs instead.
+    assert "by the bench that produced the artefact" in body["checked_by"]
+    assert "scripts.verify" in body["checked_by"]
+
+
+def test_a_signature_under_a_key_nobody_pinned_is_not_reported_as_a_valid_one(
+    leakage_case: Case,
+) -> None:
+    """The outcome that makes this route worth serving at all.
+
+    A bench signing with a key whose public half nobody has published produces
+    reports that no recipient can check, and the engineer about to send one to a
+    customer is the person who needs to know. Reported under its own name rather
+    than as tampering: the document was not altered, it was signed by somebody
+    else's key, and the two send a reader to different places.
+    """
+    key = generate()
+    with completed([leakage_case], key) as served:
+        body = served.fetch("/verification").json()
+
+    assert body["signature"]["outcome"] == SignatureOutcome.ANOTHER_KEY.value
+    assert body["verified"] is False
+    assert body["contradicted"] is True
+    # Both fingerprints, so the reader can see which key they are missing rather
+    # than being told that something about the key is wrong.
+    assert fingerprint(key.public_key()) in body["signature"]["statement"]
+    assert fingerprint(public_key()) in body["signature"]["statement"]
+    # The other two are separate questions and are answered separately: the document
+    # beside these bytes is still the one they are bound to, and the arithmetic still
+    # re-derives.
+    assert body["binding"]["outcome"] == BindingOutcome.MATCHES.value
+    assert body["arithmetic"]["outcome"] == ReDerivationOutcome.AGREES.value
+
+
+def test_the_verification_states_no_verdict_on_the_target_and_no_figure_over_families(
+    leakage_case: Case,
+) -> None:
+    """A reading of an artefact, and never a grade for an agent.
+
+    Two prohibitions in one response, because this is the part of the interface
+    most likely to be mistaken for one: a green tick beside somebody's agent name
+    reads as a pass, and ADR-0018 says a target has rates and bands and passes
+    nothing. So the check is that the words *this target passed* have nowhere to
+    appear, and that no key here totals across families (ADR-0005, D12).
+    """
+    key = generate()
+    with completed([leakage_case], key, pinned=key.public_key()) as served:
+        response = served.fetch("/verification")
+
+    body = response.json()
+    for key_name in _keys(body):
+        assert not [word for word in FORBIDDEN_IN_A_KEY if word in key_name], (
+            f"{key_name} reads as a figure over more than one family"
+        )
+    target = body["target"]
+    for sentence in _sentences(body):
+        for verdict in (f"{target} passed", f"{target} failed", "the target passed"):
+            assert verdict not in sentence, (
+                f"{verdict!r} appears in a verification. A target has rates, "
+                "intervals and bands and passes nothing (ADR-0018)"
+            )
+    # Nor is there a field that reduces the three results to one word. `verified`
+    # and `contradicted` are the verifier's own two properties and they answer two
+    # different questions — nothing contradicted with one result never established
+    # is a third answer, and a single flag could not carry it.
+    assert set(body) == {
+        "artefact",
+        "artefact_version",
+        "target",
+        "signature",
+        "binding",
+        "arithmetic",
+        "verified",
+        "contradicted",
+        "integrity",
+        "re_derivability",
+        "checked_by",
+    }
+
+
+def test_the_verification_is_the_same_reading_the_recipient_s_own_script_prints(
+    leakage_case: Case, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """One definition of verifying, reached two ways.
+
+    The route and the script are the same three checks over the same three byte
+    strings, so a report the script calls valid is one this route calls valid — and
+    a second implementation behind the route would be a second definition that only
+    has to disagree once for a screen to show a property nobody checked.
+    """
+    key = generate()
+    with completed([leakage_case], key, pinned=key.public_key()) as served:
+        body = served.fetch("/verification").json()
+        payload = served.fetch()
+        rendering = served.fetch("/rendering")
+        signature = served.fetch("/signature")
+
+    (tmp_path / REPORT_PAYLOAD).write_bytes(payload.content)
+    (tmp_path / REPORT_MARKDOWN).write_bytes(rendering.content)
+    (tmp_path / SIGNATURE_FILE).write_bytes(signature.content)
+    pinned = tmp_path / "pinned.pub"
+    pinned.write_bytes(public_pem(key.public_key()))
+
+    code = main([str(tmp_path), "--pubkey", str(pinned)])
+
+    printed = capsys.readouterr().out
+    assert code == 0, printed
+    for result in ("signature", "binding", "arithmetic"):
+        assert body[result]["outcome"] in printed
+        assert body[result]["statement"] in printed
+    for name in CHECKS:
+        assert name in printed
+
+
+def test_a_run_with_no_artefact_refuses_the_verification_by_the_same_name(
+    leakage_case: Case,
+) -> None:
+    """No artefact, no reading of one — and the refusal is the route's own four.
+
+    A verification of a report that does not exist would have to be built out of
+    nothing, and the caller polling for one needs the same named answer the three
+    file routes give: *not yet* and *not ever* are different facts.
+    """
+    with completed([leakage_case], None) as served:
+        response = served.fetch("/verification")
+
+    assert response.status_code == 409
+    assert response.json()["detail"]["outcome"] == "never_signed"
+    assert "signature" not in response.json()["detail"]
+
+
 # --- what is not served ----------------------------------------------------------
 
 
@@ -376,6 +553,18 @@ def test_an_unknown_run_id_is_refused_by_its_own_name(leakage_case: Case) -> Non
 
 
 # --- helpers ---------------------------------------------------------------------
+
+
+def _sentences(node: Any) -> Iterator[str]:
+    """Every string anywhere in the response, however deeply nested."""
+    if isinstance(node, dict):
+        for value in node.values():
+            yield from _sentences(value)
+    elif isinstance(node, list):
+        for value in node:
+            yield from _sentences(value)
+    elif isinstance(node, str):
+        yield node
 
 
 def _keys(node: Any) -> Iterator[str]:

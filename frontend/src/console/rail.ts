@@ -190,7 +190,8 @@ const STANDING: readonly (Place & { path: string })[] = [
     name: 'The gate',
     answers:
       'The rule this bench is held to, what the last gate run answered under it, ' +
-      'and the command that starts another. Nothing here starts one.',
+      'and the two ways to run another — from here, or from a terminal. Starting ' +
+      'one asks the three statements and shows both figures first.',
   },
   {
     path: ARTEFACTS_PATH,

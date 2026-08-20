@@ -8,30 +8,38 @@
  * is an answer somebody can re-derive — which is the whole of ADR-0003, and the
  * reason those numbers were declared before the code that evaluates them existed.
  * **Then what the last gate run answered**, or the stated absence of one. **Then
- * what a gate run does to the case library**, before the command, because it is not
- * a read-only action and an operator who learns that after running it learned it too
- * late. **Then the command**, which is the only way to start one.
+ * what a gate run does to the case library**, before anything that starts one,
+ * because it is not a read-only action and an operator who learns that afterwards
+ * learned it too late. **Then the two ways to run one** — the control this bench
+ * offers, where it can, and the command that runs one at a terminal.
  *
  * **The order is asserted, not merely intended.** This module returns the blocks as
  * a sequence and the component maps over it, so *above* is a property of the value a
  * test can read rather than of markup nobody checks. A screen that put the outcome
  * first would fail in `gate.test.ts`.
  *
- * **Nothing here starts a gate run, and there is nowhere to put the thing that
- * would.** A gate run is the whole admitted library against all three reference
- * agents, about 830 target calls on the operator's own provider, behind a terminal
- * that asks the three attestation statements one at a time and reads an absent or
- * piped answer as a refusal (ADR-0007, PLAN.md §8). So the console prints the
- * command and offers no affordance: every field of every block here is text, the
- * type has no callback in it, and `GateScreen.tsx` has no button, no form and no
- * write of any kind. The bench's own HTTP surface has no route under `/bench` that
- * is not a read, asserted over its route table in `test_api_gate.py`.
+ * **One control, beside the command and not instead of it.** A gate run is the
+ * whole live library against all three reference agents, about 830 calls on the
+ * operator's own provider and a write-back to every case record. `PLAN.md` §8 kept
+ * it on the command line and ADR-0021 reversed that, so the command block now
+ * carries the one affordance that starts one — where the bench says it can, and a
+ * stated refusal where it cannot. The command stays: a gate run from a terminal is
+ * still the path that writes a dated document, and a deployment that ships no
+ * reference agents can run one nowhere but somewhere else.
  *
- * **The document is named and never parsed.** Every per-family rate and every
- * per-family `D` of that gate run is in its document, and the citation carries none
- * of them; this screen shows what the citation carries and names the rest. A screen
- * that read the bench's own prose output would break on a rewording, and the
- * machine-readable sidecar that would supply those figures properly is a follow-up.
+ * **What the control is is still text here.** The blocks this module returns carry
+ * no callback and no handler — `available` is a boolean and everything beside it is
+ * a sentence — so the affordance is described by a value a test can read and driven
+ * by the component. What it may never grow is a second one: `gate.test.ts` pins the
+ * one field named for something that happens, and any other fails there.
+ *
+ * **This screen's own figures still come from the citation, and the document is
+ * still never parsed.** The per-family rates and each family's `D` of the *cited*
+ * gate run are in its document and the citation carries none of them, so this
+ * screen shows what the citation carries and names the rest. The figures for a gate
+ * run started here come from the run itself, in memory, and are rendered by
+ * `gaterun.ts` — which is why this module's scan for document-only figures still
+ * holds: a screen that read the bench's own prose output would break on a rewording.
  *
  * **The citation is read through the front door's own reading.** `gateReading` is
  * imported rather than reimplemented: the citation's own two sentences are written
@@ -49,14 +57,15 @@
  */
 
 import type { BenchGate, DeclaredRule } from '../api/bench'
+import type { StartControl } from './gaterun'
 import { gateReading, type GateReading } from './landing'
 
 export const WHAT_THIS_SCREEN_ANSWERS =
-  'The gate is the stop before this bench is trusted: the whole admitted library ' +
-  'run against three agents of the project’s own construction, decided by a rule ' +
-  'stated in advance. This screen is the rule, what the last gate run answered ' +
-  'under it, what running another one does to the case library, and the command ' +
-  'that starts one.'
+  'The gate is the stop before this bench is trusted: the whole live library run ' +
+  'against three agents of the project’s own construction, decided by a rule stated ' +
+  'in advance. This screen is the rule, what the last gate run answered under it, ' +
+  'what running another one does to the case library, and the two ways to run one — ' +
+  'from here, or from a terminal.'
 
 /** The command that starts a gate run, and the only thing that does. */
 export const THE_COMMAND = 'uv run python -m scripts.gate --identity "your name"'
@@ -125,6 +134,21 @@ export interface CommandBlock {
   heading: string
   command: string
   statements: string[]
+  /**
+   * The one control this screen offers, or the stated absence of one.
+   *
+   * Beside the command rather than instead of it, because they are two entry points
+   * and they leave different traces: a gate run from a terminal writes a dated
+   * document, and one started here returns its figures and holds them. `null` is
+   * neither — it is this app not yet knowing, which is a third state and the only
+   * one in which nothing at all is drawn.
+   *
+   * It carries no callback. `available` is a boolean, the rest is text, and the
+   * component holds the handler — so what this module describes is *whether* there
+   * is a control and what it says, and a second affordance appearing anywhere in
+   * this value fails `gate.test.ts`.
+   */
+  start: StartControl | null
 }
 
 export type GateBlock = RuleBlock | OutcomeBlock | ConsequenceBlock | CommandBlock
@@ -196,34 +220,51 @@ function whatItWrites(rule: DeclaredRule): string[] {
       `agents at ${rule.attempts_per_case} attempts per case, and then the ` +
       'adaptive layer under a ceiling and a counter of its own. The terminal ' +
       'presents the two as two figures before anything is sent, never added ' +
-      'together, and it runs overnight rather than in a browser tab.',
-    'It asks first. The three attestation statements one at a time, then the ' +
-      'estimated cost, and answering no to any of them spends nothing and writes ' +
-      'nothing.',
+      'together, and it takes many minutes rather than seconds.',
+    'It asks first, whichever way it is started. The three attestation statements ' +
+      'one at a time, then the estimated cost, and answering no to any of them ' +
+      'spends nothing and writes nothing.',
+    'It holds this bench’s case library while it goes, and one gate run runs at ' +
+      'a time on one library: a second is refused rather than queued, because two ' +
+      'overlapping runs would decide a retirement off a series missing a reading.',
   ]
 }
 
-const ONLY_ENTRY_POINT = [
+const TWO_ENTRY_POINTS = [
   'The identity is required and is never defaulted from the environment: it is the ' +
     'liability record for the run, so nothing may pre-answer it. Replace it with ' +
     'yours before running the command.',
-  'The terminal is the only entry point. There is no control on this screen that ' +
-    'starts a gate run and no route on this bench that would take one, because the ' +
-    'consent flow is what makes the spend and the write-back somebody’s decision: ' +
-    'an absent or piped answer is read as a refusal, so anything that started a ' +
-    'gate run unattended would answer no to all three statements and spend nothing ' +
-    '(ADR-0007, PLAN.md §8).',
+  'This command and the control beside it are the two entry points, and they ask ' +
+    'the same three attestation statements and present the same two figures before ' +
+    'anything is sent. What differs is what they leave: the command writes a dated ' +
+    'document of the run, and a gate run started here returns its figures and holds ' +
+    'them on the bench.',
+  'Neither can be answered by something that is not a person. The terminal reads ' +
+    'an absent or piped answer as a refusal, and the browser posts an attestation ' +
+    'the bench will not construct with a statement withheld — which is why nothing ' +
+    'here spawns the command, and why no flag anywhere lets a gate run proceed ' +
+    'without one (ADR-0007, ADR-0021).',
 ]
 
 /**
- * The rule, then the outcome, then the consequence, then the command.
+ * The rule, then the outcome, then the consequence, then the way to start one.
  *
  * A sequence and not four fields, so that the order a reader meets them in is a
  * property of this value: the two orderings this screen is required to have — the
- * rule above the outcome, the write-back before the command — are asserted here
- * rather than hoped for in markup.
+ * rule above the outcome, the write-back before the way to start one — are asserted
+ * here rather than hoped for in markup. The second matters more now that one of
+ * those ways is on this screen: an operator who learns about the write-back after
+ * pressing a control learned it too late.
+ *
+ * `start` is what the bench said about whether a gate run may begin here, already
+ * read (`gaterun.startControl`). Passed in rather than fetched, because this module
+ * is a transformation and not a client — and `null` where this app has not been told
+ * yet, which draws no control and no refusal.
  */
-export function gateScreen(bench: BenchGate): GateBlock[] {
+export function gateScreen(
+  bench: BenchGate,
+  start: StartControl | null = null,
+): GateBlock[] {
   return [
     {
       kind: 'rule',
@@ -246,9 +287,10 @@ export function gateScreen(bench: BenchGate): GateBlock[] {
     },
     {
       kind: 'command',
-      heading: 'The command that starts one',
+      heading: 'Starting one: here, or the command that does it',
       command: THE_COMMAND,
-      statements: [...ONLY_ENTRY_POINT],
+      statements: [...TWO_ENTRY_POINTS],
+      start,
     },
   ]
 }
@@ -261,7 +303,7 @@ export function gateScreen(bench: BenchGate): GateBlock[] {
  * leading whitespace of its own — a clause promoted to a heading by losing two
  * spaces would read as a rule of its own.
  */
-function clausesOf(rule: DeclaredRule): RuleClause[] {
+export function clausesOf(rule: DeclaredRule): RuleClause[] {
   return rule.stated
     .split('\n')
     .filter((line) => line.trim() !== '')

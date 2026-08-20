@@ -1,8 +1,9 @@
 /**
  * The bench's HTTP surface as this app is allowed to see it.
  *
- * Three of the seven routes are reachable from here — `POST /nonces`, `POST
- * /runs` and `GET /runs/{id}` — and the field names are the backend's own,
+ * Four of the seven routes are reachable from here — `POST /nonces`, `POST
+ * /runs`, `POST /runs/{id}/approval` and `GET /runs/{id}` — and the field names
+ * are the backend's own,
  * `snake_case` and all, because the request body is a contract with
  * `backend/api/app.py` rather than a shape this app is free to choose. A
  * camel-cased mirror would be one rename away from posting a body the API
@@ -80,18 +81,62 @@ export interface StartRunBody {
 }
 
 /**
+ * One layer's figure on the consent surface, as `LayerFigurePayload` sends it.
+ *
+ * `kind` is the whole point of the record: `exact` is a fact and `ceiling` is a
+ * bound, and the bench carries the difference in a field rather than in prose so
+ * that nothing downstream can present a bound as though it were arithmetic
+ * (`budget.py`). `basis` is that arithmetic in words, which is what makes the
+ * number checkable rather than believable, and `cost` is already rendered — `≤`
+ * and currency and all — because the money is the operator's declaration and this
+ * app has no business recomputing it.
+ */
+export interface LayerFigure {
+  calls: number
+  kind: string
+  basis: string
+  cost: string
+}
+
+/**
+ * The consent surface exactly as the interrupt is holding it.
+ *
+ * **`total`, `hard_ceiling` and `presented` are on the wire and the run screen
+ * renders none of them.** They are typed here rather than dropped from the type
+ * because the run screen's first acceptance criterion is the *absence* of a
+ * blended number, and an absence is only assertable against a field a test can
+ * name (`interrupt.test.ts` scans the view for both figures). The bench builds
+ * them as bounds and is right to — ADR-0007's own table prints a bounded total —
+ * but the screen shows the two layers and the ceiling each one is enforced
+ * against, which is the same disclosure with nothing spanning the layers. See
+ * `interrupt.ts`.
+ */
+export interface RunEstimate {
+  scored: LayerFigure
+  adaptive: LayerFigure
+  total: LayerFigure
+  hard_ceiling: LayerFigure
+  scored_ceiling: number
+  adaptive_ceiling: number
+  currency: string
+  presented: string[]
+}
+
+/**
  * A run that exists and is holding its interrupt.
  *
- * `estimate` and `spent` are carried untouched and unread. This app does not
- * render either — the two cost figures are the run screen's subject — and typing
- * them here would be a second description of figures the bench already
- * describes, which is the first place a friendly total gets added.
+ * `estimate` is the consent surface the graph is holding, and it arrives here
+ * because this is the only response that carries it: `GET /runs/{id}` reports
+ * progress and no figures, so the run screen is shown the estimate that came back
+ * from the registration that made the run (`interrupt.ts` says how it gets
+ * there). `spent` is per layer with no total beside it, which is why it is a map
+ * of two counters rather than a number.
  */
 export interface RunStarted {
   run_id: string
   status: string
   statement: string
-  estimate: unknown
+  estimate: RunEstimate
   spent: Record<string, number>
   cases: number
   families_not_run: Record<string, string>
@@ -109,6 +154,92 @@ export interface RunStanding {
   run_id: string
   status: string
   statement: string
+}
+
+/** Where the scored layer is: family, case and attempt. */
+export interface ScoredPosition {
+  family: string
+  case_id: string
+  attempt: number
+}
+
+/**
+ * Where the adaptive layer is: family, episode and turn.
+ *
+ * A second interface rather than a shared one with a layer label, for the reason
+ * the API keeps two models: the units differ, and a type that could hold either
+ * would let a reader compare an attempt with a turn — the arithmetic CONTEXT.md
+ * keeps apart and ADR-0010 forbids.
+ */
+export interface AdaptivePosition {
+  family: string
+  episode: number
+  turn: number
+}
+
+/** What the scored layer has reached, spent and found. Its own figures only. */
+export interface ScoredProgress {
+  reached: boolean
+  statement: string
+  position: ScoredPosition | null
+  calls_spent: number
+  /** `null` while no attempt has come back — absent, and never a rate of zero. */
+  succeeded_attempts: number | null
+}
+
+/** What the adaptive layer has reached, spent and found. Nothing here is scored. */
+export interface AdaptiveProgress {
+  reached: boolean
+  statement: string
+  position: AdaptivePosition | null
+  calls_spent: number
+  /** Routes episodes found. `null` while no episode has ended, never a zero. */
+  adaptive_findings: number | null
+}
+
+/** The named outcome that stopped a run on the wire, and what it is not. */
+export interface TransportOutcome {
+  failure: string
+  statement: string
+}
+
+/** Where a finished run's three files are served, once there are three. */
+export interface ReportLocation {
+  path: string
+  rendering: string
+  signature: string
+  statement: string
+}
+
+/**
+ * One run in flight, reported per layer, as the screen that polls it reads it.
+ *
+ * `RunStanding` extended rather than restated, so that the register screen's
+ * narrow read of this same route stays a narrowing of one type instead of a second
+ * description of it. There is no field here that spans the two layers, and this
+ * app adds none: calls spent and findings so far live inside `scored` and
+ * `adaptive` and nowhere else, so a total would have to be written out in front of
+ * the two labels saying what was being added.
+ */
+export interface RunProgress extends RunStanding {
+  scored: ScoredProgress
+  adaptive: AdaptiveProgress
+  transport: TransportOutcome | null
+  report: ReportLocation | null
+}
+
+/**
+ * The answer to one run's interrupt. A `confirmed: true` is the only thing that
+ * spends.
+ *
+ * `reason` is carried on a no as well as a yes, because a declined run is a result
+ * about the estimate: a figure somebody refused is the one piece of evidence that
+ * the cost display is doing its job (`approval.py`).
+ */
+export interface ApprovalBody {
+  confirmed: boolean
+  identity: string
+  reason: string
 }
 
 /**
@@ -223,4 +354,79 @@ export async function runStanding(runId: string): Promise<RunStanding> {
     )
   }
   return (await response.json()) as RunStanding
+}
+
+/**
+ * The same route, read wide: the run's position and spend in both layers.
+ *
+ * Two functions over one route rather than one function two callers narrow, so
+ * that the register screen keeps the read it was given. Nothing about this request
+ * touches the target — polling a run's standing is a question put to the bench.
+ */
+export async function runProgress(runId: string): Promise<RunProgress> {
+  const response = await fetch(`/runs/${encodeURIComponent(runId)}`)
+  if (!response.ok) {
+    throw new Error(
+      `the bench has no run ${runId} to report on (HTTP ${response.status})`,
+    )
+  }
+  return (await response.json()) as RunProgress
+}
+
+/**
+ * What became of an answer to an interrupt.
+ *
+ * `no_longer_waiting` is its own outcome rather than a refusal, because it is the
+ * one refusal that has already decided the run: an interrupt is answered once, and
+ * a `409` means either that it was answered already or that the hour ran out and
+ * the graph was told nobody answered. Either way the run is settled and the screen
+ * has a standing to read rather than an answer to retry — offering a retry would be
+ * offering to consent to a spend that already happened or already will not.
+ */
+export type ApprovalOutcome =
+  | { kind: 'answered'; run: RunStarted }
+  | { kind: 'no_longer_waiting'; statement: string }
+  | { kind: 'refused'; statement: string }
+  | { kind: 'unreachable'; statement: string }
+
+const ANSWER_UNREACHABLE =
+  'the bench did not answer, so it is not known whether it recorded this ' +
+  'decision. Read the run’s standing before answering again: an interrupt is ' +
+  'answered once, and if this one was taken the run is already under way.'
+
+/**
+ * Answer one run's interrupt.
+ *
+ * **This is the only function in this app that can cause a call on the target**,
+ * and only ever with a `confirmed: true` that `interrupt.ts` refused to build
+ * without an explicit confirmation. A `confirmed: false` goes on the wire too, and
+ * that is deliberate: it records the run as *declined* by a person rather than
+ * leaving it to time out as *unanswered*, and the bench's own sentence for it says
+ * that nothing was sent to the target and nothing was spent.
+ */
+export async function answerTheInterrupt(
+  runId: string,
+  body: ApprovalBody,
+): Promise<ApprovalOutcome> {
+  let response: Response
+  try {
+    response = await fetch(`/runs/${encodeURIComponent(runId)}/approval`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+  } catch (unreachable) {
+    return {
+      kind: 'unreachable',
+      statement: `${ANSWER_UNREACHABLE} (${unreachable})`,
+    }
+  }
+  if (response.ok) {
+    return { kind: 'answered', run: (await response.json()) as RunStarted }
+  }
+  const statement = await refusalIn(response)
+  if (response.status === 409) {
+    return { kind: 'no_longer_waiting', statement }
+  }
+  return { kind: 'refused', statement }
 }

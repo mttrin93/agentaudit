@@ -22,10 +22,14 @@
  * broken link on the front door, and how the document is served is the gate screen's
  * question rather than this screen's.
  *
- * **There is no button here that starts a gate run**, and no route that would take
- * one. A gate run attacks all three reference agents, spends about 830 calls and
- * writes back to the case library, behind a terminal that asks the three
- * attestation statements one at a time (PLAN.md §8). The console cites it.
+ * **There is no control here that starts a gate run**, and that is a decision about
+ * this screen rather than about the bench. A gate run attacks all three reference
+ * agents, spends about 830 calls and writes back to the case library; one can now be
+ * started from the console, and the place it is started from is the gate screen,
+ * where the rule, the write-back and the two figures are on the page beside it
+ * (ADR-0021). The front door cites what the last one answered and links to that
+ * screen: an operation with three attestation statements and a spend in front of it
+ * does not belong on the screen somebody lands on.
  *
  * **The second region is the runs on the record**, read from `GET /runs`, so that a
  * run whose URL nobody kept is still reachable. Each row carries calls spent in two

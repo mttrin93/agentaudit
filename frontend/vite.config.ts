@@ -20,7 +20,10 @@
  * landing screen reads the gate citation from it, and there is nothing under it that
  * starts anything. `/artefacts` is proxied on the same terms as `/runs`: the screen
  * that lists them sits at the same path behind the `#`, and everything under it is a
- * read.
+ * read. `/gate-runs` is the one prefix through which this app can start something
+ * that spends on the bench's own behalf — a gate run, its own route family and not a
+ * run (ADR-0021) — and it is named separately for that reason: it is not reachable
+ * by proxying `/bench`, and it should not become reachable by widening one.
  *
  * **The tests run in node and there is no browser here.** The spec expects these
  * screens to be driven by hand, and three screens do not justify a browser-driver
@@ -44,6 +47,7 @@ export default defineConfig({
       '/report': BENCH,
       '/artefacts': BENCH,
       '/bench': BENCH,
+      '/gate-runs': BENCH,
     },
   },
   test: {

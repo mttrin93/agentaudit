@@ -803,15 +803,369 @@ export interface BenchGate {
  * The rule this bench is held to, and the gate run it cites under it.
  *
  * The only read in this module whose subject is the instrument rather than a
- * target, and it takes no run id because it is not about a run. There is no
- * counterpart that starts a gate run: one is 830-odd calls against three
- * reference agents behind a terminal consent flow (PLAN.md §8), so the console
- * cites it, prints the command, and the CLI stays the only entry point. This
- * module has no function that posts anywhere under `/bench` and the API has no
- * route that would take one.
+ * target, and it takes no run id because it is not about a run. It reads what the
+ * deployment declared and nothing a gate run this bench just made decided — those
+ * are two different facts and they arrive on two different routes.
+ *
+ * **Nothing under `/bench` is a write, and starting a gate run is not here.** The
+ * four functions below post to and read `/gate-runs`, which is its own route
+ * family for the reason a gate run is its own record: a run produces rates about
+ * somebody's target, a gate run produces a decision about this bench (ADR-0018,
+ * ADR-0021).
  */
 export async function benchGate(): Promise<BenchGate> {
   return (await fetched(BENCH_GATE_PATH, 'gate citation')) as BenchGate
+}
+
+/** Where a gate run is started, listed and read. Its own family, never `/runs`. */
+export const GATE_RUNS_PATH = '/gate-runs'
+
+/**
+ * This bench can run a gate, and what starting one would do first.
+ *
+ * `available` is the field the screen branches on and it is a literal on both
+ * shapes, so *can* and *cannot* are two facts rather than one record with empty
+ * fields — the idiom `GateCitation` already uses for a citation and its absence.
+ */
+export interface MayStart {
+  available: true
+  library: string
+  statement: string
+}
+
+/**
+ * This bench cannot run a gate, and the named reason it cannot.
+ *
+ * Four names on the wire, and two of them are permanent facts about the deployment
+ * while two are about right now. The screen states whichever it is told and offers
+ * no control either way: *this build ships no reference agents* is not answered by
+ * trying again, and *a gate run is already holding the library* is.
+ */
+export interface MayNotStart {
+  available: false
+  refusal: string
+  stated: string
+}
+
+export type GateRunStart = MayStart | MayNotStart
+
+/**
+ * One gate run on the record: when, where it got to, what it spent per layer.
+ *
+ * A row and never a decision. `spent` is two keys and there is no third: the two
+ * layers are enforced against separate counters and nothing adds them (ADR-0010).
+ */
+export interface GateRunRow {
+  gate_run_id: string
+  recorded_at: string
+  status: string
+  statement: string
+  spent: Record<string, number>
+}
+
+/** The gate runs on the record, and whether another may start right now. */
+export interface GateRuns {
+  start: GateRunStart
+  gate_runs: GateRunRow[]
+  statement: string
+}
+
+/**
+ * What a gate run's scored layer will cost, in the units it is declared in.
+ *
+ * Attempts over cases over agents, exact because it is a multiplication. Not one
+ * numeric field here appears on the adaptive figure below: the two layers share no
+ * number, so there is no name in this app under which a total could be built.
+ */
+export interface ScoredEstimate {
+  layer: string
+  attempt_calls: number
+  attempt_ceiling: number
+  cases: number
+  attempts_per_case: number
+  kind: string
+  basis: string
+  cost: string
+  statement: string
+}
+
+/**
+ * What a gate run's adaptive layer may cost, in the units *it* is declared in.
+ *
+ * Turns over episodes over families over agents, and a bound rather than a figure:
+ * an attacker that chooses its own route has no exact cost, and an average here
+ * would invite a gate run to exceed what was agreed to (ADR-0007).
+ */
+export interface AdaptiveEstimate {
+  layer: string
+  turn_calls: number
+  turn_ceiling: number
+  turns_per_episode: number
+  episodes_per_family: number
+  kind: string
+  basis: string
+  cost: string
+  statement: string
+}
+
+/** Two figures, two ceilings, and no third field anywhere on the response. */
+export interface GateRunEstimate {
+  scored: ScoredEstimate
+  adaptive: AdaptiveEstimate
+  currency: string
+  statement: string
+}
+
+/**
+ * A gate run recorded and halted in front of its estimate.
+ *
+ * The estimate arrives once, here, from the request that created the gate run —
+ * the same division `POST /runs` makes, because the route that reports progress
+ * reports no estimate: nothing on it spans the two layers.
+ */
+export interface GateRunStarted {
+  gate_run_id: string
+  status: string
+  statement: string
+  estimate: GateRunEstimate
+  library: string
+  agents: string[]
+  cases: number
+}
+
+/** The three attestation statements and the declared cost, and nothing else. */
+export interface StartGateRunBody {
+  attestation: AttestationBody
+  cost: CostBody
+}
+
+/**
+ * One reference agent's failure rate on one family, with what it came from.
+ *
+ * The counts and the interval travel with the value, because a rate with no
+ * denominator beside it is a number a reader has to trust.
+ */
+export interface MeasuredRate {
+  agent: string
+  value: number
+  successes: number
+  attempts: number
+  lower: number
+  upper: number
+  stated: string
+}
+
+/**
+ * One family at one gate run: three rates, its `D`, its ordering, its verdict.
+ *
+ * There is no band here and no severity. A band summarises one family for one
+ * *target* and the subject of a gate run is the bench (ADR-0014, ADR-0018).
+ */
+export interface FamilyFigures {
+  family: string
+  rates: MeasuredRate[]
+  discrimination: number
+  intervals_separate: boolean
+  inversions: number
+  monotonic: boolean
+  passes: boolean
+  stated: string
+}
+
+/** One family barred from the counts, with the reason and the reading behind it. */
+export interface ExcludedFamily {
+  family: string
+  reason: string
+  kappa: number | null
+  stated: string
+}
+
+/** One judged family's κ against the gold set, or the stated absence of one. */
+export interface JudgedReliability {
+  family: string
+  kappa: number | null
+  stated: string
+}
+
+/**
+ * What a gate run decided, and everything needed to re-derive it.
+ *
+ * Six families at once, which makes this the surface most likely to grow a
+ * composite: a mean of six discrimination scores would look like a figure about the
+ * bench. There is no field for one, and the counts on it are counts *of families*
+ * that the rule declares (ADR-0005, ADR-0003).
+ */
+export interface GateDecided {
+  outcome: string
+  families_passing: number
+  families_monotonic: number
+  fit_families: number
+  families: FamilyFigures[]
+  excluded: ExcludedFamily[]
+  reliability: JudgedReliability[]
+  library: { cases: number; digest: string }
+  attempts: number
+  agents: string[]
+  stated: string
+  read_from: string
+}
+
+/** What a gate run wrote to the case library, and where it wrote it. */
+export interface WroteBack {
+  library: string
+  readings: number
+  unread: string[]
+  retired: string[]
+  stated: string
+}
+
+/**
+ * Where one gate run has got to, and what it decided if it has.
+ *
+ * `rule` is above `decision` on the wire as it is on the screen: an outcome read
+ * with no bar beside it is a verdict somebody trusted (ADR-0003). Progress is the
+ * same two per-layer readings a run reports, because a position is neither a run
+ * nor a gate run and the units are the units either way.
+ */
+export interface GateRunReading {
+  gate_run_id: string
+  status: string
+  statement: string
+  rule: DeclaredRule
+  scored: ScoredProgress
+  adaptive: AdaptiveProgress
+  decision: GateDecided | null
+  written: WroteBack | null
+}
+
+/**
+ * The gate runs on the record, and whether this bench may start another.
+ *
+ * Read before a control is drawn rather than after one is pressed: a screen that
+ * offered a start button on a deployment which ships no reference agents would be
+ * offering an operation the bench refuses, and the refusal it would then show is a
+ * fact the screen could have stated in the first place.
+ */
+export async function gateRuns(): Promise<GateRuns> {
+  return (await fetched(GATE_RUNS_PATH, 'gate runs')) as GateRuns
+}
+
+/**
+ * Start a gate run: record the three statements, declare the estimate, and halt.
+ *
+ * A `202` means the gate run exists and is holding its interrupt, which is before
+ * anything has been sent to a reference agent and before one case record has been
+ * written to. It also means this bench's case library is now held by it — a second
+ * gate run is refused rather than queued, and the refusal names the holder.
+ *
+ * The refusals are outcomes rather than exceptions, on `startRun`'s reasoning: a
+ * bench that ships no reference agents, holds no writable library, has no
+ * adjudicating instrument, or is already running a gate is a state the operator has
+ * to be told about in words, and an exception would lose the sentence on the way to
+ * whatever caught it.
+ */
+export async function startGateRun(
+  body: StartGateRunBody,
+): Promise<GateRunOutcome> {
+  let response: Response
+  try {
+    response = await fetch(GATE_RUNS_PATH, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+  } catch (unreachable) {
+    return { kind: 'unreachable', statement: `${GATE_RUN_UNREACHABLE} (${unreachable})` }
+  }
+  if (response.ok) {
+    return { kind: 'started', gateRun: (await response.json()) as GateRunStarted }
+  }
+  return { kind: 'refused', statement: await refusalIn(response) }
+}
+
+/**
+ * What became of a request to start a gate run.
+ *
+ * `refused` carries the bench's own sentence, which is the one that says which of
+ * the four reasons it was. `unreachable` is no answer at all: nothing was started,
+ * and the operator has an API to check rather than a form to fix.
+ */
+export type GateRunOutcome =
+  | { kind: 'started'; gateRun: GateRunStarted }
+  | { kind: 'refused'; statement: string }
+  | { kind: 'unreachable'; statement: string }
+
+const GATE_RUN_UNREACHABLE =
+  'the bench did not answer, so it is not known whether a gate run was started. ' +
+  'Read the list of gate runs before asking again: one holds the case library ' +
+  'while it goes, and a second would be refused rather than queued.'
+
+/**
+ * Answer a gate run's interrupt. A `confirmed: true` is the only thing that spends.
+ *
+ * The same body a run's interrupt takes, deliberately: the answer to an interrupt is
+ * the consent mechanism itself and there is one of those in this app (ADR-0007).
+ * What is not shared is the record it answers — this posts under `/gate-runs`, and a
+ * run id here is a `404` rather than an interrupt answered for something else.
+ *
+ * A `confirmed: false` goes on the wire too, for the reason a declined run does: it
+ * records the gate run as declined by a person rather than leaving it to time out as
+ * unanswered, and the bench's own sentence for it says that nothing was sent and not
+ * one case record was written to.
+ */
+export async function answerTheGateRunsInterrupt(
+  gateRunId: string,
+  body: ApprovalBody,
+): Promise<GateApprovalOutcome> {
+  let response: Response
+  try {
+    response = await fetch(
+      `${GATE_RUNS_PATH}/${encodeURIComponent(gateRunId)}/approval`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      },
+    )
+  } catch (unreachable) {
+    return {
+      kind: 'unreachable',
+      statement: `${ANSWER_UNREACHABLE} (${unreachable})`,
+    }
+  }
+  if (response.ok) {
+    return { kind: 'answered', gateRun: (await response.json()) as GateRunStarted }
+  }
+  const statement = await refusalIn(response)
+  if (response.status === 409) {
+    return { kind: 'no_longer_waiting', statement }
+  }
+  return { kind: 'refused', statement }
+}
+
+/** What became of an answer to a gate run's interrupt. */
+export type GateApprovalOutcome =
+  | { kind: 'answered'; gateRun: GateRunStarted }
+  | { kind: 'no_longer_waiting'; statement: string }
+  | { kind: 'refused'; statement: string }
+  | { kind: 'unreachable'; statement: string }
+
+/**
+ * Where one gate run has got to, per layer, and what it decided if it has.
+ *
+ * Polled while it goes. Nothing about this request touches a reference agent —
+ * asking a gate run how it is going is a question put to the bench.
+ */
+export async function gateRunReading(gateRunId: string): Promise<GateRunReading> {
+  const response = await fetch(
+    `${GATE_RUNS_PATH}/${encodeURIComponent(gateRunId)}`,
+  )
+  if (!response.ok) {
+    throw new Error(
+      `the bench has no gate run ${gateRunId} to report on (HTTP ${response.status})`,
+    )
+  }
+  return (await response.json()) as GateRunReading
 }
 
 /** Where the runs on the record are listed. The path a run is started at, read. */

@@ -1,4 +1,4 @@
-"""Runs the gate. One entry point, no web layer involved.
+"""Runs the gate from a terminal, which is where a gate run started.
 
     uv run python -m scripts.gate --identity "your name"
     uv run python -m scripts.gate --identity "your name" --price-per-call 0.0005
@@ -33,6 +33,13 @@ has to exist before the first user does, and a gate answer that lived only in a
 terminal is a gate answer nobody can check (spec story 80). The curated narrative
 stays in `docs/validation.md`; what is written here is the run itself.
 
+**One writer at a time on one library.** This run takes an exclusive lease on the
+case directory before it reads anything and gives it back however it ends, because a
+gate run started from the console (`backend/api/gate_runs.py`, ADR-0021) writes to the
+same records: two overlapping runs would decide a retirement off a series missing a
+reading. A run that finds the library held names the holder and stops, having sent
+nothing.
+
 **It writes the decay series it measured back onto the case records.** `D` for every
 case it read, appended to that case's own `[[history]]` (spec story 72), and a case
 below the declared floor on two consecutive gate runs marked retired with its date
@@ -44,8 +51,12 @@ that question open on purpose.
 
 **It asks before it sends anything**, on the same terms as every other entry point:
 the three attestation statements one at a time, then the estimated cost at the
-approval interrupt. Answering no to any of them spends nothing, and nothing here
-has a `--yes` (ADR-0007).
+approval interrupt. Answering no to any of them spends nothing, and nothing here has
+a `--yes` (ADR-0007). That is unchanged by there being a second entry point now: the
+console asks the same three statements in a browser and records the same
+`Attestation`, and the reason this command cannot simply be spawned by it is the
+reason there is no `--yes` — `attest` treats absent or piped input as a refusal, so a
+gate run nobody was watching would answer no three times and spend nothing.
 
 All three reference agents run, and there is no flag to run fewer: `D` is trivial
 minus hardened and monotonicity is read across all three, so a gate on two agents
@@ -73,6 +84,7 @@ from backend.bench.completion import (
 from backend.bench.contract import TargetConfig
 from backend.bench.gate import GateResult, NotAGateRun, read_gate
 from backend.bench.goldset import load_gold_sets, measure_reliability
+from backend.bench.lease import LibraryBusy, holding_the_library
 from backend.bench.library import Case
 from backend.bench.retirement import live_library, readings_of, store
 from backend.bench.rule import DECLARED_RULE
@@ -199,7 +211,33 @@ def main(argv: Sequence[str] | None = None) -> int:
             "and reads the records"
         ),
     )
-    args = parser.parse_args(argv)
+    return _run_it(parser.parse_args(argv))
+
+
+def _run_it(args: argparse.Namespace) -> int:
+    """This gate run, holding the case library it is about to write back to.
+
+    A gate run reads every case record and appends a reading to every one of them, so
+    the library has one writer at a time (`bench/lease.py`): the lease is taken before
+    the library is read and given back however this run ends. It is a file in the
+    library's own directory rather than a lock in this process, because a gate run
+    started from the console writes to the same records — the two entry points have to
+    exclude each other and not only themselves (ADR-0021).
+
+    A run that finds the library held prints who holds it and stops, having sent
+    nothing. Nothing here waits: a gate run is many minutes, and a command that hung
+    for one is a command nobody can tell from a hung run of its own.
+    """
+    try:
+        with holding_the_library(Path(args.cases), f"{args.identity}, at a terminal"):
+            return run_the_gate(args)
+    except LibraryBusy as held:
+        print(f"\nThis case library is already being written to:\n{held}")
+        return EXIT_WITHHELD
+
+
+def run_the_gate(args: argparse.Namespace) -> int:
+    """The gate run itself, under the lease `_run_it` is holding."""
 
     try:
         call_price = price(args.price_per_call, args.currency)

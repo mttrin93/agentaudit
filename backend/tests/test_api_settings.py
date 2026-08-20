@@ -51,6 +51,8 @@ from fastapi.testclient import TestClient
 from backend.api.app import (
     BENCH_GATE_ROUTE,
     BENCH_SETTINGS_ROUTE,
+    GATE_RUN_APPROVAL_ROUTE,
+    GATE_RUNS_ROUTE,
     NOT_HELD_BY_THIS_BENCH,
     create_app,
 )
@@ -491,4 +493,14 @@ def test_no_route_under_the_bench_prefix_changes_a_setting() -> None:
         for method in route.methods or set()
         if method not in {"GET", "HEAD"}
     }
-    assert writes == {"/nonces", "/runs", "/runs/{run_id}/approval"}
+    assert writes == {
+        "/nonces",
+        "/runs",
+        "/runs/{run_id}/approval",
+        # The gate-run family, since ADR-0021: one route that records the attestation
+        # and declares the estimate, one that answers the halt. Neither is under
+        # `/bench`, and neither takes a key, a model or a threshold — a gate run
+        # rewrites the case library and changes no setting.
+        GATE_RUNS_ROUTE,
+        GATE_RUN_APPROVAL_ROUTE,
+    }

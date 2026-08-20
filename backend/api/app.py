@@ -1,15 +1,17 @@
 """The HTTP surface: a nonce, a run, the answer to the run's interrupt, and the
 artefact it produced.
 
-Twelve routes. `POST /nonces` issues the value an operator plants to prove they
-control the endpoint; `POST /runs` records the attestation, declares the estimate
-and halts; `POST /runs/{id}/approval` answers the halt; `GET /runs` lists the runs on
-the record; `GET /runs/{id}` says where the run has got to; four under `/report/{id}`
-— three that serve the files one signed run leaves, the payload, the rendering and
-the detached signature, and a fourth that says what a verifier makes of them; `GET
-/artefacts` lists every signed artefact with that same reading beside it; and two
-under `/bench`, whose subject is the bench rather than any run — `GET /bench/gate`
-and `GET /bench/settings`.
+Sixteen routes, in three families. `POST /nonces` issues the value an operator
+plants to prove they control the endpoint; `POST /runs` records the attestation,
+declares the estimate and halts; `POST /runs/{id}/approval` answers the halt; `GET
+/runs` lists the runs on the record; `GET /runs/{id}` says where the run has got to;
+four under `/report/{id}` — three that serve the files one signed run leaves, the
+payload, the rendering and the detached signature, and a fourth that says what a
+verifier makes of them; `GET /artefacts` lists every signed artefact with that same
+reading beside it; two under `/bench`, whose subject is the bench rather than any run
+— `GET /bench/gate` and `GET /bench/settings`; and four under `/gate-runs`, which are
+the newest and the only ones on this surface that spend money on the bench's own
+behalf.
 
 **Neither route under `/runs` returns a figure spanning the two layers.** Calls
 spent are reported per layer by both — `GET /runs/{id}` for one run in flight,
@@ -17,18 +19,39 @@ spent are reported per layer by both — `GET /runs/{id}` for one run in flight,
 `scored` and `adaptive` and nowhere else, so no caller can be handed a blended
 number and no list can grow a totals row (ADR-0007, ADR-0010).
 
-**`GET /bench/gate` cites and never starts.** It is the only route here whose
-subject is the instrument: the declared rule the gate is decided under, and then the
-outcome of the gate run this bench was configured to cite, the date it was decided,
-the library version it was earned at, and the path of the document that recorded it.
-The rule is above the outcome on the wire as it is on the screen, because a pass with
-no bar beside it is a verdict to be trusted rather than an answer to be re-derived
-(ADR-0003). A gate run is 830-odd calls from a terminal that asks three attestation
-statements one at a time (PLAN.md §8, `scripts/gate.py`), so there is no route that
-begins one and no record type for one — this route reads the rule the bench declares
-and the citation the deployment declared, and nothing else. The document is **named
-and never opened**: a route that parsed the bench's own prose output would break on a
-rewording, and the citation already carries every field a reader needs.
+**`GET /bench/gate` cites and never starts.** The declared rule the gate is decided
+under, and then the outcome of the gate run this bench was configured to cite, the
+date it was decided, the library version it was earned at, and the path of the
+document that recorded it. The rule is above the outcome on the wire as it is on the
+screen, because a pass with no bar beside it is a verdict to be trusted rather than
+an answer to be re-derived (ADR-0003). This route reads the rule the bench declares
+and the citation the deployment declared, and nothing else; the document it names is
+**named and never opened**, because a route that parsed the bench's own prose output
+would break on a rewording. Starting a gate run is not here and never was: `/bench`
+is read-only in every method, and what begins one is the family below.
+
+**`/gate-runs` starts one, and a gate run is not a run.** Four routes — `POST
+/gate-runs` records the three attestation statements and declares the estimate per
+layer, `POST /gate-runs/{id}/approval` answers the halt, `GET /gate-runs` lists them
+and says whether another may start, `GET /gate-runs/{id}` reports progress per layer
+and then the decision under the rule. PLAN.md §8 put this on the command line and
+[ADR-0021](../../docs/adr/0021-the-console-may-start-a-gate-run.md) reverses that,
+which is a decision of record changed rather than a route added: read the ADR for what
+it gives up. What the reversal does not touch is either control — the attestation is
+the record `registration.py` refuses to construct incomplete, and the halt is the
+same `PendingApproval` seam `POST /runs` answers — and **there is no flag, setting or
+environment variable on this surface that lets a gate run proceed without both**.
+
+A gate run is its own record and its own family for the reason a target report has no
+gate-decision field: a run produces rates about somebody's agent, a gate run produces
+a decision about this bench, and nothing here takes either (ADR-0018, ADR-0010).
+`GateRunRecord` and `RunRecord` never appear in one signature; no route under `/runs`
+takes a gate run id and no route under `/gate-runs` takes a run id. What *is* shared
+is the consent mechanism, deliberately: one `Attestation`, one interrupt seam, one
+`ApprovalRequest`, because a second copy of a consent flow is a second place for it
+to be weakened. The per-family figures the decision carries — the three reference
+agents' rates and each family's `D` — are read off the `GateResult` the run left in
+memory and never out of a document.
 
 **`GET /bench/settings` states and never changes.** The second route under
 `/bench`, and a reader in the strong sense: the two key fingerprints — the key an
@@ -135,6 +158,16 @@ from fastapi import Body, FastAPI, HTTPException, Response, status
 from fastapi import Path as PathParam
 from pydantic import BaseModel, Field
 
+from backend.api.gate_runs import DEPLOYED_LIBRARY as DEPLOYED_LIBRARY_MOUNT
+from backend.api.gate_runs import (
+    BenchGateRuns,
+    CannotRunAGate,
+    GateRunBench,
+    GateRunRecord,
+    seeded_library,
+    shipped_agents,
+)
+from backend.api.gate_runs import NoLongerWaiting as GateRunNoLongerWaiting
 from backend.api.report import (
     CHECKED_BY_THE_BENCH_THAT_PRODUCED_IT,
     UNDECLARED_MODEL,
@@ -155,12 +188,14 @@ from backend.api.runs import (
 from backend.bench.adaptive.budget import DECLARED_ADAPTIVE_BUDGET, AdaptiveBudget
 from backend.bench.admission import admitted_library
 from backend.bench.contract import NOT_A_SECURITY_RESULT, RetryPolicy, TargetConfig
+from backend.bench.gate import GateResult, stated_outcome, stated_rate
 from backend.bench.library import Case, CaseStatus, LibraryVersion
 from backend.bench.payload import DeclaredModels, GateCitation, citation
 from backend.bench.registration import ECHO_PROBE, Attestation
 from backend.bench.rendering import REPORT_MARKDOWN, REPORT_PAYLOAD
 from backend.bench.retirement import retired_cases
 from backend.bench.rule import DECLARED_RULE, GateRule
+from backend.bench.scorer import FamilyOutcome, Rate
 from backend.bench.signing import (
     SIGNATURE_FILE,
     SIGNING_KEY_VARIABLE,
@@ -272,6 +307,17 @@ def _refused(refusal: ReportRefusal, statement: str) -> dict[str, str]:
     """That refusal as the body of a `detail`, which is plain data by the time it
     reaches FastAPI."""
     return Refusal(outcome=refusal, statement=statement).model_dump(mode="json")
+
+
+def _cannot(refused: CannotRunAGate) -> dict[str, str]:
+    """Why a gate run may not start, as a name beside the sentence that explains it.
+
+    The same division `_refused` makes and for the same reason: the name is the field
+    a caller branches on and the sentence is the one a person reads. Four names, and
+    two of them are permanent facts about the deployment while two are about right
+    now — a status code carries neither difference.
+    """
+    return {"outcome": str(refused.refusal), "statement": str(refused)}
 
 
 class TargetRequest(BaseModel):
@@ -1890,6 +1936,572 @@ def bench_settings(config: BenchConfig) -> BenchSettings:
     )
 
 
+GATE_RUNS_ROUTE = "/gate-runs"
+"""Where a gate run is started, listed, and read. Its own family, and never `/runs`.
+
+**A gate run is not a run and this is not a route under `/runs`.** A run is one pass
+over one target and comes back with rates, intervals and bands about somebody's
+agent; a gate run is the whole library against three agents of this project's own
+construction and comes back with a decision about this bench (ADR-0018). Nothing on
+this prefix takes a run id, nothing under `/runs` takes a gate run id, and no model
+on either is the other's.
+
+**It is also not under `/bench`.** `/bench` is the instrument's own prefix and every
+method on it is a `GET` — a reader in the strong sense, asserted over the route table
+from two directions. A gate run spends about 830 calls and rewrites the case library,
+so it belongs where a caller can see that it is not a read.
+"""
+
+GATE_RUN_ROUTE = "/gate-runs/{gate_run_id}"
+GATE_RUN_APPROVAL_ROUTE = "/gate-runs/{gate_run_id}/approval"
+"""The two routes for one gate run: where it is read, and where its halt is answered.
+
+The interrupt is a route rather than a field on the start request for the reason
+`POST /runs/{id}/approval` is: a `confirmed: true` in the body that started the run
+would be a form answered by whatever composed it, and a separate answer to a graph
+that has already halted is a decision taken in front of the figures (ADR-0007).
+"""
+
+A_GATE_RUN_IS_NOT_A_RUN = (
+    "a gate run, which is not a run. Its subject is this bench: the whole live case "
+    "library against three reference agents of known construction, decided by the "
+    "declared rule. It produces no rate about anybody's target and no report, and no "
+    "route here takes a run id (ADR-0018)"
+)
+"""Said on the list, because a screenshot of a list travels alone."""
+
+
+class MayStart(BaseModel):
+    """This bench can run a gate, and what one would do before it does it.
+
+    Two facts and no control: the caller learns that the affordance is available and
+    what pressing it costs. `available` is a literal so this shape and the one below
+    are two facts rather than one record with empty fields.
+    """
+
+    available: Literal[True] = True
+    library: str
+    """The case library a gate run would read and write back to, named as the path
+    it is. A gate run is not a read, and the operator sees where it writes."""
+
+    statement: str
+    """What starting one does, and what it asks first.
+
+    The three agents are deliberately not named here: they are served by a different
+    application this bench holds no handle on, and naming them would mean this module
+    importing test equipment a deployment may legitimately not ship. The console
+    names them from the one list it already keeps for the gate screen.
+    """
+
+
+class MayNotStart(BaseModel):
+    """This bench cannot run a gate, and the named reason it cannot.
+
+    A stated absence rather than a missing field, and never an empty `MayStart`: a
+    deployment that ships no reference agents and a library already held by another
+    gate run are different facts, and only one of them is answered by waiting.
+    """
+
+    available: Literal[False] = False
+    refusal: str
+    """One of `NotStartable`'s four members — the field a caller branches on."""
+
+    stated: str
+
+
+THE_GATE_RUN_IS_AVAILABLE = (
+    "this bench can run a gate: it ships the three reference agents, it holds a case "
+    "library it may write to, and no gate run is holding that library now. Starting "
+    "one asks the three attestation statements one at a time and then presents the "
+    "estimate per layer, and nothing is sent and nothing is written until the "
+    "estimate is answered"
+)
+
+
+def may_start(gates: BenchGateRuns) -> MayStart | MayNotStart:
+    """Whether a gate run may start on this bench right now, and why not if not.
+
+    Read off `BenchGateRuns.why_not`, which is the one place the four refusals are
+    decided: a second reading here would be a screen that offered a control the bench
+    would refuse, or withheld one it would have taken.
+    """
+    refusal = gates.why_not()
+    if refusal is not None:
+        held = gates.holder()
+        return MayNotStart(
+            refusal=str(refusal),
+            stated=f"{refusal.stated()}. {held}" if held else refusal.stated(),
+        )
+    library = gates.bench.library
+    return MayStart(library=str(library), statement=THE_GATE_RUN_IS_AVAILABLE)
+
+
+class GateRunRow(BaseModel):
+    """One gate run on the record: when, where it got to, what it spent per layer.
+
+    A row and never a decision. There is no outcome on it and no per-family figure:
+    those are read from the gate run's own route, because a decision lifted onto a
+    list arrives without the rule it was taken under (ADR-0003).
+    """
+
+    gate_run_id: str
+    recorded_at: str
+    status: str
+    statement: str
+    spent: dict[str, int]
+    """Calls spent per layer, and no third figure. Two keys, and nothing here adds
+    them or adds either across the rows (ADR-0007, ADR-0010)."""
+
+
+class GateRuns(BaseModel):
+    """The gate runs this bench has started, and whether it may start another.
+
+    The start availability is on the list rather than on `GET /bench/gate`, because
+    `/bench` is a reader about the instrument and *may I start one right now* is a
+    fact about this moment — and because the console needs the answer before it draws
+    a control, not after somebody presses it.
+    """
+
+    start: MayStart | MayNotStart
+    gate_runs: list[GateRunRow]
+    statement: str = A_GATE_RUN_IS_NOT_A_RUN
+
+
+def gate_run_row(record: GateRunRecord) -> GateRunRow:
+    """One gate run as it stands, built in one place so every route agrees."""
+    return GateRunRow(
+        gate_run_id=record.gate_run_id,
+        recorded_at=record.recorded_at.isoformat(),
+        status=str(record.status),
+        statement=record.statement,
+        spent={str(layer): record.spent[layer] for layer in Layer},
+    )
+
+
+def gate_runs_response(
+    gates: BenchGateRuns, records: Sequence[GateRunRecord]
+) -> GateRuns:
+    """The list, and the one fact a screen needs before it offers a control."""
+    return GateRuns(
+        start=may_start(gates), gate_runs=[gate_run_row(record) for record in records]
+    )
+
+
+THE_SCORED_ESTIMATE_IS_EXACT = (
+    "the scored layer, and it is arithmetic: every live case at the declared attempts "
+    "per case, against each of the three reference agents, plus the one registration "
+    "probe each. Exact because it is a multiplication, and held to the scored layer's "
+    "own ceiling below it"
+)
+
+THE_ADAPTIVE_ESTIMATE_IS_A_CEILING = (
+    "the adaptive layer, and it is a bound rather than a figure: an attacker that "
+    "chooses its own route has no exact cost, so what is shown is the worst case — "
+    "every episode running to its turn cap, against each agent. An average here would "
+    "invite a gate run to exceed what was agreed to (ADR-0007)"
+)
+
+TWO_FIGURES_AND_NO_THIRD = (
+    "two figures, and there is no third one on this response. The two layers are "
+    "enforced against two separate counters, so neither can borrow what the other did "
+    "not spend, and a blended number would hide which half of a gate run is spending "
+    "the operator's budget. Nothing shown here with a ≤ in front of it may be "
+    "exceeded (ADR-0007, ADR-0010)"
+)
+
+
+class ScoredEstimate(BaseModel):
+    """What a gate run's scored layer will cost, in the units it is declared in.
+
+    Attempts over cases over agents. Not one numeric field here appears on the model
+    below: the two layers share no number to add, which is the invariant carried by
+    the type rather than by a comment asking for care (`ScoredCeiling`'s own reason).
+    """
+
+    layer: Literal[Layer.SCORED] = Layer.SCORED
+    attempt_calls: int
+    """The calls this layer will make. Exact, and the arithmetic is in `basis`."""
+
+    attempt_ceiling: int
+    """The scored layer's own enforced ceiling — the figure above with every message
+    retried to its transport limit. The larger figure is the enforced one, and a run
+    may not exceed anything it was shown with a `≤` in front of it (ADR-0007)."""
+
+    cases: int
+    attempts_per_case: int
+    kind: str
+    basis: str
+    cost: str
+    statement: str = THE_SCORED_ESTIMATE_IS_EXACT
+
+
+class AdaptiveEstimate(BaseModel):
+    """What a gate run's adaptive layer may cost, in the units *it* is declared in.
+
+    Turns over episodes over families over agents. A separate model with no numeric
+    field in common with the one above, for the reason the two ceilings on the
+    settings route are two records: an attempt is the unit of a denominator and a turn
+    is deliberately not one (CONTEXT.md, ADR-0010).
+    """
+
+    layer: Literal[Layer.ADAPTIVE] = Layer.ADAPTIVE
+    turn_calls: int
+    """The most this layer may spend: every episode to its cap, per agent."""
+
+    turn_ceiling: int
+    """The adaptive layer's own enforced ceiling, held on its own counter."""
+
+    turns_per_episode: int
+    episodes_per_family: int
+    kind: str
+    basis: str
+    cost: str
+    statement: str = THE_ADAPTIVE_ESTIMATE_IS_A_CEILING
+
+
+class GateRunEstimate(BaseModel):
+    """The consent surface for a gate run: two figures, two ceilings, no total.
+
+    Two differently-typed records and no third field. There is no name here under
+    which a sum could be added without inventing a model to hold it, and there is no
+    arithmetic in the function that builds it: every number is read off the
+    `RunBudget` the gate run is held to.
+    """
+
+    scored: ScoredEstimate
+    adaptive: AdaptiveEstimate
+    currency: str
+    statement: str = TWO_FIGURES_AND_NO_THIRD
+
+
+def gate_run_estimate(record: GateRunRecord, config: BenchConfig) -> GateRunEstimate:
+    """The estimate this gate run is holding, per layer, off its own budget.
+
+    Read from `RunBudget` and from the two records that declare the units — the gate
+    rule and the adaptive budget — and nothing here computes a figure of its own.
+    `BudgetPayload`'s bounded total and hard ceiling are deliberately not carried:
+    what replaces them is each layer beside *the ceiling it is enforced against*,
+    which is what the run screen's interrupt already presents (ADR-0007).
+    """
+    budget = record.budget
+    estimate = budget.estimate
+    return GateRunEstimate(
+        scored=ScoredEstimate(
+            attempt_calls=estimate.scored.calls,
+            attempt_ceiling=budget.ceiling(Layer.SCORED),
+            cases=len(record.cases),
+            attempts_per_case=config.rule.attempts_per_case,
+            kind=str(estimate.scored.kind),
+            basis=estimate.scored.basis,
+            cost=estimate.cost(estimate.scored),
+        ),
+        adaptive=AdaptiveEstimate(
+            turn_calls=estimate.adaptive.calls,
+            turn_ceiling=budget.ceiling(Layer.ADAPTIVE),
+            turns_per_episode=config.adaptive.turns_per_episode,
+            episodes_per_family=config.adaptive.episodes_per_family,
+            kind=str(estimate.adaptive.kind),
+            basis=estimate.adaptive.basis,
+            cost=estimate.cost(estimate.adaptive),
+        ),
+        currency="" if estimate.price is None else estimate.price.currency,
+    )
+
+
+class GateRunStarted(BaseModel):
+    """A gate run recorded and halted in front of its estimate.
+
+    The estimate is returned once, here, by the request that created the gate run —
+    the same division `POST /runs` uses, and for the same reason: the route that
+    reports progress reports no estimate, because nothing on it spans the layers.
+    """
+
+    gate_run_id: str
+    status: str
+    statement: str
+    estimate: GateRunEstimate
+    library: str
+    """The case library this gate run holds and will write back to."""
+
+    agents: list[str]
+    cases: int
+
+
+def gate_run_started(record: GateRunRecord, config: BenchConfig) -> GateRunStarted:
+    """One gate run as it stands right now, with the figures it is holding."""
+    return GateRunStarted(
+        gate_run_id=record.gate_run_id,
+        status=str(record.status),
+        statement=record.statement,
+        estimate=gate_run_estimate(record, config),
+        library=str(record.library),
+        agents=list(record.agents),
+        cases=len(record.cases),
+    )
+
+
+class MeasuredRate(BaseModel):
+    """One reference agent's failure rate on one family, with what it came from.
+
+    The counts and the interval travel with the value, because a rate with no
+    denominator beside it is a number a reader has to trust: thirty attempts per
+    family per agent is the declared sample size, and it is printed rather than
+    implied (ADR-0003).
+    """
+
+    agent: str
+    value: float
+    successes: int
+    attempts: int
+    lower: float
+    upper: float
+    stated: str
+
+
+class FamilyFigures(BaseModel):
+    """One family at this gate run: three rates, its `D`, its ordering, its verdict.
+
+    Every number the per-family pass turned on, beside the verdict rather than
+    instead of it, so a reader re-derives the line rather than trusting it. There is
+    no band here and no severity: a band summarises one family for one *target*, and
+    the subject of a gate run is the bench (ADR-0014, ADR-0018).
+    """
+
+    family: str
+    rates: list[MeasuredRate]
+    """The three agents in construction order — hardened, weak, trivial — because
+    the ordering is what monotonicity is read across."""
+
+    discrimination: float
+    """`D` for this family: trivial minus hardened, from this gate run's attempts."""
+
+    intervals_separate: bool
+    inversions: int
+    monotonic: bool
+    passes: bool
+    stated: str
+
+
+class ExcludedFamily(BaseModel):
+    """One family barred from the counts, with the reason and the reading behind it.
+
+    Excluded is not scored a fail and not force-passed: its rates were measured and
+    are still recorded, and they decide nothing in either count (ADR-0015).
+    """
+
+    family: str
+    reason: str
+    kappa: float | None
+    stated: str
+
+
+class JudgedReliability(BaseModel):
+    """One judged family's κ against the gold set, or the stated absence of one."""
+
+    family: str
+    kappa: float | None
+    stated: str
+
+
+FIGURES_FROM_THE_RUN_ITSELF = (
+    "every figure here was read off the attempts this gate run just made, in the "
+    "process that made them. Nothing on this response was parsed out of a document: "
+    "the dated Markdown a command-line gate run writes is prose, and a screen that "
+    "depended on its shape would break on a rewording"
+)
+
+
+class GateDecided(BaseModel):
+    """What this gate run decided, and everything a reader needs to re-derive it.
+
+    The counts are over the fit families and the excluded ones are carried beside
+    them with their reasons. There is no composite figure here, nothing that adds two
+    families and no severity scale: the outcome is one of three answers to a stated
+    rule, and the rule is served above this on the same response (ADR-0003, ADR-0005).
+    """
+
+    outcome: str
+    """`passed`, `failed` or `not_decided` — three answers, because *not decided* is
+    not a polite fail (`scorer.GateOutcome`)."""
+
+    families_passing: int
+    families_monotonic: int
+    fit_families: int
+    families: list[FamilyFigures]
+    excluded: list[ExcludedFamily]
+    reliability: list[JudgedReliability]
+    library: CitedLibrary
+    attempts: int
+    agents: list[str]
+    stated: str
+    """The whole decision as the gate prints it, from `GateResult.stated()` — the
+    same text a command-line run puts in its document."""
+
+    read_from: str = FIGURES_FROM_THE_RUN_ITSELF
+
+
+def _rate(agent: str, rate: Rate) -> MeasuredRate:
+    """One agent's rate on one family, off the record the scorer produced."""
+    return MeasuredRate(
+        agent=agent,
+        value=rate.value,
+        successes=rate.successes,
+        attempts=rate.attempts,
+        lower=rate.interval.lower,
+        upper=rate.interval.upper,
+        stated=stated_rate(rate),
+    )
+
+
+def family_figures(outcome: FamilyOutcome) -> FamilyFigures:
+    """One family's line, read off the outcome the gate decided it on."""
+    rates = outcome.rates
+    return FamilyFigures(
+        family=str(outcome.family),
+        rates=[
+            _rate("hardened", rates.hardened),
+            _rate("weak", rates.weak),
+            _rate("trivial", rates.trivial),
+        ],
+        discrimination=outcome.discrimination,
+        intervals_separate=outcome.intervals_separate,
+        inversions=outcome.monotonicity.inversions,
+        monotonic=outcome.monotonicity.holds,
+        passes=outcome.passes,
+        stated=stated_outcome(outcome),
+    )
+
+
+def gate_decided(gate: GateResult) -> GateDecided:
+    """The decision as it goes on the wire, read off the result held in memory.
+
+    Every field is the `GateResult` this gate run produced. Nothing is recomputed
+    here — a second reading of the rates would be a second arithmetic — and nothing
+    is read from the filesystem.
+    """
+    decision = gate.decision
+    return GateDecided(
+        outcome=str(decision.outcome),
+        families_passing=decision.families_passing,
+        families_monotonic=decision.families_monotonic,
+        fit_families=decision.fit_families,
+        families=[family_figures(outcome) for outcome in decision.outcomes],
+        excluded=[
+            ExcludedFamily(
+                family=str(excluded.family),
+                reason=str(excluded.reason),
+                kappa=excluded.kappa,
+                stated=excluded.stated(),
+            )
+            for excluded in decision.excluded
+        ],
+        reliability=[
+            JudgedReliability(
+                family=str(family),
+                kappa=None if measured is None else measured.kappa,
+                stated=(
+                    measured.stated()
+                    if measured is not None
+                    else "no κ was measured against the gold set, so the family is "
+                    "not fit to report and decides nothing here"
+                ),
+            )
+            for family, measured in sorted(gate.reliability.items())
+        ],
+        library=CitedLibrary(cases=gate.library.cases, digest=gate.library.digest),
+        attempts=gate.attempts,
+        agents=list(gate.agents),
+        stated=gate.stated(),
+    )
+
+
+class WroteBack(BaseModel):
+    """What this gate run wrote to the case library, and where it wrote it.
+
+    On the response because it is the half of a gate run that outlives it: the series
+    the *next* gate run reads, and the retirements this one marked. A run that wrote
+    nothing is absent rather than a zero here — `written` is null until there is a
+    write-back to report.
+    """
+
+    library: str
+    readings: int
+    unread: list[str]
+    retired: list[str]
+    stated: str
+
+
+class GateRunReading(BaseModel):
+    """Where one gate run has got to, per layer, and what it decided if it has.
+
+    **The rule is above the decision, and that is not a layout preference.** A pass
+    or a fail means nothing without the bar it was decided against, so the declared
+    rule is served first and an operator can re-derive the answer rather than trust
+    it (ADR-0003). It is `DECLARED_RULE` — the record every scorer in this repository
+    reads — and not a copy kept for a screen.
+
+    **Progress is per layer and there is no figure that spans them.** The scored
+    layer's position is family, case and attempt; the adaptive layer's is family,
+    episode and turn — the same two models `GET /runs/{id}` reports a run's progress
+    with, because a position is neither a run nor a gate run and the units are the
+    units either way (CONTEXT.md, ADR-0010).
+    """
+
+    gate_run_id: str
+    status: str
+    statement: str
+    rule: DeclaredRule
+    scored: ScoredProgress
+    adaptive: AdaptiveProgress
+    decision: GateDecided | None
+    written: WroteBack | None
+
+
+def gate_run_reading(record: GateRunRecord, rule: GateRule) -> GateRunReading:
+    """One gate run: the rule it is held to, where it is, and what it answered."""
+    written = record.written
+    return GateRunReading(
+        gate_run_id=record.gate_run_id,
+        status=str(record.status),
+        statement=record.statement,
+        rule=declared_rule(rule),
+        scored=_scored_progress(record.run_state),
+        adaptive=_adaptive_progress(record.run_state),
+        decision=None if record.gate is None else gate_decided(record.gate),
+        written=(
+            None
+            if written is None
+            else WroteBack(
+                library=str(written.library),
+                readings=written.readings,
+                unread=list(written.unread),
+                retired=list(written.retired),
+                stated=written.stated(),
+            )
+        ),
+    )
+
+
+class StartGateRunRequest(BaseModel):
+    """Everything a gate run needs before it may exist, and nothing it can default.
+
+    Two fields, and neither has a default anywhere. The attestation is the same
+    three-statement record `POST /runs` takes — one field each, because the record has
+    to show *what* was attested — and the cost is declared by the operator because
+    the reference agents run on the operator's own provider credential.
+
+    There is no target here, because a gate run's targets are this bench's own three
+    reference agents and there is nothing for a caller to choose: `D` is trivial minus
+    hardened and monotonicity is read across all three, so a gate over a subset is not
+    a smaller gate but a different and undeclared one. There is no nonce either: the
+    run plants its own in equipment it started itself, which is the one case where the
+    bench can prove control of the endpoint without asking anybody to.
+    """
+
+    attestation: AttestationRequest
+    cost: CostRequest
+
+
 class ApprovalRequest(BaseModel):
     """The answer to one run's interrupt. A yes is the only thing that spends."""
 
@@ -1932,22 +2544,73 @@ def deployed_bench() -> BenchConfig:
         key = signing_key()
     except NoSigningKey as missing:
         raise NoSigningKey(f"{missing}. {NO_KEY_NO_BOOT}") from missing
+    library = deployed_library()
     return BenchConfig(
-        cases=admitted_library(CASES_DIR), report=ReportConfig(signing_key=key)
+        cases=admitted_library(library or CASES_DIR),
+        report=ReportConfig(signing_key=key),
     )
 
 
-def create_app(config: BenchConfig | None = None) -> FastAPI:
+def deployed_library() -> Path | None:
+    """The case library a deployed bench reads and a gate run may write to.
+
+    The mounted volume when there is one, seeded once from the image's own admitted
+    library, and `None` when the deployment mounted nothing. Both halves of that
+    matter: the library is read from the mount so that a case a gate run retired
+    comes back retired after a redeploy, and the absence of a mount is what makes a
+    gate run unavailable rather than a write into a filesystem that is about to be
+    thrown away (`gate_runs.DEPLOYED_LIBRARY`).
+    """
+    return seeded_library(DEPLOYED_LIBRARY_MOUNT, CASES_DIR)
+
+
+def deployed_gate_runs(config: BenchConfig) -> GateRunBench:
+    """What a gate run on a deployed bench has to work with, or the absence of it.
+
+    Two readings and neither is a default that fills itself in: the case library is
+    the mounted one or nothing, and the equipment is the three reference agents if
+    this build ships them or nothing. A deployment missing either states it on the
+    console and offers no control, which is the only honest answer — a gate run
+    against equipment that is not there, or writing to a library that will not
+    survive the next release, would look exactly like the real thing.
+
+    The reference agents' model is read off the record that declares it
+    (`DeclaredModels.calibration`) rather than named here, because a `D` is a reading
+    about one pair of models and the pair has to be the declared one (ADR-0012).
+    """
+    return GateRunBench(
+        library=deployed_library(),
+        equipment=shipped_agents(config.report.models.calibration),
+    )
+
+
+def create_app(
+    config: BenchConfig | None = None, gate_runs: GateRunBench | None = None
+) -> FastAPI:
     """The API over one bench, over one library.
 
     The bench is a constructor argument rather than a module global so that a run
     is estimated against the same library it is attempted against — and so that a
     test can hold both ends of that. Given none, the bench is the deployed one,
     which reads a signing key and refuses to exist without it.
+
+    `gate_runs` is a **second** declaration and deliberately not a field of the
+    first. What a run is measured with and what a gate run needs are two different
+    statements about a deployment: a bench that has said what it signs with has not
+    thereby said that it holds a case library it may write to and ships the three
+    reference agents a gate is decided over. Given nothing, a bench that declared its
+    own configuration runs no gate — the operation that spends 830 calls and rewrites
+    the library is not something a deployment acquires by omission — and a bench that
+    declared nothing at all gets the deployed reading of both.
     """
+    declared = config is not None
     bench = BenchRuns(config if config is not None else deployed_bench())
+    if gate_runs is None:
+        gate_runs = GateRunBench() if declared else deployed_gate_runs(bench.config)
+    gates = BenchGateRuns(bench.config, gate_runs)
     app = FastAPI(title="AgentAudit", version="0.1.0")
     app.state.bench = bench
+    app.state.gate_runs = gates
 
     @app.post("/nonces", status_code=status.HTTP_201_CREATED)
     def issue_nonce_for_a_target() -> NonceIssued:
@@ -2200,13 +2863,16 @@ def create_app(config: BenchConfig | None = None) -> FastAPI:
         rather than trust it (ADR-0003). It is `DECLARED_RULE` — the record every
         scorer in this repository reads — and not a copy kept for a screen.
 
-        **There is no route that starts a gate run and this is not it.** A gate run
-        attacks all three reference agents, spends about 830 calls, and appends a
-        discrimination reading to every case record it reads while retiring the
-        cases the rule retires, behind a terminal that asks the three attestation
-        statements one at a time (PLAN.md §8, `scripts/gate.py`). The console cites
-        it and prints the command. What an operator gets here is a fact about the
-        instrument; what they do not get anywhere is a button.
+        **This route does not start a gate run, and the one that does is not under
+        `/bench`.** A gate run attacks all three reference agents, spends about 830
+        calls, and appends a discrimination reading to every case record it reads
+        while retiring the cases the rule retires. It is started at `POST /gate-runs`
+        — its own family, and a path that says plainly it is not a read — behind the
+        same three attestation statements and the same halt a terminal gate run asks
+        for (ADR-0021, `scripts/gate.py`). What this route serves is the citation the
+        *deployment* declared, which is a different fact from what a gate run this
+        bench just made decided: a completed gate run does not change what the bench
+        cites, and whether it should is a question this route does not answer.
         """
         return bench_gate(bench.config.report.gate)
 
@@ -2249,5 +2915,139 @@ def create_app(config: BenchConfig | None = None) -> FastAPI:
         the route table in `test_api_settings.py` as well as in `test_api_gate.py`.
         """
         return bench_settings(bench.config)
+
+    @app.post(GATE_RUNS_ROUTE, status_code=status.HTTP_202_ACCEPTED)
+    def start_a_gate_run(
+        request: Annotated[StartGateRunRequest, Body()],
+    ) -> GateRunStarted:
+        """Record the attestation, declare the estimate per layer, and halt.
+
+        Returns once the gate run is holding its interrupt, which is before anything
+        has been sent to a reference agent and before one case record has been
+        written to. The gate run holds this bench's case library from this moment, so
+        a second one is refused by name rather than queued.
+
+        **The two controls the command line carried are the two controls here.** The
+        three attestation statements are the `Attestation` record that cannot be
+        constructed with one withheld, and the halt is the same `PendingApproval`
+        seam `POST /runs/{id}/approval` answers. Neither is reimplemented and there is
+        no flag, no setting and no environment variable that stands in for either: a
+        gate run that proceeded unattended is the thing ADR-0007 forbids, which is
+        also why one cannot be spawned as a subprocess — the terminal helper reads
+        absent or piped input as a refusal (ADR-0021, PLAN.md §8).
+
+        **There is no target in the request and no nonce.** A gate run's targets are
+        this bench's own three reference agents, all three of them, because `D` is
+        trivial minus hardened and monotonicity is read across all three. The nonce
+        is planted by the run in equipment it started itself, which is the one case
+        where the bench can prove control of an endpoint without asking anybody to.
+        """
+        try:
+            attestation = request.attestation.attestation()
+            price = request.cost.price()
+        except ValueError as refused:
+            # The attestation's own refusal, which names the statements that were
+            # withheld. No gate run exists, the library was never held, and nothing
+            # has been sent.
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(refused)
+            ) from refused
+
+        try:
+            record = gates.start(attestation=attestation, price=price)
+        except CannotRunAGate as refused:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT, detail=_cannot(refused)
+            ) from refused
+        except NeverPresented as unpresented:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=str(unpresented),
+            ) from unpresented
+        return gate_run_started(record, bench.config)
+
+    @app.post(GATE_RUN_APPROVAL_ROUTE)
+    def answer_the_gate_runs_interrupt(
+        gate_run_id: Annotated[str, PathParam()],
+        request: Annotated[ApprovalRequest, Body()],
+    ) -> GateRunStarted:
+        """Answer the halt. On a yes the gate run goes; on anything else it does not.
+
+        The same request body the run interrupt takes, deliberately: the answer to an
+        interrupt is the consent mechanism itself, and there is exactly one of those
+        in this application (ADR-0007). What is not shared is the record it answers —
+        this route takes a gate run id, no route under `/runs` takes one, and a run id
+        here is a `404` rather than a run somebody accidentally confirmed.
+
+        A declined gate run spends nothing and writes nothing: the library it was
+        holding goes back exactly as it was.
+        """
+        try:
+            record = gates.answer(
+                gate_run_id,
+                Approval(
+                    confirmed=request.confirmed,
+                    identity=request.identity,
+                    reason=request.reason,
+                ),
+            )
+        except KeyError as unknown:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"no gate run {gate_run_id} was started by this bench",
+            ) from unknown
+        except GateRunNoLongerWaiting as closed:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT, detail=str(closed)
+            ) from closed
+        return gate_run_started(record, bench.config)
+
+    @app.get(GATE_RUNS_ROUTE)
+    def list_the_gate_runs_on_the_record() -> GateRuns:
+        """Every gate run this bench has started, and whether it may start another.
+
+        The availability is here rather than under `/bench` because it is a fact about
+        this moment and `/bench` is a reader about the instrument — and because a
+        console has to know before it draws a control, not after somebody presses one.
+        Where the reference agents are absent, where there is no library to write to,
+        where no adjudicating instrument is configured, or where a gate run already
+        holds the library, this route says which and the screen states it.
+
+        **Rows, and never a summary of them.** Calls spent are per layer on each row
+        and there is no total, no average and no count of these gate runs. No row
+        carries a decision: a pass lifted onto a list arrives without the rule it was
+        decided under (ADR-0003).
+        """
+        return gate_runs_response(gates, gates.records())
+
+    @app.get(GATE_RUN_ROUTE)
+    def report_the_gate_runs_progress(
+        gate_run_id: Annotated[str, PathParam()],
+    ) -> GateRunReading:
+        """Where one gate run has got to, per layer, and what it decided if it has.
+
+        **The rule comes first and the decision after it.** A pass or a fail means
+        nothing without the bar it cleared, so the declared rule is above the outcome
+        on the wire as it is on the screen, and it is `DECLARED_RULE` rather than a
+        copy kept for a display (ADR-0003).
+
+        **Every per-family figure here was read off the attempts this gate run just
+        made.** The three reference agents' rates, each family's `D`, its ordering and
+        its verdict come from the `GateResult` the run left in memory. Nothing on this
+        route parses the dated Markdown a command-line gate run writes: a screen that
+        depended on the shape of the bench's own prose would break on a rewording, and
+        this gate run has the figures already.
+
+        **Progress is per layer while it is in flight.** Family, case and attempt in
+        the scored layer; family, episode and turn in the adaptive one — six words for
+        six things, and no field that adds the two (CONTEXT.md, ADR-0010).
+        """
+        record = gates.record(gate_run_id)
+        if record is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"no gate run {gate_run_id} was started by this bench",
+            )
+        return gate_run_reading(record, bench.config.rule)
 
     return app

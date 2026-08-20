@@ -21,16 +21,22 @@
  * move with it — a floor hard-coded in the console is a floor that can disagree with
  * `rule.py` in the flattering direction.
  *
- * **That the command is copyable and stated as the only entry point.** One line, no
- * prompt character, nothing but the command, because what happens to it is a
- * selection and a paste.
+ * **That the command is copyable, and that the copy says what the two entry points
+ * differ on.** One line, no prompt character, nothing but the command, because what
+ * happens to it is a selection and a paste — and beside it the sentences that say
+ * what a terminal gate run leaves that one started here does not, and what neither
+ * of them will do without a person answering.
  *
- * **That no affordance here starts a gate run.** Asserted three ways: no leaf of the
- * view is anything but text, so there is nowhere for a handler to live; no field is
- * named for an action; and `GateScreen.tsx` itself is read and contains no button, no
- * form, no click handler and no write. The route table's half of the same claim is in
- * `backend/tests/test_api_gate.py`. This is the test #83 has to replace rather than
- * delete when the console grows the affordance this ticket forbids.
+ * **That there is exactly one control here, and that it is described rather than
+ * held.** This file used to assert that nothing on this screen could start a gate
+ * run; ADR-0021 reversed that decision, so the assertions were turned around rather
+ * than deleted. The view model still carries no callback — every leaf is a string, a
+ * boolean, or the one `null` that means *this app has not been told yet* — and
+ * exactly one field is named for something that happens. The component's own half is
+ * asserted over its source: the two writes it can make are a gate run's, it cannot
+ * start a run or answer a run's interrupt, it has no form and no `fetch` of its own,
+ * and every button on it is a `type="button"`. The route table's half of the same
+ * claim is in `backend/tests/test_api_gate.py`.
  *
  * **That the document is named and never parsed.** Every string in the view is
  * scanned for the figures only the gate run's own document holds — a measured `D`, a
@@ -45,6 +51,7 @@ import { describe, expect, it } from 'vitest'
 import type { BenchGate, DeclaredRule, GateCitation } from '../api/bench'
 import component from './GateScreen.tsx?raw'
 import { gateScreen, THE_COMMAND, type GateBlock, type RuleBlock } from './gate'
+import { startControl, type StartControl } from './gaterun'
 
 /**
  * The declared rule as `rule.py` states it, verbatim.
@@ -98,6 +105,24 @@ const UNCITED: GateCitation = {
 
 const CERTIFIED: BenchGate = { rule: RULE, citation: CITED }
 const FRESH: BenchGate = { rule: RULE, citation: UNCITED }
+
+/** A bench that can run a gate, as `GET /gate-runs` says so. */
+const OFFERED: StartControl = startControl({
+  available: true,
+  library: '/var/lib/agentaudit/cases',
+  statement:
+    'this bench can run a gate: it ships the three reference agents, it holds a ' +
+    'case library it may write to, and no gate run is holding that library now.',
+})
+
+/** A bench that cannot, because this build ships no test equipment. */
+const WITHHELD: StartControl = startControl({
+  available: false,
+  refusal: 'no_reference_agents',
+  stated:
+    'this deployment does not ship the three reference agents, so there is nothing ' +
+    'for a gate run to be decided over.',
+})
 
 /** Every string anywhere in the view, which is everything a reader can be shown. */
 function everyString(node: unknown): string[] {
@@ -230,8 +255,8 @@ describe('what running one does to the case library', () => {
   })
 })
 
-describe('the command that starts one', () => {
-  it('is one line, is nothing but the command, and names the only entry point', () => {
+describe('the command that runs one at a terminal', () => {
+  it('is one line, is nothing but the command, and says what the two doors differ on', () => {
     const command = block(gateScreen(CERTIFIED), 'command')
 
     // Copyable means exactly this: what a reader selects is the command and nothing
@@ -247,9 +272,16 @@ describe('the command that starts one', () => {
     // The identity is the liability record and is never defaulted, so the command
     // carries a placeholder the operator has to replace rather than a default.
     expect(said).toMatch(/never defaulted/)
-    expect(said).toMatch(/terminal is the only entry point/)
-    expect(said).toMatch(/no control on this screen that starts a gate run/)
-    expect(said).toMatch(/no route on this bench that would/)
+    // Two entry points now, and what the copy has to carry is what differs between
+    // them and what does not. What differs: one writes a dated document, the other
+    // returns its figures. What does not: the three statements, the two figures, and
+    // that neither can be answered by something that is not a person — which is why
+    // nothing here spawns the command and why no flag stands in for a statement.
+    expect(said).toMatch(/two entry points/)
+    expect(said).toMatch(/same three attestation statements/)
+    expect(said).toMatch(/writes a dated document/)
+    expect(said).toMatch(/absent or piped answer as a refusal/)
+    expect(said).toMatch(/no flag anywhere lets a gate run proceed without one/)
   })
 })
 
@@ -279,43 +311,86 @@ describe('a bench that cites no gate run', () => {
   })
 })
 
-describe('nothing on this screen starts a gate run', () => {
-  it('offers no handler, no action-shaped field, and no button in the component', () => {
-    for (const bench of [CERTIFIED, FRESH]) {
-      const blocks = gateScreen(bench)
+describe('the one control this screen adds, and no second one', () => {
+  it('describes the control rather than holding it, and names it once', () => {
+    for (const start of [OFFERED, WITHHELD, null]) {
+      for (const bench of [CERTIFIED, FRESH]) {
+        const blocks = gateScreen(bench, start)
 
-      // Every leaf is a string or a boolean. There is nowhere in this value for a
-      // callback to live, which is what "no button" means at the seam this screen is
-      // tested at: a button needs a handler and a handler needs a field.
-      for (const leaf of everyOtherLeaf(blocks)) {
-        expect(typeof leaf).toBe('boolean')
-      }
-      // And no field named for something that happens. A gate run is 830-odd calls
-      // against three reference agents and a write-back to the case library, behind
-      // a terminal that asks three attestation statements one at a time.
-      for (const field of fieldsOf(blocks)) {
-        expect(field).not.toMatch(/start|launch|begin|trigger|submit|click|post|run$/i)
+        // Every leaf is a string, a boolean, or the one null that means *not told
+        // yet*. There is nowhere in this value for a callback to live: the control is
+        // described here and driven by the component, which is what keeps the
+        // affordance a thing a test can read.
+        for (const leaf of everyOtherLeaf(blocks)) {
+          expect(leaf === null || typeof leaf === 'boolean').toBe(true)
+        }
+
+        // And exactly one field is named for something that happens. A gate run is
+        // 830-odd calls against three reference agents and a write-back to the case
+        // library: one way to begin one is the decision ADR-0021 took, and a second
+        // appearing anywhere in this value is not.
+        const named = fieldsOf(blocks).filter((field) =>
+          /start|launch|begin|trigger|submit|click|post|run$/i.test(field),
+        )
+        expect(named).toEqual(['start'])
       }
     }
+  })
 
+  it('offers the control only where the bench said one may start', () => {
+    const offered = block(gateScreen(CERTIFIED, OFFERED), 'command')
+    const control = offered.start
+    if (control?.available !== true) {
+      throw new Error('the control was withheld where the bench offered it')
+    }
+    // Beside the command and not instead of it: two entry points, two traces.
+    expect(offered.command).toBe(THE_COMMAND)
+    // It names where the gate run writes, before it is pressed. A gate run is not a
+    // read, and the library it rewrites is the one every run is measured with.
+    expect(control.library).toBe('/var/lib/agentaudit/cases')
+    expect(control.asks.join(' ')).toMatch(/three attestation statements, one at a time/)
+    expect(control.asks.join(' ')).toMatch(/two figures against two ceilings/)
+
+    const refused = block(gateScreen(CERTIFIED, WITHHELD), 'command')
+    const absent = refused.start
+    if (absent?.available !== false) {
+      throw new Error('the control was offered where the bench refused it')
+    }
+    // A stated absence in the place the control would have been, carrying the
+    // bench's own name for the refusal — and no label, so there is nothing to draw.
+    expect(absent.refusal).toBe('no_reference_agents')
+    expect(absent.statement).toMatch(/does not ship the three reference agents/)
+    expect(absent.statement).toMatch(/no way to start a gate run from this bench/)
+    expect((absent as unknown as Record<string, unknown>).label).toBeUndefined()
+    // The command is still there: a deployment that cannot run one here can run one
+    // where the equipment is shipped.
+    expect(refused.command).toBe(THE_COMMAND)
+
+    // And nothing at all where this app has not been told yet, which is a third
+    // state: a control drawn on a guess would be a control the bench then refuses.
+    expect(block(gateScreen(CERTIFIED, null), 'command').start).toBeNull()
+  })
+
+  it('can make a gate run’s two writes in the component and no others', () => {
     // The component itself, read rather than rendered. These screens are driven by
-    // hand, so the absence of the affordance is asserted over the source: no button,
-    // no form, no handler, no write of any kind, and nothing imported that could
-    // post. #83 replaces this assertion; it does not delete it.
+    // hand, so what it can and cannot do is asserted over its source. This is #80's
+    // scan turned around: it used to say the file could write nothing at all.
     expect(component).toContain('export function GateScreen')
-    for (const affordance of [
-      '<button',
-      '<form',
-      'onClick',
-      'onSubmit',
-      'onChange',
-      'method:',
-      'fetch(',
-      'startRun',
-      'answerTheInterrupt',
-    ]) {
-      expect(component).not.toContain(affordance)
+    for (const write of ['startGateRun', 'answerTheGateRunsInterrupt']) {
+      expect(component).toContain(write)
     }
+    // Two writes and they are both a gate run's. It cannot start a run, cannot
+    // answer a run's interrupt, has no form to submit and no `fetch` of its own —
+    // every request it makes goes through the one module that types the wire.
+    for (const absent of ['startRun(', 'answerTheInterrupt(', '<form', 'method:', 'fetch(']) {
+      expect(component).not.toContain(absent)
+    }
+    // Every button is a `type="button"`. A submit button inside a form is a write
+    // this file did not decide to make.
+    const buttons = component.match(/<button/g) ?? []
+    const typed = component.match(/type="button"/g) ?? []
+    expect(buttons.length).toBeGreaterThan(0)
+    expect(typed.length).toBe(buttons.length)
   })
 })
 

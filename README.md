@@ -57,6 +57,8 @@ Three calls start a run, and both of the controls that make one authorised are i
 
 The price per call is yours to declare and is never defaulted from the bench's own configuration: your confirmation is the liability record, and a run you have not priced reports its cost as *not priced* rather than as zero.
 
+**A gate run has its own three calls, and it is not a run.** `POST /gate-runs` records the same three attestation statements and declares the estimate per layer, `POST /gate-runs/{gate_run_id}/approval` answers the halt, and `GET /gate-runs/{gate_run_id}` reports progress per layer and then the decision under the declared rule with every per-family figure the run measured. It is the whole live case library against the three reference agents — about 830 calls — and it writes back to every case record it reads, so it holds an exclusive lease on the library while it goes and one runs at a time. `PLAN.md` §8 put this on the command line and [ADR-0021](./docs/adr/0021-the-console-may-start-a-gate-run.md) reverses that, including what serving it over HTTP gives up; `scripts/gate.py` is unchanged and still the path that writes a dated document.
+
 ### Registering a target in the browser
 
 The same three calls, as a screen that walks you through them. The frontend is a Vite, React and TypeScript app in [`frontend/`](./frontend):
@@ -67,7 +69,7 @@ npm run build                                 # typecheck and production build
 npm test                                      # the guard rules, no browser
 ```
 
-The dev server proxies `/nonces`, `/runs` and `/report` to the API on `http://127.0.0.1:8000` — set `AGENTAUDIT_API` to point it somewhere else. The proxy is the whole of the cross-origin arrangement: the API installs no CORS middleware, and a header the bench would send to every caller forever is not a thing to add so that one developer's browser is happy.
+The dev server proxies `/nonces`, `/runs`, `/report`, `/artefacts`, `/bench` and `/gate-runs` to the API on `http://127.0.0.1:8000` — set `AGENTAUDIT_API` to point it somewhere else. The proxy is the whole of the cross-origin arrangement: the API installs no CORS middleware, and a header the bench would send to every caller forever is not a thing to add so that one developer's browser is happy.
 
 **Registration is a walk rather than a form.** The endpoint and its price, then the nonce to plant, then the three attestations one screen at a time with the consequence of each stated beside it, then the tool-call visibility declaration — which is where you are told that scope creep and halt defeat report as *not measurable* without it, and that the tool list you type is a declaration the bench cannot verify. A registration the bench refuses is shown in the bench's own words and hands you back to the plant step, and so is a run whose target never echoed the nonce: that one cannot be known until after the cost interrupt is answered, so the run screen points back here.
 

@@ -469,6 +469,60 @@ export interface RunProgress extends RunStanding {
   report: ReportLocation | null
 }
 
+/** What one run's scored layer put on the wire, against the scored ceiling. */
+export interface ScoredSpend {
+  calls_spent: number
+  statement: string
+}
+
+/**
+ * What one run's adaptive layer put on the wire, against the adaptive ceiling.
+ *
+ * A second interface rather than one `LayerSpend` read twice, matching the two
+ * models the route serves. The two figures are held to two separate ceilings, and
+ * a type that accepted either would be a type something could be accumulated
+ * through — the widening ADR-0010 asks anyone reaching for it to stop at.
+ */
+export interface AdaptiveSpend {
+  calls_spent: number
+  statement: string
+}
+
+/**
+ * One run on the record: what it was against, when, where it got to, what it spent.
+ *
+ * A row and never a report. There is no rate here, no band and no verdict — a
+ * figure lifted out of a signed report onto a list would arrive without the
+ * denominator that was printed beside it. The target is named and its URL is
+ * nowhere (ADR-0008).
+ */
+export interface RunRow {
+  run_id: string
+  target: string
+  /**
+   * When the run went on the record — the attestation taken, the estimate
+   * declared — which is before the target was asked to echo anything. Not a
+   * registration time: registration is the nonce echo, and a declined run never
+   * reached one.
+   */
+  recorded_at: string
+  status: string
+  statement: string
+  scored: ScoredSpend
+  adaptive: AdaptiveSpend
+}
+
+/**
+ * The runs on the record, most recently recorded first.
+ *
+ * No count and no totals block: the route returns rows and never a summary of
+ * them, so there is no field here for a figure spanning two runs or two layers.
+ */
+export interface RunList {
+  runs: RunRow[]
+  statement: string
+}
+
 /**
  * The answer to one run's interrupt. A `confirmed: true` is the only thing that
  * spends.
@@ -710,6 +764,23 @@ export const BENCH_GATE_PATH = '/bench/gate'
  */
 export async function benchGate(): Promise<GateCitation> {
   return (await fetched(BENCH_GATE_PATH, 'gate citation')) as GateCitation
+}
+
+/** Where the runs on the record are listed. The path a run is started at, read. */
+export const RUNS_PATH = '/runs'
+
+/**
+ * The runs this bench has on the record, with calls spent per layer.
+ *
+ * Takes no run id, because it is not about one run — and it is still under `/runs`
+ * rather than under `/bench`, because a list of somebody's runs is about their
+ * targets and `/bench` is the prefix whose subject is the instrument (ADR-0018).
+ *
+ * A read, and a bench that has started nothing answers with no rows rather than
+ * with a refusal: a fresh deployment is in exactly that state.
+ */
+export async function benchRuns(): Promise<RunList> {
+  return (await fetched(RUNS_PATH, 'list of runs')) as RunList
 }
 
 /**

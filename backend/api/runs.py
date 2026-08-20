@@ -68,6 +68,7 @@ import threading
 import uuid
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from enum import StrEnum
 
 from backend.api.report import ReportConfig, Unsigned, artefact_for
@@ -321,6 +322,24 @@ class RunRecord:
     budget: RunBudget
     run_state: RunState
     presented: BudgetPayload
+    recorded_at: datetime = field(default_factory=lambda: datetime.now(tz=UTC))
+    """When this run went on the record: the moment the attestation was taken and
+    the estimate declared.
+
+    Deliberately not *when the target was registered*. Registration is the nonce
+    echo (CONTEXT.md), and the echo probe is the run's first call on the operator's
+    endpoint — on the far side of the interrupt — so a run awaiting approval, a run
+    declined and a run nobody answered have no registration time at all, and a
+    field that claimed to be one would be empty for exactly the runs a list is most
+    useful for. This is the time the bench took responsibility for the run, which
+    every run has.
+
+    A wall clock in UTC, because it is read by somebody asking *which of these did I
+    start yesterday*. `RunState.started_at` is `time.monotonic()` and stays that
+    way: it exists so that the layer-ordering invariant is checkable (ADR-0010), and
+    a monotonic reading has no date in it.
+    """
+
     status: RunStatus = RunStatus.AWAITING_APPROVAL
     statement: str = (
         "halted at the approval interrupt: nothing has been sent to the target "
@@ -493,6 +512,23 @@ class BenchRuns:
         """One run's record, or `None` for an id this bench never issued."""
         with self._lock:
             return self._runs.get(run_id)
+
+    def records(self) -> list[RunRecord]:
+        """Every run this bench has started, most recently recorded first.
+
+        The records themselves, and never a summary of them: nothing here counts
+        runs, adds a spend across them, or averages one. A caller that wanted a
+        figure spanning two runs would have to build it in front of the rows it
+        built it from.
+
+        Reversed insertion order rather than a sort on `recorded_at`, because
+        insertion order *is* chronological — `start` puts the record in this dict
+        under the lock, in the same critical section that issued its id — and two
+        runs started in the same microsecond would otherwise be ordered by
+        whichever comparison the sort happened to make.
+        """
+        with self._lock:
+            return list(self._runs.values())[::-1]
 
     def start(
         self,

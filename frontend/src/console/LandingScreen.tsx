@@ -27,14 +27,32 @@
  * writes back to the case library, behind a terminal that asks the three
  * attestation statements one at a time (PLAN.md §8). The console cites it.
  *
- * The view model is `landing.ts` and it is where the wording lives; this file is
- * markup and is driven by hand, as every screen in this app is.
+ * **The second region is the runs on the record**, read from `GET /runs`, so that a
+ * run whose URL nobody kept is still reachable. Each row carries calls spent in two
+ * columns — the scored layer's and the adaptive layer's — set side by side in two
+ * hues and **never added into a third figure**: the two are enforced against two
+ * separate ceilings, and a single number would say what a run cost without saying
+ * which half of it cost that (ADR-0007, ADR-0010). There is no totals row on this
+ * screen and the view model has no field for one.
+ *
+ * The two regions read two routes and hold two pieces of state, deliberately not
+ * one: a bench that answered for its gate citation and not for its runs has said
+ * one of the two things, and a single failure state would lose the half that
+ * arrived.
+ *
+ * The view models are `landing.ts` and `runs.ts` and they are where the wording
+ * lives; this file is markup and is driven by hand, as every screen in this app is.
  */
 
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 
-import { benchGate, type GateCitation } from '../api/bench'
+import {
+  benchGate,
+  benchRuns,
+  type GateCitation,
+  type RunList,
+} from '../api/bench'
 import {
   gateReading,
   WHAT_THIS_INSTRUMENT_IS,
@@ -42,6 +60,13 @@ import {
   type GateReading,
 } from './landing'
 import { REGISTER_PATH } from './rail'
+import {
+  runsReading,
+  TWO_COLUMNS_NEVER_ONE,
+  type AdaptiveColumn,
+  type RunsReading,
+  type ScoredColumn,
+} from './runs'
 
 /** What this screen is holding: the citation, or why it could not read one. */
 interface Held {
@@ -51,8 +76,17 @@ interface Held {
 
 const NOTHING_YET: Held = { gate: null, unavailable: '' }
 
+/** What the second region is holding: the runs, or why it could not read them. */
+interface HeldRuns {
+  list: RunList | null
+  unavailable: string
+}
+
+const NO_LIST_YET: HeldRuns = { list: null, unavailable: '' }
+
 export function LandingScreen() {
   const [held, setHeld] = useState<Held>(NOTHING_YET)
+  const [runs, setRuns] = useState<HeldRuns>(NO_LIST_YET)
 
   useEffect(() => {
     let current = true
@@ -65,6 +99,26 @@ export function LandingScreen() {
       } catch (unknown: unknown) {
         if (current) {
           setHeld({ gate: null, unavailable: `${unknown}` })
+        }
+      }
+    }
+    void read()
+    return () => {
+      current = false
+    }
+  }, [])
+
+  useEffect(() => {
+    let current = true
+    const read = async () => {
+      try {
+        const list = await benchRuns()
+        if (current) {
+          setRuns({ list, unavailable: '' })
+        }
+      } catch (unknown: unknown) {
+        if (current) {
+          setRuns({ list: null, unavailable: `${unknown}` })
         }
       }
     }
@@ -111,7 +165,89 @@ export function LandingScreen() {
           <Citation reading={gateReading(held.gate)} />
         )}
       </section>
+
+      <section>
+        <h2>Your runs</h2>
+        <p>{TWO_COLUMNS_NEVER_ONE}</p>
+
+        {runs.unavailable ? (
+          <div className="citation uncited" role="alert">
+            <h3>This bench did not answer for its runs</h3>
+            <p>{runs.unavailable}</p>
+            <p className="aside">
+              Not the same fact as a bench with no runs on the record: what is
+              unknown here is what it would have listed, so nothing below should be
+              read as <em>none</em>.
+            </p>
+          </div>
+        ) : runs.list === null ? (
+          <p className="aside">Reading the runs on the record…</p>
+        ) : (
+          <Runs reading={runsReading(runs.list)} />
+        )}
+      </section>
     </main>
+  )
+}
+
+/**
+ * The runs on the record, or the stated fact that there are none.
+ *
+ * An ordered list rather than a table, and that is the load-bearing choice: a table
+ * of two numeric columns has a footer, and a footer is where a total goes. A list
+ * of runs has no footer to put one in, so the two figures stay two figures — the
+ * same argument the interrupt's two cost figures are set as two blocks on
+ * (`.figures` in the stylesheet).
+ */
+function Runs({ reading }: { reading: RunsReading }) {
+  if (!reading.listed) {
+    return (
+      <div className="citation uncited">
+        <h3>No runs on the record</h3>
+        <p>{reading.statement}</p>
+      </div>
+    )
+  }
+  return (
+    <ol className="runs">
+      {reading.runs.map((run) => (
+        <li className="run" key={run.id}>
+          <h3>
+            <Link to={run.path}>{run.target}</Link>
+          </h3>
+          <p className="standing">
+            {run.standing} — recorded {run.recordedAt}
+          </p>
+          <p className="aside">
+            <code>{run.id}</code>
+          </p>
+          <p className="aside">{run.statement}</p>
+          <div className="spends">
+            <Spend column={run.scored} />
+            <Spend column={run.adaptive} />
+          </div>
+        </li>
+      ))}
+    </ol>
+  )
+}
+
+/**
+ * One layer's spend, in its own hue and under its own name.
+ *
+ * The union rather than one shared column type, so that this component is the only
+ * place in the app that has seen both — and all it does with them is draw them
+ * apart. The accent is a class name and the colour is the stylesheet's, and the
+ * layer is written out in words beside it so the distinction survives a reader who
+ * cannot see the two hues apart.
+ */
+function Spend({ column }: { column: ScoredColumn | AdaptiveColumn }) {
+  return (
+    <div className={`spend ${column.accent}`}>
+      <p className="layer-name">{column.layer}</p>
+      <p className="calls">{column.calls}</p>
+      <p className="kind">{column.statement}</p>
+    </div>
   )
 }
 

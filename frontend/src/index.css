@@ -474,6 +474,99 @@ code {
 }
 
 /*
+ * The runs on the record, as a list of blocks and never as a table.
+ *
+ * The choice is the whole of the layout. A table of two numeric columns has a
+ * footer, and a footer is where somebody puts a total — which here would be an
+ * adaptive figure added to a scored one, against two ceilings that are enforced
+ * separately (ADR-0007, ADR-0010). A list of runs has nowhere to put one, which is
+ * the same argument the interrupt's two cost figures are set as two blocks on.
+ *
+ * The list numbering is dropped: the rows are ordered most recent first, and a
+ * column of ordinals beside them would be a count of somebody's runs on a screen
+ * whose whole point is that every figure belongs to the thing that measured it.
+ */
+.runs {
+  list-style: none;
+  margin: 1.2rem 0 0;
+  padding: 0;
+}
+
+.run {
+  padding: 1.2rem 0;
+  border-top: 1px solid var(--line);
+}
+
+.run h3 {
+  margin: 0 0 0.2rem;
+  font-size: 1rem;
+}
+
+.standing {
+  margin: 0 0 0.4rem;
+  font-size: 0.85rem;
+  color: var(--quiet);
+}
+
+/*
+ * The two spends, side by side, each in its own hue.
+ *
+ * Two hues at matched lightness and chroma so that the boundary between the layers
+ * is visible and neither reads as the more serious of the two — colour carries
+ * identity here and never a judgement, and the layer is written out in words above
+ * every figure so nothing is carried by hue alone. They wrap onto two rows on a
+ * narrow window rather than shrinking, because two figures squeezed side by side
+ * start to look like one figure and its subtotal.
+ */
+.spends {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+  gap: 1rem;
+  margin: 0.8rem 0 0;
+}
+
+.spend {
+  padding: 0.2rem 0 0.2rem 0.8rem;
+  border-left: 3px solid var(--line);
+}
+
+.spend.scored {
+  border-left-color: var(--scored);
+}
+
+.spend.adaptive {
+  border-left-color: var(--adaptive);
+}
+
+.spend .layer-name {
+  margin: 0;
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.spend.scored .layer-name {
+  color: var(--scored);
+}
+
+.spend.adaptive .layer-name {
+  color: var(--adaptive);
+}
+
+.spend .calls {
+  margin: 0.1rem 0;
+  font-size: 1.4rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.spend .kind {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--quiet);
+}
+
+/*
  * The console shell: a rail that persists, and a screen that does not move.
  *
  * The frame is a two-column grid rather than a fixed sidebar and a margin, because

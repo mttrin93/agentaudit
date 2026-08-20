@@ -1,13 +1,19 @@
 """The HTTP surface: a nonce, a run, the answer to the run's interrupt, and the
 artefact it produced.
 
-Nine routes. `POST /nonces` issues the value an operator plants to prove they
+Ten routes. `POST /nonces` issues the value an operator plants to prove they
 control the endpoint; `POST /runs` records the attestation, declares the estimate
-and halts; `POST /runs/{id}/approval` answers the halt; `GET /runs/{id}` says where
-the run has got to; four under `/report/{id}` — three that serve the files one
-signed run leaves, the payload, the rendering and the detached signature, and a
-fourth that says what a verifier makes of them; and `GET /bench/gate`, which is
-about the bench rather than about any run.
+and halts; `POST /runs/{id}/approval` answers the halt; `GET /runs` lists the runs on
+the record; `GET /runs/{id}` says where the run has got to; four under `/report/{id}`
+— three that serve the files one signed run leaves, the payload, the rendering and
+the detached signature, and a fourth that says what a verifier makes of them; and
+`GET /bench/gate`, which is about the bench rather than about any run.
+
+**Neither route under `/runs` returns a figure spanning the two layers.** Calls
+spent are reported per layer by both — `GET /runs/{id}` for one run in flight,
+`GET /runs` for every run on the record — and in both the two figures live inside
+`scored` and `adaptive` and nowhere else, so no caller can be handed a blended
+number and no list can grow a totals row (ADR-0007, ADR-0010).
 
 **`GET /bench/gate` cites and never starts.** It is the only route here whose
 subject is the instrument: the outcome of the gate run this bench was configured to
@@ -95,6 +101,8 @@ filesystem and environment question::
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from enum import StrEnum
 from pathlib import Path
@@ -719,6 +727,187 @@ def _attachment(filename: str) -> dict[str, str]:
     return {"Content-Disposition": f'attachment; filename="{filename}"'}
 
 
+RUNS_ROUTE = "/runs"
+"""Where the runs on the record are listed. Rows, and never a summary of them.
+
+Under `/runs` rather than under `/bench` because the subject is a run. `/bench` is
+the one prefix whose subject is the instrument (ADR-0018, `BENCH_GATE_ROUTE`), and a
+list of somebody's runs is about their targets rather than about this bench. It is
+the path `POST /runs` starts a run at, read.
+
+**This route computes no quantity that spans two runs and none that spans two
+layers.** There is no count of runs on it, no spend added across rows and no average
+of anything: it returns the records as rows, and a caller that wanted a figure over
+them would have to build it in front of the rows it built it from (spec: *a list
+route returns rows; it does not return a summary of them*).
+"""
+
+PER_LAYER_AND_NEVER_ADDED = (
+    "one row per run, with calls spent in two figures — the scored layer's and the "
+    "adaptive layer's — and no third figure anywhere. The two are enforced against "
+    "two separate ceilings, so neither layer can borrow the other's budget and a "
+    "blended number would hide which half of a run spent it (ADR-0007, ADR-0010). "
+    "There is no total here, no average and no count of these runs."
+)
+"""What the list is, said on the list, because a screenshot of it travels alone."""
+
+SCORED_SPENT = (
+    "calls the scored layer put on the wire for this run, held to the scored "
+    "layer's own ceiling. This is the half of the run that produces every number "
+    "the bench signs — 18 cases at ten attempts each, plus the registration probe"
+)
+
+ADAPTIVE_SPENT = (
+    "calls the adaptive layer put on the wire for this run, held to the adaptive "
+    "layer's own ceiling. Nothing this layer spent is scored: its unit is an "
+    "episode, it has no denominator, and none of it reaches a rate (ADR-0010)"
+)
+
+NOTHING_ON_THE_WIRE = (
+    "nothing: this layer put no call on the operator's endpoint. A fact about the "
+    "wire, checkable against the endpoint, and not a measurement of the target — "
+    "the run's standing says why, and a layer that attempted nothing found nothing "
+    "rather than finding none"
+)
+"""Why a zero here is a zero and not the zero CONTEXT.md forbids.
+
+*Not measurable* is a family's outcome against a target that could not answer it,
+and it is never a rate of zero. This is not that figure: it is a count of calls,
+and a run nobody approved really did put nothing on the wire. What must not appear
+beside it is a count of what the layer *found*, and there is no such field on this
+row — findings are reported per layer by `GET /runs/{id}`, over a run that ran.
+"""
+
+
+class ScoredSpend(BaseModel):
+    """What one run's scored layer put on the wire, and what that figure is.
+
+    A model of its own, and deliberately not one `LayerSpend` shared with the
+    adaptive layer. The two figures are two facts about two halves of a run, held
+    to two ceilings, and the shared type would be the one thing ADR-0010 asks not
+    to exist: a signature that accepts either layer is a signature something can be
+    accumulated through. Kept apart, the only way to a total is to write the two
+    field names down side by side, in front of the two labels saying what is being
+    added.
+    """
+
+    calls_spent: int
+    statement: str
+
+
+class AdaptiveSpend(BaseModel):
+    """What one run's adaptive layer put on the wire, and what that figure is not.
+
+    Two models rather than one, for the reason `ScoredSpend` gives. This layer's
+    calls buy episodes and turns; the other layer's buy attempts. A field a reader
+    could add to the scored layer's would be an adaptive quantity entering a scored
+    one by arithmetic (ADR-0010), which is the one edge this bench does not have.
+    """
+
+    calls_spent: int
+    statement: str
+
+
+class RunRow(BaseModel):
+    """One run on the record: what it was against, when, where it got to, what it
+    spent in each layer.
+
+    Enough to find a run again and no more. There is no rate here, no band, no
+    verdict and no finding — those belong to the report the run produced, which is
+    a document with a signature over it, and a figure lifted out of one onto a list
+    would be a measurement without its denominator beside it.
+
+    The target is named and its URL is nowhere: a live endpoint that answers
+    jailbreak payloads is not a thing to put in a list a screenshot is taken of
+    (ADR-0008). The name is the operator's own, which is what they will recognise.
+    """
+
+    run_id: str
+    """The id the bench issued. What a link back to the run is built from."""
+
+    target: str
+    """The operator's own name for the endpoint. Never the endpoint."""
+
+    recorded_at: datetime
+    """When the run went on the record — the attestation taken, the estimate
+    declared — which is before the target was asked to echo anything.
+
+    Not called a registration time, because registration is the nonce echo and it
+    happens on the far side of the interrupt: a declined run and an unanswered run
+    never reached one, and those are the runs a list has to be able to show
+    (`RunRecord.recorded_at`).
+    """
+
+    status: str
+    """Where the run got to, in the record's own word. The row's standing."""
+
+    statement: str
+    """The record's own sentence for that standing, carried unedited."""
+
+    scored: ScoredSpend
+    adaptive: AdaptiveSpend
+    """The two spends, as two named fields and never a list of layers.
+
+    A list is a thing a caller reduces. Two names are two facts, and the row has
+    nowhere to put a third.
+    """
+
+
+class RunList(BaseModel):
+    """The runs on the record, most recently recorded first, and nothing over them.
+
+    No count field and no totals block. A count of runs would be the first figure
+    on a screen whose whole subject is that figures belong to the thing that
+    measured them, and the rows are countable by whoever needs to count them.
+    """
+
+    runs: list[RunRow]
+    statement: str
+
+
+def _scored_spend(record: RunRecord) -> ScoredSpend:
+    spent = record.run_state.spent_in(Layer.SCORED)
+    return ScoredSpend(
+        calls_spent=spent,
+        statement=SCORED_SPENT if spent else NOTHING_ON_THE_WIRE,
+    )
+
+
+def _adaptive_spend(record: RunRecord) -> AdaptiveSpend:
+    spent = record.run_state.spent_in(Layer.ADAPTIVE)
+    return AdaptiveSpend(
+        calls_spent=spent,
+        statement=ADAPTIVE_SPENT if spent else NOTHING_ON_THE_WIRE,
+    )
+
+
+def run_row(record: RunRecord) -> RunRow:
+    """One run as a list of runs shows it. Read off the record, computed nowhere.
+
+    The two spends come from the same counters `GET /runs/{id}` reports and are read
+    one layer at a time — `spent_in(Layer.SCORED)` and `spent_in(Layer.ADAPTIVE)`,
+    never `RunState.calls_spent`, which is the blended reporting figure and is not
+    what either ceiling is enforced against.
+    """
+    return RunRow(
+        run_id=record.run_id,
+        target=record.target.name,
+        recorded_at=record.recorded_at,
+        status=str(record.status),
+        statement=record.statement,
+        scored=_scored_spend(record),
+        adaptive=_adaptive_spend(record),
+    )
+
+
+def runs_response(records: Sequence[RunRecord]) -> RunList:
+    """The rows for those records, in the order they were handed over."""
+    return RunList(
+        runs=[run_row(record) for record in records],
+        statement=PER_LAYER_AND_NEVER_ADDED,
+    )
+
+
 class CheckResult(BaseModel):
     """One of the three results: what it found, under its own name, and the words.
 
@@ -1017,6 +1206,23 @@ def create_app(config: BenchConfig | None = None) -> FastAPI:
                 status_code=status.HTTP_409_CONFLICT, detail=str(closed)
             ) from closed
         return response_for(record)
+
+    @app.get(RUNS_ROUTE)
+    def list_the_runs_on_the_record() -> RunList:
+        """Every run this bench has started, with calls spent per layer.
+
+        A read, and the answer to *which of these did I start and what did it cost
+        me* for an operator who did not keep the URL. It starts nothing: the only
+        route on this bench that can cause a call on a target is the one that
+        answers an interrupt with a yes.
+
+        **Two figures per row and no third one anywhere.** The scored layer's spend
+        and the adaptive layer's spend, each against its own ceiling, and nothing
+        here adds them, averages them, or adds either across the rows — a run list
+        is the surface most likely to grow a totals row, and the response has no
+        field for one to live in (`RunList`).
+        """
+        return runs_response(bench.records())
 
     @app.get("/runs/{run_id}")
     def report_progress(run_id: Annotated[str, PathParam()]) -> RunProgress:

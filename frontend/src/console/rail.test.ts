@@ -20,6 +20,7 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  ARTEFACTS_PATH,
   CONSOLE_PATH,
   GATE_PATH,
   NOT_A_SCREEN,
@@ -76,6 +77,17 @@ describe('the paths the shell may not move', () => {
     expect(GATE_PATH.startsWith('/bench')).toBe(false)
     expect(railView(GATE_PATH, null).destinations.map((d) => d.path)).toContain(
       GATE_PATH,
+    )
+  })
+
+  it('lists the signed artefacts at the path the API lists them at', () => {
+    // The same path as the route, on the same terms `/runs` already is: the screens
+    // are behind a `#` and no document request carries one, so the proxied prefix
+    // and the screen coexist. Pinned here with the others because it is a
+    // destination the rail names, and `App.tsx` routes on this constant.
+    expect(ARTEFACTS_PATH).toBe('/artefacts')
+    expect(railView(ARTEFACTS_PATH, null).destinations.map((d) => d.path)).toContain(
+      ARTEFACTS_PATH,
     )
   })
 

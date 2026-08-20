@@ -222,13 +222,34 @@ def artefact_for(
     return signed(payload_for(result, cases, rule, config), key)
 
 
+VERIFY_SCRIPT = "uv run python -m scripts.verify"
+"""The recipient's own check, named once so that two screens cannot name it twice.
+
+`scripts/verify.py` is the offline verifier — three results over three files, no
+network and no credential — and this is how it is invoked. Written down here rather
+than in the sentences below it because it now appears in two places a person reads:
+the statement saying whose check the bench's own reading is, and the command a
+console prints beside the files it offers. Two literals would only have to disagree
+once for a recipient to be told to run something that does not exist.
+"""
+
+VERIFY_COMMAND = f"{VERIFY_SCRIPT} path/to/the-three-files"
+"""The whole command, with the directory as the placeholder it has to be.
+
+One line and nothing but the command, because what happens to it is a selection and
+a paste: a `$` in front of it is a command that fails. The argument is a directory
+and never a run id — the verifier is handed the three files and is told nothing
+else, which is the whole of what makes it something a recipient can run when the
+sender is gone.
+"""
+
 CHECKED_BY_THE_BENCH_THAT_PRODUCED_IT = (
     "these three results were computed here, by the bench that produced the "
     "artefact, over the same bytes this run serves. That makes them a statement "
     "that the artefact is checkable and internally consistent — it is not the "
     "check a recipient makes, because a sender's word for their own document is "
     "the thing a signature exists to replace. Download the three files and run "
-    "`uv run python -m scripts.verify` over the directory: it reaches no network, "
+    f"`{VERIFY_SCRIPT}` over the directory: it reaches no network, "
     "needs no credential, and pins the key whose fingerprint this repository's "
     "README publishes"
 )

@@ -95,6 +95,22 @@ h3 {
   margin-bottom: 0.3rem;
 }
 
+/*
+ * A heading inside a block, for the parts of one artefact.
+ *
+ * One artefact carries three results, two claims and three files, and each of those
+ * is a group with a name. Quieter than an `h3` and set apart by letterspacing rather
+ * than by size, so a block stays one block rather than reading as three sections.
+ */
+h4 {
+  margin: 1.4rem 0 0.4rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--quiet);
+}
+
 .steps {
   margin: 0 0 2rem;
   color: var(--quiet);
@@ -636,6 +652,53 @@ code {
 .agent .kind {
   margin: 0;
   font-size: 0.85rem;
+  color: var(--quiet);
+}
+
+/*
+ * One signed artefact per block, and never a row in a shared table.
+ *
+ * A table of artefacts wants a column that says whether each one verified, and one
+ * column over three results is the mark this project refuses: *unsigned* and *signed
+ * by a key you did not pin* are different facts, and a tick would show them
+ * identically. A stack of blocks has nowhere to put that column, and each block has
+ * room for all three outcomes in words.
+ *
+ * The list numbering is dropped for the reason the run list drops it: a column of
+ * ordinals beside somebody's documents is a count of them, on a screen whose whole
+ * subject is that every figure belongs to the thing that measured it.
+ */
+.artefacts {
+  list-style: none;
+  margin: 1.2rem 0 0;
+  padding: 0;
+}
+
+.artefact {
+  padding: 1.4rem 0 0.4rem;
+  border-top: 1px solid var(--line);
+}
+
+.artefact h3 {
+  margin: 0 0 0.2rem;
+  font-size: 1rem;
+}
+
+/*
+ * The three files, under the names a verifier reads them by.
+ *
+ * The filename is set in the monospace face the case ids and the nonce use, because
+ * it is a name that has to be typed or matched rather than read at speed — and what
+ * makes the directory verifiable is that all three arrive under exactly these names.
+ */
+.files {
+  margin: 0.4rem 0 1.2rem;
+  padding-left: 1.2rem;
+  font-size: 0.9rem;
+}
+
+.files li {
+  margin: 0.3rem 0;
   color: var(--quiet);
 }
 

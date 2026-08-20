@@ -55,6 +55,18 @@ export const REGISTER_PATH = '/register'
  */
 export const GATE_PATH = '/gate'
 
+/**
+ * Where the signed artefacts are listed: the documents an engineer sends out.
+ *
+ * The same path the API lists them at, on the same terms `/runs` already is: the
+ * screens are behind a `#` and no document request ever carries one, so the dev
+ * server can proxy the prefix wholesale without shadowing a screen (`main.tsx`,
+ * `vite.config.ts`). It is not under `/bench`, because an artefact is a document
+ * about somebody's target and `/bench` is the prefix whose subject is the
+ * instrument (ADR-0018).
+ */
+export const ARTEFACTS_PATH = '/artefacts'
+
 /** The run screen's route, as `App.tsx` declares it. */
 export const RUN_PATTERN = '/runs/:runId'
 
@@ -135,7 +147,7 @@ interface Place {
 /**
  * The console's standing destinations.
  *
- * Three, today, and the shell is the reason there can be more: a screen added to
+ * Four, today, and the shell is the reason there can be more: a screen added to
  * this list is a screen the rail names, and nothing else has to change. The three
  * screens the console already had are not all here, because two of them are a
  * run's and a run is not somewhere the console always goes.
@@ -164,6 +176,13 @@ const STANDING: readonly (Place & { path: string })[] = [
     answers:
       'The rule this bench is held to, what the last gate run answered under it, ' +
       'and the command that starts another. Nothing here starts one.',
+  },
+  {
+    path: ARTEFACTS_PATH,
+    name: 'Signed artefacts',
+    answers:
+      'Every artefact this bench has signed, each with all three verification ' +
+      'results named, and the command a recipient runs.',
   },
 ]
 

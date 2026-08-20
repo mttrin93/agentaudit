@@ -618,7 +618,7 @@ def _provenance(payload: TargetPayload) -> dict[str, Any]:
             "stated": provenance.library.stated(),
         },
         "calls_spent": {layer.value: provenance.calls_spent[layer] for layer in Layer},
-        "gate": _citation(provenance.gate),
+        "gate": citation(provenance.gate),
         "rule": {
             "interval_confidence": payload.rule.interval_confidence,
             "attempts_per_case": payload.rule.attempts_per_case,
@@ -628,20 +628,34 @@ def _provenance(payload: TargetPayload) -> dict[str, Any]:
     }
 
 
-def _citation(citation: GateCitation | None) -> dict[str, Any]:
-    """The gate citation, or the stated absence of one. Never a missing key."""
-    if citation is None:
+def citation(cited: GateCitation | None) -> dict[str, Any]:
+    """The gate citation, or the stated absence of one. Never a missing key.
+
+    Public because two carriers need the same shape and one of them is not a
+    report: this block travels inside the signed provenance above, and the console
+    reads the identical block from a route of its own (`api/app.py`). One
+    serialiser rather than two, for the reason `figures` is shared with the tests —
+    two would only have to disagree once for a screen to state a gate result the
+    artefact does not carry, and the disagreement would be in the flattering
+    direction (ADR-0018).
+
+    **`cited: false` is a sentence and not a blank.** The two shapes are two
+    different facts, not one record with empty fields: an uncited instrument has no
+    outcome, no date and no library version, so there is nowhere here for a reader
+    to find an empty one and read it as *not passed*.
+    """
+    if cited is None:
         return {"cited": False, "stated": UNCITED_GATE}
     return {
         "cited": True,
-        "outcome": citation.outcome.value,
-        "decided_on": citation.decided_on.isoformat(),
+        "outcome": cited.outcome.value,
+        "decided_on": cited.decided_on.isoformat(),
         "library": {
-            "cases": citation.library.cases,
-            "digest": citation.library.digest,
+            "cases": cited.library.cases,
+            "digest": cited.library.digest,
         },
-        "document": citation.document,
-        "stated": citation.stated(),
+        "document": cited.document,
+        "stated": cited.stated(),
     }
 
 

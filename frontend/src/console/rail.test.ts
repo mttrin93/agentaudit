@@ -27,6 +27,7 @@ import {
   REGISTER_PATH,
   REPORT_PATTERN,
   RUN_PATTERN,
+  SETTINGS_PATH,
   THE_CONSOLE,
   railView,
   rememberTheRun,
@@ -88,6 +89,18 @@ describe('the paths the shell may not move', () => {
     expect(ARTEFACTS_PATH).toBe('/artefacts')
     expect(railView(ARTEFACTS_PATH, null).destinations.map((d) => d.path)).toContain(
       ARTEFACTS_PATH,
+    )
+  })
+
+  it('states what the bench is set to at a path that does not shadow the API', () => {
+    // The same reasoning as the gate screen's: `/bench` is the prefix the dev server
+    // proxies to the API, and the settings route the screen reads is at
+    // `/bench/settings`. So the screen is at `/settings`, and this is where a move to
+    // the shadowing path fails. `App.tsx` routes on this constant.
+    expect(SETTINGS_PATH).toBe('/settings')
+    expect(SETTINGS_PATH.startsWith('/bench')).toBe(false)
+    expect(railView(SETTINGS_PATH, null).destinations.map((d) => d.path)).toContain(
+      SETTINGS_PATH,
     )
   })
 

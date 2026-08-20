@@ -1,14 +1,15 @@
 """The HTTP surface: a nonce, a run, the answer to the run's interrupt, and the
 artefact it produced.
 
-Eleven routes. `POST /nonces` issues the value an operator plants to prove they
+Twelve routes. `POST /nonces` issues the value an operator plants to prove they
 control the endpoint; `POST /runs` records the attestation, declares the estimate
 and halts; `POST /runs/{id}/approval` answers the halt; `GET /runs` lists the runs on
 the record; `GET /runs/{id}` says where the run has got to; four under `/report/{id}`
 — three that serve the files one signed run leaves, the payload, the rendering and
 the detached signature, and a fourth that says what a verifier makes of them; `GET
-/artefacts` lists every signed artefact with that same reading beside it; and
-`GET /bench/gate`, which is about the bench rather than about any run.
+/artefacts` lists every signed artefact with that same reading beside it; and two
+under `/bench`, whose subject is the bench rather than any run — `GET /bench/gate`
+and `GET /bench/settings`.
 
 **Neither route under `/runs` returns a figure spanning the two layers.** Calls
 spent are reported per layer by both — `GET /runs/{id}` for one run in flight,
@@ -28,6 +29,16 @@ begins one and no record type for one — this route reads the rule the bench de
 and the citation the deployment declared, and nothing else. The document is **named
 and never opened**: a route that parsed the bench's own prose output would break on a
 rewording, and the citation already carries every field a reader needs.
+
+**`GET /bench/settings` states and never changes.** The second route under
+`/bench`, and a reader in the strong sense: the two key fingerprints — the key an
+artefact will be signed by and the key a verification is run against, which are two
+facts and not one — the live library's version with the retired count kept beside
+it, the four model settings as four rows, and each layer's ceiling as its own record
+in its own units. There is no field on it that adds the two layers, no fifth field
+combining two model settings, and nothing derived from a private key: rotation stays
+in the environment and configuration stays on the command line, because the factory
+reads its key from one place and refuses to boot without it (ADR-0020).
 
 **`GET /artefacts` is the same reading, once per artefact, and never a mark.** An
 engineer choosing which run to send a customer needs to learn the artefact is
@@ -126,6 +137,7 @@ from pydantic import BaseModel, Field
 
 from backend.api.report import (
     CHECKED_BY_THE_BENCH_THAT_PRODUCED_IT,
+    UNDECLARED_MODEL,
     VERIFY_COMMAND,
     ReportConfig,
     Unsigned,
@@ -140,26 +152,38 @@ from backend.api.runs import (
     RunRecord,
     RunStatus,
 )
+from backend.bench.adaptive.budget import DECLARED_ADAPTIVE_BUDGET, AdaptiveBudget
 from backend.bench.admission import admitted_library
 from backend.bench.contract import NOT_A_SECURITY_RESULT, RetryPolicy, TargetConfig
-from backend.bench.payload import GateCitation, citation
+from backend.bench.library import Case, CaseStatus, LibraryVersion
+from backend.bench.payload import DeclaredModels, GateCitation, citation
 from backend.bench.registration import ECHO_PROBE, Attestation
 from backend.bench.rendering import REPORT_MARKDOWN, REPORT_PAYLOAD
+from backend.bench.retirement import retired_cases
 from backend.bench.rule import DECLARED_RULE, GateRule
 from backend.bench.signing import (
     SIGNATURE_FILE,
+    SIGNING_KEY_VARIABLE,
     NoSigningKey,
     SignedArtefact,
     encoded,
+    fingerprint,
+    public_key,
     signing_key,
 )
 from backend.bench.verification import (
     INTEGRITY_CLAIM,
     RE_DERIVABILITY_CLAIM,
+    SignatureOutcome,
     Verification,
 )
 from backend.graph.approval import Approval
-from backend.graph.budget import BudgetPayload, CallPrice, Layer
+from backend.graph.budget import (
+    REGISTRATION_PROBES_PER_TARGET,
+    BudgetPayload,
+    CallPrice,
+    Layer,
+)
 from backend.graph.runstate import RunState
 
 CASES_DIR = Path(__file__).resolve().parents[1] / "cases"
@@ -1366,6 +1390,506 @@ def bench_gate(cited: GateCitation | None, rule: GateRule = DECLARED_RULE) -> Be
     return BenchGate(rule=declared_rule(rule), citation=gate_response(cited))
 
 
+BENCH_SETTINGS_ROUTE = "/bench/settings"
+"""What this instrument is configured to do, read and never written.
+
+Under `/bench` with the gate citation, because the subject is the instrument: not
+one field here is a measurement of anybody's target, and nothing about a target is
+reachable from here (ADR-0018). A reader, in the strong sense — this route has no
+sibling that writes, rotation stays in the environment and configuration stays on
+the command line, so an operator who needs a different key or a different model
+changes the deployment rather than this screen (ADR-0020).
+
+**Every value on it already exists on the record.** The two key fingerprints are
+`signing.fingerprint` over the two public halves `ReportConfig` already holds; the
+library version is `LibraryVersion.of` over the cases the bench was built with; the
+four model settings are read off `DeclaredModels` and, for the fourth, stated as the
+setting this bench does not hold; the ceilings are the declared numbers of
+`rule.py` and `adaptive/budget.py`. Nothing here computes a rate, a band or a
+verdict, and nothing adds two layers or two families.
+"""
+
+THE_INSTRUMENT_AS_CONFIGURED = (
+    "what this bench is configured to do, as it is currently loaded. A read: no "
+    "route under this prefix writes, and nothing here can be changed from a "
+    "browser — the signing key is rotated in the environment and the models and "
+    "the library are chosen on the command line, because the factory reads its key "
+    "from one place and refuses to boot without it (ADR-0020). Not one field below "
+    "is a measurement of a target: this bench has a configuration, and a target has "
+    "rates, intervals and bands (ADR-0018)"
+)
+"""What the settings response is, said on the response, because a screenshot travels."""
+
+TWO_KEYS_TWO_FACTS = (
+    "Two identifiers, and they are two facts rather than one restated. One is the "
+    "key an artefact this bench produces will be signed by; the other is the key a "
+    "verification of one is run against. A bench signing with a key nobody "
+    f"published verifies against the published one and reports "
+    f"{SignatureOutcome.ANOTHER_KEY} on every report it ever produces — a reachable "
+    "state, named, and invisible on a screen that printed one identifier and called "
+    "it the key (ADR-0017). Neither of them is the private half: what is served "
+    "here is a fingerprint over a public key and nothing else derived from a secret, "
+    f"and {SIGNING_KEY_VARIABLE} is read by `signing.signing_key` — the only line in "
+    "this repository that reads it — and by no route"
+)
+"""Why one key identifier would be a screen hiding a state its own tests reach."""
+
+WILL_BE_SIGNED_BY = (
+    "the key every artefact this bench produces will be signed by, named by the "
+    "fingerprint and by nothing else. The same value is written into the payload as "
+    "`key_id`, inside the bytes the signature covers, so a recipient compares what "
+    "they were told against what they were handed rather than taking a sender's word "
+    "for which key signed"
+)
+
+WILL_BE_SIGNED_BY_NOTHING = (
+    "this bench holds no signing key, so it will produce no signed artefact. A "
+    "stated absence and not a blank: its runs still attempt the library and are "
+    "still measured, and the report each one leaves is refused by name as "
+    f"{ReportRefusal.NEVER_SIGNED} rather than served unsigned, because the word "
+    "*signed* has to mean one thing (ADR-0017). A deployment cannot arrive here by "
+    f"omission — the factory refuses to boot without {SIGNING_KEY_VARIABLE} "
+    "(ADR-0020) — so a bench in this state is one somebody declared"
+)
+
+VERIFIED_AGAINST_A_DECLARED_PIN = (
+    "the key this bench runs its own verification readings against: a published "
+    "half the deployment declared, which is what a rotated key needs. Compare it "
+    "with the fingerprint above — if the two differ, every verification this bench "
+    "reports reads "
+    f"{SignatureOutcome.ANOTHER_KEY}, and that is worth finding here rather than "
+    "after a recipient runs the script"
+)
+
+VERIFIED_AGAINST_THE_COMMITTED_KEY = (
+    "the key this bench runs its own verification readings against: the committed "
+    "public half whose fingerprint this repository's README publishes, which is what "
+    "`scripts/verify.py` pins when it is handed no other. This deployment declared "
+    "no pin of its own, so this is the key a recipient who does not trust the sender "
+    "would use — and it is the default for exactly that reason, because a bench "
+    "verifying its own artefacts against its own signing key would report valid on "
+    "every report it ever produced"
+)
+
+
+class WillBeSignedBy(BaseModel):
+    """The key an artefact this bench produces will be signed by, as a fingerprint.
+
+    The fingerprint and nothing else. Nothing derived from the private half reaches
+    this model, and there is no field on it that could carry one: what a settings
+    screen is for is telling an operator *which* key, and `signing.fingerprint` is
+    the one representation of that — the value in `key_id`, the value the README
+    publishes, and the value `verify.py` compares (ADR-0017).
+    """
+
+    holds_a_key: Literal[True] = True
+    fingerprint: str
+    stated: str = WILL_BE_SIGNED_BY
+
+
+class WillSignNothing(BaseModel):
+    """A bench that declared it does not sign, saying so where a key would be.
+
+    `holds_a_key` is the field a caller branches on and it is a literal, so this and
+    the shape above are two facts rather than one record with an empty fingerprint.
+    There is no `fingerprint` field to be blank, so nothing here can be read as a
+    key whose name failed to load.
+    """
+
+    holds_a_key: Literal[False] = False
+    stated: str = WILL_BE_SIGNED_BY_NOTHING
+
+
+class VerifiedAgainst(BaseModel):
+    """The key a verification of this bench's artefacts is run against.
+
+    Never absent, because there is always an answer: a deployment that declared no
+    pin verifies against the committed public half, which is the key a recipient
+    would pin. `declared` says which of the two this is, so *the deployment rotated
+    its key* and *the deployment said nothing* are distinguishable rather than
+    inferred from a fingerprint somebody would have to recognise.
+    """
+
+    fingerprint: str
+    declared: bool
+    """True when the deployment declared its own published half (`pinned`)."""
+
+    stated: str
+
+
+class SigningKeys(BaseModel):
+    """The two key identifiers, kept apart, and neither of them a secret.
+
+    Two fields rather than one, mirroring `SignatureResult.claimed` and `.pinned`
+    exactly: those two are separate on the wire because a signature valid under a
+    key the recipient did not pin is the failure a single value would hide, and the
+    same two keys are what a settings screen is asked about.
+    """
+
+    will_be_signed_by: WillBeSignedBy | WillSignNothing
+    verified_against: VerifiedAgainst
+    statement: str = TWO_KEYS_TWO_FACTS
+
+
+def signing_keys(config: ReportConfig) -> SigningKeys:
+    """The two fingerprints this bench's configuration implies, and nothing else.
+
+    Both read off `ReportConfig`: the first over the public half of the key the
+    bench signs with, the second over the pin the deployment declared or over the
+    committed key when it declared none — the same fallback `verification_of`
+    applies, so the fingerprint shown here is the key the readings this bench serves
+    were actually run against.
+    """
+    key = config.signing_key
+    pinned = config.pinned
+    return SigningKeys(
+        will_be_signed_by=WillSignNothing()
+        if key is None
+        else WillBeSignedBy(fingerprint=fingerprint(key.public_key())),
+        verified_against=VerifiedAgainst(
+            fingerprint=fingerprint(pinned if pinned is not None else public_key()),
+            declared=pinned is not None,
+            stated=VERIFIED_AGAINST_A_DECLARED_PIN
+            if pinned is not None
+            else VERIFIED_AGAINST_THE_COMMITTED_KEY,
+        ),
+    )
+
+
+RETIRED_IS_KEPT = (
+    "retired cases are counted and kept. A case that stopped discriminating is "
+    "marked retired with the date and the reading it retired on, and it is never "
+    "deleted, because a case the field caught up with is evidence that the field "
+    "moved (CONTEXT.md, PLAN §6). It leaves live scoring and stays in the library, "
+    "which is why this is a count beside the version rather than a difference "
+    "between two versions: the library's history is part of what it is, and a screen "
+    "showing only the live half would show an instrument with no past"
+)
+"""Why the retired count sits beside the version rather than inside it."""
+
+THE_VERSION_IS_OVER_THE_LIVE_HALF = (
+    "the version is over the cases a run scores — the live half — which is the half "
+    "a gate run is decided on, so the version here and the version in the gate "
+    "citation are comparable by eye. Both the count and the digest, because a "
+    "library described only as *eighteen cases* cannot tell a reader whether the "
+    "eighteen are the same eighteen"
+)
+
+
+class LoadedLibrary(BaseModel):
+    """The case library this bench is loaded with: its version, and what has retired.
+
+    Two figures and no third. There is no total of the two here and no field that is
+    their sum: *live* and *retired* answer different questions — what a run will
+    attempt, and what the library has stopped attempting — and a figure adding them
+    would be a case count nothing runs.
+    """
+
+    live: CitedLibrary
+    """The count and the digest over the cases a run scores.
+
+    `CitedLibrary` and not a second shape, because this is the same fact the gate
+    citation carries and story 31 is a reader comparing the two. One model, so the
+    comparison is between two values of one type rather than two types somebody has
+    to be told are the same.
+    """
+
+    stated: str
+    """The version as a run prints it, from `LibraryVersion.stated`."""
+
+    retired: int
+    """How many cases are marked retired and kept. Never a deletion."""
+
+    kept: str = RETIRED_IS_KEPT
+    statement: str = THE_VERSION_IS_OVER_THE_LIVE_HALF
+
+
+def loaded_library(cases: Sequence[Case]) -> LoadedLibrary:
+    """The version of the live half, and the count of the retired half beside it.
+
+    Split on the status already on each record rather than by re-deriving the
+    retirement rule: `retirement.live_library` re-decides every case and refuses a
+    record whose status and stored series disagree, which is the right behaviour for
+    a run that is about to spend money and the wrong one for a screen — a settings
+    reader that raised would tell an operator nothing at all about the bench they
+    are trying to read.
+    """
+    live = [case for case in cases if case.status is CaseStatus.ACTIVE]
+    version = LibraryVersion.of(live)
+    return LoadedLibrary(
+        live=CitedLibrary(cases=version.cases, digest=version.digest),
+        stated=version.stated(),
+        retired=len(retired_cases(cases)),
+    )
+
+
+FOUR_SETTINGS_NEVER_ONE = (
+    "four separate settings, deliberately, and shown separately for the reason they "
+    "are declared separately. The reference agents' model is what is being measured; "
+    "the adjudicator's is the instrument measuring it; the adaptive attacker's is a "
+    "third thing that decides nothing; the second reference model is what a swap is "
+    "measured against. Collapsing any two of them into one would report an "
+    "instrument's agreement with itself — a κ measured on the model that produced "
+    "the transcripts, or a swap that measured run-to-run variation (ADR-0012, "
+    "ADR-0013). There is no combined field here and no default that fills one in"
+)
+"""Why four rows and never one: each collapse names the figure it would corrupt."""
+
+THE_REFERENCE_AGENTS_MODEL = (
+    "the model the three reference agents run on, and so the model this bench's own "
+    "discrimination scores were earned on. What is being measured rather than the "
+    "instrument measuring it: a `D` is a reading about one pair of models and never "
+    "a general claim (ADR-0012)"
+)
+
+THE_ADJUDICATORS_MODEL = (
+    "the instrument that decides the two judged families, and the one κ is measured "
+    "on against the gold set. Never a reference agent's model: an adjudicator "
+    "scoring transcripts its own model produced would be reporting its agreement "
+    "with itself, which is the reading ADR-0013 keeps a third instrument apart to "
+    "prevent"
+)
+
+THE_ADAPTIVE_ATTACKERS_MODEL = (
+    "the adaptive layer's model, and the adaptive layer's only. It decides nothing "
+    "that is scored: no episode it runs lands in a denominator, and `A_break` is "
+    "never written `D` (ADR-0010)"
+)
+
+THE_SECOND_REFERENCE_MODEL = (
+    "the model the library is re-run on when the bench checks whether it reads the "
+    "agents' defences or the model's default refusals. Not a setting this bench "
+    "holds: it is declared to `scripts/swap.py` on the command line, per run, and it "
+    "has to differ from the reference agents' model above or the second run measures "
+    "run-to-run variation rather than a model swap (ADR-0012). Stated here rather "
+    "than omitted, because a screen showing three of the four would be exactly the "
+    "collapse this block exists to make visible"
+)
+
+NOT_HELD_BY_THIS_BENCH = (
+    "not held by this bench — declared on the command line, per run, to the script "
+    "that uses it"
+)
+"""What the fourth setting's identifier says. A stated absence, not a model."""
+
+
+class ModelSetting(BaseModel):
+    """One of the four model settings: the instrument, its model, what it decides.
+
+    A row with no figure on it. Nothing here is a rate, a κ or a `D` — those belong
+    to the runs and to the gate document — and there is no field on which two of
+    these rows could be compared, because what a reader has to be able to see is
+    that they are four and not one.
+    """
+
+    instrument: str
+    """What this model is the model *of*, in the bench's own words."""
+
+    identifier: str
+    """The model as the deployment declared it, or the stated absence of one."""
+
+    declared: bool
+    """Whether a deployment named this one. `False` is a sentence, not a blank."""
+
+    decides: str
+    """What it decides, and which other setting it must never be collapsed with."""
+
+
+def model_settings(models: DeclaredModels) -> list[ModelSetting]:
+    """The four settings, in the order they are declared, each on its own row.
+
+    Three read off `DeclaredModels` — the same three identifiers every signed
+    provenance block carries, so the models on this screen are the models a report
+    names — and the fourth stated as the setting this bench does not hold. Built as
+    a list of four rather than one record with four fields so that *four* is a
+    length a test can assert, and so that there is nowhere to put a fifth field
+    combining any two of them.
+    """
+    return [
+        ModelSetting(
+            instrument="the reference agents",
+            identifier=models.calibration,
+            declared=models.calibration != UNDECLARED_MODEL,
+            decides=THE_REFERENCE_AGENTS_MODEL,
+        ),
+        ModelSetting(
+            instrument="the adjudicator",
+            identifier=models.adjudicating,
+            declared=models.adjudicating != UNDECLARED_MODEL,
+            decides=THE_ADJUDICATORS_MODEL,
+        ),
+        ModelSetting(
+            instrument="the adaptive attacker",
+            identifier=models.attacking,
+            declared=models.attacking != UNDECLARED_MODEL,
+            decides=THE_ADAPTIVE_ATTACKERS_MODEL,
+        ),
+        ModelSetting(
+            instrument="the second reference model",
+            identifier=NOT_HELD_BY_THIS_BENCH,
+            declared=False,
+            decides=THE_SECOND_REFERENCE_MODEL,
+        ),
+    ]
+
+
+NEITHER_LAYER_BORROWS = (
+    "each layer's ceiling is declared for that layer and enforced against that "
+    "layer's own counter, so a layer with room left cannot spend the other's "
+    "unspent allowance (ADR-0007, ADR-0010). There is no combined budget here and "
+    "no field that adds the two: the figures are in different units — attempts over "
+    "cases on one side, turns over episodes on the other — and an episode is not an "
+    "attempt, which is why the sum a reader might want does not exist to be printed"
+)
+"""Why two blocks and no total. The units differ, so the sum is not a quantity."""
+
+THE_SCORED_CEILING_IS_DECLARED = (
+    "the scored layer runs recorded cases at a declared number of attempts each, and "
+    "its ceiling is the whole live library at that number, plus one registration "
+    "probe per target, allowing each message the retries that target says it will "
+    "tolerate. Exact rather than a bound, because a suite of known size is "
+    "arithmetic — the figure for one run is declared at the approval interrupt, "
+    "against the library that run is attempted with, and it is presented there as "
+    "its own figure beside the adaptive one"
+)
+
+THE_ADAPTIVE_CEILING_IS_DECLARED = (
+    "the adaptive layer's ceiling is declared here, ahead of any run, because an "
+    "attacker choosing its own route spends unpredictably by construction: it is a "
+    "worst case and it is stated as one. Every episode running to its turn cap, "
+    "across every family, is the most this layer may put on one target's wire — and "
+    "the per-episode cap is a different limit, enforced by the attacker as it runs, "
+    "so a per-family cap multiplied out is not something a reader has to do in their "
+    "head (ADR-0007)"
+)
+
+
+class ScoredCeiling(BaseModel):
+    """The scored layer's ceiling, in the units the scored layer is declared in.
+
+    Attempts over cases. There is no turn on this model and no episode: the two
+    layers are enforced independently and reported separately, and a shape holding
+    both layers' units is a shape somebody eventually adds up (ADR-0010).
+    """
+
+    layer: Literal[Layer.SCORED] = Layer.SCORED
+    attempts_per_case: int
+    """`n` — the declared attempts per case, from `rule.py`. Also a denominator, and
+    that is not an accident: the scored layer's cost is its sample size."""
+
+    registration_probes_per_target: int
+    """The nonce echo probe, which is a call on the operator's endpoint like any
+    other and is inside the ceiling rather than beside it."""
+
+    declared_in: str
+    statement: str = THE_SCORED_CEILING_IS_DECLARED
+
+
+class AdaptiveCeiling(BaseModel):
+    """The adaptive layer's ceiling, in the units the adaptive layer is declared in.
+
+    Turns over episodes over families. No field here shares a unit with the model
+    above, which is what makes the two ceilings unaddable rather than merely
+    un-added: an attempt is the unit of a denominator and a turn is a spending
+    limit, and CONTEXT.md keeps them apart for exactly this reason.
+    """
+
+    layer: Literal[Layer.ADAPTIVE] = Layer.ADAPTIVE
+    turns_per_episode: int
+    """`T` — the cap on one episode, which the attacker enforces as it runs."""
+
+    episodes_per_family: int
+    """`k` — how many episodes are run per family per target."""
+
+    families: int
+    """The families the layer covers, read off the closed enum."""
+
+    turns_per_target: int
+    """The layer's own ceiling: every episode running to its cap, per target."""
+
+    declared_in: str
+    statement: str = THE_ADAPTIVE_CEILING_IS_DECLARED
+
+
+class LayerCeilings(BaseModel):
+    """The two ceilings, one field each, and no third field anywhere.
+
+    Two differently-typed records rather than two integers, so that the invariant is
+    carried by the type: there is no name here under which a sum could be added
+    without inventing a model to hold it, and the two models have not one numeric
+    field in common to add.
+    """
+
+    scored: ScoredCeiling
+    adaptive: AdaptiveCeiling
+    statement: str = NEITHER_LAYER_BORROWS
+
+
+def layer_ceilings(
+    rule: GateRule = DECLARED_RULE, adaptive: AdaptiveBudget = DECLARED_ADAPTIVE_BUDGET
+) -> LayerCeilings:
+    """Each layer's ceiling, read off the record that declares it.
+
+    Two records and two readers: the scored layer's numbers are `rule.py`'s and the
+    adaptive layer's are `adaptive/budget.py`'s, which is where they are declared and
+    why `AdaptiveBudget` is deliberately not `GateRule`. No number is written here.
+    """
+    return LayerCeilings(
+        scored=ScoredCeiling(
+            attempts_per_case=rule.attempts_per_case,
+            registration_probes_per_target=REGISTRATION_PROBES_PER_TARGET,
+            declared_in="backend/bench/rule.py — the declared gate rule",
+        ),
+        adaptive=AdaptiveCeiling(
+            turns_per_episode=adaptive.turns_per_episode,
+            episodes_per_family=adaptive.episodes_per_family,
+            families=adaptive.family_count,
+            turns_per_target=adaptive.turn_ceiling,
+            declared_in="backend/bench/adaptive/budget.py — the declared adaptive "
+            "budget",
+        ),
+    )
+
+
+class BenchSettings(BaseModel):
+    """What this instrument is configured to do. A reader, whole, in one response.
+
+    Five fields and a sentence, and not one of them a measurement. There is no field
+    here that spans two families, none that spans two layers, no severity scale, no
+    composite figure and no control: what a caller can do with this response is read
+    it (ADR-0005, ADR-0010).
+
+    The reference agents are deliberately not on it. They are test equipment served
+    by a different application (`backend/targets/reference`) and this bench holds no
+    handle on them, so a field here would be this route asserting what some other
+    process is running. The console names the three of them from the one constant
+    the gate screen already names them by, which is where *what `D` is measured
+    against* belongs.
+    """
+
+    statement: str = THE_INSTRUMENT_AS_CONFIGURED
+    signing: SigningKeys
+    library: LoadedLibrary
+    models: list[ModelSetting]
+    ceilings: LayerCeilings
+
+
+def bench_settings(config: BenchConfig) -> BenchSettings:
+    """The bench's own configuration as it is currently loaded, and nothing derived.
+
+    Every field is read off the record the deployment handed in. There is no clock
+    here, no filesystem read of a case, no model call and no write — and the one
+    file that is read is the committed public key, through the same
+    `signing.public_key` the verification readings already reach.
+    """
+    return BenchSettings(
+        signing=signing_keys(config.report),
+        library=loaded_library(config.cases),
+        models=model_settings(config.report.models),
+        ceilings=layer_ceilings(config.rule, config.adaptive),
+    )
+
+
 class ApprovalRequest(BaseModel):
     """The answer to one run's interrupt. A yes is the only thing that spends."""
 
@@ -1685,5 +2209,45 @@ def create_app(config: BenchConfig | None = None) -> FastAPI:
         instrument; what they do not get anywhere is a button.
         """
         return bench_gate(bench.config.report.gate)
+
+    @app.get(BENCH_SETTINGS_ROUTE)
+    def state_what_this_bench_is_configured_to_do() -> BenchSettings:
+        """The bench's own configuration as it is currently loaded. A reader.
+
+        Read off the `BenchConfig` this application was built with — the same record
+        every run through it is estimated and attempted against — so what an operator
+        sees here is what the next run will use rather than what a deployment
+        intended. Nothing here is assembled from the filesystem and nothing is parsed
+        out of prose.
+
+        **Two key identifiers, because they are two facts.** The fingerprint of the
+        key an artefact will be signed by, and the fingerprint of the key a
+        verification is run against. A bench signing with a key nobody published
+        verifies against the published one and reports every report as
+        `signed_by_another_key` — a state this bench's own tests reach, and one a
+        screen naming a single key would hide (ADR-0017). Neither is the private
+        half: the signing key variable is read by `signing.signing_key` and by no
+        route, and what is served is a fingerprint over a public key.
+
+        **The four model settings are four rows and never one.** The reference
+        agents' model is what is measured, the adjudicator's is the instrument
+        measuring it, the adaptive attacker's decides nothing, and the second
+        reference model is what a swap is measured against — declared on the command
+        line rather than held here, and stated rather than omitted (ADR-0012,
+        ADR-0013).
+
+        **The two layer ceilings are two records with no unit in common.** Attempts
+        over cases on one side, turns over episodes on the other. There is no
+        combined budget on this response and nothing that could hold one: the two
+        are enforced against separate counters, so a layer with room left cannot
+        borrow the other's allowance (ADR-0007, ADR-0010).
+
+        **Nothing here writes, and there is no route that would.** Rotation stays in
+        the environment and configuration stays on the command line, per the
+        decision that the factory reads its key from one place and refuses to boot
+        without it (ADR-0020). Every method under `/bench` is a `GET`, asserted over
+        the route table in `test_api_settings.py` as well as in `test_api_gate.py`.
+        """
+        return bench_settings(bench.config)
 
     return app

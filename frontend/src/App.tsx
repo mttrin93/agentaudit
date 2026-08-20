@@ -34,6 +34,7 @@ import { ConsoleShell } from './console/ConsoleShell'
 import { ArtefactsScreen } from './console/ArtefactsScreen'
 import { GateScreen } from './console/GateScreen'
 import { LandingScreen } from './console/LandingScreen'
+import { SettingsScreen } from './console/SettingsScreen'
 import {
   ARTEFACTS_PATH,
   CONSOLE_PATH,
@@ -41,6 +42,7 @@ import {
   REGISTER_PATH,
   REPORT_PATTERN,
   RUN_PATTERN,
+  SETTINGS_PATH,
 } from './console/rail'
 import { RegisterScreen } from './register/RegisterScreen'
 import { ReportScreen } from './report/ReportScreen'
@@ -54,6 +56,7 @@ export default function App() {
         <Route path={REGISTER_PATH} element={<RegisterScreen />} />
         <Route path={GATE_PATH} element={<GateScreen />} />
         <Route path={ARTEFACTS_PATH} element={<ArtefactsScreen />} />
+        <Route path={SETTINGS_PATH} element={<SettingsScreen />} />
         <Route path={RUN_PATTERN} element={<RunScreen />} />
         <Route path={REPORT_PATTERN} element={<ReportScreen />} />
         <Route path="*" element={<NoSuchScreen />} />
@@ -70,8 +73,9 @@ function NoSuchScreen() {
       <p>
         The console's front door is at <Link to={CONSOLE_PATH}>/</Link>,
         registration at <Link to={REGISTER_PATH}>/register</Link>, the bench's own
-        gate at <Link to={GATE_PATH}>/gate</Link> and the signed artefacts at{' '}
-        <Link to={ARTEFACTS_PATH}>/artefacts</Link>. A run is at
+        gate at <Link to={GATE_PATH}>/gate</Link>, the signed artefacts at{' '}
+        <Link to={ARTEFACTS_PATH}>/artefacts</Link> and what the bench is set to at{' '}
+        <Link to={SETTINGS_PATH}>/settings</Link>. A run is at
         <code> /runs/&lt;id&gt;</code>, and its report at
         <code> /runs/&lt;id&gt;/report</code>.
       </p>

@@ -67,6 +67,21 @@ export const GATE_PATH = '/gate'
  */
 export const ARTEFACTS_PATH = '/artefacts'
 
+/**
+ * Where the bench states what it is configured to do: keys, library, models, limits.
+ *
+ * `/settings` and not `/bench/settings`, for the reason the gate screen is at
+ * `/gate`: `/bench` is the API's own prefix for the routes whose subject is the
+ * instrument, and a screen path that shadowed it would be a document request the dev
+ * server proxies to the bench.
+ *
+ * The name is the plainest one and it is deliberately not *configure*: nothing on
+ * this screen changes a setting, and there is no route on this bench that would take
+ * one. Rotation stays in the environment and configuration stays on the command line
+ * (ADR-0020).
+ */
+export const SETTINGS_PATH = '/settings'
+
 /** The run screen's route, as `App.tsx` declares it. */
 export const RUN_PATTERN = '/runs/:runId'
 
@@ -147,7 +162,7 @@ interface Place {
 /**
  * The console's standing destinations.
  *
- * Four, today, and the shell is the reason there can be more: a screen added to
+ * Five, today, and the shell is the reason there can be more: a screen added to
  * this list is a screen the rail names, and nothing else has to change. The three
  * screens the console already had are not all here, because two of them are a
  * run's and a run is not somewhere the console always goes.
@@ -183,6 +198,14 @@ const STANDING: readonly (Place & { path: string })[] = [
     answers:
       'Every artefact this bench has signed, each with all three verification ' +
       'results named, and the command a recipient runs.',
+  },
+  {
+    path: SETTINGS_PATH,
+    name: 'What it is set to',
+    answers:
+      'The key an artefact will be signed by and the key a verification is run ' +
+      'against, the case library, the four model settings and each layer’s own ' +
+      'ceiling. It states them and changes none of them.',
   },
 ]
 

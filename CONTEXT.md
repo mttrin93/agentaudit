@@ -216,11 +216,18 @@ _Avoid_: history, memory, knowledge, prior
 ### Trust mechanics
 
 **Canary**:
-A token planted where the bench will recognise it again. Two plantings, proving two
+A token planted where the bench will recognise it again. Three plantings, proving three
 different things. Planted in the target's **configuration**, its appearance in output
 proves a leak. Planted by a third party in **content the target fetches**, as an
 instruction the target has to carry out to produce it, its appearance proves obedience
-— the value was never inside the boundary, so nothing about it leaked.
+— the value was never inside the boundary, so nothing about it leaked. Planted in the
+target's **session memory**, as an instruction carried out in a later turn where the
+content that planted it is gone, its appearance proves persistence — a different claim
+from obedience, and named apart for the same reason **probe** and **case** are: obedience
+is shown while the instruction is still in front of the target, persistence is shown
+after it is not, and a conflation of the two would let a same-turn success stand as
+evidence that memory was poisoned. The third planting needs a target that retains
+session state, and reports **not measurable** against one that does not.
 _Avoid_: marker, tracer, honeytoken
 
 **Nonce**:

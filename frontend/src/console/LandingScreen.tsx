@@ -74,7 +74,7 @@ import {
   benchRuns,
   reportPayload,
   runProgress,
-  type GateCitation,
+  type BenchGate,
   type RunList,
 } from '../api/bench'
 import {
@@ -94,7 +94,7 @@ import {
   type Questionnaire,
   type QuestionnaireAnswer,
 } from './questionnaire'
-import { REGISTER_PATH } from './rail'
+import { GATE_PATH, REGISTER_PATH } from './rail'
 import {
   runsReading,
   TWO_COLUMNS_NEVER_ONE,
@@ -103,9 +103,16 @@ import {
   type ScoredColumn,
 } from './runs'
 
-/** What this screen is holding: the citation, or why it could not read one. */
+/**
+ * What this screen is holding: the bench's own gate reading, or why it read none.
+ *
+ * The whole of `GET /bench/gate` — the declared rule and the citation — of which
+ * this screen shows the citation. The rule is the gate screen's subject and is not
+ * restated here: the front door says whether the instrument was validated, and the
+ * bar it was validated against is one link away.
+ */
 interface Held {
-  gate: GateCitation | null
+  gate: BenchGate | null
   unavailable: string
 }
 
@@ -247,6 +254,11 @@ export function LandingScreen() {
       <section>
         <h2>Whether it has been validated</h2>
         <p>{WHY_THE_GATE_IS_HERE}</p>
+        <p className="steps">
+          The rule it was decided under, what running another one writes back to the
+          case library, and the command that starts one are on{' '}
+          <Link to={GATE_PATH}>the gate screen</Link>.
+        </p>
 
         {held.unavailable ? (
           <div className="citation uncited" role="alert">
@@ -261,7 +273,7 @@ export function LandingScreen() {
         ) : held.gate === null ? (
           <p className="aside">Reading this bench’s own gate citation…</p>
         ) : (
-          <Citation reading={gateReading(held.gate)} />
+          <Citation reading={gateReading(held.gate.citation)} />
         )}
       </section>
 

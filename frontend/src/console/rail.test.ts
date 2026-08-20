@@ -21,6 +21,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   CONSOLE_PATH,
+  GATE_PATH,
   NOT_A_SCREEN,
   REGISTER_PATH,
   REPORT_PATTERN,
@@ -63,6 +64,19 @@ describe('the paths the shell may not move', () => {
     expect(REPORT_PATTERN).toBe('/runs/:runId/report')
     expect(runPath('run-1')).toBe('/runs/run-1')
     expect(reportPath('run-1')).toBe('/runs/run-1/report')
+  })
+
+  it('keeps the gate screen off the prefix the API answers on', () => {
+    // `/bench` is the bench's own HTTP prefix and the dev server proxies it, so a
+    // screen at `/bench/gate` would be a document request handed to the API — the
+    // console's gate screen is at `/gate` and this is where a move to the shadowing
+    // path fails. It is also the console's only new standing destination since the
+    // shell, so the literal is pinned here with the three that may not move.
+    expect(GATE_PATH).toBe('/gate')
+    expect(GATE_PATH.startsWith('/bench')).toBe(false)
+    expect(railView(GATE_PATH, null).destinations.map((d) => d.path)).toContain(
+      GATE_PATH,
+    )
   })
 
   it('leads back to the run it was built from, whatever its id looks like', () => {

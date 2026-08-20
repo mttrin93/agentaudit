@@ -31,9 +31,11 @@
 import { Link, Route, Routes } from 'react-router-dom'
 
 import { ConsoleShell } from './console/ConsoleShell'
+import { GateScreen } from './console/GateScreen'
 import { LandingScreen } from './console/LandingScreen'
 import {
   CONSOLE_PATH,
+  GATE_PATH,
   REGISTER_PATH,
   REPORT_PATTERN,
   RUN_PATTERN,
@@ -48,6 +50,7 @@ export default function App() {
       <Route element={<ConsoleShell />}>
         <Route path={CONSOLE_PATH} element={<LandingScreen />} />
         <Route path={REGISTER_PATH} element={<RegisterScreen />} />
+        <Route path={GATE_PATH} element={<GateScreen />} />
         <Route path={RUN_PATTERN} element={<RunScreen />} />
         <Route path={REPORT_PATTERN} element={<ReportScreen />} />
         <Route path="*" element={<NoSuchScreen />} />
@@ -62,8 +65,9 @@ function NoSuchScreen() {
     <main className="screen">
       <h1>No such screen</h1>
       <p>
-        The console's front door is at <Link to={CONSOLE_PATH}>/</Link> and
-        registration at <Link to={REGISTER_PATH}>/register</Link>. A run is at
+        The console's front door is at <Link to={CONSOLE_PATH}>/</Link>,
+        registration at <Link to={REGISTER_PATH}>/register</Link> and the bench's own
+        gate at <Link to={GATE_PATH}>/gate</Link>. A run is at
         <code> /runs/&lt;id&gt;</code>, and its report at
         <code> /runs/&lt;id&gt;/report</code>.
       </p>

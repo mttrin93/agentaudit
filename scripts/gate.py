@@ -27,11 +27,18 @@ below the decision, carrying no rate, no interval, no band and no `D` (ADR-0010)
 A weak attacker cannot fail a working bench here and a lucky one cannot pass a
 broken one, because `read_gate` is handed the recorded attempts and nothing else.
 
-**Its output survives the run.** Everything printed is also written to a dated
+**Its output survives the run, twice.** Everything printed is written to a dated
 document under `--record`, in the two sections it was printed in: validation history
 has to exist before the first user does, and a gate answer that lived only in a
-terminal is a gate answer nobody can check (spec story 80). The curated narrative
-stays in `docs/validation.md`; what is written here is the run itself.
+terminal is a gate answer nobody can check (spec story 80). Beside it goes the same
+run as a machine-readable record — each family's three reference-agent rates, its
+`D`, whether the intervals were disjoint and whether the ordering held, under the
+decision and the rule that was applied — so a reader recovers the figures without
+parsing prose, in the shape `GET /gate-runs/{id}` serves them for a gate run started
+from the console (`bench/gate_record.py`, ADR-0021). The two cannot disagree: one
+`GateResult` is read once, and the document's scored section is the record's own
+rendering of it. The curated narrative stays in `docs/validation.md`; what is
+written here is the run itself.
 
 **One writer at a time on one library.** This run takes an exclusive lease on the
 case directory before it reads anything and gives it back however it ends, because a

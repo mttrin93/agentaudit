@@ -969,6 +969,14 @@ export interface FamilyFigures {
   inversions: number
   monotonic: boolean
   passes: boolean
+  /**
+   * Why this family decided nothing, or null where it decided something.
+   *
+   * On the family's own line and not only in `GateDecided.excluded`, so nothing
+   * here reads as a contribution to the outcome: its rates were measured and are
+   * recorded, and they decide nothing in either count (ADR-0015).
+   */
+  excluded: string | null
   stated: string
 }
 

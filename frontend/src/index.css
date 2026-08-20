@@ -311,3 +311,105 @@ a {
   margin: 0;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
+
+/*
+ * The three verification results, as three blocks with the failing one marked.
+ *
+ * Marked by a border and the outcome's own name rather than by a tick or a cross:
+ * a tick beside somebody's agent name is the badge D3 forbids, and *unsigned* and
+ * *signed by a key you did not pin* are different facts that one cross would show
+ * identically.
+ */
+.checks {
+  margin: 1.2rem 0 2rem;
+}
+
+.check {
+  padding: 0.8rem 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 0.95rem;
+}
+
+.check dd {
+  margin: 0.3rem 0 0;
+  color: var(--quiet);
+}
+
+.check.did-not-hold {
+  border-left: 3px solid var(--refusal);
+  padding-left: 0.8rem;
+  color: var(--refusal);
+}
+
+.check.did-not-hold dd {
+  color: inherit;
+}
+
+/*
+ * One family per block, and never a row in a shared table.
+ *
+ * A table wants a total row, an average under it and a sort by the worst column —
+ * three things this report must not have (ADR-0005, D12). A stack of blocks has
+ * nowhere to put any of them, and the layout is therefore the argument rather than
+ * a decoration of it.
+ */
+.families {
+  display: grid;
+  gap: 1.5rem;
+  margin: 1.5rem 0;
+}
+
+.family {
+  padding: 1rem 1.2rem;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  font-size: 0.95rem;
+}
+
+.family h3 {
+  margin-top: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.family .calls {
+  display: inline-block;
+  margin-right: 0.8rem;
+  font-size: 1.8rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/*
+ * A family with no rate is drawn without the place a rate would go.
+ *
+ * Dashed rather than solid, and with the reason where the figure would have been:
+ * a family withheld below the κ floor and a family the target could not answer are
+ * not rates of zero, and the surest way to be read as one is to be drawn in the
+ * same box with an empty number in it.
+ */
+.family.absent {
+  border-style: dashed;
+}
+
+.defeat {
+  margin: 1.2rem 0;
+  padding-left: 0.9rem;
+  border-left: 3px solid var(--refusal);
+}
+
+.defeat h3 {
+  margin-top: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+blockquote {
+  margin: 1rem 0;
+  padding-left: 1rem;
+  border-left: 1px solid var(--line);
+  color: var(--quiet);
+  font-size: 0.95rem;
+}
+
+code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.9em;
+}

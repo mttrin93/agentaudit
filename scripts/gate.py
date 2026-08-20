@@ -68,6 +68,7 @@ import os
 import secrets
 import sys
 from collections.abc import Sequence
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import InvalidOperation
 from pathlib import Path
@@ -83,6 +84,7 @@ from backend.bench.completion import (
 )
 from backend.bench.contract import TargetConfig
 from backend.bench.gate import GateResult, NotAGateRun, read_gate
+from backend.bench.gate_record import recorded_gate_run, write_the_record
 from backend.bench.goldset import load_gold_sets, measure_reliability
 from backend.bench.lease import LibraryBusy, holding_the_library
 from backend.bench.library import Case
@@ -375,8 +377,23 @@ def run_the_gate(args: argparse.Namespace) -> int:
         args,
         retirement_section(history, decisions, library),
     )
-    print(f"\nthis run's own document: {written}")
+    print(f"\nthis run's own document: {written.document}")
+    print(f"the same run as a record: {written.record}")
     return exit_code(gate)
+
+
+@dataclass(frozen=True)
+class WrittenRun:
+    """Where this gate run was written down: the document, and the record beside it.
+
+    Two files and one run. A reader gets the prose, a program gets the fields, and
+    neither is the other's summary — they are two renderings of one reading, and the
+    writer below returns both so that no caller can be handed one and told the other
+    exists somewhere.
+    """
+
+    document: Path
+    record: Path
 
 
 def record_run(
@@ -386,14 +403,29 @@ def record_run(
     directory: Path,
     args: argparse.Namespace,
     retirement: str = "",
-) -> Path:
-    """Write this run to a dated document, in the sections it was printed in.
+) -> WrittenRun:
+    """Write this run to a dated document, and to a record beside it.
 
     The same text the operator saw, because a recorded document that differed from
     the terminal would be two records of one run. One file per run and never an
     append to a single log: a gate run is the unit a reader compares with another
     gate run, and two of them in one file is a document whose reader has to work out
     where one ended.
+
+    **The record is the same run in fields rather than in prose**, in the same
+    directory and under the same stamp, so a reader recovers each family's three
+    reference-agent rates and its `D` without parsing a sentence (#84). Its shape is
+    `bench/gate_record.py`'s — the shape `GET /gate-runs/{id}` serves for a gate run
+    started from the console — so the two entry points describe one gate run in one
+    vocabulary (ADR-0021).
+
+    **One reading, two renderings, and the document is rendered from the record.**
+    `recorded_gate_run` is called once, and the scored-layer section below is
+    `recorded.decision.stated` rather than a second `gate.stated()`: the document and
+    the record carry the same string because it is the same string, which is what
+    makes disagreement unrepresentable rather than merely unobserved. Nothing here
+    reads either file back — a figure recovered from prose would break on a
+    rewording, and there is no second arithmetic for the two to differ over.
 
     **No payload text, on either side.** The scored half holds counts, intervals and
     the rule; the adaptive half holds prose route descriptions and the statistics.
@@ -403,6 +435,9 @@ def record_run(
     directory.mkdir(parents=True, exist_ok=True)
     stamped = datetime.now(tz=UTC)
     path = directory / f"gate-{stamped:%Y-%m-%dT%H-%M-%SZ}.md"
+    recorded = recorded_gate_run(
+        gate, decided_at=stamped.isoformat(), document=path.name
+    )
     path.write_text(
         "\n".join(
             (
@@ -417,7 +452,9 @@ def record_run(
                 "## The scored layer, which decides the gate",
                 "",
                 "```",
-                gate.stated(),
+                # The record's own rendering of the decision, not a second reading
+                # of it: this is the one string the two files share.
+                recorded.decision.stated,
                 "```",
                 "",
                 "## The adaptive layer, which decides nothing",
@@ -435,7 +472,10 @@ def record_run(
         ),
         encoding="utf-8",
     )
-    return path
+    return WrittenRun(
+        document=path,
+        record=write_the_record(recorded, path.with_suffix(".json")),
+    )
 
 
 def exit_code(gate: GateResult) -> int:

@@ -67,6 +67,7 @@ from backend.bench.assembler import (
     TargetResult,
 )
 from backend.bench.library import ExternalId, LibraryVersion
+from backend.bench.published import UntestedCategory
 from backend.bench.registration import AttestationRecord
 from backend.bench.rule import DECLARED_RULE, GateRule
 from backend.bench.scorer import GateOutcome, Interval, Reliability
@@ -363,6 +364,9 @@ def document(payload: TargetPayload) -> dict[str, Any]:
         "declared": _declared(payload.result.declared),
         "adaptive": _adaptive(payload.result.adaptive),
         "coverage_gaps": [_gap(gap) for gap in payload.result.coverage_gaps],
+        "untested_categories": [
+            _untested(category) for category in payload.result.untested_categories
+        ],
         "provenance": _provenance(payload),
         "rendered_sha256": payload.rendered_sha256,
         "key_id": payload.key_id,
@@ -588,6 +592,23 @@ def _episode(episode: ReportedEpisode) -> dict[str, Any]:
 
 def _gap(gap: CoverageGap) -> dict[str, str]:
     return {"category": gap.category, "reason": gap.reason, "stated": gap.stated()}
+
+
+def _untested(category: UntestedCategory) -> dict[str, str]:
+    """One published agentic category no family claims, with its identifier apart.
+
+    The identifier is its own key rather than folded into the category name, because
+    it is the part a reader can look up: a recipient checking this report's coverage
+    against the published list matches on `ASI07`, not on a title this repository
+    transcribed. `stated` carries the rendered line beside them, on the same terms as
+    `_gap` — the document holds what the Markdown says, so the two cannot drift.
+    """
+    return {
+        "identifier": category.identifier,
+        "title": category.title,
+        "reason": category.reason,
+        "stated": category.stated(),
+    }
 
 
 def _provenance(payload: TargetPayload) -> dict[str, Any]:

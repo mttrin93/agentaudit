@@ -281,6 +281,35 @@ def test_the_negative_coverage_list_is_printed_with_a_reason_for_every_gap() -> 
     assert "OWASP Top 10 for Agentic Applications 2026" in text
 
 
+def test_the_untested_published_categories_print_with_their_identifiers() -> None:
+    # The half of ADR-0002 that did not exist: not only labelling families with
+    # published identifiers, but naming the published categories no family reaches.
+    # The identifier prints because that is the part a reader looks up.
+    payload = a_payload()
+    text = render(payload)
+    [gaps_section] = [
+        section for section in sections(payload) if section.number == "5a"
+    ]
+    body = " ".join(gaps_section.body)
+
+    assert payload.result.untested_categories
+    for category in payload.result.untested_categories:
+        assert f"- {category.stated()}." in gaps_section.body
+        assert category.identifier in text
+        assert category.title in text
+
+    # Two blocks and not one merged list: one is subtracted from a stored copy, the
+    # other is declared because no published register carries it. Printing them
+    # together would make the derived half look declared and the declared half look
+    # checkable.
+    assert "Published categories no family reaches" in body
+    assert "Limits of the bench" in body
+
+    # And the confession this change retires is gone: the bench does now hold a copy
+    # of one of the two lists, so the report may not still say it holds neither.
+    assert "holds no stored copy" not in text
+
+
 # --- Each family's own boundary, beside its own figure (ADR-0002) ------------
 
 

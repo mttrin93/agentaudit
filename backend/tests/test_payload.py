@@ -303,6 +303,23 @@ def test_no_field_in_the_payload_can_hold_a_gate_decision_about_the_target() -> 
         assert value not in answers, f"{path} carries the gate's answer {value!r}"
 
 
+# --- Negative coverage, derived and looked-up-able ---------------------------
+
+
+def test_an_untested_category_carries_its_identifier_as_its_own_key() -> None:
+    # A recipient checking this report's coverage against the published list matches
+    # on ASI07, not on a title this repository transcribed — so the identifier is a
+    # key of its own rather than prose a reader has to parse out of a sentence.
+    categories = document(a_payload())["untested_categories"]
+    assert categories
+
+    for entry in categories:
+        assert set(entry) == {"identifier", "title", "reason", "stated"}
+        assert entry["identifier"].startswith("ASI")
+        assert entry["identifier"] in entry["stated"]
+        assert all(isinstance(value, str) for value in entry.values())
+
+
 # --- No total, no average, nothing across families ---------------------------
 
 

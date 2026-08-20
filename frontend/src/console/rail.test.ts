@@ -20,6 +20,7 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  CONSOLE_PATH,
   NOT_A_SCREEN,
   REGISTER_PATH,
   REPORT_PATTERN,
@@ -56,6 +57,7 @@ describe('the paths the shell may not move', () => {
   it('is the three paths this app served before there was a shell', () => {
     // A report is a link somebody sent to a customer last month. `App.tsx` routes
     // on these constants, so a prefix invented for the shell fails here first.
+    expect(CONSOLE_PATH).toBe('/')
     expect(REGISTER_PATH).toBe('/register')
     expect(RUN_PATTERN).toBe('/runs/:runId')
     expect(REPORT_PATTERN).toBe('/runs/:runId/report')
@@ -97,11 +99,16 @@ describe('the rail names where you are', () => {
     expect(nowhere.destinations.length).toBeGreaterThan(0)
     expect(nowhere.destinations.some((d) => d.current)).toBe(false)
     expect(nowhere.where).toBe(NOT_A_SCREEN)
-    // The root is on its way somewhere rather than nowhere, so it does not say
-    // that the console has no such screen while it redirects.
-    const root = railView('/', null)
-    expect(root.destinations.some((d) => d.current)).toBe(false)
-    expect(root.where).toBe(THE_CONSOLE)
+    // The root is a screen rather than a redirect on its way to one: the landing
+    // screen answers it, so it is a destination the rail names and marks like any
+    // other, and the top bar names it rather than saying where the console is off
+    // to next.
+    const root = railView(CONSOLE_PATH, null)
+    expect(root.destinations.filter((d) => d.current).map((d) => d.path)).toEqual([
+      CONSOLE_PATH,
+    ])
+    expect(root.where).not.toBe(NOT_A_SCREEN)
+    expect(root.where).not.toBe(THE_CONSOLE)
   })
 
   it('marks one place and never two, wherever you are', () => {

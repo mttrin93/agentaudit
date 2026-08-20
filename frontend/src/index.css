@@ -443,6 +443,37 @@ code {
 }
 
 /*
+ * The gate citation on the front door, and the absence of one in the same box.
+ *
+ * Bordered so that it is one region a reader can take in — and, when there is no
+ * gate run to cite, dashed and drawn without the rows a citation would have filled.
+ * That is the idiom `.family.absent` already uses one screen along, for the same
+ * reason: an empty figure in a solid box is read as a measured zero, and an empty
+ * outcome in one is read as a gate the bench failed. Nothing here is coloured by
+ * outcome. A pass in green and a fail in red would be the severity scale the report
+ * exists to refuse, arriving on the landing screen instead.
+ */
+.citation {
+  margin: 1.2rem 0 0;
+  padding: 1rem 1.2rem;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  font-size: 0.95rem;
+}
+
+.citation.uncited {
+  border-style: dashed;
+}
+
+.citation h3 {
+  margin-top: 0;
+}
+
+.citation code {
+  word-break: break-all;
+}
+
+/*
  * The console shell: a rail that persists, and a screen that does not move.
  *
  * The frame is a two-column grid rather than a fixed sidebar and a margin, because

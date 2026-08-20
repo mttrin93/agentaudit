@@ -1,5 +1,5 @@
 /**
- * The three screens the spec asks for, now inside the console shell.
+ * The three screens the spec asks for, inside the console shell, behind a front door.
  *
  * Register carries the nonce and the three attestations; the run screen carries the
  * interrupt that blocks on both figures and then progress per layer; the report
@@ -18,14 +18,26 @@
  * the router cannot disagree about where a screen is, and `rail.test.ts` asserts
  * their literal values.
  *
+ * **The root is a screen rather than a redirect.** It used to send an arriving
+ * engineer straight to the registration form, which asked for an endpoint before
+ * saying anything about the instrument that would attack it — and a deployment on a
+ * live URL had nothing to serve at its root but a form. The landing screen answers
+ * it: what this bench is, and the gate run it last passed.
+ *
  * The catch-all is inside the shell as well: a mistyped path is somewhere to be
  * lost with the rail still on screen, rather than a dead end.
  */
 
-import { Link, Navigate, Route, Routes } from 'react-router-dom'
+import { Link, Route, Routes } from 'react-router-dom'
 
 import { ConsoleShell } from './console/ConsoleShell'
-import { REGISTER_PATH, REPORT_PATTERN, RUN_PATTERN } from './console/rail'
+import { LandingScreen } from './console/LandingScreen'
+import {
+  CONSOLE_PATH,
+  REGISTER_PATH,
+  REPORT_PATTERN,
+  RUN_PATTERN,
+} from './console/rail'
 import { RegisterScreen } from './register/RegisterScreen'
 import { ReportScreen } from './report/ReportScreen'
 import { RunScreen } from './run/RunScreen'
@@ -34,7 +46,7 @@ export default function App() {
   return (
     <Routes>
       <Route element={<ConsoleShell />}>
-        <Route path="/" element={<Navigate to={REGISTER_PATH} replace />} />
+        <Route path={CONSOLE_PATH} element={<LandingScreen />} />
         <Route path={REGISTER_PATH} element={<RegisterScreen />} />
         <Route path={RUN_PATTERN} element={<RunScreen />} />
         <Route path={REPORT_PATTERN} element={<ReportScreen />} />
@@ -50,7 +62,8 @@ function NoSuchScreen() {
     <main className="screen">
       <h1>No such screen</h1>
       <p>
-        Registration is at <Link to={REGISTER_PATH}>/register</Link>. A run is at
+        The console's front door is at <Link to={CONSOLE_PATH}>/</Link> and
+        registration at <Link to={REGISTER_PATH}>/register</Link>. A run is at
         <code> /runs/&lt;id&gt;</code>, and its report at
         <code> /runs/&lt;id&gt;/report</code>.
       </p>

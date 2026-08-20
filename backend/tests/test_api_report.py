@@ -36,7 +36,7 @@ from backend.api.app import REPORT_ROUTE, create_app
 from backend.api.report import ReportConfig, Unsigned
 from backend.api.runs import BenchConfig, BenchRuns, RunRecord, RunStatus
 from backend.bench.library import Case
-from backend.bench.payload import canonical, document
+from backend.bench.payload import GateCitation, canonical, document
 from backend.bench.rendering import REPORT_MARKDOWN, REPORT_PAYLOAD
 from backend.bench.signing import (
     SIGNATURE_FILE,
@@ -68,6 +68,7 @@ def completed(
     cases: list[Case],
     key: Ed25519PrivateKey | None,
     pinned: Ed25519PublicKey | None = None,
+    gate: GateCitation | None = None,
 ) -> Iterator[Served]:
     """One run taken through the API to completion, against a served reference agent.
 
@@ -78,12 +79,17 @@ def completed(
     `pinned` is the key a verification of that artefact is run against. Left out, it
     is the key committed to this repository — which is what a recipient pins, and so
     what a bench signing with a test key is honestly reported against.
+
+    `gate` is the citation this bench carries into the provenance of what it signs.
+    Left out, the bench cites no gate run, which is the state a report states rather
+    than omits — and `test_api_gate.py` hands one in so that the route serving the
+    citation and the artefact carrying it can be compared over the same run.
     """
     app = create_app(
         BenchConfig(
             cases=cases,
             approval_wait_seconds=60.0,
-            report=ReportConfig(signing_key=key, pinned=pinned),
+            report=ReportConfig(signing_key=key, pinned=pinned, gate=gate),
         )
     )
     bench = cast(BenchRuns, app.state.bench)

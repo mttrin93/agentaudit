@@ -13,8 +13,9 @@
  * **The paths are declared here and nowhere else.** `App.tsx` routes on these
  * exact constants, and `rail.test.ts` asserts their literal values, because a
  * report is a link an engineer sends to a customer and a shell that grew a URL
- * prefix would break every one already sent. There is no path in this module that
- * the app did not already serve before the shell existed.
+ * prefix would break every one already sent. No path in this module has ever moved:
+ * the three the app served before the shell existed are the three it serves now, and
+ * the root is the one addition — a screen where there used to be a redirect.
  *
  * **The run in view is a group, not a destination.** `/register` is somewhere the
  * console always goes; a run is somewhere it goes only because you have one. So a
@@ -31,6 +32,13 @@
  * verdict. The rail is where a reader would most easily be handed a number that
  * spans two families, so it is built out of a type that has nowhere to put one.
  */
+
+/**
+ * The console's own front door, and the only path here the app did not serve as a
+ * screen before: `/` was a redirect to registration, and it is now the landing
+ * screen that says what this instrument is and which gate run it last passed.
+ */
+export const CONSOLE_PATH = '/'
 
 /** Where registration lives, unchanged: the path this app has always served. */
 export const REGISTER_PATH = '/register'
@@ -51,7 +59,13 @@ export function reportPath(runId: string): string {
   return `${runPath(runId)}/report`
 }
 
-/** What the top bar says when the console is on its way to a destination. */
+/**
+ * What the top bar falls back to when a standing destination cannot be named.
+ *
+ * It used to be what the root said while it redirected. The root is a screen now,
+ * so it is named like every other destination and this is the last resort rather
+ * than a state the console is routinely in.
+ */
 export const THE_CONSOLE = 'The operator console'
 
 /** What it says on a path no screen answers, rather than saying nothing at all. */
@@ -109,12 +123,22 @@ interface Place {
 /**
  * The console's standing destinations.
  *
- * One, today, and the shell is the reason there can be more: a screen added to
+ * Two, today, and the shell is the reason there can be more: a screen added to
  * this list is a screen the rail names, and nothing else has to change. The three
  * screens the console already had are not all here, because two of them are a
  * run's and a run is not somewhere the console always goes.
+ *
+ * The landing screen is first because it is what the root serves and what an
+ * engineer opening a deployed bench sees before it asks them for an endpoint.
  */
 const STANDING: readonly (Place & { path: string })[] = [
+  {
+    path: CONSOLE_PATH,
+    name: 'What this bench is',
+    answers:
+      'What this instrument does, and the gate run it last passed — a fact about ' +
+      'the bench, and never a verdict about a target.',
+  },
   {
     path: REGISTER_PATH,
     name: 'Register a target',
@@ -139,9 +163,14 @@ const REPORT_SCREEN: Place = {
     'time. A run with no report says so in the bench’s own words.',
 }
 
-/** Where a path is, as the few cases the console can be in. */
+/**
+ * Where a path is, as the few cases the console can be in.
+ *
+ * There is no `root` case any more. It existed so that the redirect at `/` did not
+ * flash *no such screen* on its way to registration; `/` is a standing destination
+ * now, so the root is answered by the same branch as every other screen.
+ */
 type Whereabouts =
-  | { kind: 'root' }
   | { kind: 'standing'; path: string }
   | { kind: 'run'; id: string }
   | { kind: 'report'; id: string }
@@ -173,9 +202,6 @@ function idIn(segment: string): string {
 
 function whereabouts(pathname: string): Whereabouts {
   const path = tidy(pathname)
-  if (path === '/') {
-    return { kind: 'root' }
-  }
   const standing = STANDING.find((place) => place.path === path)
   if (standing) {
     return { kind: 'standing', path: standing.path }
@@ -241,8 +267,6 @@ export function railView(pathname: string, remembered: string | null): Rail {
 /** The top bar's line: the name of the place you are standing on. */
 function whereYouAre(at: Whereabouts, destinations: Destination[]): string {
   switch (at.kind) {
-    case 'root':
-      return THE_CONSOLE
     case 'standing':
       return destinations.find((there) => there.current)?.name ?? THE_CONSOLE
     case 'run':

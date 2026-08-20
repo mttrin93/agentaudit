@@ -6,8 +6,8 @@
  * **The cross-origin problem is solved in dev tooling rather than in the API.**
  * `create_app` installs no CORS middleware, and adding one would be a change to
  * the deployed surface — a header the bench sends to every caller forever — bought
- * to make one developer's browser happy. So the dev server proxies the three
- * routes this app calls to the API instead, and the app fetches same-origin paths
+ * to make one developer's browser happy. So the dev server proxies the four
+ * prefixes this app calls to the API instead, and the app fetches same-origin paths
  * with no base URL anywhere in it. In a deployment the built assets are served
  * from the same origin as the API and the same paths keep working, which is the
  * second reason to prefer this: the fetch code has no dev-only branch in it.
@@ -16,6 +16,9 @@
  * that a route this app has no business calling does not silently start working
  * through it. `/runs` can be proxied wholesale, screens and all, because the
  * screens are behind a `#` and no document request ever carries one (`main.tsx`).
+ * `/bench` is the one prefix whose subject is the instrument rather than a run: the
+ * landing screen reads the gate citation from it, and there is nothing under it that
+ * starts anything.
  *
  * **The tests run in node and there is no browser here.** The spec expects these
  * screens to be driven by hand, and three screens do not justify a browser-driver
@@ -37,6 +40,7 @@ export default defineConfig({
       '/nonces': BENCH,
       '/runs': BENCH,
       '/report': BENCH,
+      '/bench': BENCH,
     },
   },
   test: {

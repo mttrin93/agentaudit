@@ -357,11 +357,17 @@ export interface CoverageGap {
 }
 
 /**
- * The bench's own gate result as provenance, or the stated absence of one.
+ * The bench's own gate result, or the stated absence of one.
  *
  * `cited: false` is a sentence and not a blank — an uncited instrument is a fact
- * about the report. Neither shape carries anything about the target: the bench
+ * about the bench. Neither shape carries anything about the target: the bench
  * passed its gate, and the target has rates and bands (ADR-0018).
+ *
+ * **Two carriers, one shape.** It arrives inside a report's provenance block, and
+ * it arrives on its own from `GET /bench/gate` for a screen that is asking about
+ * the instrument rather than about a run. The backend writes both through one
+ * serialiser (`payload.citation`), so this one type reads both and a test compares
+ * them over the same run.
  */
 export type GateCitation =
   | {
@@ -688,6 +694,22 @@ export async function reportPayload(path: string): Promise<TargetReport> {
  */
 export async function reportVerification(path: string): Promise<Verification> {
   return (await fetched(path, 'verification')) as Verification
+}
+
+/** Where the bench's own gate citation is read. About the bench, not about a run. */
+export const BENCH_GATE_PATH = '/bench/gate'
+
+/**
+ * The gate run this bench cites, or the stated absence of one.
+ *
+ * The only read in this module whose subject is the instrument rather than a
+ * target, and it takes no run id because it is not about a run. There is no
+ * counterpart that starts a gate run: one is 830-odd calls against three
+ * reference agents behind a terminal consent flow (PLAN.md §8), so the console
+ * cites it and the CLI stays the only entry point.
+ */
+export async function benchGate(): Promise<GateCitation> {
+  return (await fetched(BENCH_GATE_PATH, 'gate citation')) as GateCitation
 }
 
 /**

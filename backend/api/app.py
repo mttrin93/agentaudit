@@ -1,12 +1,23 @@
 """The HTTP surface: a nonce, a run, the answer to the run's interrupt, and the
 artefact it produced.
 
-Eight routes. `POST /nonces` issues the value an operator plants to prove they
+Nine routes. `POST /nonces` issues the value an operator plants to prove they
 control the endpoint; `POST /runs` records the attestation, declares the estimate
 and halts; `POST /runs/{id}/approval` answers the halt; `GET /runs/{id}` says where
-the run has got to; and four under `/report/{id}` — three that serve the files one
+the run has got to; four under `/report/{id}` — three that serve the files one
 signed run leaves, the payload, the rendering and the detached signature, and a
-fourth that says what a verifier makes of them.
+fourth that says what a verifier makes of them; and `GET /bench/gate`, which is
+about the bench rather than about any run.
+
+**`GET /bench/gate` cites and never starts.** It is the only route here whose
+subject is the instrument: the outcome of the gate run this bench was configured to
+cite, the date it was decided, the library version it was earned at, and the path
+of the document that recorded it. A gate run is 830-odd calls from a terminal that
+asks three attestation statements one at a time (PLAN.md §8, `scripts/gate.py`), so
+there is no route that begins one and no record type for one — this route reads the
+citation the deployment declared and nothing else. The document is **named and
+never opened**: a route that parsed the bench's own prose output would break on a
+rewording, and the citation already carries every field a reader needs.
 
 **The verification route is a reading and never a fourth file.** It runs the
 recipient's own three checks — `verification.checked`, the function
@@ -87,7 +98,7 @@ from __future__ import annotations
 from decimal import Decimal, InvalidOperation
 from enum import StrEnum
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import Body, FastAPI, HTTPException, Response, status
 from fastapi import Path as PathParam
@@ -110,6 +121,7 @@ from backend.api.runs import (
 )
 from backend.bench.admission import admitted_library
 from backend.bench.contract import NOT_A_SECURITY_RESULT, RetryPolicy, TargetConfig
+from backend.bench.payload import GateCitation, citation
 from backend.bench.registration import ECHO_PROBE, Attestation
 from backend.bench.rendering import REPORT_MARKDOWN, REPORT_PAYLOAD
 from backend.bench.signing import (
@@ -787,6 +799,89 @@ def verification_response(verification: Verification) -> ReportVerification:
     )
 
 
+BENCH_GATE_ROUTE = "/bench/gate"
+"""Where the bench's own gate citation is read. About the instrument, not a run.
+
+Under `/bench` rather than under `/runs` because the subject is different, and the
+subject is the whole of ADR-0018: a run has rates, intervals and bands, and the
+bench passes its own gate. Nothing about a target is reachable from here and
+nothing here is reachable from a target's report.
+"""
+
+
+class CitedLibrary(BaseModel):
+    """The library version a gate run was decided at: a count and a digest.
+
+    Both, because a citation saying only *eighteen cases* cannot tell a reader
+    whether the eighteen are the same eighteen (`library.LibraryVersion`), and the
+    digest is what makes "has the bench changed since?" a question with an answer.
+    """
+
+    cases: int
+    digest: str
+
+
+class CitedGate(BaseModel):
+    """A bench citing a gate run: its outcome, its date, its version, its document.
+
+    The outcome is one of three and this model is not only the passing one: a bench
+    whose gate failed or was not decided cites it here in the same shape, because the
+    citation is what the bench last put itself through rather than a badge it earned.
+
+    `cited` is the field a caller branches on and it is a literal, so this shape and
+    the one below are two facts rather than one record with empty fields. There is
+    no field here for a per-family figure: the reference agents' rates and the
+    per-family `D` live only in the document, and a route that read them out of it
+    would be parsing the bench's own prose (spec §75, "Per-family gate figures are
+    out").
+    """
+
+    cited: Literal[True] = True
+    outcome: str
+    """`passed`, `failed` or `not_decided` — three answers, because *not decided*
+    is not a polite fail (`scorer.GateOutcome`)."""
+
+    decided_on: str
+    """The date the run was decided, as the citation holds it: ISO, no locale."""
+
+    library: CitedLibrary
+    document: str
+    """Where the run is written down, so the citation is checkable. A path the
+    caller may link and this route never opens."""
+
+    stated: str
+    """The citation in the bench's own words, whose subject is the bench."""
+
+
+class UncitedGate(BaseModel):
+    """A bench citing no gate run, saying so where a citation would have been.
+
+    A stated absence and not a blank, and not a failed gate either: this bench was
+    configured without a citation, which is a fact about the bench and is exactly as
+    much as this route knows. There is no `outcome` field to be empty, so nothing
+    here can be read as *did not pass*.
+    """
+
+    cited: Literal[False] = False
+    stated: str
+
+
+def gate_response(cited: GateCitation | None) -> CitedGate | UncitedGate:
+    """The citation this bench carries into a report, served as it is carried.
+
+    Built through `payload.citation` — the same serialiser that writes the block
+    into the signed provenance — and then validated into one of the two models, so
+    the wire shape is the artefact's own and the schema is still declared. A second
+    mapping written here would be a second definition of the citation, and the two
+    would only have to disagree once for a screen to state a gate result no
+    artefact carries (ADR-0018).
+    """
+    body = citation(cited)
+    if cited is None:
+        return UncitedGate.model_validate(body)
+    return CitedGate.model_validate(body)
+
+
 class ApprovalRequest(BaseModel):
     """The answer to one run's interrupt. A yes is the only thing that spends."""
 
@@ -1037,5 +1132,22 @@ def create_app(config: BenchConfig | None = None) -> FastAPI:
         return verification_response(
             verification_of(servable(run_id), bench.config.report)
         )
+
+    @app.get(BENCH_GATE_ROUTE)
+    def cite_the_gate_run_this_bench_last_passed() -> CitedGate | UncitedGate:
+        """The gate run this bench cites, or the stated absence of one.
+
+        A read of the citation the deployment declared (`ReportConfig.gate`), which
+        is the same value the provenance block of every report this bench signs
+        carries. One source of truth: the citation is not assembled here, not read
+        off the filesystem, and not parsed out of the document it names.
+
+        **There is no route that starts a gate run and this is not it.** A gate run
+        attacks all three reference agents under a terminal consent flow and writes
+        back to the case library, and the console cites it rather than offering it
+        (PLAN.md §8). What an operator gets here is a fact about the instrument;
+        what they do not get anywhere is a button.
+        """
+        return gate_response(bench.config.report.gate)
 
     return app

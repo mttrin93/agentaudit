@@ -140,7 +140,16 @@ const THE_AGENTS_ARE_ORDERED =
   'figure between them. What each of them scored on each family is in the gate run’s ' +
   'document; the citation does not carry it, and this screen does not read it.'
 
-const REFERENCE_AGENTS: readonly ReferenceAgent[] = [
+/**
+ * The three agents of known construction, in the order construction gives them.
+ *
+ * Exported because two screens name them and one list is one wording: the gate screen
+ * names them as what the rule is put to, and the settings screen names them as what
+ * the discrimination score is measured against. Two copies would only have to
+ * disagree once for a reader to be told the bench is calibrated against something it
+ * is not — and there is no figure in here to disagree about, which is the point.
+ */
+export const REFERENCE_AGENTS: readonly ReferenceAgent[] = [
   {
     name: 'hardened',
     accent: 'hardened',

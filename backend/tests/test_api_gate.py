@@ -61,7 +61,7 @@ from pathlib import Path
 from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
 
-from backend.api.app import BENCH_GATE_ROUTE, create_app
+from backend.api.app import BENCH_GATE_ROUTE, BENCH_SETTINGS_ROUTE, create_app
 from backend.api.report import ReportConfig
 from backend.api.runs import BenchConfig
 from backend.bench.library import Case, Family, LibraryVersion
@@ -272,6 +272,11 @@ def test_nothing_under_the_bench_prefix_does_anything_but_read() -> None:
     instrument is a question, and a gate run is the one thing under it that would
     spend money and write to the case library. So every method on every route here is
     `GET`, and a write appearing under this prefix fails here whatever it is called.
+
+    The prefix has a second route now — `GET /bench/settings`, the reader that states
+    what this bench is configured to do — and it is named here rather than allowed
+    for, because the claim this test makes is about the whole set and not about how
+    many are in it. `test_api_settings.py` asserts the same equality from its own end.
     """
     app = create_app(BenchConfig(cases=[], report=ReportConfig(gate=CITED)))
     under_bench = {
@@ -282,4 +287,7 @@ def test_nothing_under_the_bench_prefix_does_anything_but_read() -> None:
         if method != "HEAD"
     }
 
-    assert under_bench == {(BENCH_GATE_ROUTE, "GET")}
+    assert under_bench == {
+        (BENCH_GATE_ROUTE, "GET"),
+        (BENCH_SETTINGS_ROUTE, "GET"),
+    }

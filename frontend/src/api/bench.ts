@@ -1,10 +1,10 @@
 /**
  * The bench's HTTP surface as this app is allowed to see it.
  *
- * Eight of the eleven routes are reachable from here — `POST /nonces`, `POST
+ * Nine of the twelve routes are reachable from here — `POST /nonces`, `POST
  * /runs`, `POST /runs/{id}/approval`, `GET /runs`, `GET /runs/{id}`, `GET
- * /bench/gate`, `GET /artefacts` and the two under `/report/{id}` the report
- * screen reads — and the field names are the backend's own,
+ * /bench/gate`, `GET /bench/settings`, `GET /artefacts` and the two under
+ * `/report/{id}` the report screen reads — and the field names are the backend's own,
  * `snake_case` and all, because the request body is a contract with
  * `backend/api/app.py` rather than a shape this app is free to choose. A
  * camel-cased mirror would be one rename away from posting a body the API
@@ -888,6 +888,139 @@ export interface ArtefactList {
  */
 export async function benchArtefacts(): Promise<ArtefactList> {
   return (await fetched(ARTEFACTS_PATH, 'list of signed artefacts')) as ArtefactList
+}
+
+/** Where this bench states what it is configured to do. A reader, and only that. */
+export const BENCH_SETTINGS_PATH = '/bench/settings'
+
+/**
+ * The key an artefact this bench produces will be signed by, or the absence of one.
+ *
+ * `holds_a_key: false` is a bench that declared it does not sign, which is a
+ * sentence rather than an empty fingerprint: there is no `fingerprint` field on that
+ * shape, so nothing here can be drawn as a key whose name failed to load.
+ */
+export type WillBeSignedBy =
+  | { holds_a_key: true; fingerprint: string; stated: string }
+  | { holds_a_key: false; stated: string }
+
+/**
+ * The key a verification of this bench's artefacts is run against.
+ *
+ * Never absent, because there is always an answer: a deployment that declared no pin
+ * verifies against the committed public half whose fingerprint the README publishes.
+ * `declared` is which of the two, so *rotated* and *said nothing* are two facts
+ * rather than one a reader has to recognise a fingerprint to tell apart.
+ */
+export interface VerifiedAgainst {
+  fingerprint: string
+  declared: boolean
+  stated: string
+}
+
+/**
+ * The two key identifiers, and they are two facts.
+ *
+ * The same pair `SignatureResult` keeps apart: a bench signing with a key nobody
+ * published verifies against the published one and reports `signed_by_another_key`
+ * on every report it produces. A screen naming one of them would show that bench as
+ * correctly configured (ADR-0017).
+ */
+export interface SigningKeys {
+  will_be_signed_by: WillBeSignedBy
+  verified_against: VerifiedAgainst
+  statement: string
+}
+
+/**
+ * The case library this bench is loaded with: the live version, and what retired.
+ *
+ * The version is over the cases a run scores, so it is comparable by eye with the
+ * version the gate citation carries. The retired count sits beside it and is never
+ * folded into it: a retired case is marked and kept, and their sum is a case count
+ * nothing runs.
+ */
+export interface LoadedLibrary {
+  live: { cases: number; digest: string }
+  stated: string
+  retired: number
+  kept: string
+  statement: string
+}
+
+/** One of the four model settings: the instrument, its model, what it decides. */
+export interface ModelSetting {
+  instrument: string
+  identifier: string
+  declared: boolean
+  decides: string
+}
+
+/**
+ * The scored layer's ceiling, in the scored layer's own units.
+ *
+ * Attempts over cases. No field here shares a unit with the adaptive ceiling below,
+ * which is what makes the two unaddable rather than merely un-added.
+ */
+export interface ScoredCeiling {
+  layer: 'scored'
+  attempts_per_case: number
+  registration_probes_per_target: number
+  declared_in: string
+  statement: string
+}
+
+/** The adaptive layer's ceiling, in turns over episodes over families. */
+export interface AdaptiveCeiling {
+  layer: 'adaptive'
+  turns_per_episode: number
+  episodes_per_family: number
+  families: number
+  turns_per_target: number
+  declared_in: string
+  statement: string
+}
+
+/**
+ * The two ceilings, one field each, and no third field anywhere.
+ *
+ * Two differently-shaped records rather than two numbers, so there is no name here
+ * under which a sum could be written: each layer is enforced against its own
+ * counter, and a layer with room left cannot spend the other's unspent allowance
+ * (ADR-0007, ADR-0010).
+ */
+export interface LayerCeilings {
+  scored: ScoredCeiling
+  adaptive: AdaptiveCeiling
+  statement: string
+}
+
+/**
+ * What this bench is configured to do, as it is currently loaded.
+ *
+ * Five fields and not one of them a measurement. There is nothing here that spans
+ * two families, nothing that spans two layers, no severity scale and no composite
+ * figure — and nothing that could be posted back, because the route that serves this
+ * has no sibling that writes.
+ */
+export interface BenchSettings {
+  statement: string
+  signing: SigningKeys
+  library: LoadedLibrary
+  models: ModelSetting[]
+  ceilings: LayerCeilings
+}
+
+/**
+ * The bench's own configuration, read.
+ *
+ * A read and nothing else. This module has no function that posts anywhere under
+ * `/bench` and the API has no route that would take one: rotation stays in the
+ * environment and configuration stays on the command line, because the factory reads
+ * its key from one place and refuses to boot without it (ADR-0020).
+ */
+export async function benchSettings(): Promise<BenchSettings> {
+  return (await fetched(BENCH_SETTINGS_PATH, 'bench settings')) as BenchSettings
 }
 
 /**

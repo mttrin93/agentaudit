@@ -585,26 +585,44 @@ a {
   transform: translateY(-1px);
 }
 
-.family .plot .dot {
-  position: absolute;
-  top: 50%;
+/*
+ * One agent's mark, open rather than filled, and the same mark in both places.
+ *
+ * Every rule a dot needs is here rather than under `.plot`, because the plot and
+ * the legend have to draw the identical thing: a legend whose mark is not the mark
+ * on the line is a legend that has to be decoded instead of read. Only position and
+ * size differ below.
+ *
+ * Open — a ring in the agent's accent, filled with the paper — so the axis does not
+ * run through the middle of the mark and three overlapping rates stay three rings
+ * rather than one blob. The hue is identity and order, never rank, and it is
+ * redundant with the name printed beside it in both places.
+ */
+.dot {
+  display: inline-block;
   width: 0.5rem;
   height: 0.5rem;
-  margin: -0.25rem 0 0 -0.25rem;
+  border: 1.5px solid var(--line);
   border-radius: 50%;
-  background: var(--line);
+  background: var(--paper);
 }
 
 .dot.hardened {
-  background: var(--agent-hardened);
+  border-color: var(--agent-hardened);
 }
 
 .dot.weak {
-  background: var(--agent-weak);
+  border-color: var(--agent-weak);
 }
 
 .dot.trivial {
-  background: var(--agent-trivial);
+  border-color: var(--agent-trivial);
+}
+
+.family .plot .dot {
+  position: absolute;
+  top: 50%;
+  margin: -0.25rem 0 0 -0.25rem;
 }
 
 /* Which dot is which, and the span beside the floor it had to clear. */
@@ -623,11 +641,8 @@ a {
 }
 
 .family .legend .dot {
-  position: static;
-  display: inline-block;
-  width: 0.45rem;
-  height: 0.45rem;
-  margin: 0 0.25rem 0 0;
+  margin: 0 0.3rem 0 0;
+  vertical-align: baseline;
 }
 
 /*

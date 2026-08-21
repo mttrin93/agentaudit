@@ -443,10 +443,19 @@ export function GateScreen() {
     void answer(confirmation.body)
   }
 
+  /*
+   * The control is handed over at every stage, and `going` is what greys it out.
+   *
+   * It used to be passed only while the stage was `idle`, which is why it vanished:
+   * the stage stays `watching` after a run is decided — that is what keeps the
+   * progress and the decision on the page — so the command block was handed `null`
+   * and drew nothing at all. Not a disabled button, not a refusal, not the control
+   * that re-asks: nothing. A screen whose one control is absent is indistinguishable
+   * from a bench that cannot run a gate, which is the one thing this block exists to
+   * tell apart.
+   */
   const blocks =
-    held.bench === null
-      ? []
-      : gateScreen(held.bench, stage === 'idle' ? control : null)
+    held.bench === null ? [] : gateScreen(held.bench, control)
 
   return (
     <main className="screen">

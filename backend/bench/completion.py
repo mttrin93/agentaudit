@@ -71,6 +71,34 @@ class Provider(StrEnum):
     OPENROUTER = "openrouter"
 
 
+REFERENCE_MODEL_ENV = "AGENTAUDIT_REFERENCE_MODEL"
+"""Where a deployment declares the model its three reference agents run on."""
+
+ADJUDICATOR_MODEL_ENV = "AGENTAUDIT_ADJUDICATOR_MODEL"
+"""Where a deployment declares the instrument that decides the judged families."""
+
+
+def declared_model(variable: str) -> str | None:
+    """What the environment declares under that name, or `None` for nothing.
+
+    Here rather than in the caller because this module is where the environment is
+    read: `backend/api/` imports no `os` and is asserted not to, so that a price, a
+    target URL or a bearer token cannot arrive that way behind a default
+    (`test_api_runs.py`). A model identifier can, and only through this function —
+    it is declared configuration that every signed report already prints, and the
+    scripts read these same two variables.
+
+    **Blank is nothing.** An environment variable set to the empty string is how half
+    the tooling that sets one says *unset*, and a bench that treated it as a model
+    identifier would fail building a client for `''`.
+
+    **There is no default.** A model named here that the deployment did not declare
+    would describe a run that did not happen, which is what `UNDECLARED_MODEL` exists
+    to say instead (ADR-0004).
+    """
+    return os.environ.get(variable, "").strip() or None
+
+
 def completion_for(spec: str) -> Completion:
     """The bench's model call, from a `<provider>:<model>` configuration string.
 

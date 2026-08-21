@@ -186,8 +186,15 @@ from backend.api.runs import (
     RunStatus,
 )
 from backend.bench.adaptive.budget import DECLARED_ADAPTIVE_BUDGET, AdaptiveBudget
+from backend.bench.adjudication import Completion
 from backend.bench.admission import admitted_library
 from backend.bench.cited import the_citation
+from backend.bench.completion import (
+    ADJUDICATOR_MODEL_ENV,
+    REFERENCE_MODEL_ENV,
+    completion_for,
+    declared_model,
+)
 from backend.bench.contract import NOT_A_SECURITY_RESULT, RetryPolicy, TargetConfig
 from backend.bench.gate_record import (
     CitedLibrary,
@@ -2481,9 +2488,11 @@ def deployed_bench() -> BenchConfig:
     except NoSigningKey as missing:
         raise NoSigningKey(f"{missing}. {NO_KEY_NO_BOOT}") from missing
     library = deployed_library() or CASES_DIR
+    models, adjudicator = deployed_models()
     return BenchConfig(
         cases=admitted_library(library),
-        report=ReportConfig(signing_key=key, gate=the_citation(library)),
+        adjudicator=adjudicator,
+        report=ReportConfig(signing_key=key, gate=the_citation(library), models=models),
     )
 
 
@@ -2500,6 +2509,63 @@ def deployed_library() -> Path | None:
     return seeded_library(DEPLOYED_LIBRARY_MOUNT, CASES_DIR)
 
 
+NAMED_BUT_UNUSABLE = (
+    "the deployment declared this model and the bench cannot build it. Refusing to "
+    "boot rather than starting without it: an instrument named in a configuration "
+    "and absent from the process is the one state where a screen would offer a "
+    "control that spends and then fails, and OPENROUTER_API_KEY is the credential "
+    "to check first"
+)
+
+
+def deployed_models() -> tuple[DeclaredModels, Completion | None]:
+    """The models a deployment declared, and the adjudicator built from one of them.
+
+    **The environment is read through `completion.declared_model` and nowhere else.**
+    No module of `backend/api/` imports `os`, which is what keeps a price, a target
+    URL or a bearer token from arriving from the environment behind a default
+    (`test_api_runs.py`). A model identifier arrives that way and only that way.
+
+    **Nothing here defaults to a real model.** A bench that declared none says so on
+    every screen and in every report, because a default naming an instrument would
+    describe a run that did not happen (`UNDECLARED_MODEL`, ADR-0004). What the
+    environment declares, this builds; what it does not, stays a stated absence.
+
+    **Two are read and the third is not.** The reference agents' model and the
+    adjudicating model are both used by a gate run started from the console — one
+    serves the three agents, the other decides the two judged families. The attacking
+    model is left undeclared because this bench runs the deterministic stand-in for
+    it: naming a model it does not call would be the lie the stated absence exists to
+    avoid.
+
+    **A model named and unbuildable stops the boot.** `completion_for` builds its
+    client at configuration time precisely so a missing credential is not discovered
+    at the first call, and this keeps that promise one level up: the alternative is a
+    console that offers a start control for 830 calls against an instrument that was
+    never there. A deployment that declares nothing still boots and still serves
+    reports — it simply runs no gate (ADR-0020's shape, for a different instrument).
+    """
+    calibration = declared_model(REFERENCE_MODEL_ENV)
+    adjudicating = declared_model(ADJUDICATOR_MODEL_ENV)
+    adjudicator: Completion | None = None
+    if adjudicating is not None:
+        try:
+            adjudicator = completion_for(adjudicating)
+        except (KeyError, ValueError) as unusable:
+            raise RuntimeError(
+                f"{ADJUDICATOR_MODEL_ENV}={adjudicating!r}: {unusable}. "
+                f"{NAMED_BUT_UNUSABLE}"
+            ) from unusable
+    return (
+        DeclaredModels(
+            calibration=calibration or UNDECLARED_MODEL,
+            adjudicating=adjudicating or UNDECLARED_MODEL,
+            attacking=UNDECLARED_MODEL,
+        ),
+        adjudicator,
+    )
+
+
 def deployed_gate_runs(config: BenchConfig) -> GateRunBench:
     """What a gate run on a deployed bench has to work with, or the absence of it.
 
@@ -2512,11 +2578,17 @@ def deployed_gate_runs(config: BenchConfig) -> GateRunBench:
 
     The reference agents' model is read off the record that declares it
     (`DeclaredModels.calibration`) rather than named here, because a `D` is a reading
-    about one pair of models and the pair has to be the declared one (ADR-0012).
+    about one pair of models and the pair has to be the declared one (ADR-0012). A
+    bench that declared none ships no equipment as far as this is concerned: the
+    model string is what the agents are served with, and `UNDECLARED_MODEL` is a
+    sentence rather than a model. Answering *no reference agents* is what keeps the
+    failure at the console, where it is a stated refusal, instead of at the first
+    call of a gate run somebody already confirmed.
     """
+    declared = config.report.models.calibration
     return GateRunBench(
         library=deployed_library(),
-        equipment=shipped_agents(config.report.models.calibration),
+        equipment=(None if declared == UNDECLARED_MODEL else shipped_agents(declared)),
     )
 
 

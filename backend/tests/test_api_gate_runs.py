@@ -66,6 +66,7 @@ from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
 
 from backend.api.app import (
+    BENCH_GATE_ROUTE,
     GATE_RUN_APPROVAL_ROUTE,
     GATE_RUNS_ROUTE,
     create_app,
@@ -85,11 +86,15 @@ from backend.api.gate_runs import (
 from backend.api.report import ReportConfig
 from backend.api.runs import BenchConfig, BenchRuns, RunStatus
 from backend.bench.adaptive.budget import AdaptiveBudget
+from backend.bench.cited import CITED_GATE_RUN, Replaced, cite, the_citation
 from backend.bench.contract import TargetConfig
+from backend.bench.gate_record import RecordedGateRun
 from backend.bench.lease import LEASE_FILE, LibraryBusy, take_the_library
 from backend.bench.library import CaseStatus, load_library
+from backend.bench.payload import citation
 from backend.bench.registration import Attestation
 from backend.bench.rule import DECLARED_RULE
+from backend.graph.approval import Approval
 from backend.graph.budget import Layer
 from backend.targets.reference.hardened import HARDENED
 from backend.targets.reference.model import ModelConfig, measures_the_field
@@ -1129,6 +1134,177 @@ def test_the_gate_run_writes_its_series_back_to_the_library_it_read(
     # The image's own library is untouched, byte for byte. A gate run that wrote
     # there would have written into a filesystem the next redeploy replaces.
     assert library_bytes(CASES_DIR) == image
+
+
+# --- the citation this gate run earned (ADR-0023) -----------------------------
+
+
+def test_a_console_gate_run_updates_the_gate_this_bench_cites(tmp_path: Path) -> None:
+    """The second reversal, end to end: the bench cites the run it just made.
+
+    ADR-0021 recorded this as shut — "the bench does not start citing the gate run it
+    just made" — and ADR-0023 opens it. Asserted on all three surfaces the citation
+    reaches, because one of them changing and not the others is exactly how a screen
+    comes to state a gate result no artefact carries (ADR-0018): the route the console
+    reads, the `ReportConfig` every finished run's provenance block is built from, and
+    the library the next process will boot with.
+    """
+    library = a_library(tmp_path)
+
+    with a_bench(library, attempts_per_case=2) as gating:
+        assert gating.client.get(BENCH_GATE_ROUTE).json()["citation"]["cited"] is False
+
+        body = started(gating)
+        gating.client.post(approval_of(body["gate_run_id"]), json=a_confirmation())
+        [record] = gating.gates.records()
+        settled(record)
+        cited = gating.client.get(BENCH_GATE_ROUTE).json()["citation"]
+
+        assert record.status is GateRunStatus.DECIDED
+        assert record.gate is not None
+        # The route now cites this gate run, in the outcome the run reached rather
+        # than the passing one: a citation is what the bench last put itself through.
+        assert cited["cited"] is True
+        assert cited["outcome"] == str(record.gate.decision.outcome)
+        assert cited["library"] == {
+            "cases": record.gate.library.cases,
+            "digest": record.gate.library.digest,
+        }
+        # And the same citation is on the record every report is signed against, so
+        # the screen and the artefact cannot state two different gate results.
+        carried = gating.runs.config.report.gate
+        assert carried is not None
+        assert citation(carried) == cited
+
+    # Durable, and in the library rather than in this process: the next boot reads it
+    # off the volume the gate run wrote to (`app.deployed_bench`).
+    assert (library / CITED_GATE_RUN).exists()
+    assert the_citation(library) == carried
+
+
+def test_the_citation_is_written_while_this_gate_run_still_holds_the_library(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Under the same lease as the write-back, so two gate runs cannot interleave.
+
+    The readings and the citation are one critical section: a citation written after
+    the lease went back could be overwritten by a second gate run that had already
+    stored its own readings, and the bench would cite a library version that no
+    longer describes the cases. Asserted at the moment of the write rather than
+    afterwards — the lease file has to be there when `cite` is called, and a call
+    outside the lease is a citation nothing excludes.
+    """
+    library = a_library(tmp_path)
+    held: list[bool] = []
+
+    def under_the_lease(record: RecordedGateRun, directory: Path) -> Replaced:
+        held.append((directory / LEASE_FILE).exists())
+        return cite(record, directory)
+
+    monkeypatch.setattr("backend.api.gate_runs.cite", under_the_lease)
+
+    with a_bench(library, attempts_per_case=2) as gating:
+        body = started(gating)
+        gating.client.post(approval_of(body["gate_run_id"]), json=a_confirmation())
+        [record] = gating.gates.records()
+        settled(record)
+
+    assert held == [True], "the citation was written outside this gate run's lease"
+    # And the lease went back afterwards, so the citation is not what holds it. The
+    # release is the last thing the run's own thread does, after the status this test
+    # waited for, so it is waited for rather than asserted on the instant.
+    _until(
+        lambda: not (library / LEASE_FILE).exists(),
+        failure="the gate run that wrote the citation left the library held",
+    )
+
+
+def test_a_gate_run_that_wrote_nothing_cites_nothing(tmp_path: Path) -> None:
+    """A declined gate run leaves the citation exactly as it found it.
+
+    The citation is written from the write-back and the write-back happens only from
+    a decision the run reached: a run that was refused at the interrupt sent nothing,
+    stored no reading, and has no claim about this library to make. A bench that
+    started citing an answer nobody measured would be the worst version of ADR-0023.
+    """
+    library = a_library(tmp_path)
+
+    with a_bench(library, attempts_per_case=2) as gating:
+        body = started(gating)
+        gating.client.post(
+            approval_of(body["gate_run_id"]), json=a_confirmation(confirmed=False)
+        )
+        [record] = gating.gates.records()
+        settled(record)
+
+        assert record.status is GateRunStatus.DECLINED
+        assert record.written is None
+        assert gating.runs.config.report.gate is None
+
+    assert not (library / CITED_GATE_RUN).exists()
+    assert the_citation(library) is None
+
+
+def test_the_write_back_names_the_record_it_wrote_and_the_citation_it_replaced(
+    tmp_path: Path,
+) -> None:
+    """Both writes are reported, and the replacement is named rather than silent.
+
+    The console's counterpart to the line the terminal prints. A gate run that
+    replaced what this bench cites and said nothing about it would be the *silent*
+    half of ADR-0023's rejected option, arriving through a response body instead of
+    through a file.
+    """
+    library = a_library(tmp_path)
+
+    with a_bench(library, attempts_per_case=2) as gating:
+        body = started(gating)
+        gating.client.post(approval_of(body["gate_run_id"]), json=a_confirmation())
+        [record] = gating.gates.records()
+        settled(record)
+        written = gating.client.get(f"{GATE_RUNS_ROUTE}/{body['gate_run_id']}").json()[
+            "written"
+        ]
+
+    assert written["record"].endswith(".json")
+    assert (library / written["record"]).exists()
+    assert "cited no gate run before now" in written["cited"]
+    assert written["record"] in written["stated"]
+
+
+def test_the_citation_reaches_the_bench_through_one_edge_and_nothing_else(
+    tmp_path: Path,
+) -> None:
+    """A gate run registry wired to no bench still writes the durable citation.
+
+    `Cites` is the one edge from a gate run onto the bench a run is measured with,
+    and it is optional on purpose: the citation in the library is the fact, and the
+    in-process update is a convenience for the operator who is watching. A registry
+    with no bench behind it therefore leaves the library citing this gate run and
+    leaves the process citing nothing — which is the same state a command-line gate
+    run leaves, and the whole of the difference between the two entry points.
+    """
+    library = a_library(tmp_path)
+    config = BenchConfig(
+        cases=[],
+        rule=replace(DECLARED_RULE, attempts_per_case=2),
+        adaptive=SMALL_ADAPTIVE,
+        adjudicator=ADJUDICATING,
+        approval_wait_seconds=60.0,
+        report=ReportConfig(),
+    )
+    gates = BenchGateRuns(
+        config,
+        GateRunBench(library=library, equipment=shipped_agents("stub:obedient")),
+    )
+
+    record = gates.start(BENCH_ATTESTATION, None)
+    gates.answer(record.gate_run_id, Approval(confirmed=True, identity="a tester"))
+    settled(record)
+
+    assert record.status is GateRunStatus.DECIDED
+    assert config.report.gate is None, "a frozen record was mutated"
+    assert the_citation(library) is not None
 
 
 def _imports_of(source: Path) -> set[str]:

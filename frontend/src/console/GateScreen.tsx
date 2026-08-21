@@ -110,12 +110,17 @@ const POLL_SECONDS = 2
 /**
  * How many times *may another start yet* is re-asked after a gate run settles.
  *
- * The library's lease is released just after the run is marked decided, so the first
- * answer can still be `already_in_flight`. Bounded rather than a loop: past this the
- * refusal is somebody else's terminal run holding the library, which is a true
- * answer and belongs on the screen.
+ * The library's lease is released after the run is marked decided, and how long after
+ * is not this screen's to know: the write-back to eighteen case records, the
+ * retirement decisions and the citation all land in that gap. Thirty asks two seconds
+ * apart is a minute of patience, where five was ten seconds and ran out on a real
+ * gate run — which left a refusal on the page that had stopped being true.
+ *
+ * Bounded, and the bound is not a failure: past a minute the refusal is somebody
+ * else's terminal run holding the library, which is a true answer and belongs on the
+ * screen. The control beside it re-asks, so no wait is ever the last word.
  */
-const LEASE_ASKS = 5
+const LEASE_ASKS = 30
 
 /** What this screen is holding: the rule, the citation, and whether one may start. */
 interface Held {
@@ -378,6 +383,11 @@ export function GateScreen() {
   const ourRunIsGoing =
     stage !== 'idle' && (reading === null || stillGoing(reading.status))
 
+  /** Read the bench again, on request. A read: nothing here starts anything. */
+  const askTheBench = () => {
+    void readTheBench().then(setHeld)
+  }
+
   const begin = () => {
     setRefused('')
     setStep(0)
@@ -530,6 +540,7 @@ export function GateScreen() {
           block={block}
           begin={begin}
           going={ourRunIsGoing}
+          ask={askTheBench}
           key={block.kind}
         />
       ))}
@@ -576,10 +587,12 @@ function Block({
   block,
   begin,
   going,
+  ask,
 }: {
   block: GateBlock
   begin: () => void
   going: boolean
+  ask: () => void
 }) {
   switch (block.kind) {
     case 'rule':
@@ -589,7 +602,9 @@ function Block({
     case 'consequence':
       return <TheConsequence block={block} />
     case 'command':
-      return <TheCommand block={block} begin={begin} going={going} />
+      return (
+        <TheCommand block={block} begin={begin} going={going} ask={ask} />
+      )
   }
 }
 
@@ -670,10 +685,12 @@ function TheCommand({
   block,
   begin,
   going,
+  ask,
 }: {
   block: CommandBlock
   begin: () => void
   going: boolean
+  ask: () => void
 }) {
   const start = block.start
   return (
@@ -720,6 +737,25 @@ function TheCommand({
           <p className="aside">
             The bench’s own name for this: <code>{start.refusal}</code>.
           </p>
+          {start.refusal === ALREADY_IN_FLIGHT ? (
+            <>
+              {/*
+                Only this refusal gets a control, and only because only this one is
+                answered by waiting. A gate run gives the library back a moment after
+                it is decided, and *a moment* is not a number this screen may assume —
+                so it re-asks on its own for a minute and then hands the asking over.
+                The other three refusals are facts about how this bench was built, and
+                a button that re-asked them would be a button that changes nothing.
+              */}
+              <button type="button" onClick={ask}>
+                Ask the bench again
+              </button>
+              <p className="aside">
+                Nothing is started by asking. The lease is released a moment after a
+                gate run is decided, and this reads whether it has been.
+              </p>
+            </>
+          ) : null}
         </div>
       )}
 

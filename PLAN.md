@@ -446,7 +446,8 @@ agentaudit/
 │   ├── adr/                 # 0001-0012
 │   ├── specs/               # per-phase specs, mirrored to the issue tracker
 │   ├── article-mapping.md   # the table from section 4, with limits and coverage gaps
-│   └── validation.md        # gate results, discrimination per family per run, κ per judged family
+│   ├── validation.md        # gate results, discrimination per family per run, κ per judged family
+│   └── reflection.md        # the defects in this system, each with what would separate its explanations
 ├── backend/
 │   ├── bench/
 │   │   ├── registration.py  # nonce issue and echo check, attestation record
@@ -704,6 +705,11 @@ No fixed count. The list follows the architecture; it does not target a number.
 ---
 
 ## 13. Reflection prompts for the review
+
+**The notes prepared against these prompts are [docs/reflection.md](./docs/reflection.md)**,
+written at phase 8 once implementation had had a chance to turn up defects the plan could
+not predict. It answers the two named below, five more the sprint's gate runs and pull
+requests produced, and every prompt in the list that follows them.
 
 Two defects in this system, both real. Name them; do not hide them.
 

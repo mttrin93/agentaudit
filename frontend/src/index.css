@@ -18,7 +18,7 @@
    * and the page is what it sits on, so a block of figures is an object with an
    * edge rather than a region of the same colour with a line drawn round it.
    */
-  --page: #f5f5f2;
+  --page: #fafaf8;
   --quiet: #5b6170;
   --line: #d8d8d4;
   --refusal: #8c2f1f;
@@ -82,7 +82,7 @@
   :root {
     --ink: #eceef2;
     --paper: #1c1f26;
-    --page: #14161a;
+    --page: #16181d;
     --quiet: #9aa2b1;
     --line: #333842;
     --refusal: #ffb3a2;
@@ -122,14 +122,34 @@ body {
  * inside it.
  */
 .screen {
-  max-width: 64rem;
+  /*
+   * `border-box`, which is the whole of why the gutters are the width they look.
+   * Without it `max-width` is the *content* width and the padding is added outside
+   * it, so the block asked for 77rem inside a frame narrower than that: the browser
+   * kept the padding, squeezed the content, and the gutters came out at two thirds
+   * of what they were set to. Now the number below is the block, padding included,
+   * and the gutter is the gutter.
+   */
+  box-sizing: border-box;
+  max-width: 72rem;
   margin: 0 auto;
-  /* The sides are wide enough that a card's edge is never against the frame's:
-   * the rail is a hard edge on one side and the window is on the other, and a
-   * block of figures needs air between it and both. Kept equal to the top bar's
-   * own padding below, so the screen's content and the line above it start at the
-   * same place. */
-  padding: 3rem 6.5rem 6rem;
+  /* 10rem a side, which is the gutter of the page this was measured against. The
+   * rail is a hard edge on one side and the window is on the other, and a block of
+   * figures needs air between it and both. */
+  padding: 3rem 10rem 6rem;
+}
+
+/*
+ * Between the phone and the desk, the gutter gives way before the content does.
+ *
+ * A 10rem gutter inside a frame this size would leave the family cards too narrow
+ * to sit two abreast, and the cards are what the width is for. The breakpoint is on
+ * the frame rather than the window because the rail is beside it.
+ */
+@media (max-width: 78rem) {
+  .screen {
+    padding-inline: 4rem;
+  }
 }
 
 .eyebrow {

@@ -31,6 +31,7 @@ import {
   theRunLastInView,
   type Destination,
 } from './rail'
+import { RailGlyph } from './railIcons'
 
 export function ConsoleShell() {
   const { pathname } = useLocation()
@@ -85,11 +86,18 @@ export function ConsoleShell() {
   )
 }
 
-/** One destination, marked when it is the one you are standing on. */
+/**
+ * One destination, marked when it is the one you are standing on.
+ *
+ * The glyph is inside the `<Link>` rather than beside it, so the whole of what a
+ * reader points at is the link — and it is decorative, so this stays a link whose
+ * accessible name is exactly the destination's name.
+ */
 function RailLink({ there }: { there: Destination }) {
   return (
     <li className={there.current ? 'current' : undefined}>
       <Link to={there.path} aria-current={there.current ? 'page' : undefined}>
+        <RailGlyph icon={there.icon} />
         {there.name}
       </Link>
     </li>

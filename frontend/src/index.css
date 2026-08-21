@@ -729,9 +729,11 @@ code {
  * scrolls itself rather than widening the page.
  *
  * At a narrow width the rail stops being a column and becomes a strip along the
- * top: the destinations wrap and the reading column gets the whole window. That is
- * one breakpoint and no JavaScript, so there is no width at which the console has
- * navigation it cannot show.
+ * top: the destinations wrap and the reading column gets the whole window. The
+ * glyphs come with them — there is nothing that hides one, at any width — because a
+ * name is what a destination is read by and the drawing is how it is found twice.
+ * That is one breakpoint and no JavaScript, so there is no width at which the
+ * console has navigation it cannot show.
  */
 .console {
   display: grid;
@@ -782,6 +784,23 @@ code {
 .rail li a {
   text-decoration: none;
   color: var(--quiet);
+}
+
+/*
+ * A glyph and a name on one line box, which is what puts them on one baseline.
+ *
+ * The anchor is left inline rather than made a flex row on purpose: an inline glyph
+ * and the text beside it share the line box's baseline by construction, where a flex
+ * row would have had to be told to line them up. The glyph is sized in `em` so it
+ * tracks the rail's own font-size at every width, and `vertical-align` lowers it by
+ * the fraction of an em that takes a square drawing — whose baseline is its bottom
+ * edge — from sitting on the text's baseline to sharing its x-height.
+ */
+.rail li a .glyph {
+  width: 1.05em;
+  height: 1.05em;
+  margin-right: 0.45em;
+  vertical-align: -0.17em;
 }
 
 .rail li a:hover {
@@ -842,7 +861,8 @@ code {
     gap: 0 1.2rem;
   }
 
-  /* The mark's gap was the dropped note's; in the strip the names sit close under it. */
+  /* In the strip the mark is a label over the names rather than a column head, so
+   * they sit closer under it than they do down the side. */
   .rail .mark {
     margin-bottom: 0.6rem;
   }

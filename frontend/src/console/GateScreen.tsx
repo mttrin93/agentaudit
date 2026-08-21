@@ -57,7 +57,7 @@
  * it.
  */
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 
 import {
   answerTheGateRunsInterrupt,
@@ -163,34 +163,44 @@ export function GateScreen() {
   const [busy, setBusy] = useState(false)
 
   /**
-   * The rule, the citation, and whether a gate run may start — read once, on arrival.
+   * The rule, the citation, and whether a gate run may start — asked, never inferred.
    *
-   * Once, because all three are answers only the bench can give and this screen never
-   * infers them: a gate run that has just finished here has given the library back,
-   * and *whether another may start now* is the bench's answer on the next visit
-   * rather than something this screen may assume on its own. What it shows in the
-   * meantime is the decision that gate run reached, which is what the operator is
-   * looking at.
+   * All three are answers only the bench can give, and this screen never works one
+   * out for itself: *whether another gate run may start now* depends on a lease on
+   * the library that this browser cannot see, and the citation depends on what the
+   * last one decided. So they are read, and they are read **again at the one moment
+   * they can all have changed** — when a gate run this screen was watching stops.
+   * Before this, the control was read once on arrival and never again, which is a
+   * gate run that finishes and leaves the screen looking like a bench that still
+   * holds its own library until somebody reloads.
+   *
+   * Asked again rather than assumed: a settled gate run is not proof that the next
+   * one may start. The library may have been taken by a terminal run in the
+   * meantime, and `POST /gate-runs` would refuse a control this screen had drawn on
+   * its own authority.
    */
+  const readTheBench = useCallback(async () => {
+    try {
+      const [bench, runs] = await Promise.all([benchGate(), gateRuns()])
+      return { bench, start: runs.start, unavailable: '' }
+    } catch (unknown: unknown) {
+      return { bench: null, start: null, unavailable: `${unknown}` }
+    }
+  }, [])
+
   useEffect(() => {
     let current = true
     const read = async () => {
-      try {
-        const [bench, runs] = await Promise.all([benchGate(), gateRuns()])
-        if (current) {
-          setHeld({ bench, start: runs.start, unavailable: '' })
-        }
-      } catch (unknown: unknown) {
-        if (current) {
-          setHeld({ bench: null, start: null, unavailable: `${unknown}` })
-        }
+      const answered = await readTheBench()
+      if (current) {
+        setHeld(answered)
       }
     }
     void read()
     return () => {
       current = false
     }
-  }, [])
+  }, [readTheBench])
 
   /**
    * The last gate run this bench decided, read on arrival so its figures survive a
@@ -289,10 +299,24 @@ export function GateScreen() {
           return
         }
         setReading(now)
-        // Stopped for good, so stop asking: a gate run that has been decided is one
-        // whose screen has nothing left to learn from the bench.
-        if (!stillGoing(now.status) && timer !== undefined) {
+        if (stillGoing(now.status)) {
+          return
+        }
+        // Stopped for good, so stop asking *this* route: a decided gate run has
+        // nothing left to say about itself.
+        if (timer !== undefined) {
           clearInterval(timer)
+        }
+        /*
+         * And ask the bench the two questions whose answers this run just changed:
+         * the citation it now carries (ADR-0023 — a gate run started here becomes the
+         * one this bench cites, without a restart) and whether another may start,
+         * which is true again now that the library has been given back. Without this
+         * the control stays gone and the outcome stays stale until a reload.
+         */
+        const answered = await readTheBench()
+        if (current) {
+          setHeld(answered)
         }
       } catch (unknown: unknown) {
         if (current) {
@@ -306,7 +330,7 @@ export function GateScreen() {
       current = false
       clearInterval(timer)
     }
-  }, [gateRunId, stage])
+  }, [gateRunId, stage, readTheBench])
 
   const control: StartControl | null =
     held.start === null ? null : startControl(held.start)
@@ -448,13 +472,23 @@ export function GateScreen() {
         />
       ) : null}
 
-      {stage === 'watching' && reading !== null ? (
-        <TheGateRun reading={reading} />
-      ) : null}
+      {/*
+        The bench's own sections first — the rule, the last outcome, what a gate run
+        writes, and the control that starts one — and a run's figures after them.
 
+        The control was under the whole decision before: six family cards, the
+        exclusions and the write-back stood between the top of the page and the one
+        button on it, so a finished gate run looked like a screen that had lost its
+        control. This is also the order the rule requires of itself, since the rule
+        block is the first thing on the page and every outcome is below it.
+      */}
       {blocks.map((block) => (
         <Block block={block} begin={begin} key={block.kind} />
       ))}
+
+      {stage === 'watching' && reading !== null ? (
+        <TheGateRun reading={reading} />
+      ) : null}
 
       {stage === 'watching' ? null : lastly.unavailable ? (
         <section>
@@ -862,7 +896,10 @@ function TheEstimate({
  * order, and an outcome read with no bar beside it is a verdict somebody trusted.
  */
 function TheGateRun({ reading }: { reading: GateRunReading }) {
-  const decided = decidedView(reading)
+  // Without the rule block: the declared rule is the first section on this page,
+  // read from the bench's own reader, and it is the same `DECLARED_RULE` either way.
+  // What ADR-0003 asks for is the rule above the outcome, and it is.
+  const decided = decidedView(reading).filter((block) => block.kind !== 'rule')
   return (
     <>
       <section>

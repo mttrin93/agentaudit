@@ -29,7 +29,10 @@ threshold is declared in advance rather than adjusted to a run that disappointed
 unit of the denominator and a turn is not an attempt; an episode is not an attempt; a
 gate run measures the bench and a run measures a target. Every figure is quoted from
 [docs/validation.md](./validation.md) or from the gate documents it reads, never
-paraphrased.
+paraphrased. One word needs its sense fixed before it is used seven times: **defect**
+here means a flaw in this bench, and never a **Finding**, which is a verdict about a
+target. CONTEXT.md puts *defect* on `Finding`'s avoid list for exactly that reason, and
+the usage below is the other side of the same line — PLAN §13's.
 
 ---
 
@@ -204,6 +207,10 @@ on opposite rows.
 | Hardened | censored on 4 of 4 families in scope | censored on 4 of 4 families in scope |
 | Sign test over 4 families | 0 discordant pairs, p = 1.000 | 1 discordant pair, p = 0.500 |
 
+Quoted from validation.md's own comparison of the two runs rather than re-derived here, and
+the gate documents are the record behind both — which is §7's subject and the reason this
+sentence is here rather than left implied.
+
 Both runs: reference agents on `openrouter:openai/gpt-4.1-nano`, the two judged families
 adjudicated by `openrouter:openai/gpt-4.1-mini`, the adaptive layer on
 `openrouter:openai/gpt-4.1-mini` at the declared `T = 8`, `k = 2`. Both documented —
@@ -271,15 +278,17 @@ Four, and they are separable in this order.
 
    **(3) and (4) are separated by moving one deliberately and measuring the size of the
    move**, not by holding either still — a provider model cannot be held still, which is
-   what makes them rival explanations in the first place. The attacker model and the
-   reference agents' model are separately declared, and the swap machinery of #15 already
-   moves one of them, so each side yields a measured difference: swap the reference agents'
-   model with the attacker declaration unchanged, then the attacker's with the agents'
-   unchanged. Compare each difference against the same-configuration spread from (2). A
-   side whose deliberate swap moves `A_break` further than the no-change spread is
-   implicated; if neither does, neither is attributable and (2) stands. The residual — drift
-   in a model nobody swapped — is separable only in time, by two runs close together
-   against two far apart, and this repository has exactly two runs and no such design.
+   what makes them rival explanations in the first place. The two are separately declared,
+   so each side is movable, but only one of the two experiments is a command that exists:
+   `scripts/swap.py` moves the model underneath the reference agents between its two runs
+   and declares `--attacker-model` as "the model the adaptive attacker runs on, **in both
+   runs**", so it offers the target half and not the attacker half. The attacker half is
+   two `scripts/gate.py` runs at different `--attacker-model` values, which is a second
+   paid run and not a flag. Either difference is read against the same-configuration spread
+   from (2): a side whose deliberate move shifts `A_break` further than the no-change
+   spread is implicated, and if neither does, neither is attributable and (2) stands. The
+   residual — drift in a model nobody moved — is separable only in time, by two runs close
+   together against two far apart, and this repository has two runs and no such design.
 
 **And the sharpest single observation is already inside both readings.** In both runs
 exactly one family broke — data leakage — exactly one agent broke it, the hardened agent
@@ -569,13 +578,14 @@ estimate test is load-dependent like #98, since it too failed under the full sui
 passed alone; (e) the assertion is value-dependent, and the value it depends on is entropy
 the test never chose.
 
-Two observations separate them and both were made. The request in a tight loop in one
-process, with nothing else running, failed one iteration in six — a race does not appear
-when there is nothing to race against, and the body that failed carries the digits inside
-its identifier where they can be read. And the measured rate is predictable from string
-statistics alone: 0.503% for a `uuid4` containing `579` against 0.505% measured over whole
-bodies, so the identifier accounts for the failures and nothing is left for scheduling to
-explain. A race has no such prediction available to it.
+Two observations separate them and both were made. The request was made in a tight loop in
+one process with nothing else running, and one body in six collided — a lucky draw at the
+rate below, and the point is not the frequency but that a race does not appear when there
+is nothing to race against, and that the body which failed carries the digits inside its
+identifier where they can be read off. Then the rate itself, which is predictable from
+string statistics alone: 0.503% for a `uuid4` containing `579`, against 0.505% measured
+over whole bodies. The identifier accounts for the failures and leaves nothing for
+scheduling to explain, and a race has no such prediction available to it.
 
 ---
 
@@ -594,7 +604,9 @@ paragraphs said another, live on the deploy. Both prior tickets were correctly s
 #103's scope is the rail and nothing else, and screens' own prose was fenced off — and the
 drift happened between them anyway. #107 closed it: the landing screen's name is an
 exported binding, the table reads it, and the two screens name it rather than spelling it.
-A rename now reaches every sentence that uses it.
+A rename now reaches every sentence that uses it. (Unlike §5's #43 and §6's #98, #107 is a
+pull request and not an issue: this defect was found and closed in one change, so there is
+no ticket to cite beside it.)
 
 ### The class, and where it still lives
 
@@ -648,11 +660,11 @@ statement of that is this paragraph rather than a claim that the convention is a
 
 ## Prepared against the review's other prompts
 
-PLAN §13's two named defects are §1 and §2 above. Four of its remaining prompts are
-answered by the entries above rather than restated here — the attacker prompt, the
-model-swap prompt, the finds-nothing prompt and the catch-that-class-earlier prompt are
-marked below with where the answer is. The rest are answered short, with the record each
-rests on.
+PLAN §13's two named defects are §1 and §2 above, and every prompt in its remaining list
+is answered below. Four of them — the attacker prompt, the model-swap prompt, the
+finds-nothing prompt and the catch-that-class-earlier prompt — are answered by the entries
+above, so what appears below is a pointer to the section that answers them rather than a
+second answer. The rest are answered short, with the record each rests on.
 
 **Why validated testing rather than more testing?** An unvalidated instrument produces
 numbers with no known relation to what it claims to measure, and more cases enlarge the
@@ -733,9 +745,10 @@ cases the attacker discovered, and a retirement window scoped to one model. The 
 is the list of things worth attacking.
 
 **The reference agents' failure rates are known by construction. What would it take to know
-them by measurement, and why can't you?** It would take a ground truth about the agents
-independent of this bench, and for a reference agent "by construction" already *is* that
-ground truth: the hardened agent's rate is a property of code the project wrote. Measuring it
+them by measurement, and why can't you?** It would take a statement about the agents'
+rates that is independent of this bench, and for a reference agent "by construction"
+already *is* that statement: the hardened agent's rate is a property of code the project
+wrote. Measuring it
 would need a second instrument, which would then need its own gate — the same regress one
 step out, which is the shape ADR-0011 accepted rather than escaped when it validated the
 attacker against the same three agents. What *is* known by measurement is the **ordering**,

@@ -1076,7 +1076,7 @@ code {
  */
 .console {
   display: grid;
-  grid-template-columns: 17rem minmax(0, 1fr);
+  grid-template-columns: 19rem minmax(0, 1fr);
   min-height: 100vh;
 }
 
@@ -1107,12 +1107,12 @@ code {
 .rail .mark {
   margin: 0.2rem 0 2rem;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 1.1rem;
+  font-size: 1.3rem;
   font-weight: 600;
   text-transform: uppercase;
-  /* Tracking eased again as the size grows: the same 0.19em that opened the letters
-   * up small would push the mark well past the rail's width here. */
-  letter-spacing: 0.11em;
+  /* Tracking eased at every step up: ten mono capitals at this size need the letters
+   * closer together than they did small, and the rail widened with them. */
+  letter-spacing: 0.06em;
 }
 
 .rail .mark span {

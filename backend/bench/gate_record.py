@@ -104,10 +104,15 @@ class DeclaredRule(BaseModel):
     **Nothing here is a measurement, and nothing here is per family.** Every field is
     a declared threshold or a declared count; not one of them is a rate, an interval,
     a `D` or a κ that a gate run produced. The reference agents' rates and the
-    per-family `D` live only in the gate run's document, and no route reads it (spec
-    §75, "Per-family gate figures are out"). Nothing adaptive appears either: `T` and
-    `k` are declared in `AdaptiveBudget`, and the adaptive layer decides nothing
-    (ADR-0010).
+    per-family `D` are in the `GateDecided` below, on their own carrier: this rule is
+    what a gate run had to clear and never what one measured. Nothing adaptive appears
+    either: `T` and `k` are declared in `AdaptiveBudget`, and the adaptive layer
+    decides nothing (ADR-0010).
+
+    Spec §75 put those figures out of the console's reach altogether, and #84 replaced
+    that with a record and ADR-0023 with a pointer to it. `GET /bench/gate/record`
+    now follows the pointer — the citation route still carries no figure of its own,
+    and the read is a second request against a second path.
     """
 
     stated: str

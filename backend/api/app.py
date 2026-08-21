@@ -193,6 +193,7 @@ from backend.bench.gate_record import (
     CitedLibrary,
     DeclaredRule,
     GateDecided,
+    RecordedGateRun,
     declared_rule,
     gate_decided,
 )
@@ -1379,6 +1380,139 @@ class BenchGate(BaseModel):
 def bench_gate(cited: GateCitation | None, rule: GateRule = DECLARED_RULE) -> BenchGate:
     """The rule this bench is held to, and the gate run it cites under it."""
     return BenchGate(rule=declared_rule(rule), citation=gate_response(cited))
+
+
+BENCH_GATE_RECORD_ROUTE = "/bench/gate/record"
+"""The gate run record the citation names, read out of the library it was written to.
+
+Under `/bench/gate` because it is the same subject one level down: the citation says
+*what* the last gate run answered, and this says *what it measured to answer it* —
+each reference agent's rate on each family, and each family's `D`. Nothing about
+anybody's target is reachable from here (ADR-0018).
+
+**This is the read the citation route deliberately does not do.** `GET /bench/gate`
+names the record and opens nothing (ADR-0023), and it still does not: the citation
+stays byte-identical to the provenance block of every signed report, with no
+per-family figure added on the way to a screen. Reaching those figures is a second
+request against a second path, which is what keeps the two facts — *what it
+answered* and *what it measured* — separable by a caller who wants only the first.
+
+**It opens the record and never the document.** The record is the machine-readable
+rendering of one gate run; the dated Markdown beside it is prose for a person, and a
+figure recovered from prose would break on a rewording (#75, #84, ADR-0023). This
+route has no reader for a `.md` at all.
+
+**It reads the filesystem on request, and that is the difference from every other
+reader under `/bench`.** The record is a file, written by the gate run that earned
+the citation, and this bench does not hold it in memory: a console gate run from
+before a restart is exactly the case this route exists for. So the read happens per
+request, and every way it can fail is one shape — *this bench does not hold that
+record* — rather than an error, because a bench that cannot open a file it was
+mounted without has not thereby failed a gate.
+
+**Only inside the library.** The file name comes off the citation, which is a
+document on disk, so it is taken as a bare name and the resolved path is required to
+sit in the library directory. A citation naming `../` is a citation this route
+refuses rather than follows.
+"""
+
+
+class HeldRecord(BaseModel):
+    """The gate run record this bench holds, whole, as the run wrote it.
+
+    The rule above the decision, because that is the order the record itself is in
+    and the order every other carrier of a gate result is in: an outcome read with no
+    bar beside it is a verdict somebody trusted (ADR-0003).
+
+    Served as `RecordedGateRun` rather than re-mapped field by field, so the response
+    and the file are one schema. A second shape here would be a second definition of
+    a gate run, and the two would only have to disagree once for a screen to state a
+    gate result no record carries.
+    """
+
+    held: Literal[True] = True
+    run: RecordedGateRun
+    stated: str
+
+
+class UnheldRecord(BaseModel):
+    """No record here, and which of the several nothings it is.
+
+    Four ways to hold no record and one shape for all of them, with the reason in
+    words: this bench runs no gate and has no library to hold one; it cites no gate
+    run at all; it cites one whose record was written beside its document somewhere
+    this bench was not given; or the file is there and could not be read as a record.
+
+    **Not a failed gate, and not an absent one.** There is no `outcome` field here to
+    be empty and no figure to be zero. What the last gate run answered is on
+    `GET /bench/gate` and is unaffected by anything this route could not open.
+    """
+
+    held: Literal[False] = False
+    record: str | None
+    """The file name the citation gave, where it gave one. An address and not a
+    promise: naming it is how a reader learns which file this bench went looking
+    for."""
+
+    stated: str
+
+
+NO_LIBRARY_TO_HOLD_A_RECORD = (
+    "this bench holds no case library, so there is no directory a gate run record "
+    "could have been written to. It is a deployment that runs no gate rather than a "
+    "bench whose gate went badly"
+)
+
+CITES_NO_GATE_RUN = (
+    "this bench cites no gate run, so there is no record to open. A bench with no "
+    "citation has not failed its gate: it has not been put through one that it "
+    "carries"
+)
+
+WRITTEN_BESIDE_ITS_DOCUMENT = (
+    "the citation names a record this bench does not hold. A gate run at a terminal "
+    "writes its record into the directory that run was given, beside the dated "
+    "document, and a bench mounted with the library alone never sees it. The figures "
+    "exist and this deployment is not where they are"
+)
+
+NOT_READABLE_AS_A_RECORD = (
+    "the file the citation names is there and could not be read as a gate run "
+    "record. A partial answer assembled out of whichever fields parsed is how a "
+    "bench would come to print figures nothing measured, so nothing here is served "
+    "from it"
+)
+
+THE_FIGURES_THE_CITATION_POINTS_AT = (
+    "every figure here was read off the record the gate run itself wrote, in the "
+    "process that made the attempts. Nothing was parsed out of the dated document "
+    "beside it, and nothing on this response was recomputed: a second arithmetic "
+    "over the same attempts would be a second answer"
+)
+
+
+def held_record(
+    cited: GateCitation | None, library: Path | None
+) -> HeldRecord | UnheldRecord:
+    """The record the citation names, or which of the four nothings this bench has.
+
+    Every failure is the same shape and every one of them names the file it was
+    looking for, so a reader learns *which* record this bench does not hold rather
+    than only that it holds none.
+    """
+    if library is None:
+        return UnheldRecord(record=None, stated=NO_LIBRARY_TO_HOLD_A_RECORD)
+    if cited is None:
+        return UnheldRecord(record=None, stated=CITES_NO_GATE_RUN)
+    named = Path(cited.record).name
+    at = (library / named).resolve()
+    if at.parent != library.resolve() or not at.is_file():
+        return UnheldRecord(record=cited.record, stated=WRITTEN_BESIDE_ITS_DOCUMENT)
+    try:
+        run = RecordedGateRun.model_validate_json(at.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return UnheldRecord(record=cited.record, stated=NOT_READABLE_AS_A_RECORD)
+    return HeldRecord(run=run, stated=THE_FIGURES_THE_CITATION_POINTS_AT)
 
 
 BENCH_SETTINGS_ROUTE = "/bench/settings"
@@ -2695,6 +2829,34 @@ def create_app(
         answers with, and not whether this route can start one.
         """
         return bench_gate(bench.config.report.gate)
+
+    @app.get(BENCH_GATE_RECORD_ROUTE)
+    def open_the_record_the_citation_names() -> HeldRecord | UnheldRecord:
+        """The per-family figures of the gate run this bench cites, out of its record.
+
+        The three reference agents' rates on every family, each family's `D`, its
+        ordering and its verdict — the figures `GET /bench/gate` names and does not
+        carry. One request for what the gate answered, a second for what it measured:
+        the citation stays exactly the block a signed report carries, and this is the
+        pointer on it being followed.
+
+        **The record and never the document.** The record is one gate run as fields,
+        written by the run itself; the dated Markdown beside it is prose for a person.
+        Nothing here parses prose, and there is no reader on this route for a `.md`.
+
+        **Every way of holding no record is one answer, and it is not an error.** A
+        deployment with no library, a bench citing no gate run, a citation whose
+        record was written beside its document somewhere else, and a file that will
+        not parse: all four say *this bench does not hold that record*, with the
+        reason in words and the file name it looked for. A 404 would say the route was
+        wrong; what is true is that the figures are elsewhere.
+
+        **No composite, here as everywhere.** Six families arrive at once and there is
+        no field on this response that spans two of them: no mean of six
+        discrimination scores, no severity scale, and nothing adaptive (ADR-0005,
+        ADR-0010).
+        """
+        return held_record(bench.config.report.gate, gates.bench.library)
 
     @app.get(BENCH_SETTINGS_ROUTE)
     def state_what_this_bench_is_configured_to_do() -> BenchSettings:

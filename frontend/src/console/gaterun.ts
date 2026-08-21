@@ -54,6 +54,7 @@ import type {
   GateRunReading,
   GateRunStart,
   StartGateRunBody,
+  WroteBack,
 } from '../api/bench'
 import type { CostFigure } from '../run/interrupt'
 import { adaptiveReading, scoredReading, type LayerReading } from '../run/progress'
@@ -471,6 +472,17 @@ export function gateProgress(reading: GateRunReading): readonly LayerReading[] {
   return [scoredReading(reading.scored), adaptiveReading(reading.adaptive)]
 }
 
+/**
+ * Where the figures came from, when they came from the run this process just made.
+ *
+ * Said rather than assumed, because the same view draws the record of a gate run
+ * this bench finished before a restart, and *which* reading an operator is looking
+ * at is a fact about the figures rather than a detail of the plumbing.
+ */
+export const FROM_THIS_PROCESS =
+  'read off the gate run this bench itself ran, from the process that made the ' +
+  'attempts. Nothing here was parsed out of a document.'
+
 // --- what it decided -------------------------------------------------------------
 
 /** One labelled fact, uncoloured, in the console's own idiom. */
@@ -720,7 +732,22 @@ function barredIn(decision: GateDecided, family: string): ExcludedFamily | null 
   return decision.excluded.find((barred) => barred.family === family) ?? null
 }
 
-export function decidedView(reading: GateRunReading): DecidedBlock[] {
+/**
+ * A gate run's decision, from whichever carrier holds it.
+ *
+ * Narrower than `GateRunReading` on purpose: what `decidedView` needs is the rule,
+ * the decision and the write-back, and a gate run this bench finished before a
+ * restart has all three in its **record** and no progress to report. Typed as the
+ * three fields rather than as the reading, so the record can be drawn by the same
+ * view without a fake status being invented for it.
+ */
+export interface DecidedRun {
+  rule: DeclaredRule
+  decision: GateDecided | null
+  written: WroteBack | null
+}
+
+export function decidedView(reading: DecidedRun): DecidedBlock[] {
   const decision = reading.decision
   if (decision === null) {
     return []

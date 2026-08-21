@@ -37,13 +37,14 @@
  * rule above the outcome and then each family's three rates and its `D`, read off
  * the run that just happened.
  *
- * **And they survive the tab being closed.** The last gate run this bench finished
- * is read on arrival from `GET /gate-runs/{id}`, so an operator who reloads still
- * sees what the gate measured rather than only that it passed. What that does *not*
- * cover is a gate run this process did not start: one run at a terminal, or one
- * started here before a restart, has its figures in its own record on disk and no
- * route reads it. The citation says what the last gate run answered either way; the
- * figures behind it are shown where this bench still holds them.
+ * **And they survive the tab being closed, and a restart.** The last gate run this
+ * bench finished is read on arrival from `GET /gate-runs/{id}`; where this process
+ * ran none, the pointer on the citation is followed to `GET /bench/gate/record`,
+ * which opens the record the gate run itself wrote. Same decision, same shape, and
+ * the provenance sentence says which of the two a reader is looking at. What neither
+ * reaches is a record this bench was not given — a terminal gate run writes it beside
+ * its dated document — and that is a stated absence rather than an error: the
+ * citation still says what the last gate run answered.
  *
  * **The idiom is the console's own.** One reading column, `.citation` and
  * `.citation.uncited`, `.figures` for the estimate, `.layers` for progress,
@@ -62,6 +63,7 @@ import { Link } from 'react-router-dom'
 import {
   answerTheGateRunsInterrupt,
   benchGate,
+  benchGateRecord,
   gateRunReading,
   gateRuns,
   startGateRun,
@@ -83,6 +85,7 @@ import {
 } from './gate'
 import {
   decidedView,
+  FROM_THIS_PROCESS,
   gateConfirmation,
   gateDecline,
   gateInterruptView,
@@ -94,6 +97,7 @@ import {
   stillGoing,
   type Attesting,
   type DecidedBlock,
+  type DecidedRun,
   type Fact,
   type FamilyReading,
   type GateInterruptView,
@@ -115,18 +119,29 @@ interface Held {
 const NOTHING_YET: Held = { bench: null, start: null, unavailable: '' }
 
 /**
- * What the last gate run this bench decided left behind, or why it could not be read.
+ * The figures of the last gate run, from whichever carrier this bench still holds.
  *
- * `reading` stays `null` where this bench has finished no gate run — which is not
- * the same fact as a bench that has never passed one, and the region says so rather
- * than drawing an empty outcome.
+ * Three empty fields and not one, because *this bench holds no record of it*, *the
+ * bench did not answer* and *nothing has been read yet* are three different facts
+ * and none of them is a gate that failed. A single field would report the first as
+ * the second, which is a bench that looks broken to an operator whose bench is
+ * merely mounted without a file.
  */
 interface Lastly {
-  reading: GateRunReading | null
+  decided: DecidedRun | null
+  /** Where these figures came from, in words. Never empty beside a decision. */
+  from: string
+  /** Why there are none, where there are none. */
+  none: string
   unavailable: string
 }
 
-const NOT_READ_YET: Lastly = { reading: null, unavailable: '' }
+const NOT_READ_YET: Lastly = {
+  decided: null,
+  from: '',
+  none: '',
+  unavailable: '',
+}
 
 /**
  * Where the operator is in starting one.
@@ -190,12 +205,18 @@ export function GateScreen() {
    * the rule down with the figures. The rows arrive most recent first, so the first
    * settled one is the last gate run this bench finished.
    *
-   * **Only what this process started.** `GET /gate-runs` lists the gate runs this
-   * bench has run, which is not every gate run the library has been through: a run
-   * started at a terminal, or one started here before a restart, has its figures in
-   * its own record on disk and no route reads that. So an empty answer here is not
-   * the claim that no gate run ever happened — the citation above says what the last
-   * one answered, and this region says nothing about it either way.
+   * **Two carriers, in that order.** `GET /gate-runs` lists what this process ran,
+   * and its figures are the freshest thing there is. Where it ran nothing, the
+   * pointer on the citation is followed instead — `GET /bench/gate/record` opens the
+   * record the gate run itself wrote, which is how figures survive a restart. Both
+   * are the same decision in the same shape; only the provenance sentence differs,
+   * and it is shown.
+   *
+   * **What neither reaches is a record this bench was not given.** A gate run at a
+   * terminal writes its record beside its dated document, in the directory that run
+   * was handed, and a bench mounted with the library alone never sees it. That is a
+   * stated absence here and not an error: the citation above still says what the last
+   * gate run answered.
    */
   useEffect(() => {
     let current = true
@@ -203,16 +224,50 @@ export function GateScreen() {
       try {
         const runs = await gateRuns()
         const settled = runs.gate_runs.find((row) => !stillGoing(row.status))
-        if (settled === undefined) {
+        if (settled !== undefined) {
+          const decided = await gateRunReading(settled.gate_run_id)
+          if (decided.decision !== null) {
+            if (current) {
+              setLastly({
+                decided,
+                from: FROM_THIS_PROCESS,
+                none: '',
+                unavailable: '',
+              })
+            }
+            return
+          }
+        }
+        // Nothing this process ran, so follow the pointer on the citation instead.
+        const cited = await benchGateRecord()
+        if (!current) {
           return
         }
-        const decided = await gateRunReading(settled.gate_run_id)
-        if (current && decided.decision !== null) {
-          setLastly({ reading: decided, unavailable: '' })
-        }
+        setLastly(
+          cited.held
+            ? {
+                // `written: null` because a record does not carry one: what a gate
+                // run wrote back to the library is reported by the process that
+                // wrote it, and this is the decision as the run filed it.
+                decided: {
+                  rule: cited.run.rule,
+                  decision: cited.run.decision,
+                  written: null,
+                },
+                from: `${cited.stated}. Decided ${cited.run.decided_at}`,
+                none: '',
+                unavailable: '',
+              }
+            : { decided: null, from: '', none: cited.stated, unavailable: '' },
+        )
       } catch (unknown: unknown) {
         if (current) {
-          setLastly({ reading: null, unavailable: `${unknown}` })
+          setLastly({
+            decided: null,
+            from: '',
+            none: '',
+            unavailable: `${unknown}`,
+          })
         }
       }
     }
@@ -416,14 +471,27 @@ export function GateScreen() {
             <h3>This bench did not answer for what its last gate run measured</h3>
             <p>{lastly.unavailable}</p>
             <p className="aside">
-              Not the same fact as a bench that has finished no gate run: what is
+              Not the same fact as a bench that holds no record of one: what is
               unknown here is what the figures were, and the citation above is
               unaffected — it says what the last gate run answered.
             </p>
           </div>
         </section>
-      ) : lastly.reading === null ? null : (
-        <TheLastDecided reading={lastly.reading} />
+      ) : lastly.none ? (
+        <section>
+          <h2>What the last gate run measured is not on this bench</h2>
+          <div className="citation uncited">
+            <h3>No gate run record here</h3>
+            <p>{lastly.none}</p>
+            <p className="aside">
+              Nothing on this page should be read as a gate that failed or a figure
+              of zero. The outcome above is what the last gate run answered; what is
+              absent is the arithmetic behind it.
+            </p>
+          </div>
+        </section>
+      ) : lastly.decided === null ? null : (
+        <TheLastDecided decided={lastly.decided} from={lastly.from} />
       )}
     </main>
   )
@@ -841,16 +909,22 @@ function TheGateRun({ reading }: { reading: GateRunReading }) {
  * ADR-0003 asks for is the rule above the outcome on the page, and it is; saying it
  * twice would not make the ordering safer.
  */
-function TheLastDecided({ reading }: { reading: GateRunReading }) {
-  const decided = decidedView(reading).filter((block) => block.kind !== 'rule')
+function TheLastDecided({
+  decided,
+  from,
+}: {
+  decided: DecidedRun
+  from: string
+}) {
+  const blocks = decidedView(decided).filter((block) => block.kind !== 'rule')
   return (
     <>
       <section>
         <h2>What the last gate run measured</h2>
-        <p>{reading.statement}</p>
+        <p className="aside">{from}</p>
       </section>
 
-      {decided.map((block) => (
+      {blocks.map((block) => (
         <Decided block={block} key={block.kind} />
       ))}
     </>

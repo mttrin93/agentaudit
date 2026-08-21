@@ -79,6 +79,7 @@ from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
 
 from backend.api.app import (
+    BENCH_GATE_RECORD_ROUTE,
     BENCH_GATE_ROUTE,
     BENCH_SETTINGS_ROUTE,
     GATE_RUN_APPROVAL_ROUTE,
@@ -320,6 +321,7 @@ def test_this_route_reads_and_the_one_that_starts_a_gate_run_is_elsewhere() -> N
 
     assert gate_routes == {
         (BENCH_GATE_ROUTE, "GET"),
+        (BENCH_GATE_RECORD_ROUTE, "GET"),
         (GATE_RUNS_ROUTE, "GET"),
         (GATE_RUNS_ROUTE, "POST"),
         (GATE_RUN_ROUTE, "GET"),
@@ -364,6 +366,7 @@ def test_nothing_under_the_bench_prefix_does_anything_but_read() -> None:
 
     assert under_bench == {
         (BENCH_GATE_ROUTE, "GET"),
+        (BENCH_GATE_RECORD_ROUTE, "GET"),
         (BENCH_SETTINGS_ROUTE, "GET"),
     }
 

@@ -830,6 +830,66 @@ export async function benchGate(): Promise<BenchGate> {
   return (await fetched(BENCH_GATE_PATH, 'gate citation')) as BenchGate
 }
 
+/** Where the record the citation names is opened. The figures, one level down. */
+export const BENCH_GATE_RECORD_PATH = '/bench/gate/record'
+
+/**
+ * The gate run record this bench holds, whole, as the run that earned it wrote it.
+ *
+ * `rule` above `decision`, because that is the order the record is in on disk and on
+ * every other carrier of a gate result: an outcome read with no bar beside it is a
+ * verdict somebody trusted (ADR-0003).
+ */
+export interface RecordedGateRun {
+  decided_at: string
+  /** The dated Markdown this record sits beside, or `null` for a console gate run. */
+  document: string | null
+  record: string
+  rule: DeclaredRule
+  decision: GateDecided
+  recorded: string
+}
+
+/** The record is here, and every per-family figure of that gate run with it. */
+export interface HeldRecord {
+  held: true
+  run: RecordedGateRun
+  stated: string
+}
+
+/**
+ * No record here, with the reason and the file name it was looked for under.
+ *
+ * Four nothings in one shape: no library to hold a record, no gate run cited at all,
+ * a record written beside its document somewhere this bench was not given, or a file
+ * that would not parse. None of them is a failed gate and none is an empty outcome —
+ * what the last gate run answered is on `GET /bench/gate` and is unaffected.
+ */
+export interface UnheldRecord {
+  held: false
+  record: string | null
+  stated: string
+}
+
+export type CitedRecord = HeldRecord | UnheldRecord
+
+/**
+ * Open the record the citation names, for the figures the citation does not carry.
+ *
+ * A second request against a second path, deliberately: `GET /bench/gate` stays
+ * byte-identical to the provenance block of every signed report, with no per-family
+ * figure added on the way to a screen (ADR-0023). This is the pointer on it being
+ * followed, and it reads the record rather than the dated document — a figure
+ * recovered from prose would break on a rewording.
+ *
+ * It answers rather than refusing where the record is not held, so a caller that
+ * needs to say *which* record this bench does not have can. `held` is the field to
+ * branch on.
+ */
+export async function benchGateRecord(): Promise<CitedRecord> {
+  return (await fetched(BENCH_GATE_RECORD_PATH, 'gate run record')) as CitedRecord
+}
+
 /** Where a gate run is started, listed and read. Its own family, never `/runs`. */
 export const GATE_RUNS_PATH = '/gate-runs'
 

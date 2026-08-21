@@ -610,6 +610,7 @@ def test_the_gate_run_routes_are_their_own_family_and_bench_stays_read_only() ->
 
     assert gate_routes == {
         ("/bench/gate", "GET"),
+        ("/bench/gate/record", "GET"),
         (GATE_RUNS_ROUTE, "POST"),
         (GATE_RUNS_ROUTE, "GET"),
         ("/gate-runs/{gate_run_id}", "GET"),

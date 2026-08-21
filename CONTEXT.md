@@ -219,6 +219,30 @@ _Avoid_: approval, review, vetting
 The status of a case that has stopped discriminating. Marked, never deleted, because it is evidence that the field moved.
 _Avoid_: deprecation, removal, archiving
 
+**The field**:
+The real models a case's discriminating power is a claim about. Load-bearing since
+ADR-0022, in prose and in the `measured_the_field` flag on every stored reading: a
+gate run on a stub model — `stub:obedient`, the fixture with hardcoded replies that
+exists so the pipeline can be exercised without spending money — measures the field
+not at all, so its reading cannot retire anything. "The field moved" is therefore a
+claim only a run against the field can make.
+_Avoid_: the world, production, real life, the state of the art
+
+**Decay series**:
+Every reading one case has ever been given, in the order the gate runs happened, on
+the case's own record. One reading per case per **gate run**, counts and never a
+stored score. It is only ever appended to (ADR-0006), and the **retirement window** is
+a view of its tail rather than the whole of it.
+_Avoid_: history, the case's log, the readings, decay chart
+
+**Retirement window**:
+The readings the retirement rule is read over: the last two taken on the model of
+the case's most recent reading. Not the last two readings of the **decay series** —
+`D` is a reading about a case and a model together, so two models are not two
+readings of one thing (ADR-0022). Scoping the window is not editing the series; the
+readings outside it are kept, printed, and never deleted.
+_Avoid_: the last two runs, the recent history, the retirement history
+
 **Trigger**:
 The stated reason a case was added to the library. One of six.
 _Avoid_: source, origin, motivation

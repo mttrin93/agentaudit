@@ -700,6 +700,16 @@ def test_the_entry_point_writes_the_document_rather_than_only_being_able_to(
         assert case.status is CaseStatus.ACTIVE
     assert "retirement — D stored for every case" in printed
     assert "retirement — D stored for every case" in written
+    # And every one of those readings says it was taken on a fixture: this run is on
+    # `stub:obedient`, and the provenance is what stops the rule retiring on it
+    # (ADR-0022). Wired here rather than only in `retirement.py`, because the
+    # `ModelConfig` is the entry point's and a run that stored the permissive answer
+    # would be a run whose readings can retire a working case.
+    for case in stored:
+        assert not case.history[0].measured_the_field, (
+            f"{case.id} came out of a stub run carrying a reading that claims to "
+            "have measured the field. Two such readings retire the case (#43)"
+        )
 
 
 ADJUDICATOR_STAND_IN = "the suite's stub — no model is reached"

@@ -206,13 +206,15 @@ const IT_IS_NOT_A_READ_ONLY_ACTION =
 function whatItWrites(rule: DeclaredRule): string[] {
   return [
     'It appends a discrimination reading to every case record it reads — the ' +
-      'counts, the model, the date, and whether the family was fit to report — so ' +
-      'the score is re-derivable from the record rather than a number somebody ' +
-      'computed once.',
+      'counts, the model, the date, whether the family was fit to report, and ' +
+      'whether the run measured the field at all — so the score is re-derivable ' +
+      'from the record rather than a number somebody computed once.',
     `It marks retired any case the rule retires: below the declared floor of ` +
-      `${rule.retirement_floor.toFixed(2)} on two consecutive gate runs, with the ` +
-      'date and the final reading. Marked and never deleted, because a case the ' +
-      'field caught up with is evidence that the field moved.',
+      `${rule.retirement_floor.toFixed(2)} on two consecutive gate runs on the same ` +
+      'model, with the date and the final reading. Two readings of one model and ' +
+      'never the last two of the series, because a model swap moves the score and a ' +
+      'change of instrument is not the passage of time. Marked and never deleted, ' +
+      'because a case the field caught up with is evidence that the field moved.',
     'It writes a dated document of the run, which is the document the citation ' +
       'above names. The curated history is written by hand and reads those records; ' +
       'this one is the run itself.',

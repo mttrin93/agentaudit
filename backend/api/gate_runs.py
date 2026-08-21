@@ -166,6 +166,21 @@ class ServedAgents:
     weak: str
     hardened: str
 
+    measured_the_field: bool
+    """Whether the model these three ran on was the field, or a stub fixture.
+
+    Answered by whatever served them, because that is what holds the `ModelConfig`,
+    and carried here so that the write-back can record it on every reading it stores
+    (ADR-0022). Not derived from the declared model string in this module: the answer
+    is a fact about a closed `Provider` enum which lives in `backend/targets/`, and
+    this module reaches that package through the equipment seam and an import that is
+    allowed to fail — never at module scope.
+
+    Required rather than defaulted, on the same terms as the three roles above: the
+    permissive answer is the one that lets the rule retire a case, so equipment that
+    could leave it out could retire a library on a run that spent nothing.
+    """
+
 
 Equipment = Callable[[], AbstractContextManager[ServedAgents]]
 """How a gate run gets hold of the three reference agents while it runs.
@@ -192,7 +207,7 @@ def shipped_agents(model: str) -> Equipment | None:
     """
     try:
         from backend.targets.reference.hardened import HARDENED
-        from backend.targets.reference.model import ModelConfig
+        from backend.targets.reference.model import ModelConfig, measures_the_field
         from backend.targets.reference.operator import nonce_planter
         from backend.targets.reference.server import (
             ReferenceConfig,
@@ -220,6 +235,7 @@ def shipped_agents(model: str) -> Equipment | None:
         )
         with serve(app) as base_url:
             yield ServedAgents(
+                measured_the_field=measures_the_field(ModelConfig.parse(model)),
                 targets=tuple(
                     TargetConfig(
                         name=agent.name,
@@ -403,8 +419,8 @@ class WrittenBack:
         retired = (
             f"{len(self.retired)} case(s) marked retired: {', '.join(self.retired)}"
             if self.retired
-            else "no case was retired: the rule needs two consecutive runs below "
-            "the floor, and one run below it is not two"
+            else "no case was retired: the rule needs two consecutive runs on one "
+            "model below the floor, and one run below it is not two"
         )
         return (
             f"{self.readings} reading(s) appended to the case records in "
@@ -850,6 +866,10 @@ def _write_back(
         weak=runs[served.weak],
         trivial=runs[served.trivial],
         model=config.report.models.calibration,
+        # Whether the run measured the field, from the equipment that served the
+        # agents rather than from the declared string: a reading taken on a stub
+        # fixture is stored, marked, and retires nothing (ADR-0022).
+        measured_the_field=served.measured_the_field,
         ran_on=datetime.now(tz=UTC).date(),
         # The families the gate did not decide on. A reading from one is stored and
         # the rule is not applied to it: retirement declines on a family the bench

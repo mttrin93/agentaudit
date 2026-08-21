@@ -116,4 +116,5 @@ hardened = 3
 weak = 2
 trivial = 10
 fit_to_report = true
+measured_the_field = true
 adjudicator = "openrouter:openai/gpt-4.1-mini"

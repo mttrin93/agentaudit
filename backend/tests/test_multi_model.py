@@ -64,6 +64,7 @@ from backend.bench.scorer import (
 from backend.graph.approval import ApprovalOutcome
 from backend.graph.budget import RunBudget
 from backend.graph.runstate import RunState
+from backend.targets.reference.model import ModelConfig, Provider, measures_the_field
 from backend.tests.conftest import (
     BENCH_ATTESTATION,
     CASES_DIR,
@@ -433,6 +434,39 @@ def test_the_adaptive_comparison_reaches_no_rule_and_no_scored_arithmetic() -> N
         f"{reachable} is reachable from the adaptive comparison. It is measured on "
         "episodes and families and decides nothing"
     )
+
+
+# --- The line between a model and a fixture ----------------------------------
+
+
+def test_every_provider_says_whether_a_reading_on_it_measures_the_field() -> None:
+    """Both sides of the line, and the closed enum as the denominator.
+
+    Here rather than in `test_retirement.py` because this is the question the swap
+    makes load-bearing: the retirement window is scoped to a model and a reading taken
+    on a fixture cannot retire anything (ADR-0022), so this one boolean decides whether
+    a stored reading may ever end a case's life.
+
+    It is asserted directly because provenance can only *withhold* a retirement. An
+    inverted mapping fails in the silent direction — every reading marked as a fixture,
+    every retirement declined, no case ever retired again, and not one test red. Every
+    other test that exercises the wiring runs on a stub and asserts the false side, so
+    without this one the true side is never checked at all.
+    """
+    assert measures_the_field(ModelConfig.parse("openrouter:openai/gpt-4.1-nano"))
+    assert not measures_the_field(ModelConfig.parse("stub:obedient"))
+
+    # Every member of the closed enum answered, and the answers actually split. A
+    # third provider cannot arrive without choosing a side — the match in
+    # `measures_the_field` has no fallback branch, so mypy refuses it — and a mapping
+    # collapsed onto one side fails here rather than in a gate run six months on.
+    answered = {
+        provider: measures_the_field(ModelConfig(provider=provider, name="whichever"))
+        for provider in Provider
+    }
+    assert set(answered) == set(Provider)
+    assert any(answered.values()), "no provider measures the field: nothing can retire"
+    assert not all(answered.values()), "every provider measures the field: #43 is back"
 
 
 # --- Seam four: the entry point, on two models -------------------------------

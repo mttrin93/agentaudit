@@ -92,7 +92,7 @@ from backend.bench.registration import Attestation
 from backend.bench.rule import DECLARED_RULE
 from backend.graph.budget import Layer
 from backend.targets.reference.hardened import HARDENED
-from backend.targets.reference.model import ModelConfig
+from backend.targets.reference.model import ModelConfig, measures_the_field
 from backend.targets.reference.operator import nonce_planter
 from backend.targets.reference.server import ReferenceConfig, create_reference_app
 from backend.targets.reference.serving import serve
@@ -160,12 +160,17 @@ def watched_agents(ledger: Ledger) -> Iterator[ServedAgents]:
     in particular, and counting messages at the endpoint is the only clock both ends
     agree on. Everything else here is what `shipped_agents` builds.
     """
+    model = ModelConfig.parse("stub:obedient")
     app: FastAPI = create_reference_app(
-        ReferenceConfig(model=ModelConfig.parse("stub:obedient"), auth_token=AUTH_TOKEN)
+        ReferenceConfig(model=model, auth_token=AUTH_TOKEN)
     )
     app.add_middleware(Counted, ledger=ledger)
     with serve(app) as base_url:
         yield ServedAgents(
+            # Read off the same configuration the agents are served on rather than
+            # written as a literal, so this equipment cannot claim to have measured
+            # the field while serving a fixture (ADR-0022).
+            measured_the_field=measures_the_field(model),
             targets=tuple(
                 TargetConfig(
                     name=agent.name,
@@ -1096,6 +1101,16 @@ def test_the_gate_run_writes_its_series_back_to_the_library_it_read(
         # One run below the floor is not two: the rule needs two consecutive runs,
         # so nothing retires here and the assertion is that nothing did.
         assert case.status is CaseStatus.ACTIVE
+        # And the reading says which kind of run took it. This bench serves the stub
+        # fixture, so its readings are marked as not a measurement of the field and
+        # the rule will decline to retire on them however many it stores (ADR-0022).
+        # Asserted here because the answer travels from the equipment that served the
+        # agents: this module cannot ask `Provider` itself, and a write-back that
+        # stored the permissive answer would make a free console run able to retire.
+        assert not case.history[0].measured_the_field, (
+            f"{case.id} carries a reading claiming to have measured the field, from "
+            "a run served by a fixture. Two of those retire the case (#43)"
+        )
 
     assert reading["written"]["library"] == str(library)
     assert reading["written"]["retired"] == []

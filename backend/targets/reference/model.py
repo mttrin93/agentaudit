@@ -48,6 +48,25 @@ class ModelConfig:
         return f"{self.provider}:{self.name}"
 
 
+def measures_the_field(config: ModelConfig) -> bool:
+    """Whether a reading taken on this model is a measurement of the field at all.
+
+    False for the stub, and the answer lives here because this is where `Provider` is
+    declared. `backend/bench/` reads the retirement rule and must not import this
+    package to ask the question — so the gate-run entry point, which already holds a
+    `ModelConfig`, records the answer on every reading it stores (ADR-0022).
+
+    The match has no fallback branch on purpose. `Provider` is a closed enum, and a
+    third provider added without a line here fails the type check rather than
+    defaulting onto the side that lets two free runs retire a working case.
+    """
+    match config.provider:
+        case Provider.OPENROUTER:
+            return True
+        case Provider.STUB:
+            return False
+
+
 def complete(config: ModelConfig, system_prompt: str, message: str) -> str:
     """One turn from the configured model: a system prompt and a message in,
     text out."""

@@ -49,12 +49,14 @@ nothing.
 
 **It writes the decay series it measured back onto the case records.** `D` for every
 case it read, appended to that case's own `[[history]]` (spec story 72), and a case
-below the declared floor on two consecutive gate runs marked retired with its date
-and its final score — kept and never deleted, because a case the field caught up with
-is evidence that the field moved. `--cases` says which library that is. Nothing here
-retires a case on one run, and a case whose two low readings came from a family the
-gate could not vouch for is left *not decided* rather than retired: ADR-0015 leaves
-that question open on purpose.
+below the declared floor on two consecutive runs *of one model* marked retired with
+its date and its final score — kept and never deleted, because a case the field caught
+up with is evidence that the field moved. `--cases` says which library that is.
+Nothing here retires a case on one run, nothing retires a case on a `--model
+stub:...` run at all (ADR-0022: a fixture with hardcoded replies is not a measurement
+of the field, and two free runs would otherwise empty the live library), and a case
+whose two low readings came from a family the gate could not vouch for is left *not
+decided* rather than retired: ADR-0015 leaves that question open on purpose.
 
 **It asks before it sends anything**, on the same terms as every other entry point:
 the three attestation statements one at a time, then the estimated cost at the
@@ -100,7 +102,7 @@ from backend.bench.rule import DECLARED_RULE
 from backend.bench.scorer import GateOutcome
 from backend.graph.budget import BudgetExceeded, Layer, RunBudget
 from backend.targets.reference.hardened import HARDENED
-from backend.targets.reference.model import ModelConfig
+from backend.targets.reference.model import ModelConfig, measures_the_field
 from backend.targets.reference.operator import nonce_planter
 from backend.targets.reference.server import (
     REFERENCE_AGENTS,
@@ -356,6 +358,12 @@ def run_the_gate(args: argparse.Namespace) -> int:
         weak=runs[WEAK.name],
         trivial=runs[TRIVIAL.name],
         model=args.model,
+        # Whether this run measured the field, off the parsed configuration rather
+        # than the string: a reading taken on the stub fixture is stored and marked,
+        # and the rule declines to retire anything on it (ADR-0022). `--model
+        # stub:obedient` is how this pipeline is exercised without spending money,
+        # and it must stay a run that writes readings and retires nothing.
+        measured_the_field=measures_the_field(model),
         ran_on=datetime.now(tz=UTC).date(),
         # The families the gate did not decide on. A reading from one is stored and
         # the rule is not applied to it: retirement declines on a family the bench

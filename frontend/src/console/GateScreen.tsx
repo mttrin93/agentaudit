@@ -743,6 +743,13 @@ function Citation({ reading }: { reading: GateReading }) {
  * and two of the three are consequences nobody would infer, so a screen that showed
  * them together would be a screen where they are read as one (ADR-0007). The walk's
  * footer is the register screen's, because it is the same walk.
+ *
+ * The note under the checkbox — all three required, each recorded separately,
+ * nothing sent yet — is gone. That all three are required is enforced by the guard
+ * that will not build a body from an incomplete declaration and by the bench that
+ * refuses an incomplete one; that nothing has been sent is what *Continue* and *See
+ * what it will cost* say by being the only way forward. The register screen keeps
+ * its own note, which says a different thing: what the artefact is (ADR-0007).
  */
 function TheAttestation({
   step,
@@ -815,13 +822,6 @@ function TheAttestation({
           ))}
         </ul>
       ) : null}
-
-      <p className="aside">
-        All three statements are required and each is recorded separately, so the
-        record shows <em>what</em> was attested rather than that somebody agreed.
-        Nothing has been sent: this screen has made no call and the case library has
-        not been touched.
-      </p>
 
       <footer className="walk">
         <button type="button" onClick={back} disabled={busy}>

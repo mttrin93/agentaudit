@@ -1,8 +1,17 @@
 ---
 status: accepted
+amended_by: 0023-a-gate-run-updates-the-citation-it-earned.md
 ---
 
 # The console may start a gate run, and the command line stops being the only door
+
+> **Amended by [ADR-0023](./0023-a-gate-run-updates-the-citation-it-earned.md).** Two
+> of the costs recorded below were reversed rather than paid: a completed gate run
+> *does* now update the citation the bench carries, and both entry points leave a
+> machine-readable record. The six conditions of this decision, and every other cost
+> on the list, stand. The two paragraphs affected are marked where they appear —
+> nothing here is deleted, because what this file claimed was true when it was written
+> and is why ADR-0023 exists.
 
 `PLAN.md` §8 put a gate run on the command line and said, in a subordinate clause,
 *not through the API*. Issue #75 restated it as an implementation decision — "the
@@ -189,7 +198,10 @@ Everything else this spends is smaller and none of it is nothing:
   out of scope: the citation is carried into the provenance block of every signed
   report, so a bench that started citing a run it made of itself would be changing
   what its artefacts claim. It is a decision with its own ADR, and this one does not
-  leave the door ajar.
+  leave the door ajar. *(That ADR is
+  [ADR-0023](./0023-a-gate-run-updates-the-citation-it-earned.md). It agrees with the
+  objection and decides that a citation nobody re-checks is the worse of the two
+  claims — and it is the record #84 built that made the alternative available at all.)*
 
 ## Consequences
 

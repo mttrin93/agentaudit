@@ -198,17 +198,21 @@ written for a person, and never parsed to recover a figure.
 _Avoid_: gate report, gate log, the gate output
 
 **Gate citation**:
-What a report carries about the gate the bench last passed: the outcome, the date,
-the library version it was earned at, and the **gate document** it points to. A fact
-about the bench, never a verdict about a target.
-_Avoid_: gate result, validation stamp, certification
+What a report carries about the gate run the bench last made: the outcome, the date,
+the library version it was earned at, and the two files that hold the run — the
+**gate document** and the **gate run record**. A fact about the bench, never a verdict
+about a target. Not *the gate it last passed*: since ADR-0023 a gate run of any outcome
+replaces it, so a bench whose last gate run failed cites that, and the citation is what
+the instrument last put itself through rather than the best answer it ever got.
+_Avoid_: gate result, validation stamp, certification, the gate it passed
 
 **Gate run record**:
 The machine-readable form of a gate run's decision, carrying each family's three
 reference-agent rates and its discrimination score. Written beside the **gate
-document** by a gate run started from the command line, and held in memory by one
-started from the console. What a reader goes to for the figures the **gate citation**
-does not carry.
+document** by a gate run started from the command line, and into the case library by
+one started from the console. Since ADR-0023 it is what the **gate citation** *names*
+rather than something a reader has to know exists: the citation carries the address and
+the record carries the figures, so recovering them never means parsing the document.
 _Avoid_: sidecar, gate JSON, gate summary, the gate's data
 
 **Admission**:

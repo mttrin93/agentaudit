@@ -40,6 +40,8 @@
    * with a label in words, so nothing on any screen is carried by hue alone.
    */
   --rail: #f2f2ee;
+  /* How wide prose is allowed to get, whatever the page around it does. */
+  --measure: 44rem;
   --scored: oklch(0.48 0.11 250);
   --adaptive: oklch(0.48 0.11 305);
   --agent-hardened: oklch(0.52 0.10 195);
@@ -80,10 +82,51 @@ body {
   background: var(--paper);
 }
 
+/*
+ * The page is as wide as its widest grid; its prose is not.
+ *
+ * Two numbers, because a screen here is two things at once. A row of cards wants
+ * the width — the six families of a gate run, three at a card apiece, were wrapping
+ * at four words a line inside a 44rem column. Prose wants a measure, and 64rem of
+ * 14px text is about 130 characters, which is twice what anybody reads accurately.
+ *
+ * So the page is 64rem and `--measure` caps the prose inside it. The cap is applied
+ * to **direct children** of a header or a section, which is what keeps it off the
+ * inside of a card: a paragraph on the page is prose and gets the measure, and the
+ * same tag nested in a `.family` or a `.citation` is that block's own text and takes
+ * the block's width.
+ */
 .screen {
-  max-width: 44rem;
+  max-width: 64rem;
   margin: 0 auto;
   padding: 3rem 1.5rem 6rem;
+}
+
+.screen > header > h1,
+.screen > header > p,
+.screen > section > h2,
+.screen > section > h3,
+.screen > section > p,
+.screen > section > ol,
+.screen > section > ul,
+.screen > section > dl,
+.screen > section > label,
+.screen > section > footer,
+.screen > section > blockquote {
+  max-width: var(--measure);
+}
+
+/*
+ * The blocks that hold prose take the measure; the blocks that hold figures do not.
+ *
+ * `.families.per-family` is six cards of numbers and is left to fill the page.
+ * Plain `.families` is the report's and the questionnaire's — a stack of paragraphs,
+ * one family each — and it reads at the measure like any other prose.
+ */
+.screen .citation,
+.screen .runs,
+.screen .families:not(.per-family) {
+  max-width: var(--measure);
 }
 
 .eyebrow {
@@ -515,7 +558,7 @@ a {
  * (ADR-0005).
  */
 .families.per-family {
-  grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(24rem, 1fr));
   gap: 1rem;
 }
 

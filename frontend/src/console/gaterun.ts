@@ -46,7 +46,10 @@
 
 import type {
   ApprovalBody,
+  DeclaredRule,
+  ExcludedFamily,
   FamilyFigures,
+  GateDecided,
   GateRunEstimate,
   GateRunReading,
   GateRunStart,
@@ -484,15 +487,54 @@ export interface AgentRate {
   rate: string
   counts: string
   interval: string
+  /**
+   * Where this rate sits on the family's own 0-to-1 line, as a CSS percentage.
+   *
+   * Computed here rather than in markup, because it is arithmetic over a measured
+   * rate and this module is where the figures are read. A plot is the one place a
+   * rate can be misread by being drawn, so the number that positions the dot is a
+   * value a test can assert rather than an expression inside a `style` attribute.
+   */
+  at: string
 }
 
-/** One family's line: three rates, its `D`, its ordering, and its verdict. */
+/**
+ * One family's line: three rates on a line, its `D`, and what the line reads.
+ *
+ * **The plot is one family's three rates and never two families' anything.** The
+ * axis is 0 to 1 — the whole range a failure rate can take — so the three dots are
+ * comparable to each other and to the floor, and to nothing on another card. There
+ * is no second axis, no shared scale across the six and no ordering of the cards by
+ * score: a reader who wants the six ranked has to do it themselves, and the bench
+ * does not hand them a ranking it does not stand behind (ADR-0005).
+ *
+ * **`span` is `D` drawn rather than a second figure.** The bar runs from the
+ * hardened rate to the trivial one, which is what `D` is by definition — trivial
+ * minus hardened — so the drawing and the number are the same measurement twice and
+ * cannot disagree.
+ */
 export interface FamilyReading {
   family: string
   rates: AgentRate[]
-  discrimination: string
-  ordering: string
-  intervals: string
+  /** `D` as the bare figure, or an em dash where this family decided nothing. */
+  score: string
+  /** `span = D 0.83 · ≥ 0.40`, the figure beside the bar it had to clear. */
+  span: string
+  /** Where the span bar starts, as a CSS percentage. */
+  from: string
+  /** How long the span bar is, as a CSS percentage. `D` at the plot's scale. */
+  width: string
+  /**
+   * What the line reads, in one sentence: the verdict, then what it turned on.
+   *
+   * Or, for a family the decision set aside, the exclusion and its reading —
+   * ADR-0015 asks the exclusion to name the family, the reason *and* the figure
+   * that caused it, and this is that line on the family's own card rather than only
+   * in a sibling list.
+   */
+  reads: string
+  /** Whether this family decided nothing. Drawn, so a reader cannot miss it. */
+  set_aside: boolean
   verdict: string
   /** The bench's own line for this family, carried unedited. */
   stated: string
@@ -566,7 +608,72 @@ function accentFor(agent: string): string {
   return REFERENCE_AGENTS.find((known) => known.name === agent)?.accent ?? ''
 }
 
-function familyReading(figures: FamilyFigures): FamilyReading {
+/** A measured rate as a position on the plot's own 0-to-1 axis. */
+function at(value: number): string {
+  return `${(value * 100).toFixed(1)}%`
+}
+
+/** The rate one named agent read, out of the three the family carries. */
+function rateOf(figures: FamilyFigures, agent: string): number | null {
+  return figures.rates.find((rate) => rate.agent === agent)?.value ?? null
+}
+
+/**
+ * Why a family decided nothing, as its own card says it.
+ *
+ * Built from the exclusion the decision recorded and the floor it was read against,
+ * so the reading that barred the family is on the line that says it was barred. The
+ * bench's own whole sentence is still on the card as `stated`; this is the short
+ * form, and it is short by dropping words rather than by dropping the figure.
+ */
+function setAsideReads(barred: ExcludedFamily, floor: number): string {
+  const because =
+    barred.reason === 'not_measurable'
+      ? 'this family could not be measured'
+      : barred.kappa === null
+        ? 'no κ was measured'
+        : `κ = ${barred.kappa.toFixed(2)} is below the ${floor.toFixed(2)} floor`
+  return (
+    `excluded — ${because} · the bench cannot vouch for this family, so no D of ` +
+    'its own decides anything here'
+  )
+}
+
+/** What a family that decided something reads: the verdict, then what it turned on. */
+function decidedReads(figures: FamilyFigures): string {
+  const intervals = figures.intervals_separate
+    ? 'intervals disjoint'
+    : 'intervals overlap'
+  const ordering = figures.monotonic
+    ? 'monotonic'
+    : `${figures.inversions} inversion${figures.inversions === 1 ? '' : 's'}`
+  const verdict = figures.passes ? 'passes' : 'does not pass'
+  return `${verdict} · ${intervals} · ${ordering}`
+}
+
+/**
+ * One family's card, off its figures and the exclusion the decision recorded for it.
+ *
+ * `barred` is required rather than defaulted, on the same terms as the record's own
+ * `excluded` field: a family whose exclusion this view forgot would be drawn as a
+ * family that decided something, which is the one mistake this card can make and it
+ * would be silent.
+ */
+function familyReading(
+  figures: FamilyFigures,
+  barred: ExcludedFamily | null,
+  rule: DeclaredRule,
+): FamilyReading {
+  const hardened = rateOf(figures, 'hardened')
+  const trivial = rateOf(figures, 'trivial')
+  const span =
+    hardened === null || trivial === null
+      ? { from: '0%', width: '0%' }
+      : {
+          from: at(Math.min(hardened, trivial)),
+          width: at(Math.abs(trivial - hardened)),
+        }
+  const aside = barred !== null
   return {
     family: figures.family,
     rates: figures.rates.map((rate) => ({
@@ -575,14 +682,16 @@ function familyReading(figures: FamilyFigures): FamilyReading {
       rate: rate.value.toFixed(2),
       counts: `${rate.successes}/${rate.attempts}`,
       interval: `[${rate.lower.toFixed(3)}, ${rate.upper.toFixed(3)}]`,
+      at: at(rate.value),
     })),
-    discrimination: `D = ${figures.discrimination.toFixed(2)}`,
-    ordering: `${figures.inversions} inversion${figures.inversions === 1 ? '' : 's'} — ${
-      figures.monotonic ? 'ordered' : 'not ordered'
-    }`,
-    intervals: figures.intervals_separate
-      ? 'hardened and trivial intervals do not overlap'
-      : 'hardened and trivial intervals overlap',
+    score: aside ? '—' : figures.discrimination.toFixed(2),
+    span: aside
+      ? 'span = D — · excluded'
+      : `span = D ${figures.discrimination.toFixed(2)} · ≥ ${rule.discrimination_floor.toFixed(2)}`,
+    from: span.from,
+    width: span.width,
+    reads: aside ? setAsideReads(barred, rule.kappa_floor) : decidedReads(figures),
+    set_aside: aside,
     verdict: figures.passes ? 'passes' : 'does not pass',
     stated: figures.stated,
   }
@@ -599,6 +708,18 @@ function familyReading(figures: FamilyFigures): FamilyReading {
  * half-decision to draw, and a screen that rendered an empty outcome block would be
  * showing a gate run that failed something.
  */
+/**
+ * The exclusion this decision recorded for one family, or `null` where it decided.
+ *
+ * Read off `GateDecided.excluded` rather than off the family's own `excluded` mark,
+ * because the mark is the reason alone and the card prints the reading behind it.
+ * The two cannot disagree: the record fills both from one exclusion (ADR-0015,
+ * `gate_record.gate_decided`).
+ */
+function barredIn(decision: GateDecided, family: string): ExcludedFamily | null {
+  return decision.excluded.find((barred) => barred.family === family) ?? null
+}
+
 export function decidedView(reading: GateRunReading): DecidedBlock[] {
   const decision = reading.decision
   if (decision === null) {
@@ -632,7 +753,9 @@ export function decidedView(reading: GateRunReading): DecidedBlock[] {
       kind: 'families',
       heading: 'Each family, with the figures its line turned on',
       statement: `${READ_OFF_THE_RUN} ${NOTHING_COMBINES_THEM}`,
-      families: decision.families.map(familyReading),
+      families: decision.families.map((figures) =>
+        familyReading(figures, barredIn(decision, figures.family), reading.rule),
+      ),
     },
   ]
   if (decision.excluded.length) {

@@ -489,6 +489,162 @@ a {
 }
 
 /*
+ * The six families of one gate run, two to a row, each with its rates plotted.
+ *
+ * `.families` on its own is one column, which is what the report and the
+ * questionnaire want: there a family is a paragraph of prose. Here a family is six
+ * numbers, so two fit across the reading column and a reader sees the six without
+ * scrolling past four.
+ *
+ * `auto-fit`, so a narrow window gets one column and the cards keep their order
+ * either way. **The order is the library's and never the scores'** — a grid sorted
+ * by `D` would be the ranking across six families this bench does not stand behind
+ * (ADR-0005).
+ */
+.families.per-family {
+  grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr));
+  gap: 1rem;
+}
+
+/* The three rates on one line, with `D` at the end of it. */
+.family .rate-line {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.8rem;
+}
+
+.family .rates {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 1rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.82rem;
+}
+
+.family .rates .who {
+  color: var(--quiet);
+}
+
+.family .rates .rate {
+  font-variant-numeric: tabular-nums;
+}
+
+/*
+ * The denominator, quiet but present.
+ *
+ * Never dropped to make the line fit: a rate that leaves its denominator behind is
+ * the over-claim this whole report exists to replace, and thirty attempts per agent
+ * per family is the declared sample size rather than something a reader should have
+ * to assume (ADR-0003).
+ */
+.family .rates .of {
+  color: var(--quiet);
+  font-size: 0.76rem;
+}
+
+.family .score {
+  margin: 0;
+  white-space: nowrap;
+}
+
+/*
+ * One family's three rates on the axis a failure rate lives on.
+ *
+ * Fixed 0 to 1 and never fitted to these three values, so the dots are comparable
+ * to each other and to the floor and to nothing on another card. The bar is the span
+ * from hardened to trivial, which is `D` by definition — the drawing and the number
+ * are one measurement twice and cannot disagree.
+ *
+ * Every figure here is printed in words beside it, which is why the plot is
+ * `aria-hidden` and why the card loses no fact if it never renders.
+ */
+.family .plot {
+  position: relative;
+  height: 0.9rem;
+  margin: 0.9rem 0 0.5rem;
+}
+
+.family .plot::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  right: 0;
+  left: 0;
+  border-top: 1px solid var(--line);
+}
+
+.family .plot .span {
+  position: absolute;
+  top: 50%;
+  height: 0;
+  border-top: 2px solid var(--agent-weak);
+  transform: translateY(-1px);
+}
+
+.family .plot .dot {
+  position: absolute;
+  top: 50%;
+  width: 0.5rem;
+  height: 0.5rem;
+  margin: -0.25rem 0 0 -0.25rem;
+  border-radius: 50%;
+  background: var(--line);
+}
+
+.dot.hardened {
+  background: var(--agent-hardened);
+}
+
+.dot.weak {
+  background: var(--agent-weak);
+}
+
+.dot.trivial {
+  background: var(--agent-trivial);
+}
+
+/* Which dot is which, and the span beside the floor it had to clear. */
+.family .legend {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin: 0 0 0.3rem;
+  font-size: 0.76rem;
+  color: var(--quiet);
+}
+
+.family .legend .key {
+  margin-right: 0.7rem;
+  white-space: nowrap;
+}
+
+.family .legend .dot {
+  position: static;
+  display: inline-block;
+  width: 0.45rem;
+  height: 0.45rem;
+  margin: 0 0.25rem 0 0;
+}
+
+/*
+ * A family the decision set aside, marked and not tinted.
+ *
+ * Dashed with a rule down the side, in the same idiom as `.family.absent`, and
+ * deliberately **not** in `--refusal`: an excluded family was not scored a fail and
+ * was not force-passed, and a red card beside somebody's family is the reading
+ * ADR-0015 spent its length refusing. Its rates were measured and are drawn; what is
+ * withheld is the `D`, and the line under it says why in the bench's own terms.
+ */
+.family.set-aside {
+  border-style: dashed;
+  border-left: 3px solid var(--quiet);
+}
+
+/*
  * A family with no rate is drawn without the place a rate would go.
  *
  * Dashed rather than solid, and with the reason where the figure would have been:

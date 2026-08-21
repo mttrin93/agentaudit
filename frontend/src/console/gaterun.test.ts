@@ -579,7 +579,7 @@ describe('what the gate run decided', () => {
         '12/30',
         '26/30',
       ])
-      expect(reading.discrimination).toBe(`D = ${SCORES[index].toFixed(2)}`)
+      expect(reading.score).toBe(SCORES[index].toFixed(2))
       expect(reading.verdict).toBe(index < 4 ? 'passes' : 'does not pass')
     }
 

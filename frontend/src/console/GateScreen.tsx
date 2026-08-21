@@ -35,14 +35,25 @@
  * in flight the screen shows progress per layer — family, case and attempt on one
  * side, family, episode and turn on the other — and when it is decided it shows the
  * rule above the outcome and then each family's three rates and its `D`, read off
- * the run that just happened. The *cited* gate run's figures are still only in its
- * document, and this screen still does not read it.
+ * the run that just happened.
+ *
+ * **And they survive the tab being closed.** The last gate run this bench finished
+ * is read on arrival from `GET /gate-runs/{id}`, so an operator who reloads still
+ * sees what the gate measured rather than only that it passed. What that does *not*
+ * cover is a gate run this process did not start: one run at a terminal, or one
+ * started here before a restart, has its figures in its own record on disk and no
+ * route reads it. The citation says what the last gate run answered either way; the
+ * figures behind it are shown where this bench still holds them.
  *
  * **The idiom is the console's own.** One reading column, `.citation` and
  * `.citation.uncited`, `.figures` for the estimate, `.layers` for progress,
- * `.families` for the per-family figures, labelled uncoloured facts, and the three
- * reference agents in one hue's three ordered steps. No outcome is coloured: a pass
- * in green and a fail in red is the severity scale the report exists to refuse.
+ * `.families.per-family` for the per-family cards, labelled uncoloured facts, and
+ * the three reference agents in one hue's three ordered steps. No outcome is
+ * coloured: a pass in green and a fail in red is the severity scale the report
+ * exists to refuse, and the one plot on this screen draws a family's own three rates
+ * on a fixed nought-to-one axis — every figure in it is printed beside it in words,
+ * which is why the drawing is `aria-hidden` and why the card loses no fact without
+ * it.
  */
 
 import { useEffect, useState } from 'react'
@@ -104,6 +115,20 @@ interface Held {
 const NOTHING_YET: Held = { bench: null, start: null, unavailable: '' }
 
 /**
+ * What the last gate run this bench decided left behind, or why it could not be read.
+ *
+ * `reading` stays `null` where this bench has finished no gate run — which is not
+ * the same fact as a bench that has never passed one, and the region says so rather
+ * than drawing an empty outcome.
+ */
+interface Lastly {
+  reading: GateRunReading | null
+  unavailable: string
+}
+
+const NOT_READ_YET: Lastly = { reading: null, unavailable: '' }
+
+/**
  * Where the operator is in starting one.
  *
  * Four stages, and the first is the screen at rest. A union rather than three
@@ -120,6 +145,7 @@ export function GateScreen() {
   const [step, setStep] = useState(0)
   const [started, setStarted] = useState<GateRunStarted | null>(null)
   const [reading, setReading] = useState<GateRunReading | null>(null)
+  const [lastly, setLastly] = useState<Lastly>(NOT_READ_YET)
   const [confirmed, setConfirmed] = useState(false)
   const [refused, setRefused] = useState('')
   const [busy, setBusy] = useState(false)
@@ -145,6 +171,48 @@ export function GateScreen() {
       } catch (unknown: unknown) {
         if (current) {
           setHeld({ bench: null, start: null, unavailable: `${unknown}` })
+        }
+      }
+    }
+    void read()
+    return () => {
+      current = false
+    }
+  }, [])
+
+  /**
+   * The last gate run this bench decided, read on arrival so its figures survive a
+   * reload.
+   *
+   * Its own state and its own effect, deliberately not folded into the one above: a
+   * bench that answered for its rule and its citation and not for this has said
+   * most of what this screen is for, and one failure state across the two would take
+   * the rule down with the figures. The rows arrive most recent first, so the first
+   * settled one is the last gate run this bench finished.
+   *
+   * **Only what this process started.** `GET /gate-runs` lists the gate runs this
+   * bench has run, which is not every gate run the library has been through: a run
+   * started at a terminal, or one started here before a restart, has its figures in
+   * its own record on disk and no route reads that. So an empty answer here is not
+   * the claim that no gate run ever happened — the citation above says what the last
+   * one answered, and this region says nothing about it either way.
+   */
+  useEffect(() => {
+    let current = true
+    const read = async () => {
+      try {
+        const runs = await gateRuns()
+        const settled = runs.gate_runs.find((row) => !stillGoing(row.status))
+        if (settled === undefined) {
+          return
+        }
+        const decided = await gateRunReading(settled.gate_run_id)
+        if (current && decided.decision !== null) {
+          setLastly({ reading: decided, unavailable: '' })
+        }
+      } catch (unknown: unknown) {
+        if (current) {
+          setLastly({ reading: null, unavailable: `${unknown}` })
         }
       }
     }
@@ -340,6 +408,23 @@ export function GateScreen() {
       {blocks.map((block) => (
         <Block block={block} begin={begin} key={block.kind} />
       ))}
+
+      {stage === 'watching' ? null : lastly.unavailable ? (
+        <section>
+          <h2>The figures of the last gate run could not be read</h2>
+          <div className="citation uncited" role="alert">
+            <h3>This bench did not answer for what its last gate run measured</h3>
+            <p>{lastly.unavailable}</p>
+            <p className="aside">
+              Not the same fact as a bench that has finished no gate run: what is
+              unknown here is what the figures were, and the citation above is
+              unaffected — it says what the last gate run answered.
+            </p>
+          </div>
+        </section>
+      ) : lastly.reading === null ? null : (
+        <TheLastDecided reading={lastly.reading} />
+      )}
     </main>
   )
 }
@@ -744,6 +829,34 @@ function TheGateRun({ reading }: { reading: GateRunReading }) {
   )
 }
 
+/**
+ * What the last gate run this bench finished decided, read on arrival.
+ *
+ * The same figures the watch shows, from the same route, so this is not a second
+ * reading of anything — it is that run's own decision, read once, so that closing
+ * the tab does not lose what the gate measured.
+ *
+ * **Without the declared-rule block.** The rule is already on this screen above,
+ * from the bench's own reader, and it is the same `DECLARED_RULE` either way. What
+ * ADR-0003 asks for is the rule above the outcome on the page, and it is; saying it
+ * twice would not make the ordering safer.
+ */
+function TheLastDecided({ reading }: { reading: GateRunReading }) {
+  const decided = decidedView(reading).filter((block) => block.kind !== 'rule')
+  return (
+    <>
+      <section>
+        <h2>What the last gate run measured</h2>
+        <p>{reading.statement}</p>
+      </section>
+
+      {decided.map((block) => (
+        <Decided block={block} key={block.kind} />
+      ))}
+    </>
+  )
+}
+
 /** One layer's reading, in that layer's own units. */
 function Layer({ layer }: { layer: LayerReading }) {
   return (
@@ -803,7 +916,7 @@ function Decided({ block }: { block: DecidedBlock }) {
         <section>
           <h2>{block.heading}</h2>
           <p>{block.statement}</p>
-          <div className="families">
+          <div className="families per-family">
             {block.families.map((family) => (
               <FamilyFigure family={family} key={family.family} />
             ))}
@@ -844,33 +957,65 @@ function Facts({ facts }: { facts: Fact[] }) {
 }
 
 /**
- * One family's three rates, its `D` and its verdict.
+ * One family's three rates on their own line, its `D`, and what that line reads.
  *
  * The agents take the one hue's three ordered steps, which is identity and order and
- * never rank; the `D`, the ordering and the verdict are words and numbers with no
- * colour on them. Nothing here adds two families.
+ * never rank; the `D`, the span and the verdict are words and numbers with no colour
+ * on them. **Nothing here adds two families**, and the axis is 0 to 1 rather than
+ * fitted to these three rates, so no dot's position means anything about another
+ * card.
+ *
+ * The plot is decoration only in the sense that removing it removes no fact: every
+ * figure it draws is printed beside it in words, the counts each rate came from are
+ * on the same line, and the whole card still reads with the plot unseen. A screen
+ * reader gets the rates, the `D` and the line's verdict and skips the drawing, which
+ * is why the drawing carries `aria-hidden`.
  */
 function FamilyFigure({ family }: { family: FamilyReading }) {
   return (
-    <div className="family">
+    <div className={family.set_aside ? 'family set-aside' : 'family'}>
       <h3>{family.family}</h3>
-      <dl className="at">
+      <div className="rate-line">
+        <ul className="rates">
+          {family.rates.map((rate) => (
+            <li key={rate.agent}>
+              <span className="who">{rate.agent}</span>{' '}
+              <span className="rate">{rate.rate}</span>{' '}
+              <span className="of">{rate.counts}</span>
+            </li>
+          ))}
+        </ul>
+        <p className="score">
+          <span className="kind">D</span> <span className="calls">{family.score}</span>
+        </p>
+      </div>
+
+      <div className="plot" aria-hidden="true">
+        <span
+          className="span"
+          style={{ left: family.from, width: family.width }}
+        />
         {family.rates.map((rate) => (
-          <div key={rate.agent}>
-            <dt className={`agent ${rate.accent}`}>{rate.agent}</dt>
-            <dd>
-              <span className="calls">{rate.rate}</span>
-              <span className="kind">
-                {rate.counts} {rate.interval}
-              </span>
-            </dd>
-          </div>
+          <span
+            className={`dot ${rate.accent}`}
+            key={rate.agent}
+            style={{ left: rate.at }}
+          />
         ))}
-      </dl>
-      <p>{family.discrimination}</p>
-      <p className="kind">{family.intervals}</p>
-      <p className="kind">{family.ordering}</p>
-      <p>{family.verdict}</p>
+      </div>
+
+      <p className="legend">
+        <span>
+          {family.rates.map((rate) => (
+            <span className="key" key={rate.agent}>
+              <span className={`dot ${rate.accent}`} aria-hidden="true" />
+              {rate.agent}
+            </span>
+          ))}
+        </span>
+        <span className="kind">{family.span}</span>
+      </p>
+      <p className="kind">{family.reads}</p>
     </div>
   )
 }

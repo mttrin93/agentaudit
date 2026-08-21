@@ -11,7 +11,7 @@
  *
  * **There is one control here and it is the one ADR-0021 authorised.** `PLAN.md` §8
  * put a gate run on the command line, this screen printed the command, and a
- * deployed bench had no terminal to run it in. So the command block carries a start
+ * deployed bench had no terminal to run it in. So the start block carries a start
  * control where the bench says a gate run may begin — and a *stated refusal* where
  * it may not: no reference agents shipped, no case library it may write to, no
  * adjudicating instrument, or a gate run already holding the library. The bench
@@ -75,7 +75,7 @@ import {
 import type { LayerReading } from '../run/progress'
 import {
   gateScreen,
-  type CommandBlock,
+  type StartBlock,
   type ConsequenceBlock,
   type GateBlock,
   type OutcomeBlock,
@@ -610,10 +610,8 @@ function Block({
       return <TheOutcome block={block} />
     case 'consequence':
       return <TheConsequence block={block} />
-    case 'command':
-      return (
-        <TheCommand block={block} begin={begin} going={going} ask={ask} />
-      )
+    case 'start':
+      return <TheStart block={block} begin={begin} going={going} ask={ask} />
   }
 }
 
@@ -682,21 +680,21 @@ function TheConsequence({ block }: { block: ConsequenceBlock }) {
 }
 
 /**
- * The two ways to run one: the control this bench offers, and the command.
+ * The one control that starts a gate run, or the sentence saying why there is none.
  *
- * The command is a `pre` with nothing around it, so selecting the line selects the
- * command and nothing else. The control is beside it rather than instead of it —
- * they are two entry points that leave two different traces — and where the bench
- * says a gate run may not start here, what stands in its place is the sentence
- * saying why rather than a disabled button with nothing said about it.
+ * Where the bench says a gate run may not start here, what stands in the control's
+ * place is the reason rather than a disabled button with nothing said about it — and
+ * where it may, the button is drawn and greyed while a run this screen started is
+ * going. The terminal command this block used to print beside it is in the README
+ * and in `scripts/gate.py --help`.
  */
-function TheCommand({
+function TheStart({
   block,
   begin,
   going,
   ask,
 }: {
-  block: CommandBlock
+  block: StartBlock
   begin: () => void
   going: boolean
   ask: () => void
@@ -768,11 +766,6 @@ function TheCommand({
         </div>
       )}
 
-      <h3>Or from a terminal</h3>
-      <pre className="command">{block.command}</pre>
-      {block.statements.map((statement) => (
-        <p key={statement}>{statement}</p>
-      ))}
     </section>
   )
 }

@@ -4,11 +4,11 @@
  *
  * Six claims, each of them a way this screen could quietly go wrong.
  *
- * **That the rule is above the outcome and the write-back is above the command.**
+ * **That the rule is above the outcome and the write-back is above the control.**
  * Both orderings are acceptance criteria and both are properties of the value this
  * module returns, so they are asserted over the sequence rather than hoped for in
  * markup. A screen that led with *passed* would be handing an operator a verdict to
- * trust; a screen that led with the command would be handing them a spend and a
+ * trust; a screen that led with the control would be handing them a spend and a
  * write-back they learn about afterwards.
  *
  * **That the rule is the bench's own text.** The clauses are `rule.stated` split at
@@ -20,12 +20,6 @@
  * named in prose, and the test moves it on the fixture and expects the sentence to
  * move with it — a floor hard-coded in the console is a floor that can disagree with
  * `rule.py` in the flattering direction.
- *
- * **That the command is copyable, and that the copy says what the two entry points
- * differ on.** One line, no prompt character, nothing but the command, because what
- * happens to it is a selection and a paste — and beside it the sentences that say
- * what a terminal gate run leaves that one started here does not, and what neither
- * of them will do without a person answering.
  *
  * **That there is exactly one control here, and that it is described rather than
  * held.** This file used to assert that nothing on this screen could start a gate
@@ -50,7 +44,7 @@ import { describe, expect, it } from 'vitest'
 
 import type { BenchGate, DeclaredRule, GateCitation } from '../api/bench'
 import component from './GateScreen.tsx?raw'
-import { gateScreen, THE_COMMAND, type GateBlock, type RuleBlock } from './gate'
+import { gateScreen, type GateBlock, type RuleBlock } from './gate'
 import { startControl, type StartControl } from './gaterun'
 
 /**
@@ -166,17 +160,17 @@ function block<K extends GateBlock['kind']>(
 }
 
 describe('the order the blocks are read in', () => {
-  it('puts the declared rule above the outcome and the write-back above the command', () => {
+  it('puts the declared rule above the outcome and the write-back above the control', () => {
     for (const bench of [CERTIFIED, FRESH]) {
       // The rule first, because a pass with no bar beside it is a verdict somebody
-      // trusted. The consequence before the command, because a gate run writes to
+      // trusted. The consequence before the control, because a gate run writes to
       // the case library and an operator who learns that afterwards learned it too
       // late. Both of these are acceptance criteria, and both are this sequence.
       expect(gateScreen(bench).map((one) => one.kind)).toEqual([
         'rule',
         'outcome',
         'consequence',
-        'command',
+        'start',
       ])
     }
   })
@@ -230,7 +224,7 @@ describe('the rule this bench is held to', () => {
 })
 
 describe('what running one does to the case library', () => {
-  it('states the write-back before the command, and names the floor off the wire', () => {
+  it('states the write-back before the control, and names the floor off the wire', () => {
     const blocks = gateScreen(CERTIFIED)
     const consequence = block(blocks, 'consequence')
     const said = everyString(consequence).join(' ')
@@ -259,45 +253,15 @@ describe('what running one does to the case library', () => {
   })
 })
 
-describe('the command that runs one at a terminal', () => {
-  it('is one line, is nothing but the command, and says what the two doors differ on', () => {
-    const command = block(gateScreen(CERTIFIED), 'command')
-
-    // Copyable means exactly this: what a reader selects is the command and nothing
-    // else. A `$` pasted with it is a command that fails, and prose wrapped around
-    // it is a command somebody has to edit before it runs.
-    expect(command.command).toBe(THE_COMMAND)
-    expect(command.command.split('\n')).toHaveLength(1)
-    expect(command.command).toMatch(/^uv run python -m scripts\.gate /)
-    expect(command.command).not.toMatch(/^\s|[$>]|\s$/)
-    expect(command.command).toContain('--identity')
-
-    const said = command.statements.join(' ')
-    // The identity is the liability record and is never defaulted, so the command
-    // carries a placeholder the operator has to replace rather than a default.
-    expect(said).toMatch(/never defaulted/)
-    // Two entry points now, and what the copy has to carry is what differs between
-    // them and what does not. What differs: one writes a dated document, the other
-    // returns its figures. What does not: the three statements, the two figures, and
-    // that neither can be answered by something that is not a person — which is why
-    // nothing here spawns the command and why no flag stands in for a statement.
-    expect(said).toMatch(/two entry points/)
-    expect(said).toMatch(/same three attestation statements/)
-    expect(said).toMatch(/writes a dated document/)
-    expect(said).toMatch(/absent or piped answer as a refusal/)
-    expect(said).toMatch(/no flag anywhere lets a gate run proceed without one/)
-  })
-})
-
 describe('a bench that cites no gate run', () => {
-  it('still renders the rule and the command, and states that nothing was decided', () => {
+  it('still renders the rule and the way to start one, and says nothing was decided', () => {
     const blocks = gateScreen(FRESH)
 
-    // The rule is a fact about the bench and the command is how one is run, so both
-    // are here on a bench that has never been through a gate — which is the state a
-    // fresh deployment is in when an operator first opens this screen.
+    // The rule is a fact about the bench and starting one is what this screen is
+    // for, so both are here on a bench that has never been through a gate — which is
+    // the state a fresh deployment is in when an operator first opens this screen.
     expect(block(blocks, 'rule').clauses.length).toBeGreaterThan(6)
-    expect(block(blocks, 'command').command).toBe(THE_COMMAND)
+    expect(block(blocks, 'start').heading).toMatch(/start/i)
 
     const outcome = block(blocks, 'outcome')
     if (outcome.reading.cited) {
@@ -342,20 +306,18 @@ describe('the one control this screen adds, and no second one', () => {
   })
 
   it('offers the control only where the bench said one may start', () => {
-    const offered = block(gateScreen(CERTIFIED, OFFERED), 'command')
+    const offered = block(gateScreen(CERTIFIED, OFFERED), 'start')
     const control = offered.start
     if (control?.available !== true) {
       throw new Error('the control was withheld where the bench offered it')
     }
-    // Beside the command and not instead of it: two entry points, two traces.
-    expect(offered.command).toBe(THE_COMMAND)
     // It names where the gate run writes, before it is pressed. A gate run is not a
     // read, and the library it rewrites is the one every run is measured with.
     expect(control.library).toBe('/var/lib/agentaudit/cases')
     expect(control.asks.join(' ')).toMatch(/three attestation statements, one at a time/)
     expect(control.asks.join(' ')).toMatch(/two figures against two ceilings/)
 
-    const refused = block(gateScreen(CERTIFIED, WITHHELD), 'command')
+    const refused = block(gateScreen(CERTIFIED, WITHHELD), 'start')
     const absent = refused.start
     if (absent?.available !== false) {
       throw new Error('the control was offered where the bench refused it')
@@ -366,13 +328,10 @@ describe('the one control this screen adds, and no second one', () => {
     expect(absent.statement).toMatch(/does not ship the three reference agents/)
     expect(absent.statement).toMatch(/no way to start a gate run from this bench/)
     expect((absent as unknown as Record<string, unknown>).label).toBeUndefined()
-    // The command is still there: a deployment that cannot run one here can run one
-    // where the equipment is shipped.
-    expect(refused.command).toBe(THE_COMMAND)
 
     // And nothing at all where this app has not been told yet, which is a third
     // state: a control drawn on a guess would be a control the bench then refuses.
-    expect(block(gateScreen(CERTIFIED, null), 'command').start).toBeNull()
+    expect(block(gateScreen(CERTIFIED, null), 'start').start).toBeNull()
   })
 
   it('can make a gate run’s two writes in the component and no others', () => {
@@ -457,19 +416,6 @@ describe('the document is named and never parsed', () => {
     expect(outcome.reading.document.path).toBeNull()
     expect(outcome.reading.document.statement).toMatch(/no dated document/i)
     expect(outcome.reading.record.path).toBe(CITED.record)
-  })
-
-  it('states the difference between the two entry points rather than away', () => {
-    const statements = block(gateScreen(CERTIFIED), 'command').statements.join(' ')
-
-    // Both entry points now write the citation, which is the reversal — and the
-    // difference that survives it is a restart: a gate run from a terminal writes the
-    // library, and a bench already running reads it when it next starts (ADR-0023
-    // decision Five). A screen that said the two were identical would be stating the
-    // difference away rather than stating it.
-    expect(statements).toMatch(/both .*write the citation this bench carries/i)
-    expect(statements).toMatch(/at once/)
-    expect(statements).toMatch(/when it next starts/)
   })
 
   it('says the citation is replaced by whatever the next gate run answers', () => {

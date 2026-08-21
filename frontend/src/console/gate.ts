@@ -10,22 +10,22 @@
  * **Then what the last gate run answered**, or the stated absence of one. **Then
  * what a gate run does to the case library**, before anything that starts one,
  * because it is not a read-only action and an operator who learns that afterwards
- * learned it too late. **Then the two ways to run one** — the control this bench
- * offers, where it can, and the command that runs one at a terminal.
+ * learned it too late. **Then the way to run one** — the control this bench offers,
+ * where it can, and the stated reason where it cannot.
  *
  * **The order is asserted, not merely intended.** This module returns the blocks as
  * a sequence and the component maps over it, so *above* is a property of the value a
  * test can read rather than of markup nobody checks. A screen that put the outcome
  * first would fail in `gate.test.ts`.
  *
- * **One control, beside the command and not instead of it.** A gate run is the
- * whole live library against all three reference agents, about 830 calls on the
- * operator's own provider and a write-back to every case record. `PLAN.md` §8 kept
- * it on the command line and ADR-0021 reversed that, so the command block now
- * carries the one affordance that starts one — where the bench says it can, and a
- * stated refusal where it cannot. The command stays: a gate run from a terminal is
- * still the path that writes a dated document, and a deployment that ships no
- * reference agents can run one nowhere but somewhere else.
+ * **One control, and this screen is where it is.** A gate run is the whole live
+ * library against all three reference agents, about 830 calls on the operator's own
+ * provider and a write-back to every case record. `PLAN.md` §8 kept it on the
+ * command line and ADR-0021 reversed that, so the start block carries the one
+ * affordance that starts one — where the bench says it can, and a stated refusal
+ * where it cannot. The terminal path is unchanged and is still the one that writes a
+ * dated document; it is documented in the README and in `scripts/gate.py --help`,
+ * which is where somebody at a terminal already is, rather than on this screen.
  *
  * **What the control is is still text here.** The blocks this module returns carry
  * no callback and no handler — `available` is a boolean and everything beside it is
@@ -61,9 +61,6 @@
 import type { BenchGate, DeclaredRule } from '../api/bench'
 import type { StartControl } from './gaterun'
 import { gateReading, type GateReading } from './landing'
-
-/** The command that starts a gate run, and the only thing that does. */
-export const THE_COMMAND = 'uv run python -m scripts.gate --identity "your name"'
 
 /** One clause of the declared rule, as the gate prints it. */
 export interface RuleClause {
@@ -115,17 +112,20 @@ export interface ConsequenceBlock {
 }
 
 /**
- * The command, the statements beside it, and the control this bench may offer.
+ * The control this bench may offer, or the stated reason it offers none.
  *
- * `command` is one line and nothing but the command — no leading prompt character,
- * no prose wrapped around it — because what an operator does with it is select it
- * and paste it into a terminal, and a `$` pasted with it is a command that fails.
+ * This block used to carry the terminal command beside the control, with three
+ * paragraphs on how the two entry points differ. The command is in the README and in
+ * `scripts/gate.py --help`, which is where somebody at a terminal already is; on this
+ * screen it was a second door explained at length beside the one door being used.
+ * What the two entry points have in common — the same three attestation statements,
+ * the same two figures, neither answerable by anything that is not a person — is
+ * enforced by the guard that builds the body and by the bench that refuses an
+ * incomplete one, and it is those, not this prose, that make it true.
  */
-export interface CommandBlock {
-  kind: 'command'
+export interface StartBlock {
+  kind: 'start'
   heading: string
-  command: string
-  statements: string[]
   /**
    * The one control this screen offers, or the stated absence of one.
    *
@@ -143,7 +143,7 @@ export interface CommandBlock {
   start: StartControl | null
 }
 
-export type GateBlock = RuleBlock | OutcomeBlock | ConsequenceBlock | CommandBlock
+export type GateBlock = RuleBlock | OutcomeBlock | ConsequenceBlock | StartBlock
 
 /**
  * The three agents of known construction, in the order construction gives them.
@@ -217,25 +217,6 @@ function whatItWrites(rule: DeclaredRule): string[] {
   ]
 }
 
-const TWO_ENTRY_POINTS = [
-  'The identity is required and is never defaulted from the environment: it is the ' +
-    'liability record for the run, so nothing may pre-answer it. Replace it with ' +
-    'yours before running the command.',
-  'This command and the control beside it are the two entry points, and they ask ' +
-    'the same three attestation statements and present the same two figures before ' +
-    'anything is sent. Both leave the run’s figures as a record and both write the ' +
-    'citation this bench carries. Two things differ. The command writes a dated ' +
-    'document for a person to read and a gate run started here does not. And a gate ' +
-    'run started here changes what this bench cites at once, while one run from a ' +
-    'terminal changes the library — so a bench already running picks it up when it ' +
-    'next starts, which is the same restart a retirement takes effect at.',
-  'Neither can be answered by something that is not a person. The terminal reads ' +
-    'an absent or piped answer as a refusal, and the browser posts an attestation ' +
-    'the bench will not construct with a statement withheld — which is why nothing ' +
-    'here spawns the command, and why no flag anywhere lets a gate run proceed ' +
-    'without one (ADR-0007, ADR-0021).',
-]
-
 /**
  * The rule, then the outcome, then the consequence, then the way to start one.
  *
@@ -274,10 +255,8 @@ export function gateScreen(
       writes: whatItWrites(bench.rule),
     },
     {
-      kind: 'command',
+      kind: 'start',
       heading: 'Starting one',
-      command: THE_COMMAND,
-      statements: [...TWO_ENTRY_POINTS],
       start,
     },
   ]

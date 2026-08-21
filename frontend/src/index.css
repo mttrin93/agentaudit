@@ -129,7 +129,7 @@ body {
    * block of figures needs air between it and both. Kept equal to the top bar's
    * own padding below, so the screen's content and the line above it start at the
    * same place. */
-  padding: 3rem 3.5rem 6rem;
+  padding: 3rem 5rem 6rem;
 }
 
 .eyebrow {
@@ -1142,7 +1142,7 @@ code {
 }
 
 .topbar {
-  padding: 0.8rem 3.5rem;
+  padding: 0.8rem 5rem;
   border-bottom: 1px solid var(--line);
 }
 
@@ -1169,8 +1169,8 @@ code {
     border-bottom: 1px solid var(--line);
   }
 
-  /* The sides give their width back where there is none to spare: 3.5rem each
-   * side of a narrow window is more than a third of it spent on margin. */
+  /* The sides give their width back where there is none to spare: 5rem each side
+   * of a narrow window is half of it spent on margin. */
   .screen,
   .topbar {
     padding-inline: 1.2rem;

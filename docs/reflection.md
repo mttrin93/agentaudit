@@ -160,7 +160,9 @@ Three reasons that is not enough.
   `scripts/verify.py` is a real check and prints three results — signature valid,
   rendering matches its digest, arithmetic re-derived from the payload agrees with the
   payload's own figures. Three passing lines are the most trustworthy-looking thing in the
-  artefact, and all three are claims about the **document**.
+  artefact, and all three are claims about the **document**. `verify.py` says so itself, on
+  the line under the three — "None of that says the agent is safe" — which is the strongest
+  form the mitigation can take and is still a sentence beside a pass.
 - **The format has never been read by the audience it is written for.** No procurement
   reader has ever been asked; the structure is Annex IV's section order, a defensible
   default labelled as one in the document and in validation.md, and

@@ -194,6 +194,17 @@ interface Place {
 }
 
 /**
+ * What the landing screen is called, wherever it is named.
+ *
+ * Exported because two other screens link to it in their own prose, and a link
+ * whose text is a literal is a second copy of a name — #103 and #104 moved this
+ * one and left both of those saying what the rail had stopped saying. The name
+ * lives here once, beside the path, so a rename reaches every sentence that uses
+ * it and none can be missed.
+ */
+export const THE_BENCH = 'The bench'
+
+/**
  * The console's standing destinations.
  *
  * Five, today, and the shell is the reason there can be more: a screen added to
@@ -205,7 +216,7 @@ interface Place {
  * engineer opening a deployed bench sees before it asks them for an endpoint.
  */
 const STANDING: readonly (Place & { path: string })[] = [
-  { path: CONSOLE_PATH, name: 'The bench', icon: 'bench' },
+  { path: CONSOLE_PATH, name: THE_BENCH, icon: 'bench' },
   { path: REGISTER_PATH, name: 'Register a target', icon: 'target' },
   { path: GATE_PATH, name: 'The gate', icon: 'gate' },
   { path: ARTEFACTS_PATH, name: 'Signed artefacts', icon: 'artefacts' },

@@ -41,7 +41,7 @@ import {
   type ArtefactReading,
   type ArtefactsReading,
 } from './artefacts'
-import { CONSOLE_PATH } from './rail'
+import { CONSOLE_PATH, THE_BENCH } from './rail'
 
 /** What this screen is holding: the artefacts, or why it has none of them. */
 interface Held {
@@ -81,7 +81,7 @@ export function ArtefactsScreen() {
         <h1>Signed artefacts, and what a verifier makes of them</h1>
         <p className="steps">
           {WHAT_THIS_SCREEN_ANSWERS}{' '}
-          <Link to={CONSOLE_PATH}>What this bench is</Link> lists the runs behind
+          <Link to={CONSOLE_PATH}>{THE_BENCH}</Link> lists the runs behind
           them.
         </p>
       </header>

@@ -131,6 +131,10 @@ class Ledger:
     watched while it happens has to be looked at *somewhere in particular*, and
     counting messages is the only clock both ends agree on. With `None` the gate is
     whatever the test last set it to.
+
+    Armed at construction or through `hold`, and not by assignment: `hold` clears
+    the latch `wait_until_held` reads, and a second hold armed without it would be
+    waited on against an arrival that is already over.
     """
 
     held: threading.Event = field(default_factory=threading.Event)
@@ -154,6 +158,17 @@ class Ledger:
         if self.hold_after is not None and self.hits > self.hold_after:
             self.gate.clear()
             self.held.set()
+
+    def hold(self, count: int) -> None:
+        """Hold the message after this many, with the latch armed afresh.
+
+        The counterpart of `release`, and the only way to arm a second hold: the
+        latch is set by an arrival and cleared by a release, so one left over from
+        an earlier hold would send `wait_until_held` straight past a message that
+        is long gone — the caught moment this whole mechanism replaces.
+        """
+        self.hold_after = count
+        self.held.clear()
 
     def wait_until_held(self, seconds: float = 60.0) -> None:
         """Block until a message is being held at the endpoint, or fail the test.
@@ -887,7 +902,7 @@ def test_progress_in_the_scored_layer_is_family_case_and_attempt(
     on the wire, and a poll would be asserting on the scheduler.
     """
     with watched_reference() as watched, api([leakage_case]) as (client, bench):
-        watched.ledger.hold_after = 1
+        watched.ledger.hold(1)
         nonce = registered(client, watched)
         started = client.post("/runs", json=a_request(watched.target, nonce)).json()
         record = _record(bench, started)
@@ -895,10 +910,14 @@ def test_progress_in_the_scored_layer_is_family_case_and_attempt(
         try:
             watched.ledger.wait_until_held()
             body = _progress(client, started["run_id"])
+            held_message = watched.ledger.hits
         finally:
             watched.ledger.release()
         settled(record)
 
+    # Which message was on the doorstep, as a fact rather than an inference: the
+    # second, so the attempt in flight is the first attempt of the first case.
+    assert held_message == 2
     scored = body["scored"]
     assert scored["reached"] is True
     assert scored["position"] == {
@@ -940,7 +959,7 @@ def test_progress_in_the_adaptive_layer_is_family_episode_and_turn(
     `attempts`.
     """
     with watched_reference() as watched, api([leakage_case]) as (client, bench):
-        watched.ledger.hold_after = 11
+        watched.ledger.hold(11)
         nonce = registered(client, watched)
         started = client.post("/runs", json=a_request(watched.target, nonce)).json()
         record = _record(bench, started)
@@ -948,11 +967,15 @@ def test_progress_in_the_adaptive_layer_is_family_episode_and_turn(
         try:
             watched.ledger.wait_until_held()
             in_flight = _progress(client, started["run_id"])
+            held_message = watched.ledger.hits
         finally:
             watched.ledger.release()
         settled(record)
         finished = _progress(client, started["run_id"])
 
+    # Which message was on the doorstep, as a fact rather than an inference: the
+    # twelfth, so the scored layer is behind it and the probe is the layer's first.
+    assert held_message == 12
     assert in_flight["adaptive"]["reached"] is True
     assert in_flight["adaptive"]["position"] == {
         "family": str(leakage_case.family),

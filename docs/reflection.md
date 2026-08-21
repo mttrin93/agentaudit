@@ -124,7 +124,7 @@ finding applies and the user does not want it printed.
 Article 14(4)(b) names the human's duty to stay aware of the tendency to over-rely on
 output. This product's artefact is a **signed** document carrying a rate per family, a
 Wilson interval, a band, an article and a verification result. The signature makes two
-claims and neither is one of them a reader wants:
+claims, and neither is the one a reader wants:
 [ADR-0017](./adr/0017-the-signature-covers-the-document-and-carries-two-claims.md) states
 integrity for the whole artefact and re-derivability for the scored layer alone. It says
 this document is the one that was produced and has not been altered. It says nothing
@@ -156,7 +156,7 @@ Three reasons that is not enough.
 - **The signature makes the problem worse in exactly the way that makes it valuable.**
   `scripts/verify.py` is a real check and prints three results — signature valid,
   rendering matches its digest, arithmetic re-derived from the payload agrees with the
-  payload's own figures. Three passing lines is the most trustworthy-looking thing in the
+  payload's own figures. Three passing lines are the most trustworthy-looking thing in the
   artefact, and all three are claims about the **document**.
 - **The format has never been read by the audience it is written for.** No procurement
   reader has ever been asked; the structure is Annex IV's section order, a defensible

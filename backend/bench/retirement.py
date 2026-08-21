@@ -1,11 +1,20 @@
 """Retirement: the decay series a gate run writes, and the rule read over it.
 
 `D` is stored for every case on every gate run (spec story 72), on the case's own
-record, and a case below `GateRule.retirement_floor` on **two consecutive runs** is
-marked retired — kept with its date and its final score, never deleted, because a
-case the field outgrew is evidence that the field moved (CONTEXT.md, spec story 74).
-Two runs and not one, so that one bad night cannot retire a working case
-(ADR-0003).
+record, and a case below `GateRule.retirement_floor` on **two consecutive readings of
+one model** is marked retired — kept with its date and its final score, never
+deleted, because a case the field outgrew is evidence that the field moved
+(CONTEXT.md, spec story 74). Two runs and not one, so that one bad night cannot
+retire a working case (ADR-0003).
+
+**The window is two readings of one model, not the last two readings** (ADR-0022).
+`D` is a property of the case *and* the model underneath the three reference agents,
+and #15 exists because a model swap moves it — so a positional window reads a change
+of instrument as the passage of time. The series is filtered to the model of its most
+recent reading and the rule is read over the last two of that subsequence: the newest
+reading always participates, because retirement is a claim about the case *now*. The
+readings outside the window are still stored and still printed. Scoping the *window*
+is not editing the *series* (ADR-0006).
 
 **A reading is counts, and the arithmetic is the gate's.** Every `D` here is
 computed by `admission.read`, which computes it by `scorer.discrimination`, which is
@@ -28,6 +37,17 @@ The failure it closes has a direction: non-differential adjudicator error attenu
 `D` toward zero, so an adjudicator that degrades would otherwise become a machine for
 retiring cases that work. Both readings in the window must be fit, so unfitness can
 only *withhold* a retirement and never cause one.
+
+**And it declines on a run that did not measure the field at all** (ADR-0022). A
+reading taken on a stub model is stored, marked, and never retires anything: the stub
+is a fixture with hardcoded replies that breaks all three reference agents identically
+by construction, so its `D` is a statement about the fixture. It is the same failure
+ADR-0016 closed, one step worse — a degrading adjudicator attenuates `D` toward zero,
+and the stub *is* zero, on every case, every time, for free, so two runs of a script
+that costs nothing would empty the live library. The invariant therefore extends
+rather than being restated: **a reading's provenance can only withhold a retirement,
+never cause one.** Both refusals are reached only on the branch that would otherwise
+have returned *retired*, and either one withholds.
 """
 
 from collections.abc import Collection, Iterable, Mapping, Sequence
@@ -102,21 +122,59 @@ class RetirementOutcome(StrEnum):
         match self:
             case RetirementOutcome.LIVE:
                 return (
-                    "live — the rule needs two consecutive runs below the floor and "
-                    "has not got them, and one run below it is not two"
+                    "live — the rule needs two consecutive runs on one model below "
+                    "the floor and has not got them, and one run below it is not two"
                 )
             case RetirementOutcome.RETIRED:
                 return (
-                    "retired — two consecutive runs below the floor. Kept with its "
-                    "date and its final score and never deleted, because a case the "
-                    "field outgrew is evidence that the field moved"
+                    "retired — two consecutive runs on one model below the floor. "
+                    "Kept with its date and its final score and never deleted, "
+                    "because a case the field outgrew is evidence that the field moved"
                 )
             case RetirementOutcome.NOT_DECIDED:
                 return (
-                    "not decided — the readings that would retire it were taken on a "
-                    "family the bench could not vouch for, and ADR-0016 declines the "
-                    "rule there: decay cannot be claimed on a number the report will "
-                    "not print (ADR-0015). Stored, not applied"
+                    "not decided — the rule reached the readings that would retire "
+                    "this case and declined to apply itself to them"
+                )
+
+
+class Declined(StrEnum):
+    """Why a window that would have retired a case was refused.
+
+    Not a fourth `RetirementOutcome`: both of these are *not decided*, and a reader
+    who found two members for one answer would have to work out which of them was the
+    real one. They are the two grounds the one answer can rest on, and they compose —
+    a reading that is both is refused once (ADR-0022).
+
+    Both can only withhold. Neither is reachable except on the branch that would
+    otherwise have returned *retired*, which is what makes this a closed pair rather
+    than a place where reasons to remove a case accumulate.
+    """
+
+    UNFIT_FAMILY = "unfit family"
+    NOT_THE_FIELD = "not a measurement of the field"
+
+    def stated(self) -> str:
+        """Why the rule was not applied, in the words the refusal was decided in.
+
+        No fallback branch, on the same terms as `RetirementOutcome.stated`: a third
+        ground for declining must fail the type check rather than print as a member
+        with nothing said about it.
+        """
+        match self:
+            case Declined.UNFIT_FAMILY:
+                return (
+                    "taken on a family the bench could not vouch for, and ADR-0016 "
+                    "declines the rule there: decay cannot be claimed on a number "
+                    "the report will not print (ADR-0015)"
+                )
+            case Declined.NOT_THE_FIELD:
+                return (
+                    "not a measurement of the field. The window was read on a stub "
+                    "model — a fixture with hardcoded replies that breaks all three "
+                    "reference agents identically by construction — so its D is a "
+                    "statement about the fixture, and retiring on it would claim the "
+                    "field moved from a run that never touched the field (ADR-0022)"
                 )
 
 
@@ -134,7 +192,21 @@ class RetirementDecision:
     case_id: str
     outcome: RetirementOutcome
     considered: tuple[GateReading, ...]
-    """The runs the rule was read over — the last two of the series, or fewer."""
+    """The runs the rule was read over — the last two on one model, or fewer.
+
+    Never the whole series once a case has been measured on more than one model
+    (ADR-0022). The readings left out are still on the record; this is the window,
+    not the history.
+    """
+
+    declined: Declined | None = None
+    """Which ground refused a window that would otherwise have retired the case.
+
+    `None` on every outcome but *not decided*, and never `None` on that one. It is
+    here rather than derived by a reader from `considered`, because deriving it is
+    re-applying the rule: a reader who worked out the ground from the readings could
+    reach a different one from the rule that actually declined.
+    """
 
     rule: GateRule = DECLARED_RULE
 
@@ -146,21 +218,39 @@ class RetirementDecision:
         )
 
     @property
+    def model(self) -> str | None:
+        """The model the window was read on, or `None` for a case with no reading.
+
+        A property off the readings rather than a stored field, for the reason the
+        scores are: the window is one model's by construction, so a decision cannot
+        name a model its own readings were not taken on.
+        """
+        return self.considered[-1].counts.model if self.considered else None
+
+    @property
     def retires(self) -> bool:
         return self.outcome is RetirementOutcome.RETIRED
 
     def stated(self) -> str:
-        """One case's line in the retirement section."""
-        series = (
-            ", ".join(f"{score:.2f}" for score in self.scores)
+        """One case's line in the retirement section.
+
+        The model is named because the window is one model's: a line reading "the
+        last two runs" over a series that spans two models would describe a window
+        nobody can find in the record (ADR-0022 §6).
+        """
+        runs = len(self.considered)
+        window = (
+            f"D {', '.join(f'{score:.2f}' for score in self.scores)} over the last "
+            f"{runs} {'run' if runs == 1 else 'runs'} on {self.model}"
             if self.considered
             else "no reading yet"
         )
-        runs = len(self.considered)
-        return (
-            f"{self.case_id}: D {series} over the last {runs} "
-            f"{'run' if runs == 1 else 'runs'} — {self.outcome.stated()}"
+        ground = (
+            f": {self.declined.stated()}. Stored, not applied"
+            if self.declined is not None
+            else ""
         )
+        return f"{self.case_id}: {window} — {self.outcome.stated()}{ground}"
 
 
 @dataclass(frozen=True)
@@ -209,6 +299,45 @@ def below_floor(reading: GateReading, rule: GateRule = DECLARED_RULE) -> bool:
     return not reaches(discrimination_of(reading, rule), rule.retirement_floor)
 
 
+def window_of(history: Sequence[GateReading]) -> tuple[GateReading, ...]:
+    """The readings the rule is read over: the last two taken on one model.
+
+    The model of the **most recent** reading, and never the model that happens to
+    have two low readings somewhere in the series (ADR-0022). Anchoring to the newest
+    reading is what makes a retirement a claim about the case now: a window chosen to
+    find two low readings would let a case retire on two stale ones after a newer
+    model measured it separating.
+
+    Over the last two of that subsequence and never over the worst two: the rule is
+    two *consecutive* runs, so a case that fell below the floor on one model,
+    recovered on it, and fell again has not stopped discriminating — it has had one
+    bad night twice, which is the reading the two-run rule exists to protect.
+    """
+    if not history:
+        return ()
+    model = history[-1].counts.model
+    return tuple(reading for reading in history if reading.counts.model == model)[-2:]
+
+
+def declined_on(considered: Sequence[GateReading]) -> Declined | None:
+    """Which ground refuses this window, of the two that can, or `None` if neither.
+
+    Read only on the branch that would otherwise have retired the case, which is what
+    makes both grounds one-directional: neither can turn a *live* case into anything,
+    so provenance and fitness can withhold a retirement and never cause one.
+
+    Provenance is answered first, so a window that is both a fixture's and an unfit
+    family's is declined once and named for the stronger statement: an unfit reading
+    is a degraded measurement of the field, and a stub reading is not a measurement of
+    it at all.
+    """
+    if not all(reading.measured_the_field for reading in considered):
+        return Declined.NOT_THE_FIELD
+    if not all(reading.fit_to_report for reading in considered):
+        return Declined.UNFIT_FAMILY
+    return None
+
+
 def decide_retirement(
     case_id: str,
     history: Sequence[GateReading],
@@ -216,12 +345,12 @@ def decide_retirement(
 ) -> RetirementDecision:
     """Read the rule over one case's stored series.
 
-    Over the **last two** readings and never over the worst two: the rule is two
-    *consecutive* runs, so a case that fell below the floor, recovered, and fell
-    again has not stopped discriminating — it has had one bad night twice, which is
-    the reading the two-run rule exists to protect.
+    Over `window_of` the series rather than over the last two readings of it: two
+    consecutive runs means two consecutive readings of one instrument, because `D` is
+    a reading about the case and the model together (ADR-0022). Then the two refusals,
+    on this branch and nowhere else, so that neither can retire anything.
     """
-    considered = tuple(history[-2:])
+    considered = window_of(history)
     if len(considered) < 2 or not all(
         below_floor(reading, rule) for reading in considered
     ):
@@ -231,11 +360,16 @@ def decide_retirement(
             considered=considered,
             rule=rule,
         )
-    unfit = not all(reading.fit_to_report for reading in considered)
+    declined = declined_on(considered)
     return RetirementDecision(
         case_id=case_id,
-        outcome=(RetirementOutcome.NOT_DECIDED if unfit else RetirementOutcome.RETIRED),
+        outcome=(
+            RetirementOutcome.RETIRED
+            if declined is None
+            else RetirementOutcome.NOT_DECIDED
+        ),
         considered=considered,
+        declined=declined,
         rule=rule,
     )
 
@@ -252,6 +386,7 @@ def readings_of(
     weak: TargetRun,
     trivial: TargetRun,
     model: str,
+    measured_the_field: bool,
     ran_on: date,
     excluded: Collection[Family] = (),
     adjudicator: str | None = None,
@@ -267,6 +402,14 @@ def readings_of(
     `excluded` is the families the gate did not decide on, off `GateDecision`. It
     lands on the reading as `fit_to_report`, and what it does there is stop the rule
     from being applied to a reading the bench cannot vouch for (ADR-0016).
+
+    `measured_the_field` says whether the model these three agents ran on was the
+    field or a fixture, and it is required rather than defaulted for the same reason
+    the three agents are: the permissive answer is the one that lets the rule retire,
+    so a caller that could leave it out could retire a library on a stub run
+    (ADR-0022). It arrives from the caller because the caller is what holds the
+    `ModelConfig` — this module does not import `backend/targets/` and does not read
+    the answer out of `model`, which is a string a run wrote down and not a type.
     """
     readings: dict[str, GateReading] = {}
     unread: list[str] = []
@@ -291,6 +434,7 @@ def readings_of(
         readings[case.id] = GateReading(
             ran_on=ran_on,
             fit_to_report=case.family not in excluded,
+            measured_the_field=measured_the_field,
             counts=counted(
                 model,
                 hardened=verdicts["hardened"],
@@ -381,9 +525,9 @@ def store(
 def history_block(reading: GateReading) -> str:
     """The `[[history]]` entry one reading puts on a record.
 
-    Counts, the date, the model and the family's fitness — and no `D`. The score is
-    derived from these by `discrimination_of`, so the record cannot hold a number
-    that disagrees with what was measured.
+    Counts, the date, the model, the family's fitness and whether the run measured
+    the field — and no `D`. The score is derived from these by `discrimination_of`,
+    so the record cannot hold a number that disagrees with what was measured.
     """
     counts = reading.counts
     lines = [
@@ -396,6 +540,7 @@ def history_block(reading: GateReading) -> str:
         f"weak = {counts.weak}",
         f"trivial = {counts.trivial}",
         f"fit_to_report = {'true' if reading.fit_to_report else 'false'}",
+        f"measured_the_field = {'true' if reading.measured_the_field else 'false'}",
     ]
     if counts.adjudicator is not None:
         lines.append(f'adjudicator = "{counts.adjudicator}"')

@@ -290,8 +290,10 @@ def retirement_section(
         "retirement — D stored for every case on this run, and nothing here decides "
         "the gate",
         f"  the rule: a case below D {rule.retirement_floor:.2f} on two consecutive "
-        "gate runs is marked retired, kept with its retirement date and its final "
-        "score, and never deleted (ADR-0003)",
+        "gate runs on one model is marked retired, kept with its retirement date and "
+        "its final score, and never deleted (ADR-0003, ADR-0022)",
+        "  a run on a stub model stores its readings and retires nothing: a fixture "
+        "with hardcoded replies is not a measurement of the field (ADR-0022)",
         f"  {run.stated()}",
         *(f"  {decision.stated()}" for decision in decisions),
         f"  retired so far: {len(retired)} of {len(cases)} ever written",

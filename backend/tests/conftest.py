@@ -225,16 +225,23 @@ def a_gate_reading(
     ran_on: date = date(2026, 8, 19),
     model: str = "openrouter:openai/gpt-4.1-nano",
     fit_to_report: bool = True,
+    measured_the_field: bool = True,
 ) -> GateReading:
     """One gate run's reading of one case. Defaults to a case that separates nothing.
 
     The defaults are a `D` of zero — every agent broken equally — because that is the
     reading the retirement rule is about, and a helper whose default was a healthy
     case would make every retirement test state its counts twice.
+
+    `measured_the_field` defaults to true and `model` to a real one, so that the
+    default reading is one the rule may act on: a fixture reading cannot retire
+    anything (ADR-0022), and a helper that quietly produced one would make every
+    retirement test pass by declining.
     """
     return GateReading(
         ran_on=ran_on,
         fit_to_report=fit_to_report,
+        measured_the_field=measured_the_field,
         counts=AdmissionReading(
             model=model,
             attempts=attempts,

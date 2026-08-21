@@ -409,6 +409,24 @@ class GateReading:
     code. The flag is what lets it decline; it is not itself the answer.
     """
 
+    measured_the_field: bool
+    """Whether the model underneath the three reference agents was the field at all.
+
+    False on a stub run. `scripts/gate.py --model stub:obedient` is how the pipeline
+    is exercised without spending money, and it is a gate run like any other: it
+    reads every case and appends a reading. But the stub is a fixture with hardcoded
+    replies that breaks all three reference agents identically by construction, so
+    its `D` is a statement about the fixture and not a poor estimate of anything.
+    Retiring on it would claim the field moved from a measurement that never touched
+    the field (ADR-0022).
+
+    Recorded here by the run that took the reading, on the same terms as
+    `fit_to_report` and for the same reason: provenance is a fact about the run.
+    Never re-derived later by parsing `counts.model`, which would put a claim about
+    what a model *is* in the module that reads the rule, and would make
+    `backend/bench/` depend on `backend/targets/` to answer it.
+    """
+
 
 @dataclass(frozen=True)
 class Retirement:
@@ -786,13 +804,16 @@ def _admission(block: dict[str, Any] | None) -> AdmissionRecord | None:
 def _reading(entry: dict[str, Any]) -> GateReading:
     """One entry of a case's decay series, as the run that made it wrote it.
 
-    `fit_to_report` is read rather than defaulted. A missing flag would make the
-    answer a record acquires by silence the one that lets the retirement rule
-    operate, and that is exactly the question ADR-0015 leaves open.
+    `fit_to_report` and `measured_the_field` are both read rather than defaulted, and
+    for one reason: on either flag, the answer a record would acquire by silence is
+    the permissive one — the one that lets the retirement rule operate. A series
+    whose provenance went missing in the file would read as a series of measurements
+    of the field (ADR-0022), which is precisely the claim the flag exists to withhold.
     """
     return GateReading(
         ran_on=entry["ran_on"],
         fit_to_report=entry["fit_to_report"],
+        measured_the_field=entry["measured_the_field"],
         counts=AdmissionReading(
             model=entry["model"],
             attempts=entry["attempts"],
@@ -820,7 +841,7 @@ def _retirement(
         raise ValueError(
             f"a retirement on {block['retired_on']} with no reading behind it is an "
             "assertion, not a measurement: a case is retired by two consecutive "
-            "readings below the floor, and this record holds none"
+            "readings of one model below the floor, and this record holds none"
         )
     return Retirement(retired_on=block["retired_on"], final=history[-1])
 

@@ -39,10 +39,11 @@ class GateRule:
     retirement_floor: float = 0.25
     """The `D` below which a case has stopped discriminating.
 
-    Applied over two consecutive gate runs, so one bad night does not retire a
-    working case. The two-run part of the rule is `backend/bench/retirement.py`,
-    read over the series a gate run stores on each case record; the number is
-    declared here because it belongs to the same rule as the floor above it.
+    Applied over two consecutive gate runs *on one model*, so that one bad night does
+    not retire a working case and a change of instrument is not read as the passage of
+    time (ADR-0022). The window is `backend/bench/retirement.py`, read over the series
+    a gate run stores on each case record; the number is declared here because it
+    belongs to the same rule as the floor above it.
     """
 
     kappa_floor: float = 0.6

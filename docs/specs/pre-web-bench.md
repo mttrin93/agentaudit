@@ -195,7 +195,7 @@ run_gate(library, target_urls) -> GateResult
 
 **Statistics are pure functions over recorded attempts.** Rate, Wilson 90% interval, discrimination score, monotonicity check and gate decision take recorded results and return values, with no I/O and no model calls. This is what makes them directly testable and what makes the gate re-derivable from its inputs.
 
-**The gate rule is data, not code shape.** The thresholds — 0.4 admission and per-family pass, 0.25 retirement over two consecutive runs, four of six families, five of six monotonic, κ 0.6 — are declared configuration read by the rule evaluator, so that the rule can be printed alongside its result and cannot be quietly tuned to a run that already happened. Per ADR-0003.
+**The gate rule is data, not code shape.** The thresholds — 0.4 admission and per-family pass, 0.25 retirement over two consecutive runs of one model, four of six families, five of six monotonic, κ 0.6 — are declared configuration read by the rule evaluator, so that the rule can be printed alongside its result and cannot be quietly tuned to a run that already happened. Per ADR-0003, and ADR-0022 for what *consecutive* means.
 
 **Result assembly produces no scalar.** The assembler emits per-family entries (rate, interval, verdict class, κ, discrimination score, coverage note, band) and a separate declared-controls section (untested / held / defeated). There is no code path that combines the two sections arithmetically, and no total. Per ADR-0005.
 

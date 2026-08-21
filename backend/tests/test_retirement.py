@@ -14,13 +14,20 @@ floor, so one bad night cannot retire a working case. And the **record**: a reti
 case is kept with its date and its final score, leaves the live library, and stays
 queryable in it — a retirement is a status, never a deletion.
 
-The fourth property is a refusal. ADR-0016 declines the rule on a family the bench
-could not vouch for — decay cannot be claimed on a number the report will not print,
-which is ADR-0015's total exclusion read at the second consumer of the same `D`. The
-outcome is *not decided*: the reading is stored, the rule is not applied, and the line
-says which reliability figure stopped it. The refusal is one-directional, and that is
-tested as an invariant below: unfitness can withhold a retirement and never cause
-one.
+The fourth property is a refusal, and ADR-0022 makes it two. ADR-0016 declines the
+rule on a family the bench could not vouch for — decay cannot be claimed on a number
+the report will not print, which is ADR-0015's total exclusion read at the second
+consumer of the same `D`. ADR-0022 declines it on a run that did not measure the field
+at all, and narrows what *consecutive* means: two readings of **one model**, because
+`D` is a reading about the case and the model together and a model swap moves it. The
+outcome of both refusals is *not decided*: the reading is stored, the rule is not
+applied, and the line says which of the two stopped it.
+
+Both refusals are one-directional and both are tested as invariants below: provenance
+and fitness can withhold a retirement and neither can ever cause one. The provenance
+invariant is driven over every interleaving of two real models and a stub, because
+that is the test ADR-0022 asks for by name — for any series, a stub reading must never
+move an outcome to *retired*, and a window must never mix two models.
 """
 
 from dataclasses import replace
@@ -52,6 +59,7 @@ from backend.bench.retirement import (
     RetirementDisagrees,
     RetirementOutcome,
     RunHistory,
+    below_floor,
     decide_retirement,
     discrimination_of,
     live_library,
@@ -82,6 +90,37 @@ DECAYED = a_gate_reading(hardened=10, weak=10, trivial=10)
 """A reading that separates nothing: every agent broken equally, so D = 0.00. The
 provider caught up with the payload, and the case still runs."""
 
+SWAPPED = "openrouter:openai/gpt-4.1-mini"
+"""A second real model. Not a worse instrument than `MODEL` — a different one, which
+is the whole premise of #15 and the reason a window may not span the two."""
+
+STUB = "stub:obedient"
+"""The fixture `scripts/gate.py --model stub:obedient` runs on, named as the config
+string a run is started with, because that is the thing an operator types."""
+
+
+def on(reading: GateReading, model: str, *, field: bool = True) -> GateReading:
+    """The same counts, read on another model — and whether that model was the field.
+
+    The two travel together deliberately: provenance is a fact about the model the
+    run used, so a helper that let a test say `stub` and *measured the field* would
+    let a test assert something no run can produce.
+    """
+    return replace(
+        reading,
+        counts=replace(reading.counts, model=model),
+        measured_the_field=field,
+    )
+
+
+STUBBED = on(DECAYED, STUB, field=False)
+"""The reading a free run produces on every case: D = 0.00, and not a measurement.
+
+The stub breaks all three reference agents identically by construction, so this is
+the reading — not a low one, *this* one — that two runs of a script costing nothing
+would retire the whole library on (#43).
+"""
+
 
 # --- The series: D for every case, on every run -------------------------------
 
@@ -96,6 +135,7 @@ def test_d_is_stored_for_every_case_a_gate_run_read(library: list[Case]) -> None
         weak=a_run("weak", library, successes=5),
         trivial=a_run("trivial", library, successes=10),
         model=MODEL,
+        measured_the_field=True,
         ran_on=RAN_ON,
     )
 
@@ -120,6 +160,7 @@ def test_a_case_no_attempt_was_spent_on_has_no_d_and_is_named_instead(
         weak=a_run("weak", ran, successes=5),
         trivial=a_run("trivial", ran, successes=10),
         model=MODEL,
+        measured_the_field=True,
         ran_on=RAN_ON,
     )
 
@@ -199,6 +240,248 @@ def test_a_case_with_no_reading_yet_is_live_and_says_so() -> None:
     assert "no reading yet" in decision.stated()
 
 
+# --- The window: two consecutive readings of one model (ADR-0022) -------------
+
+
+def test_two_readings_of_two_models_are_not_two_readings_of_one_thing() -> None:
+    # `D` is a property of the case *and* the model underneath the three reference
+    # agents, and #15 exists because a model swap moves it. A positional window reads
+    # a change of instrument as the passage of time: it says "this case stopped
+    # discriminating" when what happened is that somebody pointed the bench at
+    # something else.
+    decision = decide_retirement("data-leakage-001", [DECAYED, on(DECAYED, SWAPPED)])
+
+    assert decision.outcome is RetirementOutcome.LIVE
+    assert decision.model == SWAPPED
+    # One reading of the model in question, and one is not two.
+    assert decision.considered == (on(DECAYED, SWAPPED),)
+
+
+def test_the_window_is_the_last_two_readings_of_the_most_recent_model() -> None:
+    # The clause is not only a restriction: this series retires under ADR-0022 and
+    # was live under the positional rule, which read `[B high, A low]`. `B`'s high
+    # reading is evidence about `B` and says nothing about whether the case separates
+    # on `A`, which has now failed to separate twice.
+    series = [DECAYED, on(SEPARATING, SWAPPED), DECAYED]
+
+    decision = decide_retirement("data-leakage-001", series)
+
+    assert decision.outcome is RetirementOutcome.RETIRED
+    assert decision.model == MODEL
+    assert decision.scores == (0.0, 0.0)
+    # And the intervening reading is not silently in the window it was left out of.
+    assert 1.0 not in decision.scores
+
+
+def test_the_most_recent_reading_always_participates() -> None:
+    # Anchored to the newest reading's model rather than to whichever model has two
+    # low readings somewhere in the series. Retirement is a claim about the case
+    # *now*, and a claim that ignores the most recent measurement of it is a claim
+    # about the past.
+    decision = decide_retirement(
+        "data-leakage-001", [DECAYED, DECAYED, on(SEPARATING, SWAPPED)]
+    )
+
+    assert decision.outcome is RetirementOutcome.LIVE
+    assert decision.model == SWAPPED
+    assert decision.considered == (on(SEPARATING, SWAPPED),)
+
+
+def test_the_clock_restarts_on_a_model_swap() -> None:
+    # The cost of the clause, named rather than discovered: a case with two low
+    # readings on `A` needs two readings on `B` before `B` can retire it, and one is
+    # not two. Bounded by two runs, and paid in attempts against a case that stays
+    # live meanwhile.
+    once = decide_retirement(
+        "data-leakage-001", [DECAYED, DECAYED, on(DECAYED, SWAPPED)]
+    )
+    twice = decide_retirement(
+        "data-leakage-001",
+        [DECAYED, DECAYED, on(DECAYED, SWAPPED), on(DECAYED, SWAPPED)],
+    )
+
+    assert once.outcome is RetirementOutcome.LIVE
+    assert twice.outcome is RetirementOutcome.RETIRED
+    assert twice.model == SWAPPED
+
+
+def test_readings_outside_the_window_are_kept_and_the_window_is_named() -> None:
+    # Scoping the *window* is not editing the *series* (ADR-0006): the readings the
+    # rule did not read are still on the record, and the line says which model the
+    # two it did read were taken on — so a reader can tell a window of two from a
+    # series of five.
+    series = [DECAYED, on(DECAYED, SWAPPED), DECAYED, DECAYED]
+
+    decision = decide_retirement("data-leakage-001", series)
+
+    assert len(decision.considered) == 2
+    assert MODEL in decision.stated()
+    assert decision.model == MODEL
+
+
+# --- The refusal ADR-0022 decides: a fixture is not a measurement -------------
+
+
+def test_two_runs_of_the_stub_fixture_do_not_retire_a_case() -> None:
+    # The defect #43 demonstrated, and the reason the model-scoped window is not
+    # enough on its own: two stub runs are two readings of one model and satisfy the
+    # window exactly. The stub does not attenuate `D` toward zero — it *is* zero, on
+    # every case, every time, for free, so two runs of a script that costs nothing
+    # would empty the live library and record each removal as evidence of decay.
+    decision = decide_retirement("data-leakage-001", [STUBBED, STUBBED])
+
+    assert decision.outcome is RetirementOutcome.NOT_DECIDED
+    assert not decision.retires
+    # Stored and read, not ignored: the readings are in the window and the scores are
+    # the ones that would have retired it.
+    assert decision.scores == (0.0, 0.0)
+    assert decision.model == STUB
+    # The line says the window was refused for provenance rather than for fitness —
+    # two different refusals under one outcome, and a reader gets which one.
+    assert "not a measurement of the field" in decision.stated()
+    assert "ADR-0022" in decision.stated()
+
+
+def test_a_run_on_the_field_after_a_stub_run_has_one_reading_of_the_field() -> None:
+    # #43's third demonstration: under the positional rule this retired, and the
+    # *real* model's name landed on the recorded final score while the stub silently
+    # supplied half the evidence the rule used. Both clauses close it — the window
+    # holds one reading now, and the stub reading could not have retired anything
+    # anyway.
+    decision = decide_retirement("data-leakage-001", [STUBBED, DECAYED])
+
+    assert decision.outcome is RetirementOutcome.LIVE
+    assert decision.considered == (DECAYED,)
+    assert decision.model == MODEL
+
+
+def test_a_stub_reading_can_never_move_an_outcome_to_retired() -> None:
+    # The invariant ADR-0022 extends from ADR-0016: a reading's provenance can only
+    # withhold a retirement and never cause one. Driven over every interleaving of
+    # two models and every fitness pattern rather than over one example, because the
+    # value of an invariant is that no future series gets to be the exception — and
+    # because the two refusals compose, so a stub reading on an unfit family must be
+    # *not decided* once and not twice.
+    models = ((MODEL, True), (SWAPPED, True), (STUB, False))
+    withheld = 0
+    for shape in product((SEPARATING, DECAYED), repeat=3):
+        for provenance in product(models, repeat=3):
+            for flags in product((True, False), repeat=3):
+                series = [
+                    replace(on(reading, model, field=field), fit_to_report=flag)
+                    for reading, (model, field), flag in zip(
+                        shape, provenance, flags, strict=True
+                    )
+                ]
+                decision = decide_retirement("data-leakage-001", series)
+                window = decision.considered
+
+                # No window ever spans two models, whatever the series.
+                assert len({reading.counts.model for reading in window}) <= 1
+
+                if decision.outcome is RetirementOutcome.RETIRED:
+                    # Reachable only over two readings, both of the field, both fit,
+                    # both below the floor — and never on a model that is a fixture.
+                    assert len(window) == 2
+                    assert all(reading.measured_the_field for reading in window)
+                    assert all(reading.fit_to_report for reading in window)
+                    assert all(below_floor(reading) for reading in window)
+                    assert decision.model != STUB
+
+                if decision.outcome is RetirementOutcome.NOT_DECIDED:
+                    # Declined only where the rule would otherwise have retired.
+                    withheld += 1
+                    assert len(window) == 2
+                    assert all(below_floor(reading) for reading in window)
+                    assert not all(
+                        reading.measured_the_field and reading.fit_to_report
+                        for reading in window
+                    )
+
+    # Not vacuous: the withholding really happens, and on the stub in particular.
+    assert withheld > 0
+    assert (
+        decide_retirement("data-leakage-001", [STUBBED, STUBBED]).outcome
+        is RetirementOutcome.NOT_DECIDED
+    )
+
+
+def test_a_stub_reading_on_an_unfit_family_is_not_decided_once() -> None:
+    # The two refusals compose the same way — both checked only on the branch that
+    # would have retired, either one withholding — so there is one outcome and not a
+    # fourth member for the pair of them. Provenance is the one named, because it is
+    # the stronger statement: an unfit reading is a degraded measurement of the field,
+    # and a fixture reading is not a measurement of it at all.
+    both = replace(STUBBED, fit_to_report=False)
+
+    decision = decide_retirement("wrongful-commitment-001", [both, both])
+
+    assert decision.outcome is RetirementOutcome.NOT_DECIDED
+    assert "not a measurement of the field" in decision.stated()
+
+
+def test_a_run_records_on_every_reading_whether_it_measured_the_field(
+    library: list[Case],
+) -> None:
+    # Recorded by the run that took the reading, beside `fit_to_report` and for the
+    # same reason: provenance is a fact about the run. Both answers are asserted,
+    # because a flag that is always true is not a flag.
+    def run_on(field: bool) -> RunHistory:
+        return readings_of(
+            library,
+            hardened=a_run("hardened", library, successes=10),
+            weak=a_run("weak", library, successes=10),
+            trivial=a_run("trivial", library, successes=10),
+            model=MODEL if field else STUB,
+            measured_the_field=field,
+            ran_on=RAN_ON,
+        )
+
+    assert all(reading.measured_the_field for reading in run_on(True).readings.values())
+    assert not any(
+        reading.measured_the_field for reading in run_on(False).readings.values()
+    )
+
+
+def test_two_stub_runs_write_their_readings_and_retire_nothing(tmp_path: Path) -> None:
+    # The rule reaching the store rather than a list in memory, on the series that
+    # would have retired the record. The storing path stays exercised by a run that
+    # spends nothing — which is the reason the stub fixture exists, and the reason
+    # ADR-0022 marks the reading instead of refusing to write it.
+    path = _record(tmp_path)
+    store(tmp_path, _one_run(STUBBED, ran_on=RAN_ON))
+    [decision] = store(tmp_path, _one_run(STUBBED, ran_on=LATER))
+
+    stored = load_case(path)
+    assert decision.outcome is RetirementOutcome.NOT_DECIDED
+    assert stored.status is CaseStatus.ACTIVE
+    assert stored.retirement is None
+    # Both readings are on the record, and both say what they are.
+    assert len(stored.history) == 2
+    assert [reading.measured_the_field for reading in stored.history] == [False, False]
+
+
+def test_a_reading_that_does_not_say_whether_it_measured_the_field_does_not_load(
+    tmp_path: Path,
+) -> None:
+    # Read rather than defaulted, because the answer a record would acquire by
+    # silence is the one that lets the rule retire. A series whose provenance went
+    # missing in the file would read as a series of measurements of the field.
+    path = _record(tmp_path)
+    store(tmp_path, _one_run(DECAYED))
+    path.write_text(
+        "\n".join(
+            line
+            for line in path.read_text(encoding="utf-8").splitlines()
+            if not line.startswith("measured_the_field")
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(KeyError, match="measured_the_field"):
+        load_case(path)
+
+
 # --- The refusal ADR-0016 decides ---------------------------------------------
 
 
@@ -271,6 +554,7 @@ def test_a_family_the_bench_could_not_vouch_for_still_stores_its_d(
         weak=a_run("weak", library, successes=10),
         trivial=a_run("trivial", library, successes=10),
         model=MODEL,
+        measured_the_field=True,
         ran_on=RAN_ON,
         excluded=[Family.WRONGFUL_COMMITMENT],
     )

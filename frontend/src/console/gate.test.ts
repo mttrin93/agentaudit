@@ -239,7 +239,10 @@ describe('what running one does to the case library', () => {
     expect(said).toMatch(/appends a discrimination reading to every case record/)
     expect(said).toMatch(/marks retired/)
     expect(said).toMatch(/never deleted/)
-    expect(said).toMatch(/two consecutive gate runs/)
+    // Two readings of one model and never the last two of a series that spans two:
+    // the copy states the window the rule actually reads (ADR-0022).
+    expect(said).toMatch(/two consecutive gate runs on the same model/)
+    expect(said).toMatch(/a change of instrument is not the passage of time/)
     expect(said).toMatch(/not a read/)
     // And it spends, per layer and never as one figure: the adaptive layer has a
     // ceiling and a counter of its own, and nothing here adds the two.

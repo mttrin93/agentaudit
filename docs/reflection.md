@@ -507,13 +507,27 @@ mechanism.
 
 ### What is still open
 
-The class. The mechanism is available to the tests that needed it and both that did were
-converted, but nothing prevents the next test from asserting a moment it does not hold —
-that is a property of how a test is written. PR #102 names one assertion it deliberately
-left as an inequality: `position["attempt"] >= 1`, because which case the eighth message
-belongs to is the library's running order across three reference agents and not that test's
-business. That is the right answer there, and it is also indistinguishable in the source
-from an inequality written to make a race go away.
+The class, which is wider than the timing and did not close with it. The general shape is
+**a test whose passing depends on something nobody pinned**, and holding a moment still is
+the repair for one instance of it. PR #102 names an assertion it deliberately left as an
+inequality — `position["attempt"] >= 1`, because which case the eighth message belongs to
+is the library's running order across three reference agents and not that test's business.
+That is the right answer there, and it is also indistinguishable in the source from an
+inequality written to make a race go away.
+
+**A second instance was found while writing these notes and is open as #108.**
+`test_the_estimate_is_two_figures_against_two_ceilings_and_no_third` asserts that the two
+layers' figures have not been added together anywhere, and asserts the last of its three
+checks — that the sum was not written into a sentence — against the **whole** response body.
+The body carries a random `gate_run_id`, and the sum for the authored library is 579, so
+the test fails whenever a UUID4 happens to contain those three digits:
+`"gate_run_id":"3db339c4-1579-417a-b524-8540e39b8738"`. Measured at 1011 collisions in
+200,000 generated bodies — **0.505%**, about one full-suite run in two hundred. It has
+nothing to do with load or ordering, and #102's mechanism does not reach it, because there
+is no moment here to hold still: the assertion's universe is simply wider than the fact it
+means to check, and the difference is filled with entropy. The fact is worth asserting and
+the search is what is wrong, which is the same division of blame #98 arrived at from the
+other direction.
 
 ### The competing explanations, and what would separate them
 
@@ -809,4 +823,4 @@ Cross-references: [PLAN §13](../PLAN.md) (the prompts these notes are written a
 [docs/validation.md](./validation.md) (every measured figure quoted here, and what has never
 been validated), [docs/specs/signed-report-and-delivery.md](./specs/signed-report-and-delivery.md)
 (the spec that asked for these notes to be current rather than inherited), ADR-0005, ADR-0006,
-ADR-0010, ADR-0011, ADR-0016, ADR-0017, ADR-0022, ADR-0023, and issues #43, #98 and #107.
+ADR-0010, ADR-0011, ADR-0016, ADR-0017, ADR-0022, ADR-0023, and issues #43, #98, #107 and #108.

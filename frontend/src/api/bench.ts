@@ -1115,8 +1115,61 @@ export interface GateRunReading {
   rule: DeclaredRule
   scored: ScoredProgress
   adaptive: AdaptiveProgress
+  families: FamilyProgress[]
+  recent: AttemptPayload[]
   decision: GateDecided | null
   written: WroteBack | null
+}
+
+/**
+ * One reference agent's share of one family, over its own denominator.
+ *
+ * Two counts and nothing that says how it went. The three arrive in construction
+ * order — hardened, weak, trivial — read off the record's own roles rather than off
+ * a name.
+ */
+export interface AgentProgress {
+  agent: string
+  attempted: number
+  of: number
+}
+
+/**
+ * How far one family has got, over its own denominator.
+ *
+ * Six of these, always, whether a family has started or not. **Neither the count nor
+ * the denominator may be added across the six**: a run-wide figure would be a total
+ * across six denominators, which is the arithmetic ADR-0005 refuses. And there is no
+ * count of verdicts here — how well a family is going is a rate with an interval and
+ * a band, and it belongs to the decision.
+ */
+export interface FamilyProgress {
+  family: string
+  attempted: number
+  of: number
+  agents: AgentProgress[]
+}
+
+/**
+ * One attempt as evidence: the message sent, the reply, and the verdict on it.
+ *
+ * Served for a gate run because the three agents are this bench's own equipment
+ * talking to itself. `verdict` is the attacker's point of view — *succeeded* is the
+ * attack working — and `verdict_class` is how that was reached, which the screen
+ * prints beside it because a deterministic *resisted* and a judged one are not the
+ * same claim (ADR-0004).
+ */
+export interface AttemptPayload {
+  family: string
+  case_id: string
+  agent: string
+  attempt: number
+  sent: string
+  reply: string
+  verdict: string
+  verdict_class: string
+  status_code: number
+  sends: number
 }
 
 /**

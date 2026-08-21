@@ -1130,6 +1130,133 @@ code {
 }
 
 /*
+ * A run being watched: how far it has got beside what it is doing.
+ *
+ * Two columns, and they are two questions. The left is the six families over six
+ * denominators; the right is the exchanges as they come back. `minmax(0, 1fr)` twice
+ * so a long reply wraps inside its own column instead of widening the page, and one
+ * breakpoint where the window cannot hold two.
+ */
+.watching {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 1.5rem;
+  margin-top: 1.5rem;
+}
+
+.watching h3 {
+  margin: 0 0 0.8rem;
+  font-size: 0.95rem;
+}
+
+.watching .progress,
+.watching .payloads {
+  min-width: 0;
+}
+
+/*
+ * One family's row: the name and its two counts on one line, the bar under them.
+ *
+ * The counts are tabular so six rows of them line up as a column of figures, and the
+ * name is mono because a family is an identifier the record keeps.
+ */
+.family-bar {
+  margin-bottom: 0.9rem;
+}
+
+.family-name {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.8rem;
+  margin: 0 0 0.3rem;
+  font-size: 0.85rem;
+}
+
+.family-name .name {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.family-name .count {
+  color: var(--quiet);
+  font-variant-numeric: tabular-nums;
+}
+
+/*
+ * The bar, and the three segments that fill it.
+ *
+ * A track in the line colour so an empty family is visibly a family with nothing
+ * done rather than a row that failed to draw, and the segments laid end to end in the
+ * three agent accents — identity and order, by construction, never a judgement. No
+ * green and no red anywhere near it: this says how far, and nothing about how well.
+ */
+.track {
+  display: flex;
+  overflow: hidden;
+  height: 0.45rem;
+  background: var(--line);
+  border-radius: var(--radius-pill);
+}
+
+.track .segment {
+  height: 100%;
+}
+
+.track .segment.hardened {
+  background: var(--agent-hardened);
+}
+
+.track .segment.weak {
+  background: var(--agent-weak);
+}
+
+.track .segment.trivial {
+  background: var(--agent-trivial);
+}
+
+/*
+ * One exchange: what went out, what came back, and the verdict under them.
+ *
+ * The reply is indented and the two are set in the mono face, because they are the
+ * bytes on the wire rather than this application's prose. Both clamp: a long reply is
+ * a scroll away, and the panel keeps its shape while the run fills it.
+ */
+.payload {
+  padding: 0.7rem 0.8rem;
+  margin-bottom: 0.7rem;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  font-size: 0.85rem;
+}
+
+.payload .sent,
+.payload .reply {
+  margin: 0 0 0.4rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  overflow-wrap: anywhere;
+}
+
+.payload .reply {
+  padding-left: 0.8rem;
+  border-left: 2px solid var(--line);
+  color: var(--quiet);
+}
+
+/* The verdict, how it was reached, where it came from and what the wire did — one
+ * quiet line of words, and not one of them coloured by its answer. */
+.payload .kind {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--quiet);
+}
+
+@media (max-width: 60rem) {
+  .watching {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/*
  * The console shell: a rail that persists, and a screen that does not move.
  *
  * The frame is a two-column grid rather than a fixed sidebar and a margin, because

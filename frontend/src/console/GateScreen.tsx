@@ -87,12 +87,16 @@ import {
   gateInterruptView,
   gateProgress,
   gateRunRequest,
+  familyRows,
+  payloads,
   GATE_RUN_STATEMENTS,
   nothingAttested,
   startControl,
   stillGoing,
   type Attesting,
   type DecidedBlock,
+  type FamilyRow,
+  type PayloadRow,
   type DecidedRun,
   type Fact,
   type FamilyReading,
@@ -953,6 +957,33 @@ function TheGateRun({ reading }: { reading: GateRunReading }) {
             <Layer layer={layer} key={layer.layer} />
           ))}
         </div>
+
+        {/*
+          How far each family has got, beside the attempts behind the last calls.
+
+          Two columns because they answer two different questions and a reader is
+          watching both: the left is *how far*, the right is *what is happening*. At
+          a narrow width they stack, the progress first — a run's shape before its
+          detail.
+        */}
+        <div className="watching">
+          <div className="progress">
+            <h3>How far each family has got</h3>
+            {familyRows(reading).map((row) => (
+              <FamilyBar row={row} key={row.family} />
+            ))}
+          </div>
+          <div className="payloads">
+            <h3>The last calls</h3>
+            {payloads(reading).length === 0 ? (
+              <p className="aside">
+                Nothing has come back yet. The exchanges appear here as they do.
+              </p>
+            ) : (
+              payloads(reading).map((one) => <Payload one={one} key={one.key} />)
+            )}
+          </div>
+        </div>
       </section>
 
       {decided.map((block) => (
@@ -988,6 +1019,57 @@ function TheLastDecided({ decided }: { decided: DecidedRun }) {
         <Decided block={block} key={block.kind} />
       ))}
     </>
+  )
+}
+
+/**
+ * One family's progress: its name, its two counts, and one bar in three segments.
+ *
+ * The bar is the family's, and the three segments are which agent did which part of
+ * it. They take the three agent accents, whose documented job is identity and order —
+ * hardened, weak, trivial, cool to warm, by construction and never by result — which
+ * is why a bar of them says *how far* and cannot be read as *how well*. There is no
+ * percentage anywhere on the row: the share is the width and never a figure.
+ */
+function FamilyBar({ row }: { row: FamilyRow }) {
+  return (
+    <div className="family-bar">
+      <p className="family-name">
+        <span className="name">{row.family}</span>
+        <span className="count">
+          {row.attempted} / {row.of}
+        </span>
+      </p>
+      <div className="track">
+        {row.segments.map((segment) => (
+          <span
+            className={`segment ${segment.agent}`}
+            style={{ width: segment.width }}
+            key={segment.agent}
+          />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+/**
+ * One attempt: what the bench sent, what the agent answered, and the verdict.
+ *
+ * The two halves are set apart the way an exchange reads — the attack, then the
+ * reply — and the verdict is a line of words under them. Nothing here is coloured by
+ * its verdict: *succeeded* and *resisted* are the two answers this bench counts, and
+ * a green one beside a red one is the severity scale ADR-0005 exists to refuse.
+ */
+function Payload({ one }: { one: PayloadRow }) {
+  return (
+    <div className="payload">
+      <p className="sent">{one.sent}</p>
+      <p className="reply">{one.reply}</p>
+      <p className="kind">
+        {one.verdict} · {one.how} · {one.where} · {one.wire}
+      </p>
+    </div>
   )
 }
 

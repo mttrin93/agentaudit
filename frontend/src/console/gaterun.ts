@@ -449,6 +449,98 @@ export function gateProgress(reading: GateRunReading): readonly LayerReading[] {
   return [scoredReading(reading.scored), adaptiveReading(reading.adaptive)]
 }
 
+// --- how far it has got, per family, and the payloads behind the last calls -----
+
+/** One agent's share of a family's bar: its two counts, and the width to draw. */
+export interface FamilySegment {
+  agent: string
+  attempted: number
+  of: number
+  /**
+   * How much of the family's bar this agent has done, as a CSS width.
+   *
+   * Geometry and not a figure. The share is never printed: a percentage beside a
+   * family name is read as a rate, and a rate needs an interval and a band beside it
+   * that progress cannot have (ADR-0005). Four decimal places because three
+   * segments of one bar have to add up to the bar.
+   */
+  width: string
+}
+
+/** One family's progress: the two counts it was served, and its three segments. */
+export interface FamilyRow {
+  family: string
+  attempted: number
+  of: number
+  segments: readonly FamilySegment[]
+}
+
+/**
+ * The families as rows, in the order the route served them.
+ *
+ * The counts are carried, never recomputed: a console that added its own arithmetic
+ * to a served figure would be a second scorer. What is computed here is the width of
+ * a segment, which is a length and not a number anybody reads.
+ *
+ * A share is taken against the *family's* denominator rather than the agent's, so the
+ * three segments of a row fill that row together — the bar is the family's progress
+ * and the segments are who did which part of it.
+ */
+export function familyRows(reading: GateRunReading): readonly FamilyRow[] {
+  return reading.families.map((family) => ({
+    family: family.family,
+    attempted: family.attempted,
+    of: family.of,
+    segments: family.agents.map((agent) => ({
+      agent: agent.agent,
+      attempted: agent.attempted,
+      of: agent.of,
+      width: share(agent.attempted, family.of),
+    })),
+  }))
+}
+
+/** A segment's length, and `0%` for a family that has not started or has no cases. */
+function share(attempted: number, of: number): string {
+  if (of === 0 || attempted === 0) {
+    return '0%'
+  }
+  return `${Number(((attempted / of) * 100).toFixed(4))}%`
+}
+
+/** One attempt as the screen reads it: the exchange, the verdict, and where from. */
+export interface PayloadRow {
+  /** Stable while the list grows: one attempt of one case against one agent. */
+  key: string
+  sent: string
+  reply: string
+  /** The attacker's point of view, in the bench's own word. Never coloured. */
+  verdict: string
+  /** How that verdict was reached: `deterministic` or `judged` (ADR-0004). */
+  how: string
+  where: string
+  wire: string
+}
+
+/**
+ * The last few attempts, as the route ordered them: newest first.
+ *
+ * Nothing here is a finding. A finding is a verdict plus its narrative and it is
+ * written in the report; this is the verdict, the exchange behind it, and the two
+ * facts about the wire that tell calls from attempts.
+ */
+export function payloads(reading: GateRunReading): readonly PayloadRow[] {
+  return reading.recent.map((one) => ({
+    key: `${one.agent}/${one.case_id}/${one.attempt}`,
+    sent: one.sent,
+    reply: one.reply,
+    verdict: one.verdict,
+    how: one.verdict_class,
+    where: `${one.agent} · ${one.case_id} · attempt ${one.attempt}`,
+    wire: `HTTP ${one.status_code} · ${one.sends} ${one.sends === 1 ? 'send' : 'sends'}`,
+  }))
+}
+
 // --- what it decided -------------------------------------------------------------
 
 /** One labelled fact, uncoloured, in the console's own idiom. */

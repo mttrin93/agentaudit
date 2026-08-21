@@ -508,6 +508,16 @@ class GateRunRecord:
     library: Path
     cases: tuple[Case, ...]
     agents: tuple[str, ...]
+    roles: tuple[str, str, str]
+    """The three agents' names in construction order: hardened, then weak, then trivial.
+
+    `agents` is whatever order the equipment served them in, which is the equipment's
+    business and is not an order anything may report in. This is the order the whole
+    bench reads the three in — cool to warm, floor to ceiling of the contrast, the
+    order `GateResult.rates` is built in — carried as three names because the record
+    holds names and the roles are the served equipment's own answer, never inferred
+    from a name.
+    """
     budget: RunBudget
     run_state: RunState
     presented: BudgetPayload
@@ -675,6 +685,7 @@ class BenchGateRuns:
                 library=bench.library,
                 cases=cases,
                 agents=tuple(target.name for target in served.targets),
+                roles=(served.hardened, served.weak, served.trivial),
                 budget=budget,
                 run_state=RunState(budget=budget, library=LibraryVersion.of(cases)),
                 presented=budget.as_payload(),

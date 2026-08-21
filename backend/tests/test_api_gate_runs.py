@@ -90,7 +90,7 @@ from backend.bench.cited import CITED_GATE_RUN, Replaced, cite, the_citation
 from backend.bench.contract import TargetConfig
 from backend.bench.gate_record import RecordedGateRun
 from backend.bench.lease import LEASE_FILE, LibraryBusy, take_the_library
-from backend.bench.library import CaseStatus, load_library
+from backend.bench.library import CaseStatus, Family, load_library
 from backend.bench.payload import citation
 from backend.bench.registration import Attestation
 from backend.bench.rule import DECLARED_RULE
@@ -930,10 +930,108 @@ def test_progress_is_reported_per_layer_while_the_gate_run_is_in_flight(
             "rule",
             "scored",
             "adaptive",
+            "families",
+            "recent",
             "decision",
             "written",
         }
         assert reading["decision"] is None
+
+        ledger.release()
+        [record] = gating.gates.records()
+        settled(record)
+
+
+def test_the_six_families_and_the_last_payloads_are_reported_while_it_runs(
+    tmp_path: Path,
+) -> None:
+    """How far each family has got, and the attempts behind the last few calls.
+
+    **Six rows over six denominators, and nothing that adds them.** A family's
+    denominator is its own cases at the declared attempts per case against each of
+    the three agents, and the row carries the count against it — never a rate, never
+    a share of a run-wide total, and never a count of the verdicts so far. Progress
+    is how far a family has got, and how well it went is a rate with an interval and
+    a band that only the decision may carry (ADR-0005).
+
+    **And the payloads, which are the bench attacking its own equipment.** The three
+    reference agents are this project's own constructs, so the message sent and the
+    reply it drew are the bench's own transcript and nobody else's traffic. Each
+    carries the verdict from the attacker's point of view and how it was reached,
+    because *resisted* by a deterministic check and *resisted* in a judge's opinion
+    are two different facts (ADR-0004).
+    """
+    library = a_library(tmp_path)
+    active = [
+        case for case in load_library(library) if case.status is CaseStatus.ACTIVE
+    ]
+    ledger = Ledger(hold_after=7)
+
+    with (
+        watched_agents(ledger) as watched,
+        a_bench(
+            library, equipment=lambda: _already(watched), attempts_per_case=2
+        ) as gating,
+    ):
+        body = started(gating)
+        gating.client.post(approval_of(body["gate_run_id"]), json=a_confirmation())
+        ledger.wait_until_held()
+
+        reading = gating.client.get(f"{GATE_RUNS_ROUTE}/{body['gate_run_id']}").json()
+
+        families = reading["families"]
+        assert [row["family"] for row in families] == [str(one) for one in Family], (
+            "six rows, in the enum's own order, whether or not a family has started"
+        )
+        for row in families:
+            cases = [case for case in active if str(case.family) == row["family"]]
+            # Its own denominator: this family's cases, at the declared attempts per
+            # case, against each of the three agents.
+            assert row["of"] == len(cases) * 2 * 3
+            assert 0 <= row["attempted"] <= row["of"]
+            assert [rate["agent"] for rate in row["agents"]] == [
+                "hardened",
+                "weak",
+                "trivial",
+            ]
+            assert sum(one["attempted"] for one in row["agents"]) == row["attempted"]
+            assert sum(one["of"] for one in row["agents"]) == row["of"]
+            # No verdict count anywhere on the row. A per-family success count while
+            # the run is in flight is an interim rate with no interval beside it.
+            assert set(row) == {"family", "attempted", "of", "agents"}
+            for one in row["agents"]:
+                assert set(one) == {"agent", "attempted", "of"}
+
+        # Something has been attempted by now, and no field on the reading holds the
+        # six rows added together.
+        assert sum(row["attempted"] for row in families) >= 1
+        crossing = sum(row["attempted"] for row in families)
+        assert not any(
+            value == crossing
+            for key, value in reading.items()
+            if isinstance(value, int) and not isinstance(value, bool)
+        )
+
+        recent = reading["recent"]
+        assert 1 <= len(recent) <= 5, "the tail, and never the whole transcript log"
+        for payload in recent:
+            assert set(payload) == {
+                "family",
+                "case_id",
+                "agent",
+                "attempt",
+                "sent",
+                "reply",
+                "verdict",
+                "verdict_class",
+                "status_code",
+                "sends",
+            }
+            assert payload["verdict"] in {"succeeded", "resisted"}
+            assert payload["verdict_class"] in {"deterministic", "judged"}
+            assert payload["sent"], "the message that went on the wire"
+            assert payload["agent"] in {"hardened", "weak", "trivial"}
+            assert payload["attempt"] >= 1
 
         ledger.release()
         [record] = gating.gates.records()

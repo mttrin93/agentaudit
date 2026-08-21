@@ -204,7 +204,7 @@ from backend.bench.gate_record import (
     declared_rule,
     gate_decided,
 )
-from backend.bench.library import Case, CaseStatus, LibraryVersion
+from backend.bench.library import Case, CaseStatus, Family, LibraryVersion
 from backend.bench.payload import DeclaredModels, GateCitation, citation
 from backend.bench.registration import ECHO_PROBE, Attestation
 from backend.bench.rendering import REPORT_MARKDOWN, REPORT_PAYLOAD
@@ -2368,6 +2368,79 @@ class WroteBack(BaseModel):
     stated: str
 
 
+class AgentProgress(BaseModel):
+    """One reference agent's share of one family, over its own denominator.
+
+    A count and the count it is out of, and nothing that says how it went. The three
+    are ordered by construction — hardened, weak, trivial — because that is the order
+    the contrast is built in and the order every other surface reads them in; the
+    order is read off `GateRunRecord.roles`, which the equipment answered, and never
+    off the name.
+    """
+
+    agent: str
+    attempted: int
+    of: int
+
+
+class FamilyProgress(BaseModel):
+    """How far one family has got, over its own denominator, and never a rate.
+
+    **Six of these and no seventh figure.** A family's denominator is its own cases
+    at the declared attempts per case against each of the three agents, and this row
+    carries the count against it. Nothing here is added to another row, because a
+    run-wide count would be a total across six denominators — the one arithmetic this
+    bench refuses everywhere else (ADR-0005) — and nothing here is divided, because a
+    fraction of a family's attempts is a share of the work and would be read as a
+    rate.
+
+    **And no count of verdicts.** How well a family is going is a rate with an
+    interval and a band beside it, and it belongs to the decision or to nothing.
+    A live success count is that rate with the interval taken off.
+    """
+
+    family: str
+    attempted: int
+    of: int
+    agents: list[AgentProgress]
+
+
+class AttemptPayload(BaseModel):
+    """One attempt as evidence: what went on the wire, what came back, the verdict.
+
+    **Served because the three agents are this bench's own equipment.** A gate run
+    attacks constructs of this project, started and stopped by it, so a transcript
+    here is the bench talking to itself — no operator's target, and nobody else's
+    traffic. `GET /runs/{id}` serves nothing of the kind for a target run and this is
+    not a precedent for it.
+
+    `verdict` is the attacker's point of view, which is the sense the whole bench
+    counts in: *succeeded* is the attack working. `verdict_class` is how that was
+    reached, copied off the case record rather than inferred from the family, because
+    a deterministic *resisted* and a judged one carry different limits (ADR-0004).
+    """
+
+    family: str
+    case_id: str
+    agent: str
+    attempt: int
+    sent: str
+    reply: str
+    verdict: str
+    verdict_class: str
+    status_code: int
+    sends: int
+
+
+RECENT_ATTEMPTS = 5
+"""How many attempts the reading carries the payloads of.
+
+The tail and never the log: a gate run makes hundreds, the screen shows the last
+few as they go by, and a response that grew with the run is a response whose size is
+a function of how long somebody has been watching.
+"""
+
+
 class GateRunReading(BaseModel):
     """Where one gate run has got to, per layer, and what it decided if it has.
 
@@ -2390,6 +2463,8 @@ class GateRunReading(BaseModel):
     rule: DeclaredRule
     scored: ScoredProgress
     adaptive: AdaptiveProgress
+    families: list[FamilyProgress]
+    recent: list[AttemptPayload]
     decision: GateDecided | None
     written: WroteBack | None
 
@@ -2404,6 +2479,8 @@ def gate_run_reading(record: GateRunRecord, rule: GateRule) -> GateRunReading:
         rule=declared_rule(rule),
         scored=_scored_progress(record.run_state),
         adaptive=_adaptive_progress(record.run_state),
+        families=_families(record, rule),
+        recent=_recent(record),
         decision=None if record.gate is None else gate_decided(record.gate),
         written=(
             None
@@ -2419,6 +2496,66 @@ def gate_run_reading(record: GateRunRecord, rule: GateRule) -> GateRunReading:
             )
         ),
     )
+
+
+def _families(record: GateRunRecord, rule: GateRule) -> list[FamilyProgress]:
+    """The six families, each over its own denominator, in the enum's own order.
+
+    Six rows whether or not a family has started, because a family missing from the
+    list while the run is on another one would read as a family this run is not
+    doing. The counts are `RunState.attempts` grouped by family and agent — the same
+    grouping the rates are built from, without the division.
+    """
+    made: dict[tuple[str, str], int] = {}
+    for attempt in record.run_state.attempts:
+        key = (str(attempt.family), attempt.target_name)
+        made[key] = made.get(key, 0) + 1
+    rows: list[FamilyProgress] = []
+    for family in Family:
+        name = str(family)
+        cases = sum(1 for case in record.cases if case.family is family)
+        each = cases * rule.attempts_per_case
+        agents = [
+            AgentProgress(agent=role, attempted=made.get((name, role), 0), of=each)
+            for role in record.roles
+        ]
+        rows.append(
+            FamilyProgress(
+                family=name,
+                attempted=sum(one.attempted for one in agents),
+                of=each * len(agents),
+                agents=agents,
+            )
+        )
+    return rows
+
+
+def _recent(record: GateRunRecord) -> list[AttemptPayload]:
+    """The last few attempts, newest first, with the exchange behind each verdict."""
+    tail = record.run_state.attempts[-RECENT_ATTEMPTS:]
+    return [
+        AttemptPayload(
+            family=str(attempt.family),
+            case_id=attempt.case_id,
+            agent=attempt.target_name,
+            # One-based on the way out, for `_scored_progress`' own reason: a reader
+            # counts "the third attempt" and the record holds an index into ten.
+            attempt=attempt.index + 1,
+            sent=_message(attempt.transcript.sent),
+            reply=attempt.transcript.reply_text,
+            verdict=str(attempt.verdict),
+            verdict_class=str(attempt.verdict_class),
+            status_code=attempt.transcript.status_code,
+            sends=attempt.transcript.sends,
+        )
+        for attempt in reversed(tail)
+    ]
+
+
+def _message(sent: dict[str, object]) -> str:
+    """The message out of a sent payload, or the empty string if it carried none."""
+    message = sent.get("message")
+    return message if isinstance(message, str) else ""
 
 
 class StartGateRunRequest(BaseModel):

@@ -55,7 +55,9 @@ export function ConsoleShell() {
   return (
     <div className="console">
       <nav className="rail" aria-label="The console">
-        <p className="mark">AgentAudit</p>
+        <p className="mark">
+          Agent<span>Audit</span>
+        </p>
         <ul>
           {rail.destinations.map((there) => (
             <RailLink there={there} key={there.path} />

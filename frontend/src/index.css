@@ -1061,7 +1061,7 @@ code {
  */
 .console {
   display: grid;
-  grid-template-columns: 15rem minmax(0, 1fr);
+  grid-template-columns: 17rem minmax(0, 1fr);
   min-height: 100vh;
 }
 
@@ -1072,10 +1072,30 @@ code {
   font-size: 0.95rem;
 }
 
+/*
+ * The wordmark, in two weights of one colour.
+ *
+ * `Agent` carries the ink and `Audit` the quiet grey, which is how the name reads
+ * aloud — the noun and then what is done to it — and it needs no second hue to do
+ * it. Deliberately not an accent: every colour in this stylesheet that is not ink or
+ * grey means a layer or a reference agent, and a brand mark borrowing one would be
+ * the first thing on the screen carrying a meaning it does not have.
+ *
+ * A rule under it rather than margin alone, so the mark is a header of the rail and
+ * not its first list item.
+ */
 .rail .mark {
-  margin: 0 0 1.4rem;
-  font-weight: 600;
-  letter-spacing: 0.02em;
+  margin: 0.1rem 0 1.3rem;
+  padding-bottom: 1.1rem;
+  border-bottom: 1px solid var(--line);
+  font-size: 1.2rem;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+}
+
+.rail .mark span {
+  font-weight: 400;
+  color: var(--quiet);
 }
 
 /* The run's id stays at every width: it is how you tell one run from another. */

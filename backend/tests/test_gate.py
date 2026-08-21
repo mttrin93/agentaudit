@@ -894,7 +894,10 @@ def test_nothing_reads_the_record_by_parsing_the_markdown(
     record = json.loads(written.record.read_text(encoding="utf-8"))
 
     off_the_result = recorded_gate_run(
-        gate, decided_at=record["decided_at"], document=record["document"]
+        gate,
+        decided_at=record["decided_at"],
+        document=record["document"],
+        record=record["record"],
     )
     assert json.loads(off_the_result.model_dump_json()) == record
 
@@ -997,7 +1000,10 @@ def test_a_family_the_bench_could_not_measure_is_absent_rather_than_scored_zero(
     )
 
     record = recorded_gate_run(
-        _result(decision), decided_at="2026-08-20T00:00:00+00:00", document="gate-x.md"
+        _result(decision),
+        decided_at="2026-08-20T00:00:00+00:00",
+        document="gate-x.md",
+        record="gate-x.json",
     )
 
     figures = {one.family: one for one in record.decision.families}
@@ -1044,7 +1050,10 @@ def test_the_record_carries_no_figure_spanning_two_families_or_two_layers() -> N
     decision = decide_gate(outcomes_for(*SIX_APART), reliability=judged(wrongful=fit))
 
     record = recorded_gate_run(
-        _result(decision), decided_at="2026-08-20T00:00:00+00:00", document="gate-x.md"
+        _result(decision),
+        decided_at="2026-08-20T00:00:00+00:00",
+        document="gate-x.md",
+        record="gate-x.json",
     )
 
     scores = [one.discrimination for one in record.decision.families]

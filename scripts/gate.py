@@ -27,18 +27,27 @@ below the decision, carrying no rate, no interval, no band and no `D` (ADR-0010)
 A weak attacker cannot fail a working bench here and a lucky one cannot pass a
 broken one, because `read_gate` is handed the recorded attempts and nothing else.
 
-**Its output survives the run, twice.** Everything printed is written to a dated
-document under `--record`, in the two sections it was printed in: validation history
-has to exist before the first user does, and a gate answer that lived only in a
-terminal is a gate answer nobody can check (spec story 80). Beside it goes the same
+**Its output survives the run, three times.** Everything printed is written to a
+dated document under `--record`, in the two sections it was printed in: validation
+history has to exist before the first user does, and a gate answer that lived only in
+a terminal is a gate answer nobody can check (spec story 80). Beside it goes the same
 run as a machine-readable record — each family's three reference-agent rates, its
 `D`, whether the intervals were disjoint and whether the ordering held, under the
 decision and the rule that was applied — so a reader recovers the figures without
 parsing prose, in the shape `GET /gate-runs/{id}` serves them for a gate run started
-from the console (`bench/gate_record.py`, ADR-0021). The two cannot disagree: one
-`GateResult` is read once, and the document's scored section is the record's own
-rendering of it. The curated narrative stays in `docs/validation.md`; what is
+from the console (`bench/gate_record.py`, ADR-0021). And the **gate citation** goes
+into the case library itself, naming both files, so that the bench starts citing the
+gate run it just made rather than one wired into a configuration by hand (ADR-0023,
+`bench/cited.py`). None of the three can disagree: one `GateResult` is read once, the
+document's scored section is the record's own rendering of it, and the citation is
+read off that record. The curated narrative stays in `docs/validation.md`; what is
 written here is the run itself.
+
+**A failing run replaces a passing citation, and says so.** The citation is what
+this bench last put itself through and not the best answer it ever got, so it is
+written on all three outcomes and the line that reports it names what it displaced.
+A gate run that left a stale pass behind would be a bench claiming a certification
+its own last measurement withdrew (ADR-0023).
 
 **One writer at a time on one library.** This run takes an exclusive lease on the
 case directory before it reads anything and gives it back however it ends, because a
@@ -86,6 +95,7 @@ from dotenv import load_dotenv
 
 from backend.bench.admission import NotAdmitted, admitted_library
 from backend.bench.calibration import CalibrationResult, run_calibration
+from backend.bench.cited import cite
 from backend.bench.completion import (
     DEFAULT_ADJUDICATOR_MODEL,
     DEFAULT_ATTACKER_MODEL,
@@ -93,7 +103,11 @@ from backend.bench.completion import (
 )
 from backend.bench.contract import TargetConfig
 from backend.bench.gate import GateResult, NotAGateRun, read_gate
-from backend.bench.gate_record import recorded_gate_run, write_the_record
+from backend.bench.gate_record import (
+    RecordedGateRun,
+    recorded_gate_run,
+    write_the_record,
+)
 from backend.bench.goldset import load_gold_sets, measure_reliability
 from backend.bench.lease import LibraryBusy, holding_the_library
 from backend.bench.library import Case
@@ -394,6 +408,16 @@ def run_the_gate(args: argparse.Namespace) -> int:
     )
     print(f"\nthis run's own document: {written.document}")
     print(f"the same run as a record: {written.record}")
+
+    # The citation, last of the three and still under the lease this run has held
+    # since before it read the library: the readings and the citation land inside one
+    # critical section, so a second gate run cannot slip between them (ADR-0021,
+    # condition 5; ADR-0023). Written on every outcome, because the citation is what
+    # this bench last put itself through rather than the best answer it ever got — a
+    # failing gate run that left a passing citation behind would be a bench claiming
+    # a certification it has just lost.
+    replaced = cite(written.recorded, cases_dir)
+    print(f"\nthe gate run this library now cites: {replaced.stated()}")
     return exit_code(gate)
 
 
@@ -405,10 +429,16 @@ class WrittenRun:
     neither is the other's summary — they are two renderings of one reading, and the
     writer below returns both so that no caller can be handed one and told the other
     exists somewhere.
+
+    `recorded` is that one reading, returned rather than rebuilt, because the
+    citation is the third rendering of it (`cited.citation_of`): a caller that read
+    the `GateResult` a second time to compose one would be the second arithmetic this
+    whole arrangement exists instead of.
     """
 
     document: Path
     record: Path
+    recorded: RecordedGateRun
 
 
 def record_run(
@@ -451,7 +481,12 @@ def record_run(
     stamped = datetime.now(tz=UTC)
     path = directory / f"gate-{stamped:%Y-%m-%dT%H-%M-%SZ}.md"
     recorded = recorded_gate_run(
-        gate, decided_at=stamped.isoformat(), document=path.name
+        gate,
+        decided_at=stamped.isoformat(),
+        document=path.name,
+        # The record names its own file, so the citation rendered off it points at
+        # what was written rather than at a name a third place composed (ADR-0023).
+        record=path.with_suffix(".json").name,
     )
     path.write_text(
         "\n".join(
@@ -489,7 +524,8 @@ def record_run(
     )
     return WrittenRun(
         document=path,
-        record=write_the_record(recorded, path.with_suffix(".json")),
+        record=write_the_record(recorded, directory),
+        recorded=recorded,
     )
 
 

@@ -177,6 +177,15 @@ class GateCitation:
     contributor who wants a gate verdict beside a customer's agent name has to widen
     a type, which is the signal ADR-0010 established for exactly this class of
     mistake.
+
+    **It reaches the figures without carrying them, and that is ADR-0023's line.**
+    `record` names the machine-readable **gate run record** of the same gate run, so
+    a reader holding this block recovers each reference agent's rate and each
+    family's `D` without parsing the dated document — the thing #75 refused to build
+    a parser for. What did *not* change is that those figures are not *here*: the
+    record names `hardened`, `weak` and `trivial`, and no reference agent is named in
+    a user's report (ADR-0018, point 6). A pointer travels; a table beside a
+    customer's agent name invites the comparison this project exists to refuse.
     """
 
     outcome: GateOutcome
@@ -184,6 +193,16 @@ class GateCitation:
     library: LibraryVersion
     document: str
     """Where the run that decided it is written down, so the citation is checkable."""
+
+    record: str
+    """Where the same gate run is written down as fields, for the figures above.
+
+    The **gate run record**'s own file name, off the record itself rather than
+    composed here (`gate_record.RecordedGateRun.record`), so a reader following it
+    arrives at the file the gate run wrote. Named and never opened by anything that
+    renders this citation: this is an address, and the arithmetic behind it stays
+    where the run put it (ADR-0023).
+    """
 
     def stated(self) -> str:
         """The citation in the bench's own words, which are not the target's.
@@ -198,8 +217,10 @@ class GateCitation:
             f"the bench {self.outcome.value} its own gate on "
             f"{self.decided_on.isoformat()}, against its three agents of known "
             f"construction, at {self.library.stated()} — recorded in "
-            f"{self.document}. A fact about the instrument that produced the "
-            "figures above, and not a verdict on this target: this target has "
+            f"{self.document}, and as fields in {self.record}, where each reference "
+            "agent's rate and each family's discrimination score are recoverable "
+            "without reading a sentence. A fact about the instrument that produced "
+            "the figures above, and not a verdict on this target: this target has "
             "rates, intervals and bands, and passes and fails nothing"
         )
 
@@ -664,6 +685,11 @@ def citation(cited: GateCitation | None) -> dict[str, Any]:
     different facts, not one record with empty fields: an uncited instrument has no
     outcome, no date and no library version, so there is nowhere here for a reader
     to find an empty one and read it as *not passed*.
+
+    **Two addresses and no figures.** `document` is the prose and `record` is the
+    same gate run as fields; between them a reader reaches every per-family figure
+    without parsing a sentence, and neither of them is a figure on this block
+    (ADR-0023).
     """
     if cited is None:
         return {"cited": False, "stated": UNCITED_GATE}
@@ -676,6 +702,7 @@ def citation(cited: GateCitation | None) -> dict[str, Any]:
             "digest": cited.library.digest,
         },
         "document": cited.document,
+        "record": cited.record,
         "stated": cited.stated(),
     }
 

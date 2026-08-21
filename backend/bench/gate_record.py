@@ -1,12 +1,14 @@
 """One gate run's decision as data — the vocabulary both entry points write it in.
 
-A gate run leaves two things behind and they say the same thing twice. The dated
-Markdown a command-line run writes is prose for a person; what lives here is the
-same decision as fields for a machine, so that a reader recovers each family's three
-reference-agent rates and its `D` without parsing a sentence (spec §75, #84). A gate
-run started from the console holds the same figures in memory and serves them on
-`GET /gate-runs/{id}`, and this module is why the two describe one gate run in one
-vocabulary rather than in two that have to be kept in step.
+A gate run leaves three things behind and they say the same thing three times. The
+dated Markdown a command-line run writes is prose for a person; what lives here is
+the same decision as fields for a machine, so that a reader recovers each family's
+three reference-agent rates and its `D` without parsing a sentence (spec §75, #84);
+and the **gate citation** every signed report carries is rendered off this record
+too, which is why it can name where those figures are (`bench/cited.py`, ADR-0023).
+A gate run started from the console holds the same figures in memory and serves them
+on `GET /gate-runs/{id}`, and this module is why all of them describe one gate run in
+one vocabulary rather than in several that have to be kept in step.
 
 **Below both entry points, because both are its callers.** `backend/api/app.py`
 validates these models onto the wire and `scripts/gate.py` writes them beside the
@@ -351,9 +353,14 @@ class RecordedGateRun(BaseModel):
     (ADR-0003). The rule carried is the one this run applied, off the decision's own
     record rather than off whatever `rule.py` says today.
 
-    **It names its document and nothing else on the filesystem.** The pairing is what
-    makes the two legible as one gate run, and the direction of the reference is the
-    point: the record names the prose, and the prose has never heard of the record.
+    **It names its document, its own file, and nothing else on the filesystem.** The
+    pairing is what makes the two legible as one gate run, and the direction of the
+    reference is the point: the record names the prose, and the prose has never heard
+    of the record. It names its own file for a third reader — the **gate citation**,
+    which is rendered off this record (`bench/cited.py`, ADR-0023) and has to be able
+    to say where the figures it does not carry are. A name the citation composed for
+    itself would be a second rule for where a record lives, and the two would only
+    have to disagree once for a report to point a reader at a file nobody wrote.
 
     **The scored layer alone.** There is no adaptive figure here — the layer runs in
     the same gate run and carries no rate, no interval, no band and no `D`, and it is
@@ -364,7 +371,20 @@ class RecordedGateRun(BaseModel):
     """When this run was decided, as the document is dated: ISO, UTC, no locale."""
 
     document: str
-    """The file name of the dated Markdown this record sits beside."""
+    """The file name of the dated Markdown this record sits beside.
+
+    Or the stated absence of one: a gate run started from the console leaves no dated
+    document (ADR-0021), and it says so here rather than naming a file a reader would
+    go looking for (`cited.NO_DATED_DOCUMENT`)."""
+
+    record: str
+    """The file name this record itself is written under.
+
+    On the record rather than decided by the writer, so that the citation rendered
+    off it names the file the writer wrote: `write_the_record` takes a *directory* and
+    writes here, which is what makes the name on the record and the name on disk one
+    fact instead of two.
+    """
 
     rule: DeclaredRule
     decision: GateDecided
@@ -372,30 +392,38 @@ class RecordedGateRun(BaseModel):
 
 
 def recorded_gate_run(
-    gate: GateResult, *, decided_at: str, document: str
+    gate: GateResult, *, decided_at: str, document: str, record: str
 ) -> RecordedGateRun:
     """This gate run as a record, off the result the run left in memory.
 
     One `GateResult` in, and the rendering the document prints comes back out on
     `decision.stated`: a caller writing both writes that string into the prose rather
     than asking the gate a second time, which is what makes the two unable to
-    disagree rather than merely observed to agree.
+    disagree rather than merely observed to agree. The citation is the third rendering
+    of the same reading and is taken off what this returns (`cited.citation_of`), for
+    the same reason and with the same guarantee.
     """
     return RecordedGateRun(
         decided_at=decided_at,
         document=document,
+        record=record,
         rule=declared_rule(gate.decision.rule),
         decision=gate_decided(gate),
     )
 
 
-def write_the_record(record: RecordedGateRun, path: Path) -> Path:
+def write_the_record(record: RecordedGateRun, directory: Path) -> Path:
     """Write one gate run's record, in the shape its console counterpart serves.
 
     JSON, and the same JSON: `GET /gate-runs/{id}` validates these models onto the
     wire and this writes them to a file, so a reader who has parsed one has parsed
     the other. Indented and newline-terminated because it lands in a directory a
     person browses beside the documents it belongs to.
+
+    **A directory in, and the file name off the record.** The record names its own
+    file, so a caller cannot write it somewhere the citation rendered from it does not
+    point: the path is composed here, once, from the name the record carries.
     """
+    path = directory / record.record
     path.write_text(record.model_dump_json(indent=2) + "\n", encoding="utf-8")
     return path

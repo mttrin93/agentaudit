@@ -62,13 +62,6 @@ import type { BenchGate, DeclaredRule } from '../api/bench'
 import type { StartControl } from './gaterun'
 import { gateReading, type GateReading } from './landing'
 
-export const WHAT_THIS_SCREEN_ANSWERS =
-  'The gate is the stop before this bench is trusted: the whole live library run ' +
-  'against three agents of the project’s own construction, decided by a rule stated ' +
-  'in advance. This screen is the rule, what the last gate run answered under it, ' +
-  'what running another one does to the case library, and the two ways to run one — ' +
-  'from here, or from a terminal.'
-
 /** The command that starts a gate run, and the only thing that does. */
 export const THE_COMMAND = 'uv run python -m scripts.gate --identity "your name"'
 
@@ -101,11 +94,8 @@ export interface ReferenceAgent {
 export interface RuleBlock {
   kind: 'rule'
   heading: string
-  statement: string
   clauses: RuleClause[]
   agents: ReferenceAgent[]
-  /** What the agents block is, and what it deliberately does not carry. */
-  agentsStatement: string
 }
 
 /** What the last gate run answered, in the front door's own wording. */
@@ -155,18 +145,6 @@ export interface CommandBlock {
 
 export type GateBlock = RuleBlock | OutcomeBlock | ConsequenceBlock | CommandBlock
 
-const THE_RULE_IS_PRINTED =
-  'Printed rather than summarised, and printed above the outcome. The gate’s ' +
-  'thresholds were declared before the code that applies them existed, and they are ' +
-  'shown here in the bench’s own words so that a pass or a fail can be re-derived ' +
-  'rather than trusted. A rule nobody can read is a rule that can be moved.'
-
-const THE_AGENTS_ARE_ORDERED =
-  'The three agents the rule is put to, ordered by construction and named without a ' +
-  'figure between them. What each of them scored on each family is in the gate run’s ' +
-  'own record, named beside the citation above; the citation does not carry it, and ' +
-  'this screen does not read it.'
-
 /**
  * The three agents of known construction, in the order construction gives them.
  *
@@ -201,9 +179,8 @@ export const REFERENCE_AGENTS: readonly ReferenceAgent[] = [
 ]
 
 const IT_IS_NOT_A_READ_ONLY_ACTION =
-  'A gate run is not a read. It spends, and it writes to the library every user run ' +
-  'is measured with, so this is what it will have done by the time it prints an ' +
-  'outcome.'
+  'A gate run is not a read: it spends, and it writes to the library every user run ' +
+  'is measured with.'
 
 /** What a gate run writes and what it spends, with every number read off the rule. */
 function whatItWrites(rule: DeclaredRule): string[] {
@@ -281,26 +258,24 @@ export function gateScreen(
   return [
     {
       kind: 'rule',
-      heading: 'The rule this bench is held to',
-      statement: THE_RULE_IS_PRINTED,
+      heading: 'The rule',
       clauses: clausesOf(bench.rule),
       agents: [...REFERENCE_AGENTS],
-      agentsStatement: THE_AGENTS_ARE_ORDERED,
     },
     {
       kind: 'outcome',
-      heading: 'What the last gate run answered under it',
+      heading: 'The last outcome',
       reading: gateReading(bench.citation),
     },
     {
       kind: 'consequence',
-      heading: 'What running one does to the case library',
+      heading: 'What a gate run writes',
       statement: IT_IS_NOT_A_READ_ONLY_ACTION,
       writes: whatItWrites(bench.rule),
     },
     {
       kind: 'command',
-      heading: 'Starting one: here, or the command that does it',
+      heading: 'Starting one',
       command: THE_COMMAND,
       statements: [...TWO_ENTRY_POINTS],
       start,

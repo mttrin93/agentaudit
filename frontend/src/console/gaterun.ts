@@ -479,9 +479,7 @@ export function gateProgress(reading: GateRunReading): readonly LayerReading[] {
  * this bench finished before a restart, and *which* reading an operator is looking
  * at is a fact about the figures rather than a detail of the plumbing.
  */
-export const FROM_THIS_PROCESS =
-  'read off the gate run this bench itself ran, from the process that made the ' +
-  'attempts. Nothing here was parsed out of a document.'
+export const FROM_THIS_PROCESS = 'read off the gate run this bench ran'
 
 // --- what it decided -------------------------------------------------------------
 
@@ -571,6 +569,7 @@ export interface DecisionBlock {
 export interface FamiliesBlock {
   kind: 'families'
   heading: string
+  /** The one claim this block may not drop, and `gaterun.test.ts` guards it. */
   statement: string
   families: FamilyReading[]
 }
@@ -578,7 +577,6 @@ export interface FamiliesBlock {
 export interface ExcludedBlock {
   kind: 'excluded'
   heading: string
-  statement: string
   excluded: Fact[]
 }
 
@@ -596,24 +594,21 @@ export type DecidedBlock =
   | ExcludedBlock
   | WrittenBlock
 
-const THE_RULE_FIRST =
-  'The rule this gate run was decided under, in the bench’s own words and above ' +
-  'the answer it gave. Read in this order the outcome below is something you can ' +
-  're-derive; read the other way round it is a verdict you would have to trust.'
-
-const READ_OFF_THE_RUN =
-  'Every figure below was read off the attempts this gate run just made, in the ' +
-  'process that made them. Nothing here was parsed out of a document.'
-
+/**
+ * The no-composite claim, and the one sentence this screen may not lose.
+ *
+ * Six discrimination scores arrive at once, which makes this the surface most
+ * likely to grow a mean of them — and a mean would read as a figure about the
+ * bench, which is the thing ADR-0005 refuses. The view model has no field for one
+ * and `gaterun.test.ts` asserts both halves: that no combined figure appears, and
+ * that the block says so.
+ */
 const NOTHING_COMBINES_THEM =
-  'Six families, six lines, and nothing that adds two of them. A mean of these ' +
-  'discrimination scores would read as a figure about the bench and it is not one: ' +
-  'the counts the rule is decided on are counts of families, and each score belongs ' +
-  'to the family it was measured on.'
+  'Six families, six lines, and nothing that adds two of them.'
 
-const EXCLUDED_IS_NOT_A_FAIL =
-  'A family excluded here was not scored a fail and was not force-passed. Its ' +
-  'rates were measured and are recorded, and they decide nothing in either count.'
+const THE_RULE_FIRST =
+  'Above the answer it gave, so the outcome below is one you can re-derive rather ' +
+  'than a verdict you would have to trust.'
 
 /** The accent for one agent, from the one list the console names them by. */
 function accentFor(agent: string): string {
@@ -761,13 +756,13 @@ export function decidedView(reading: DecidedRun): DecidedBlock[] {
   const blocks: DecidedBlock[] = [
     {
       kind: 'rule',
-      heading: 'The rule this gate run was decided under',
+      heading: 'The rule applied',
       statement: THE_RULE_FIRST,
       clauses: clausesOf(reading.rule),
     },
     {
       kind: 'decision',
-      heading: 'What it answered under that rule',
+      heading: 'The outcome',
       outcome: decision.outcome,
       facts: [
         { label: 'families passing', value: `${decision.families_passing}` },
@@ -784,8 +779,8 @@ export function decidedView(reading: DecidedRun): DecidedBlock[] {
     },
     {
       kind: 'families',
-      heading: 'Each family, with the figures its line turned on',
-      statement: `${READ_OFF_THE_RUN} ${NOTHING_COMBINES_THEM}`,
+      heading: 'Each family',
+      statement: NOTHING_COMBINES_THEM,
       families: decision.families.map((figures) =>
         familyReading(figures, barredIn(decision, figures.family), reading.rule),
       ),
@@ -794,8 +789,7 @@ export function decidedView(reading: DecidedRun): DecidedBlock[] {
   if (decision.excluded.length) {
     blocks.push({
       kind: 'excluded',
-      heading: 'Families excluded from the counts',
-      statement: EXCLUDED_IS_NOT_A_FAIL,
+      heading: 'Excluded from the counts',
       excluded: decision.excluded.map((family) => ({
         label: family.family,
         value: family.stated,
@@ -806,7 +800,7 @@ export function decidedView(reading: DecidedRun): DecidedBlock[] {
   if (written !== null) {
     blocks.push({
       kind: 'written',
-      heading: 'What it wrote back to the case library',
+      heading: 'What it wrote back',
       statement: written.stated,
       facts: [
         { label: 'library', value: written.library },

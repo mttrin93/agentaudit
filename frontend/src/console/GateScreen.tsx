@@ -58,7 +58,6 @@
  */
 
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
 
 import {
   answerTheGateRunsInterrupt,
@@ -76,7 +75,6 @@ import {
 import type { LayerReading } from '../run/progress'
 import {
   gateScreen,
-  WHAT_THIS_SCREEN_ANSWERS,
   type CommandBlock,
   type ConsequenceBlock,
   type GateBlock,
@@ -104,7 +102,6 @@ import {
   type StartControl,
 } from './gaterun'
 import type { GateReading } from './landing'
-import { CONSOLE_PATH, THE_BENCH } from './rail'
 
 /** How often a gate run in flight is asked where it has got to. */
 const POLL_SECONDS = 2
@@ -377,12 +374,7 @@ export function GateScreen() {
   return (
     <main className="screen">
       <header>
-        <p className="eyebrow">AgentAudit — the bench’s own certification</p>
-        <h1>The gate: the rule, the last outcome, and running another</h1>
-        <p className="steps">
-          {WHAT_THIS_SCREEN_ANSWERS}{' '}
-          <Link to={CONSOLE_PATH}>{THE_BENCH}</Link> says the rest.
-        </p>
+        <h1>The gate</h1>
       </header>
 
       {refused ? (
@@ -398,7 +390,7 @@ export function GateScreen() {
 
       {held.unavailable ? (
         <section>
-          <h2>This bench did not answer for its own gate</h2>
+          <h2>This bench did not answer for its gate</h2>
           <div className="citation uncited" role="alert">
             <h3>Neither the rule nor the citation could be read</h3>
             <p>{held.unavailable}</p>
@@ -466,7 +458,7 @@ export function GateScreen() {
 
       {stage === 'watching' ? null : lastly.unavailable ? (
         <section>
-          <h2>The figures of the last gate run could not be read</h2>
+          <h2>The last gate run's figures could not be read</h2>
           <div className="citation uncited" role="alert">
             <h3>This bench did not answer for what its last gate run measured</h3>
             <p>{lastly.unavailable}</p>
@@ -479,7 +471,7 @@ export function GateScreen() {
         </section>
       ) : lastly.none ? (
         <section>
-          <h2>What the last gate run measured is not on this bench</h2>
+          <h2>No figures for the last gate run</h2>
           <div className="citation uncited">
             <h3>No gate run record here</h3>
             <p>{lastly.none}</p>
@@ -523,7 +515,6 @@ function TheRule({ block }: { block: RuleBlock }) {
   return (
     <section>
       <h2>{block.heading}</h2>
-      <p>{block.statement}</p>
       <ul className="clauses">
         {block.clauses.map((clause) => (
           <li className={clause.under ? 'under' : undefined} key={clause.line}>
@@ -541,7 +532,6 @@ function TheRule({ block }: { block: RuleBlock }) {
           </div>
         ))}
       </div>
-      <p className="aside">{block.agentsStatement}</p>
     </section>
   )
 }
@@ -876,18 +866,13 @@ function TheGateRun({ reading }: { reading: GateRunReading }) {
   return (
     <>
       <section>
-        <h2>Where this gate run has got to</h2>
+        <h2>Where it has got to</h2>
         <p>{reading.statement}</p>
         <div className="layers">
           {gateProgress(reading).map((layer) => (
             <Layer layer={layer} key={layer.layer} />
           ))}
         </div>
-        <p className="aside">
-          Two figures and no third: the two layers are held to two separate ceilings,
-          so neither can borrow what the other did not spend, and a blended number
-          would hide which half is spending the budget.
-        </p>
       </section>
 
       {decided.map((block) => (
@@ -989,7 +974,7 @@ function Decided({ block }: { block: DecidedBlock }) {
       return (
         <section>
           <h2>{block.heading}</h2>
-          <p>{block.statement}</p>
+          <p className="aside">{block.statement}</p>
           <div className="families per-family">
             {block.families.map((family) => (
               <FamilyFigure family={family} key={family.family} />
@@ -1001,7 +986,6 @@ function Decided({ block }: { block: DecidedBlock }) {
       return (
         <section>
           <h2>{block.heading}</h2>
-          <p>{block.statement}</p>
           <Facts facts={block.excluded} />
         </section>
       )

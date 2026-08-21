@@ -792,6 +792,8 @@ def test_a_second_gate_run_is_refused_while_the_first_holds_the_library(
     a screen draws a control.
     """
     library = a_library(tmp_path)
+    # The second message is held, so the assertions below are read off a gate run
+    # stopped inside its second attempt rather than one somewhere past a count.
     ledger = Ledger(hold_after=1)
 
     with (
@@ -805,8 +807,8 @@ def test_a_second_gate_run_is_refused_while_the_first_holds_the_library(
 
         # Held at the endpoint, so the first gate run is genuinely in flight and
         # genuinely holding the library while the second one asks. Waited on the
-        # hold rather than on a message count reached, so the run is stopped rather
-        # than merely somewhere past a number.
+        # hold rather than on a message count reached, so the gate run is stopped
+        # rather than merely somewhere past a number.
         ledger.wait_until_held()
         assert (library / LEASE_FILE).exists()
         assert first["gate_run_id"] in (library / LEASE_FILE).read_text(
@@ -876,6 +878,12 @@ def test_progress_is_reported_per_layer_while_the_gate_run_is_in_flight(
     nothing.
     """
     library = a_library(tmp_path)
+    # The eighth message is held: far enough in that the scored layer has a
+    # position to report, and — with the whole library to get through at two
+    # attempts a case — nowhere near the adaptive layer, which is the other half
+    # of what this reads. Which case the eighth message belongs to is the
+    # library's running order rather than this test's business, so the position is
+    # asserted by shape and the figures by floor.
     ledger = Ledger(hold_after=7)
 
     with (

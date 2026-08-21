@@ -136,12 +136,13 @@ class Ledger:
     held: threading.Event = field(default_factory=threading.Event)
     """Set the instant a message is held, and never by the test.
 
-    The difference between a moment held still and a moment caught. A run is one
-    thread and the gate blocks it inside the send, so between the arrival that
-    closes the gate and the release that opens it there is no line of bench code
-    left to execute: whatever the run state said when the message arrived, it still
-    says. A test that waits on this reads a frozen run; a test that polls until it
-    likes what it sees is racing a thread that is still moving.
+    The difference between a moment held still and a moment caught. A run and a
+    gate run alike are one background thread, and the gate blocks that thread
+    inside the send, so between the arrival that closes the gate and the release
+    that opens it there is no line of bench code left to execute: whatever the
+    state said when the message arrived, it still says. A test that waits on this
+    reads something stopped; a test that polls until it likes what it sees is
+    racing a thread that is still moving.
     """
 
     def __post_init__(self) -> None:
@@ -157,10 +158,11 @@ class Ledger:
     def wait_until_held(self, seconds: float = 60.0) -> None:
         """Block until a message is being held at the endpoint, or fail the test.
 
-        Waits for an event the run itself sets rather than for a duration, so there
-        is no number here that is a guess about how fast the machine is: `seconds`
-        is the point at which a run that is never going to arrive is declared a
-        failure, not the point at which the moment is assumed to have happened.
+        Waits for an event the sender itself sets rather than for a duration, so
+        there is no number here that is a guess about how fast the machine is:
+        `seconds` is the point at which a message that is never going to arrive is
+        declared a failure, not the point at which the moment is assumed to have
+        happened.
         """
         if not self.held.wait(seconds):
             raise AssertionError(
@@ -172,8 +174,8 @@ class Ledger:
         """Let the held message through, and hold nothing again.
 
         Both halves, because `hold_after` closes the gate on *every* message past
-        its count: a test that only opened the gate would hold the next message for
-        ever and its run would never settle.
+        its count: a test that only opened the gate would hold the next message
+        for ever, and whatever it was watching would never settle.
         """
         self.hold_after = None
         self.held.clear()

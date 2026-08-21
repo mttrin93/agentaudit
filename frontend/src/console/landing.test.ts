@@ -81,7 +81,8 @@ describe('the gate run the bench last passed', () => {
       'Decided on': '2026-08-19',
       // The count and the digest, both: eighteen cases does not say *which*
       // eighteen, and the digest is what answers "has the bench changed since?".
-      'Library version': '18 cases, sha256:90a8ebcc3d0c',
+      // The count, and no digest: it came off the row (`libraryVersion`).
+      'Library version': '18 cases',
     })
     expect(reading.heading).toBe('This bench passed its own gate run')
   })

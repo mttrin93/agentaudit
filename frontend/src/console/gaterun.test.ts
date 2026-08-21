@@ -655,11 +655,10 @@ describe('where a gate run may not start', () => {
       expect(control.statement).toContain(`the bench’s sentence about ${refusal}`)
       expect(control.statement).toMatch(/no way to start a gate run from this bench/)
       expect((control as unknown as Record<string, unknown>).label).toBeUndefined()
-      expect((control as unknown as Record<string, unknown>).asks).toBeUndefined()
     }
   })
 
-  it('offers one, with what it asks first, where the bench said it may', () => {
+  it('offers one, naming where it writes, where the bench said it may', () => {
     const control = startControl({
       available: true,
       library: '/var/lib/agentaudit/cases',
@@ -668,10 +667,11 @@ describe('where a gate run may not start', () => {
     if (!control.available) {
       throw new Error('an offer read as a refusal')
     }
-    expect(control.library).toBe('/var/lib/agentaudit/cases')
-    expect(control.asks).toHaveLength(2)
-    expect(control.asks[0]).toMatch(/three attestation statements, one at a time/)
-    expect(control.asks[1]).toMatch(/Declining it spends nothing and writes nothing/)
+    // What it would ask before sending anything is the walk itself, and where it
+    // writes is on the estimate the walk puts up. Neither is a list on the control.
+    for (const absent of ['asks', 'library']) {
+      expect((control as unknown as Record<string, unknown>)[absent]).toBeUndefined()
+    }
     // No handler anywhere in it: this value describes a control and does not hold one.
     for (const value of Object.values(control)) {
       expect(typeof value).not.toBe('function')

@@ -101,18 +101,17 @@ export function stillGoing(status: string): boolean {
 /**
  * The one control this screen adds, and what pressing it starts.
  *
- * `asks` is what happens *before* anything is sent, listed on the control itself:
- * an operator about to spend 830 calls of their own and rewrite the library every
- * one of their runs is measured with should be able to read what the next three
- * screens will ask them without pressing anything first.
+ * It used to carry `asks` and `library`: two lines listing what the next three
+ * screens would ask, and the path a gate run writes back to. The walk itself is
+ * those screens — the three statements one at a time and the estimate against its
+ * ceilings, each answered before a call is made — and the path is on the estimate
+ * the walk puts up, where an operator is deciding whether to send. What is left is
+ * the label, and the bench's own sentence about starting one.
  */
 export interface StartHere {
   available: true
   label: string
-  /** The case library this gate run would read and write back to. */
-  library: string
   statement: string
-  asks: string[]
 }
 
 /**
@@ -130,14 +129,6 @@ export interface NoStartHere {
 }
 
 export type StartControl = StartHere | NoStartHere
-
-const STARTING_ONE_ASKS = [
-  'The three attestation statements, one at a time, recorded against your name — ' +
-    'the same three a target run records, and for the same reason: two of them are ' +
-    'consequences nobody would infer.',
-  'The estimated cost, as two figures against two ceilings, before anything is ' +
-    'sent. Declining it spends nothing and writes nothing.',
-]
 
 const NO_CONTROL_HERE =
   'There is no way to start a gate run from this bench, and this is the reason ' +
@@ -163,9 +154,7 @@ export function startControl(start: GateRunStart): StartControl {
   return {
     available: true,
     label: 'Start a gate run',
-    library: start.library,
     statement: start.statement,
-    asks: [...STARTING_ONE_ASKS],
   }
 }
 

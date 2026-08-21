@@ -76,10 +76,8 @@ import type { LayerReading } from '../run/progress'
 import {
   gateScreen,
   type StartBlock,
-  type ConsequenceBlock,
   type GateBlock,
   type OutcomeBlock,
-  type RuleBlock,
 } from './gate'
 import {
   ALREADY_IN_FLIGHT,
@@ -591,7 +589,7 @@ export function GateScreen() {
   )
 }
 
-/** One block, in the order the reading gave it. Four kinds, four shapes. */
+/** One block, in the order the reading gave it. Two kinds, two shapes. */
 function Block({
   block,
   begin,
@@ -604,48 +602,11 @@ function Block({
   ask: () => void
 }) {
   switch (block.kind) {
-    case 'rule':
-      return <TheRule block={block} />
     case 'outcome':
       return <TheOutcome block={block} />
-    case 'consequence':
-      return <TheConsequence block={block} />
     case 'start':
       return <TheStart block={block} begin={begin} going={going} ask={ask} />
   }
-}
-
-/**
- * The declared rule, printed in the bench's own words, and the three agents it is
- * put to.
- *
- * A list of the rule's own clauses rather than a paragraph about them: the text is
- * `GateRule.stated()` split at its line breaks, so a threshold moved in `rule.py`
- * moves here and nothing on this screen can claim a bar the gate was not held to.
- */
-function TheRule({ block }: { block: RuleBlock }) {
-  return (
-    <section>
-      <h2>{block.heading}</h2>
-      <ul className="clauses">
-        {block.clauses.map((clause) => (
-          <li className={clause.under ? 'under' : undefined} key={clause.line}>
-            {clause.line}
-          </li>
-        ))}
-      </ul>
-
-      <h3>The three agents it is put to</h3>
-      <div className="agents">
-        {block.agents.map((agent) => (
-          <div className={`agent ${agent.accent}`} key={agent.name}>
-            <p className="agent-name">{agent.name}</p>
-            <p className="kind">{agent.built}</p>
-          </div>
-        ))}
-      </div>
-    </section>
-  )
 }
 
 /** What the last gate run answered, or the stated absence of one, in one region. */
@@ -654,27 +615,6 @@ function TheOutcome({ block }: { block: OutcomeBlock }) {
     <section>
       <h2>{block.heading}</h2>
       <Citation reading={block.reading} />
-    </section>
-  )
-}
-
-/**
- * What a gate run writes and what it spends, before anything that starts one.
- *
- * A list of consequences and not a warning box: every line of it is a fact about
- * what the run does, and an operator reading them is deciding whether to spend their
- * own budget and change the library every one of their runs is measured with.
- */
-function TheConsequence({ block }: { block: ConsequenceBlock }) {
-  return (
-    <section>
-      <h2>{block.heading}</h2>
-      <p className="consequence">{block.statement}</p>
-      <ul>
-        {block.writes.map((write) => (
-          <li key={write}>{write}</li>
-        ))}
-      </ul>
     </section>
   )
 }
@@ -706,21 +646,12 @@ function TheStart({
 
       {start === null ? null : start.available ? (
         <div className="citation">
-          <h3>{start.label}</h3>
+          {/*
+            No heading over the control: the section above it is already named, and
+            the button carries the same words the heading did — *Start a gate run*
+            twice, four lines apart, read as two things to press.
+          */}
           <p>{start.statement}</p>
-          <ul>
-            {start.asks.map((asks) => (
-              <li key={asks}>{asks}</li>
-            ))}
-          </ul>
-          <dl className="at">
-            <div>
-              <dt>writes to</dt>
-              <dd>
-                <code>{start.library}</code>
-              </dd>
-            </div>
-          </dl>
           <button
             type="button"
             className="primary"
@@ -776,6 +707,12 @@ function TheStart({
  * The front door's idiom, deliberately: dashed and drawn without the rows a citation
  * would have filled when there is nothing cited, because an empty outcome in a solid
  * box is read as a gate the bench failed. Nothing here is coloured by outcome.
+ *
+ * The outcome and its facts, and nothing beside them. The reading still carries the
+ * document's path and the sentence naming whose fact this is — `gateReading` composes
+ * them for whoever wants them — and this screen prints neither: three paragraphs of
+ * standing explanation under one outcome is the shape that made an operator scroll
+ * past the outcome to reach the errand.
  */
 function Citation({ reading }: { reading: GateReading }) {
   return (
@@ -791,17 +728,10 @@ function Citation({ reading }: { reading: GateReading }) {
               </div>
             ))}
           </dl>
-          <p>
-            The gate run wrote itself down at <code>{reading.document.path}</code>,
-            named as the path it is: this bench serves no route that hands the
-            document over, and a link to nothing would be worse than a path.
-          </p>
-          <p className="aside">{reading.document.statement}</p>
         </>
       ) : (
         <p>{reading.statement}</p>
       )}
-      <p className="aside">{reading.aboutTheBench}</p>
     </div>
   )
 }
@@ -1005,14 +935,15 @@ function TheEstimate({
  * A gate run in flight, then what it decided under the rule.
  *
  * While it goes: one block per layer, in that layer's own units, and no figure that
- * spans them. When it is decided: the rule, then the outcome, then each family's
- * figures — in that order because the sequence `decidedView` returns is in that
- * order, and an outcome read with no bar beside it is a verdict somebody trusted.
+ * spans them. When it is decided: the outcome, then each family's figures — in that
+ * order because the sequence `decidedView` returns is in that order, less the rule
+ * block this screen no longer prints.
  */
 function TheGateRun({ reading }: { reading: GateRunReading }) {
-  // Without the rule block: the declared rule is the first section on this page,
-  // read from the bench's own reader, and it is the same `DECLARED_RULE` either way.
-  // What ADR-0003 asks for is the rule above the outcome, and it is.
+  // Without the rule block: this screen does not restate the declared rule any
+  // more, and a gate run's own copy of it would put seven clauses back above the
+  // figures the operator started the run to read. The rule a run was decided under
+  // is on the report the run signs, printed whole beside those figures.
   const decided = decidedView(reading).filter((block) => block.kind !== 'rule')
   return (
     <>
@@ -1040,10 +971,10 @@ function TheGateRun({ reading }: { reading: GateRunReading }) {
  * reading of anything — it is that run's own decision, read once, so that closing
  * the tab does not lose what the gate measured.
  *
- * **Without the declared-rule block.** The rule is already on this screen above,
- * from the bench's own reader, and it is the same `DECLARED_RULE` either way. What
- * ADR-0003 asks for is the rule above the outcome on the page, and it is; saying it
- * twice would not make the ordering safer.
+ * **Without the declared-rule block.** This screen does not restate the declared
+ * rule any more — a gate run's own copy would put seven clauses back above the
+ * figures somebody opened this page to read. The rule a run was decided under is
+ * printed whole on the report that run signs, beside those figures.
  */
 function TheLastDecided({
   decided,

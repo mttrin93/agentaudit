@@ -2,24 +2,25 @@
  * What the operator's gate screen must say, in what order, and what it may never
  * offer.
  *
- * Six claims, each of them a way this screen could quietly go wrong.
+ * Five claims, each of them a way this screen could quietly go wrong.
  *
- * **That the rule is above the outcome and the write-back is above the control.**
- * Both orderings are acceptance criteria and both are properties of the value this
- * module returns, so they are asserted over the sequence rather than hoped for in
- * markup. A screen that led with *passed* would be handing an operator a verdict to
- * trust; a screen that led with the control would be handing them a spend and a
- * write-back they learn about afterwards.
+ * **That the outcome is above the control.** The order is a property of the value
+ * this module returns, so it is asserted over the sequence rather than hoped for in
+ * markup.
  *
- * **That the rule is the bench's own text.** The clauses are `rule.stated` split at
- * its own line breaks and nothing else, asserted by reconstructing the string from
- * them: a rule this screen paraphrased would be a bar the gate was never held to,
- * printed as though it were.
+ * **That the standing prose about what a gate run writes is gone from this screen.**
+ * It was six paragraphs of consequence above the one control, and what actually
+ * guards the spend is the walk: the three attestation statements one at a time and
+ * the estimated cost, each answered before anything is sent, asserted in
+ * `questionnaire.test.ts` and enforced by the bench that refuses an incomplete body.
+ * This file pins that no block here carries that list again.
  *
- * **That every number in a sentence is read off the wire.** The retirement floor is
- * named in prose, and the test moves it on the fixture and expects the sentence to
- * move with it — a floor hard-coded in the console is a floor that can disagree with
- * `rule.py` in the flattering direction.
+ * **That the declared rule is not restated here.** It used to lead this screen,
+ * whole, with the three reference agents under it; it came off because an operator's
+ * screen for one errand had the specification of the instrument above the errand. The
+ * clause-splitting that printed it is still asserted where the rule is still printed
+ * — `gaterun.test.ts` for a finished run, and the report's own tests — so what this
+ * file pins is the absence: no block of this screen carries a clause of it.
  *
  * **That there is exactly one control here, and that it is described rather than
  * held.** This file used to assert that nothing on this screen could start a gate
@@ -44,7 +45,7 @@ import { describe, expect, it } from 'vitest'
 
 import type { BenchGate, DeclaredRule, GateCitation } from '../api/bench'
 import component from './GateScreen.tsx?raw'
-import { gateScreen, type GateBlock, type RuleBlock } from './gate'
+import { gateScreen, REFERENCE_AGENTS, type GateBlock } from './gate'
 import { startControl, type StartControl } from './gaterun'
 
 /**
@@ -106,8 +107,8 @@ const OFFERED: StartControl = startControl({
   available: true,
   library: '/var/lib/agentaudit/cases',
   statement:
-    'this bench can run a gate: it ships the three reference agents, it holds a ' +
-    'case library it may write to, and no gate run is holding that library now.',
+    'a gate run puts the whole library to three agents of known construction, then ' +
+    'writes each family’s discrimination score onto its record',
 })
 
 /** A bench that cannot, because this build ships no test equipment. */
@@ -160,107 +161,49 @@ function block<K extends GateBlock['kind']>(
 }
 
 describe('the order the blocks are read in', () => {
-  it('puts the declared rule above the outcome and the write-back above the control', () => {
+  it('puts the outcome above the control, and restates no rule at all', () => {
     for (const bench of [CERTIFIED, FRESH]) {
-      // The rule first, because a pass with no bar beside it is a verdict somebody
-      // trusted. The consequence before the control, because a gate run writes to
-      // the case library and an operator who learns that afterwards learned it too
-      // late. Both of these are acceptance criteria, and both are this sequence.
-      expect(gateScreen(bench).map((one) => one.kind)).toEqual([
-        'rule',
-        'outcome',
-        'consequence',
-        'start',
-      ])
+      // Two blocks: what the last gate run answered, then the way to run one. The
+      // rule and the write-back list that used to sit around them came off this
+      // screen — what guards the spend is the walk, not standing prose.
+      expect(gateScreen(bench).map((one) => one.kind)).toEqual(['outcome', 'start'])
     }
   })
 })
 
-describe('the rule this bench is held to', () => {
-  it('prints the bench’s own text, clause for clause, and paraphrases none of it', () => {
-    const rule: RuleBlock = block(gateScreen(CERTIFIED), 'rule')
+describe('the rule this bench is held to, and no longer restated here', () => {
+  it('carries no clause of the declared rule and names none of the three agents', () => {
+    for (const bench of [CERTIFIED, FRESH]) {
+      const said = everyString(gateScreen(bench, OFFERED)).join(' ')
 
-    // Reconstructed from the clauses: nothing added, nothing dropped, nothing
-    // reworded. A screen that summarised the rule would be printing a bar the gate
-    // was never held to.
-    const rebuilt = rule.clauses
-      .map((clause) => (clause.under ? `  ${clause.line}` : clause.line))
-      .join('\n')
-    expect(rebuilt).toBe(STATED)
+      // The rule arrives on the wire whatever this screen does with it, and every
+      // clause of it used to be the first thing on the page. Not one of them is
+      // printed here now — asserted over the served text itself, so a clause put
+      // back by hand fails here even if it is reworded around.
+      for (const clause of bench.rule.stated.split('\n')) {
+        if (clause.trim() !== '') {
+          expect(said).not.toContain(clause.trim())
+        }
+      }
 
-    // And every threshold the gate is decided on is therefore on the screen, with
-    // its number: the floor, the interval, the κ bar, the two fixed counts and the
-    // fit-family floor. A rule nobody can read is a rule that can be moved.
-    const shown = rule.clauses.map((clause) => clause.line).join(' ')
-    expect(shown).toContain('D ≥ 0.40')
-    expect(shown).toContain('90% intervals do not overlap')
-    expect(shown).toContain('κ = 0.60')
-    expect(shown).toContain('4 of 6 families passing')
-    expect(shown).toContain('monotonicity on 5 of 6')
-    expect(shown).toContain('no fewer than 5 fit families')
-    // Nothing adaptive decides anything, and the rule the gate prints says so.
-    expect(shown).toContain('no adaptive threshold appears above')
-  })
-
-  it('names the three agents in the order construction gives them, with no figure', () => {
-    const rule = block(gateScreen(CERTIFIED), 'rule')
-
-    expect(rule.agents.map((agent) => agent.name)).toEqual([
-      'hardened',
-      'weak',
-      'trivial',
-    ])
-    // One hue in three ordered steps, so the accent is one class per agent and
-    // never shared: colour carries identity and order here and never a judgement.
-    expect(new Set(rule.agents.map((agent) => agent.accent)).size).toBe(3)
-
-    // And not one figure between them. What each agent scored on each family is in
-    // the gate run's document; a rate printed beside a name here would be a
-    // per-family gate figure, which the spec dropped rather than parse.
-    for (const said of everyString(rule.agents)) {
-      expect(said).not.toMatch(/\d/)
+      // Nor the three constructions the rule is put to. They are still exported for
+      // the settings screen, which names them as what the discrimination score is
+      // measured against; this screen stopped naming them with the rule they belong
+      // to.
+      for (const agent of REFERENCE_AGENTS) {
+        expect(said).not.toContain(agent.name)
+      }
     }
-  })
-})
-
-describe('what running one does to the case library', () => {
-  it('states the write-back before the control, and names the floor off the wire', () => {
-    const blocks = gateScreen(CERTIFIED)
-    const consequence = block(blocks, 'consequence')
-    const said = everyString(consequence).join(' ')
-
-    // It appends to every case record it reads, and it retires. Both are writes,
-    // and the library it writes to is the library every user run is measured with.
-    expect(said).toMatch(/appends a discrimination reading to every case record/)
-    expect(said).toMatch(/marks retired/)
-    expect(said).toMatch(/never deleted/)
-    // Two readings of one model and never the last two of a series that spans two:
-    // the copy states the window the rule actually reads (ADR-0022).
-    expect(said).toMatch(/two consecutive gate runs on the same model/)
-    expect(said).toMatch(/a change of instrument is not the passage of time/)
-    expect(said).toMatch(/not a read/)
-    // And it spends, per layer and never as one figure: the adaptive layer has a
-    // ceiling and a counter of its own, and nothing here adds the two.
-    expect(said).toMatch(/adaptive layer under a ceiling and a counter of its own/)
-
-    // The floor is read off the rule rather than written here, so it cannot
-    // disagree with `rule.py` in the flattering direction.
-    expect(said).toContain('declared floor of 0.25')
-    const looser = gateScreen({ ...CERTIFIED, rule: { ...RULE, retirement_floor: 0.4 } })
-    expect(everyString(block(looser, 'consequence')).join(' ')).toContain(
-      'declared floor of 0.40',
-    )
   })
 })
 
 describe('a bench that cites no gate run', () => {
-  it('still renders the rule and the way to start one, and says nothing was decided', () => {
+  it('still offers the way to start one, and says nothing was decided', () => {
     const blocks = gateScreen(FRESH)
 
-    // The rule is a fact about the bench and starting one is what this screen is
-    // for, so both are here on a bench that has never been through a gate — which is
-    // the state a fresh deployment is in when an operator first opens this screen.
-    expect(block(blocks, 'rule').clauses.length).toBeGreaterThan(6)
+    // Starting one is what this screen is for, so the way to do it is here on a
+    // bench that has never been through a gate — which is the state a fresh
+    // deployment is in when an operator first opens this screen.
     expect(block(blocks, 'start').heading).toMatch(/start/i)
 
     const outcome = block(blocks, 'outcome')
@@ -311,11 +254,10 @@ describe('the one control this screen adds, and no second one', () => {
     if (control?.available !== true) {
       throw new Error('the control was withheld where the bench offered it')
     }
-    // It names where the gate run writes, before it is pressed. A gate run is not a
-    // read, and the library it rewrites is the one every run is measured with.
-    expect(control.library).toBe('/var/lib/agentaudit/cases')
-    expect(control.asks.join(' ')).toMatch(/three attestation statements, one at a time/)
-    expect(control.asks.join(' ')).toMatch(/two figures against two ceilings/)
+    // The bench's own label and the bench's own sentence, and no path: where a gate
+    // run writes is named on the estimate the walk puts up, where the operator is
+    // deciding whether to send it.
+    expect(control.label).toMatch(/gate run/i)
 
     const refused = block(gateScreen(CERTIFIED, WITHHELD), 'start')
     const absent = refused.start
@@ -418,17 +360,6 @@ describe('the document is named and never parsed', () => {
     expect(outcome.reading.record.path).toBe(CITED.record)
   })
 
-  it('says the citation is replaced by whatever the next gate run answers', () => {
-    const writes = block(gateScreen(CERTIFIED), 'consequence').writes.join(' ')
-
-    // An operator meets the write-back before the control that starts one, and after
-    // ADR-0023 the citation is part of the write-back: a gate run replaces what this
-    // bench cites whatever it answers, so a failing one takes a passing citation off
-    // the bench. Learning that after pressing the control is learning it too late.
-    expect(writes).toMatch(/citation this bench carries/)
-    expect(writes).toMatch(/replaces whatever was cited before it/)
-    expect(writes).toMatch(/not the best answer it ever got/)
-  })
 })
 
 /** Every field name anywhere in the view, which is where an action would be named. */

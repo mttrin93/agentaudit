@@ -2096,12 +2096,18 @@ class MayNotStart(BaseModel):
 
 
 THE_GATE_RUN_IS_AVAILABLE = (
-    "this bench can run a gate: it ships the three reference agents, it holds a case "
-    "library it may write to, and no gate run is holding that library now. Starting "
-    "one asks the three attestation statements one at a time and then presents the "
-    "estimate per layer, and nothing is sent and nothing is written until the "
-    "estimate is answered"
+    "a gate run puts the whole library to three agents of known construction, then "
+    "writes each family’s discrimination score onto its record"
 )
+"""The sentence a bench that may start one says about itself.
+
+One clause where there were five, and it describes the run rather than the readiness.
+The three agents, the library and the lease were named here because they are what
+`why_not` checked, and a reader of this sentence is not auditing that check — the
+refusal names it when the answer is no. What an operator reading a control wants from
+a sentence beside it is what pressing it does, and the consent it asks for first is
+the walk that follows, not a promise made here.
+"""
 
 
 def may_start(gates: BenchGateRuns) -> MayStart | MayNotStart:

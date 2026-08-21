@@ -289,15 +289,14 @@ export function gateReading(gate: GateCitation): GateReading {
 }
 
 /**
- * The library version a gate run was earned at: the count and the digest, both.
+ * The library version a gate run was earned at, as the count of cases in it.
  *
- * A citation saying only *eighteen cases* cannot tell a reader whether the
- * eighteen are the same eighteen, and the digest is what makes "has the bench
- * changed since?" a question with an answer (`library.LibraryVersion`). Composed
- * here because the citation's library block carries the two fields and no sentence
- * of its own.
+ * The digest came off the row. It is what makes "has the bench changed since?" a
+ * question with an answer (`library.LibraryVersion`), and it is still on the wire in
+ * `citation.library.digest` and still printed on the settings screen, where a reader
+ * comparing two libraries is already looking; beside an outcome it was twelve
+ * characters of hex that no reader of this row was going to compare.
  */
 function libraryVersion(library: { cases: number; digest: string }): string {
-  const cases = `${library.cases} ${library.cases === 1 ? 'case' : 'cases'}`
-  return `${cases}, sha256:${library.digest}`
+  return `${library.cases} ${library.cases === 1 ? 'case' : 'cases'}`
 }

@@ -1016,11 +1016,17 @@ def test_the_per_family_figures_come_from_the_run_and_not_from_a_document(
         "digest": record.gate.library.digest,
     }
 
-    # And there was no document to read. This bench cites no gate run, the library
-    # it wrote to holds no Markdown, and nothing was written to `docs/gate-runs`: the
-    # figures above cannot have been parsed out of prose, because there is no prose.
+    # And there was no document to read. The library this run wrote to holds no
+    # Markdown at all, so the figures above cannot have been parsed out of prose:
+    # there is no prose. What the run did leave beside its readings is its own record
+    # as fields, and the citation the bench now carries names it (ADR-0023) — which
+    # is the same claim from the other end, because a citation pointing at a `.json`
+    # is a citation nothing has to read a sentence to follow.
     assert list(library.glob("*.md")) == []
-    assert gating.runs.config.report.gate is None
+    cited = gating.runs.config.report.gate
+    assert cited is not None
+    assert cited.record.endswith(".json")
+    assert (library / cited.record).exists()
 
     # The module could not read one either. Parsing the bench's own output would mean
     # reaching the renderer or the script that writes it, and it imports neither —

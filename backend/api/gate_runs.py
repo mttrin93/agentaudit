@@ -54,6 +54,16 @@ the three reference agents' rates and each family's `D` — are on the `GateResu
 this module holds in memory, put there by `read_gate` over the attempts that were
 just made. A route that parsed the dated Markdown a command-line run leaves would
 break on a rewording, and a gate run started here has the figures already.
+
+**And it now writes two more things, on the way out and under the same lease.** Its
+own record as fields, into the library, because a gate run started here has no dated
+document for one to sit beside — which is what ADR-0021 recorded as *the two entry
+points leave different traces*. And the **gate citation** off that record, so the
+bench cites the gate run it just made rather than whatever a deployment declared
+([ADR-0023](../../docs/adr/0023-a-gate-run-updates-the-citation-it-earned.md)). The
+citation reaches `ReportConfig.gate` through `Cites` and through nothing else: a
+`GateCitation` in, nothing out, and no decision or record crossing in either
+direction.
 """
 
 from __future__ import annotations
@@ -67,15 +77,19 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
+from typing import Protocol
 
 from backend.api.runs import PRESENT_WAIT_SECONDS, BenchConfig, PendingApproval
 from backend.bench.admission import admitted_library
 from backend.bench.calibration import CalibrationResult, PlantNonce, run_calibration
+from backend.bench.cited import NO_DATED_DOCUMENT, cite
 from backend.bench.contract import TargetConfig, TargetUnreachable
 from backend.bench.gate import GateResult, NotAGateRun, read_gate
+from backend.bench.gate_record import recorded_gate_run, write_the_record
 from backend.bench.goldset import load_gold_sets, measure_reliability
 from backend.bench.lease import LibraryBusy, held_by, holding_the_library
 from backend.bench.library import Case, LibraryVersion
+from backend.bench.payload import GateCitation
 from backend.bench.registration import Attestation
 from backend.bench.retirement import (
     RetirementDecision,
@@ -393,6 +407,26 @@ class GateRunStatus(StrEnum):
         return self in {GateRunStatus.AWAITING_APPROVAL, GateRunStatus.RUNNING}
 
 
+class Cites(Protocol):
+    """The one edge from a gate run back onto the bench a run is measured with.
+
+    A gate run decides whether this instrument discriminates, and after ADR-0023 the
+    bench starts citing the one it just made. That is a write from the gate-run side
+    onto `ReportConfig.gate`, and it is narrowed to this: **a `GateCitation` in,
+    nothing out.** No `GateResult` crosses it, no decision, no per-family figure and
+    no record of either — so the widening ADR-0021 forbids is not available here, and
+    `BenchRuns` and `GateRunRecord` still never meet in one signature.
+
+    A callable rather than the bench itself for the same reason `Approve` is a
+    callable: what this module needs is the one operation, and holding the object
+    would give it every other one as well. `None` is a registry nobody wired a bench
+    to — the durable citation is still written into the library either way, and the
+    next process reads it (`bench/cited.py`, `app.deployed_bench`).
+    """
+
+    def __call__(self, citation: GateCitation) -> None: ...
+
+
 @dataclass(frozen=True)
 class WrittenBack:
     """What one gate run wrote to the case library, and where it wrote it.
@@ -414,6 +448,25 @@ class WrittenBack:
     retired: tuple[str, ...]
     """Cases the rule retired on this run, marked and kept and never deleted."""
 
+    record: str
+    """The file name this gate run's own record was written under, in that library.
+
+    The console's counterpart to the dated `.json` a command-line gate run leaves
+    beside its document: the figures as fields, in the library, so the citation
+    written next to it has somewhere to point (ADR-0023). Never overwritten by a
+    later gate run — the name carries this run's stamp — because the citation moving
+    is a choice of which record a report names and not a loss of the ones before it.
+    """
+
+    cited: str
+    """What citing this gate run did to the one this library cited before it.
+
+    On the record rather than only in a log, because the whole of what makes *the
+    last gate run wins* safe is that a replacement is announced: a failing gate run
+    displacing a passing citation is the case this field exists for
+    (`cited.Replaced.stated`).
+    """
+
     def stated(self) -> str:
         """The write-back as the record states it."""
         retired = (
@@ -425,7 +478,8 @@ class WrittenBack:
         return (
             f"{self.readings} reading(s) appended to the case records in "
             f"{self.library}, and {retired}. Marked and never deleted, because a "
-            "case the field caught up with is evidence that the field moved"
+            f"case the field caught up with is evidence that the field moved. This "
+            f"run's own figures are in {self.record} beside them, and {self.cited}"
         )
 
 
@@ -496,9 +550,15 @@ class BenchGateRuns:
     asks a reader to stop at.
     """
 
-    def __init__(self, config: BenchConfig, bench: GateRunBench) -> None:
+    def __init__(
+        self,
+        config: BenchConfig,
+        bench: GateRunBench,
+        cites: Cites | None = None,
+    ) -> None:
         self._config = config
         self._bench = bench
+        self._cites = cites
         self._runs: dict[str, GateRunRecord] = {}
         self._pending: dict[str, PendingApproval] = {}
         self._lock = threading.Lock()
@@ -616,7 +676,7 @@ class BenchGateRuns:
                 self._pending[gate_run_id] = pending
             threading.Thread(
                 target=_execute,
-                args=(record, self._config, served, pending, stack),
+                args=(record, self._config, served, pending, stack, self._cites),
                 name=f"agentaudit-gate-run-{gate_run_id}",
                 daemon=True,
             ).start()
@@ -709,6 +769,7 @@ def _execute(
     served: ServedAgents,
     pending: PendingApproval,
     stack: ExitStack,
+    cites: Cites | None,
 ) -> None:
     """One gate run, on its own thread: the same entry point the command line takes.
 
@@ -721,7 +782,7 @@ def _execute(
     whatever this run does, the library goes back and the agents come down.
     """
     try:
-        _decide(record, config, served, pending)
+        _decide(record, config, served, pending, cites)
     except Exception as failure:
         record.settle(
             GateRunStatus.FAILED,
@@ -736,6 +797,7 @@ def _decide(
     config: BenchConfig,
     served: ServedAgents,
     pending: PendingApproval,
+    cites: Cites | None,
 ) -> None:
     """Run the library against the three agents, decide, and write the series back."""
     # Named against the seam's own type rather than passed straight through, so that
@@ -830,7 +892,7 @@ def _decide(
         return
 
     record.gate = gate
-    record.written = _write_back(record, result, gate, served, config)
+    record.written = _write_back(record, result, gate, served, config, cites)
     record.settle(
         GateRunStatus.DECIDED,
         (
@@ -846,6 +908,7 @@ def _write_back(
     gate: GateResult,
     served: ServedAgents,
     config: BenchConfig,
+    cites: Cites | None,
 ) -> WrittenBack:
     """Append this run's `D` to every case record it read, and retire what retires.
 
@@ -858,6 +921,24 @@ def _write_back(
     The models are read off the record that declares them (`DeclaredModels`) rather
     than named here: a reading stored under a model identifier this module invented
     would be a decay series about a pair of models nobody declared (ADR-0012).
+
+    **Three writes, one critical section.** The readings, then this run's own record
+    as fields, then the citation that names it — all inside the lease this gate run
+    has held since before it read the library, so no second gate run can slip between
+    the readings and the citation that claims them (ADR-0021 condition 5, ADR-0023).
+    The order is the argument: a citation is a claim about a library at a version, and
+    the version it claims is the one the readings were just stored against.
+
+    **This is where a console gate run's figures become durable.** A command-line run
+    writes its record beside its dated document; this one has no document to sit
+    beside, so the record goes into the library and the citation points at it there.
+    That closes ADR-0021's own complaint that the two entry points leave different
+    traces — the trace is now the same record in a different directory.
+
+    **The in-process citation is the last thing and it is optional.** `cites` is the
+    one edge back onto the bench a run is measured with, and a registry wired to none
+    still leaves the library citing this gate run for the next process to read: the
+    difference between the two entry points is a restart, not a citation.
     """
     runs = {run.target.name: run for run in result.target_runs}
     history = readings_of(
@@ -880,9 +961,22 @@ def _write_back(
     decisions: Sequence[RetirementDecision] = store(
         record.library, history, config.rule
     )
+    stamped = datetime.now(tz=UTC)
+    recorded = recorded_gate_run(
+        gate,
+        decided_at=stamped.isoformat(),
+        document=NO_DATED_DOCUMENT,
+        record=f"gate-{stamped:%Y-%m-%dT%H-%M-%SZ}.json",
+    )
+    write_the_record(recorded, record.library)
+    replaced = cite(recorded, record.library)
+    if cites is not None:
+        cites(replaced.now)
     return WrittenBack(
         library=record.library,
         readings=len(history.readings),
         unread=history.unread,
         retired=tuple(decision.case_id for decision in decisions if decision.retires),
+        record=recorded.record,
+        cited=replaced.stated(),
     )

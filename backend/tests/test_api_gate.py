@@ -88,6 +88,7 @@ CITED = GateCitation(
     decided_on=date(2026, 8, 19),
     library=LibraryVersion(cases=18, digest="90a8ebcc3d0c"),
     document="docs/gate-runs/gate-2026-08-19T09-38-37Z.md",
+    record="docs/gate-runs/gate-2026-08-19T09-38-37Z.json",
 )
 """The gate run of 2026-08-19 — the one this repository's own bench last passed."""
 
@@ -112,6 +113,7 @@ def test_the_route_cites_the_gate_run_the_bench_last_passed() -> None:
         "decided_on": "2026-08-19",
         "library": {"cases": 18, "digest": "90a8ebcc3d0c"},
         "document": "docs/gate-runs/gate-2026-08-19T09-38-37Z.md",
+        "record": "docs/gate-runs/gate-2026-08-19T09-38-37Z.json",
         "stated": CITED.stated(),
     }
 
@@ -220,6 +222,7 @@ def test_the_gate_document_is_named_and_never_opened() -> None:
             decided_on=date(2099, 1, 1),
             library=LibraryVersion(cases=1, digest="0000deadbeef"),
             document=absent,
+            record=absent.replace(".md", ".json"),
         )
     ).get(BENCH_GATE_ROUTE)
     assert named.status_code == 200

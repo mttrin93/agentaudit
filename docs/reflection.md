@@ -236,8 +236,8 @@ and the 4dr reserve is tied to exactly these readings (PLAN §5). Both readings 
 What the containment does not touch is the **reader**. `A_break` is published in the
 report's adaptive section and in validation.md with a row of the table beside it, and the
 row is a sentence about the world. Two runs of one configuration printed two different
-sentences about the world, as points, with no interval and nothing stating that the
-statistic's step size is a quarter of its own range in scope.
+sentences about the world, as points, with no interval and nothing beside them saying that
+one family flipping on one episode moves the statistic a whole row.
 
 One caveat belongs on the comparison rather than on the defect: the two runs carry
 different library versions — `18 cases, sha256:a10ab0c566aa` and `18 cases,
@@ -297,8 +297,8 @@ this document chooses none of them.
 This is a property of the statistic's definition and not a fault in its implementation.
 The formula's two terms are the trivial agent and the hardened agent. `scope` is the set of
 families that opened an episode against **both of those two**
-(`backend/bench/adaptive/discrimination.py`). The weak agent is in the numerator, the
-denominator and the scope not at all.
+(`backend/bench/adaptive/discrimination.py`). The weak agent appears nowhere in it — not
+in the numerator, not in the denominator, not in the scope.
 
 So **a break on the weak agent is arithmetically identical to no break at all**, and the
 row selected is *the attacker is weak, or `T` is too small*. The first certified gate run
@@ -464,7 +464,7 @@ floor.
 
 ---
 
-## 6. A test whose passing depended on a moment nobody had pinned (#98)
+## 6. A test whose passing depended on something nobody had pinned (#98, #108)
 
 **Closed in the instance, open in the class.**
 
@@ -550,6 +550,20 @@ held. That is the observation that decides between (a) and (c), and it is why th
 changed how the test waits and not what it claims. Had a figure moved when the moment was
 held still, (c) would have been the answer and the defect would have been in the progress
 route rather than in the test.
+
+**And #108's two explanations are worth separating here rather than in its own ticket**,
+because the first one is this section's own diagnosis reached for a second time: (d) the
+estimate test is load-dependent like #98, since it too failed under the full suite and
+passed alone; (e) the assertion is value-dependent, and the value it depends on is entropy
+the test never chose.
+
+Two observations separate them and both were made. The request in a tight loop in one
+process, with nothing else running, failed one iteration in six — a race does not appear
+when there is nothing to race against, and the body that failed carries the digits inside
+its identifier where they can be read. And the measured rate is predictable from string
+statistics alone: 0.503% for a `uuid4` containing `579` against 0.505% measured over whole
+bodies, so the identifier accounts for the failures and nothing is left for scheduling to
+explain. A race has no such prediction available to it.
 
 ---
 

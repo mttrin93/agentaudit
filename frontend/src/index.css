@@ -65,12 +65,12 @@
   --radius-pill: 999px;
   color-scheme: light dark;
   /*
-   * A step up from the browser default, because this is an instrument read at a
-   * desk rather than a page skimmed on a phone: every size in this stylesheet is in
-   * `rem`, so the whole scale moves with this one number and every proportion
-   * already chosen survives.
+   * The one number the whole type scale hangs off: every size in this stylesheet is
+   * in `rem`, so this moves all of them together and every proportion already chosen
+   * survives. Set explicitly rather than left to the browser's default, so that the
+   * scale is a decision in this file and turning it is one edit.
    */
-  font-size: 17px;
+  font-size: 16px;
   font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
     "Helvetica Neue", sans-serif;
   line-height: 1.55;
@@ -129,7 +129,7 @@ body {
    * block of figures needs air between it and both. Kept equal to the top bar's
    * own padding below, so the screen's content and the line above it start at the
    * same place. */
-  padding: 3rem 5rem 6rem;
+  padding: 3rem 6.5rem 6rem;
 }
 
 .eyebrow {
@@ -1152,8 +1152,8 @@ code {
     border-bottom: 1px solid var(--line);
   }
 
-  /* The sides give their width back where there is none to spare: 5rem each side
-   * of a narrow window is half of it spent on margin. */
+  /* The sides give their width back where there is none to spare: 6.5rem each
+   * side of a narrow window is more of it than is left over. */
   .screen {
     padding-inline: 1.2rem;
   }

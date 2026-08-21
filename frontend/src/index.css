@@ -196,9 +196,16 @@ h4 {
   font-size: 0.9rem;
 }
 
+/*
+ * Sections are separated by space rather than by a rule.
+ *
+ * The gap does the work a line was doing, and there is nothing left on a screen
+ * whose only job is to divide it. What still draws an edge is a card — a family, a
+ * citation, a figure — and there an edge says *this is one object* rather than
+ * *these two things are different*.
+ */
 section {
-  border-top: 1px solid var(--line);
-  padding-top: 1.5rem;
+  padding-top: 2.6rem;
 }
 
 label {
@@ -428,12 +435,14 @@ a {
  * that makes the number checkable rather than believable.
  */
 .figures {
+  display: grid;
+  gap: 0.6rem;
   margin: 1.5rem 0 1rem;
 }
 
 .figure {
-  padding: 1rem 0;
-  border-bottom: 1px solid var(--line);
+  padding: 1rem 1.1rem;
+  border-radius: var(--radius);
 }
 
 .figure dt {
@@ -477,6 +486,9 @@ a {
  * block cannot arrive as a tinted region with a line round it. */
 .does .card,
 .family,
+.run,
+.artefact,
+.figure,
 .citation,
 .layer,
 .figure,
@@ -531,8 +543,7 @@ select {
 }
 
 .check {
-  padding: 0.8rem 0;
-  border-bottom: 1px solid var(--line);
+  padding: 0.7rem 0;
   font-size: 0.95rem;
 }
 
@@ -828,14 +839,16 @@ code {
  * whose whole point is that every figure belongs to the thing that measured it.
  */
 .runs {
+  display: grid;
+  gap: 0.8rem;
   list-style: none;
   margin: 1.2rem 0 0;
   padding: 0;
 }
 
 .run {
-  padding: 1.2rem 0;
-  border-top: 1px solid var(--line);
+  padding: 1.2rem 1.3rem;
+  border-radius: var(--radius);
 }
 
 .run h3 {
@@ -994,14 +1007,16 @@ code {
  * subject is that every figure belongs to the thing that measured it.
  */
 .artefacts {
+  display: grid;
+  gap: 0.8rem;
   list-style: none;
   margin: 1.2rem 0 0;
   padding: 0;
 }
 
 .artefact {
-  padding: 1.4rem 0 0.4rem;
-  border-top: 1px solid var(--line);
+  padding: 1.4rem 1.3rem 1rem;
+  border-radius: var(--radius);
 }
 
 .artefact h3 {
@@ -1073,24 +1088,29 @@ code {
 }
 
 /*
- * The wordmark, in two weights of one colour.
+ * The wordmark, set as the instrument it names.
  *
- * `Agent` carries the ink and `Audit` the quiet grey, which is how the name reads
- * aloud — the noun and then what is done to it — and it needs no second hue to do
- * it. Deliberately not an accent: every colour in this stylesheet that is not ink or
- * grey means a layer or a reference agent, and a brand mark borrowing one would be
- * the first thing on the screen carrying a meaning it does not have.
+ * Monospace, small, uppercase and widely tracked — the letterform this application
+ * already reserves for the things a machine issued: a case id, a digest, a run id, a
+ * family name. A bench whose whole claim is that every figure on it is checkable
+ * should be signed in the face its figures are set in, not in the sans the prose
+ * takes.
  *
- * A rule under it rather than margin alone, so the mark is a header of the rail and
- * not its first list item.
+ * `AGENT` in ink and `AUDIT` in the quiet grey — two weights of one colour and never
+ * two hues. Every colour in this stylesheet that is not ink or grey means a layer or
+ * a reference agent, and a wordmark borrowing one would put a meaning it does not
+ * have on the first thing anybody reads.
+ *
+ * Space under it and no rule: the mark is the rail's header because of where it sits
+ * and what it is set in.
  */
 .rail .mark {
-  margin: 0.1rem 0 1.3rem;
-  padding-bottom: 1.1rem;
-  border-bottom: 1px solid var(--line);
-  font-size: 1.2rem;
-  font-weight: 700;
-  letter-spacing: -0.015em;
+  margin: 0.2rem 0 2rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.82rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.19em;
 }
 
 .rail .mark span {
@@ -1210,15 +1230,10 @@ code {
     margin-bottom: 0.6rem;
   }
 
-  .rail li {
-    border-top: 0;
-  }
-
   .rail li.current {
     border-left: 0;
     padding-left: 0;
     margin-left: 0;
-    border-bottom: 2px solid var(--ink);
   }
 
   .rail-heading {

@@ -98,11 +98,24 @@ command-line gate run cannot update a process it is not in, so its citation take
 effect at the next boot, which is the same shape as ADR-0021's *the library a running
 process holds is the one it booted with*.
 
+Both halves of that difference are asserted rather than described. The console's half
+is `test_a_console_gate_run_updates_the_gate_this_bench_cites`, over the route, the
+`ReportConfig` and the library at once. The command line's half is
+`test_a_citation_written_from_a_terminal_reaches_this_process_at_its_next_boot`: a
+citation written into a mounted library leaves a running bench citing nothing and the
+next boot citing it. The gate screen states the same difference in the operator's
+words, above the control that starts one.
+
 **Six.** A console gate run now writes its record too, into the library, under a dated
-name. It has no document to sit beside, so the citation's `document` field states the
-absence of one rather than naming a file a reader would go looking for. This closes
-ADR-0021's own complaint that the two entry points leave different traces: the trace
-is now the same record in a different directory.
+name. This closes ADR-0021's own complaint that the two entry points leave different
+traces: the trace is now the same record in a different directory. It has no document
+to sit beside, so `document` is **`None`** on the record and `null` on the wire — a
+typed absence rather than a sentence in a field a reader would follow as a path. The
+words for the absence live where they are read (`GateCitation.stated()`, and the two
+console screens' own two shapes), which is the same division the report screen makes
+for a family with no rate: a field that is sometimes a file name and sometimes a
+paragraph is one that the first consumer to guess wrong prints inside a `<code>`
+element.
 
 ### What a gate run that did not pass does to the citation
 
@@ -202,6 +215,15 @@ run, and then stops. A hand-declared fallback was considered and rejected — it
 precisely the *wired in by hand* that decision 2 exists to remove, and a constant
 naming a library digest is a constant that goes stale silently.
 
+**A console gate run's records accumulate in the library and nothing prunes them.**
+One dated `.json` per gate run, beside the case records, for ever. That is the
+append-only posture on purpose — the citation moving is a change of pointer and never a
+loss of the runs before it, which is ADR-0006's shape — but it is a directory that
+grows without a bound and without a rule for when a record stops being worth keeping.
+The command-line path has the same property in `docs/gate-runs/`, where a person
+reviews the diff; on a mounted volume nobody does. Pruning is a decision with a
+retention question in it and is not taken here.
+
 **One name is now overloaded in a way this does not fix.** `GateRunRecord` (the
 console's in-memory record) and `RecordedGateRun` (the written record a citation names)
 are a near-homonym, and this decision makes the second one more prominent. Renaming
@@ -264,6 +286,10 @@ either is deliberately out of scope; the vocabulary side is being handled separa
   and the write-back happens only from a decision the run reached — so a run refused at
   the interrupt leaves the citation exactly as it found it, asserted over the file
   rather than over a sentence.
+- **The route function was renamed.** `cite_the_gate_run_this_bench_last_passed`
+  became `cite_the_gate_run_this_bench_last_made`, because the old name is the
+  stale-pass reading in an identifier and this decision rejects it. The path is
+  unchanged.
 - **`CONTEXT.md`'s two entries moved.** *Gate citation* now carries what the record is
   called as well as the document; *gate run record* is what the citation points at
   rather than what a reader has to know to go looking for.

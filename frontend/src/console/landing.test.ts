@@ -136,6 +136,26 @@ describe('the gate run the bench last passed', () => {
   })
 })
 
+describe('a gate run that left no dated document', () => {
+  it('says so where the path would be, and still names the record', () => {
+    const reading = gateReading({ ...CITED, document: null })
+    if (!reading.cited) {
+      throw new Error('a cited citation read as uncited')
+    }
+
+    // The console's entry point writes the record and no prose (ADR-0021), so the
+    // citation carries no file name for one. `path: null` rather than an empty string
+    // or a sentence in a path's place: a screen that printed either would be printing
+    // a paragraph inside a code element, and the front door claims it prints paths.
+    expect(reading.document.path).toBeNull()
+    expect(reading.document.statement).toMatch(/started from the console/)
+    // And nothing about the outcome is missing: the figures are in the record, which
+    // is named exactly as it is for a gate run that also wrote prose.
+    expect(reading.record.path).toBe(CITED.record)
+    expect(reading.facts).toHaveLength(3)
+  })
+})
+
 describe('a bench that cites no gate run', () => {
   it('states the absence in the same place, and offers no empty outcome', () => {
     const reading = gateReading(UNCITED)

@@ -30,6 +30,12 @@
  * is the one a reader after the arithmetic wants. A screen that read the bench's own
  * prose output would break on a rewording, and the record is why it never has to.
  *
+ * **A gate run started from the console wrote no document, and this screen says so
+ * where the path would be.** Two shapes rather than one with an empty `path`, for the
+ * same reason an uncited bench gets no `facts`: a blank where a file name goes is a
+ * file name a reader goes looking for. The record is there either way, so nothing
+ * about the outcome is missing.
+ *
  * **The wording is the console's, and the facts are the citation's.** The citation's
  * own two sentences are written for a provenance block — they say *the figures
  * above* and *this report*, which are true under a report's figures and false on a
@@ -70,6 +76,12 @@ export const THE_DOCUMENT_IS_NAMED_AND_NEVER_PARSED =
   'than trust it. Those figures are in that document and not in this citation: ' +
   'this screen names the document and does not read it.'
 
+export const NO_DATED_DOCUMENT_WAS_WRITTEN =
+  'That gate run left no dated document: it was started from the console, which ' +
+  'writes the record above and no prose. Nothing is missing from the outcome — the ' +
+  'figures behind it are in that record — and a gate run started from a terminal ' +
+  'writes both.'
+
 export const THE_RECORD_IS_THE_SAME_RUN_AS_FIELDS =
   'The same gate run as fields, written beside the document: each agent’s rate on ' +
   'each family, each family’s discrimination score, and the rule they were decided ' +
@@ -106,6 +118,20 @@ export interface CitedRecord {
   statement: string
 }
 
+/**
+ * A gate run that wrote no prose, saying so where the document's path would be.
+ *
+ * The console's own two shapes for the console's own two entry points: a gate run
+ * from a terminal writes a dated document and one started from a browser does not
+ * (ADR-0021, ADR-0023). `path` is absent rather than empty, for the same reason
+ * `UncitedGateReading` has no `facts` — a blank where a path goes is a path a reader
+ * goes looking for.
+ */
+export interface NoCitedDocument {
+  path: null
+  statement: string
+}
+
 /** One labelled fact off the citation. Three of them, and none is a measurement. */
 export interface CitedFact {
   label: string
@@ -120,7 +146,7 @@ export interface CitedGateReading {
   /** Outcome, date and library version, in the order a reader asks for them. */
   facts: CitedFact[]
   record: CitedRecord
-  document: CitedDocument
+  document: CitedDocument | NoCitedDocument
   aboutTheBench: string
 }
 
@@ -188,10 +214,13 @@ export function gateReading(gate: GateCitation): GateReading {
       path: gate.record,
       statement: THE_RECORD_IS_THE_SAME_RUN_AS_FIELDS,
     },
-    document: {
-      path: gate.document,
-      statement: THE_DOCUMENT_IS_NAMED_AND_NEVER_PARSED,
-    },
+    document:
+      gate.document === null
+        ? { path: null, statement: NO_DATED_DOCUMENT_WAS_WRITTEN }
+        : {
+            path: gate.document,
+            statement: THE_DOCUMENT_IS_NAMED_AND_NEVER_PARSED,
+          },
     aboutTheBench: A_FACT_ABOUT_THE_BENCH,
   }
 }

@@ -94,6 +94,7 @@ from backend.bench.library import CaseStatus, load_library
 from backend.bench.payload import citation
 from backend.bench.registration import Attestation
 from backend.bench.rule import DECLARED_RULE
+from backend.bench.signing import SIGNING_KEY_VARIABLE, encoded_private, generate
 from backend.graph.approval import Approval
 from backend.graph.budget import Layer
 from backend.targets.reference.hardened import HARDENED
@@ -111,6 +112,7 @@ from backend.tests.conftest import (
     authored_library,
 )
 from backend.tests.test_api_runs import Counted, Ledger
+from backend.tests.test_cited import a_passing_gate, a_record
 
 API_DIR = Path(__file__).resolve().parents[1] / "api"
 CASES_DIR = Path(__file__).resolve().parents[1] / "cases"
@@ -1270,6 +1272,78 @@ def test_the_write_back_names_the_record_it_wrote_and_the_citation_it_replaced(
     assert (library / written["record"]).exists()
     assert "cited no gate run before now" in written["cited"]
     assert written["record"] in written["stated"]
+
+
+def test_a_citation_written_from_a_terminal_reaches_this_process_at_its_next_boot(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The difference between the two entry points, which is one restart.
+
+    ADR-0023 decision Five states it and this is the test of it. A gate run at a
+    terminal writes the citation into the library — the whole of its durable effect,
+    and all it can do, because it is not in this process. A bench already running goes
+    on citing what it booted with; the next boot reads the library and cites the new
+    one. That is the same shape as ADR-0021's *the library a running process holds is
+    the one it booted with*, and a retirement takes effect at the same moment.
+
+    The console's half of the difference — reaching the running process at once — is
+    asserted in `test_a_console_gate_run_updates_the_gate_this_bench_cites`.
+    """
+    # A mounted volume, which is what makes this a deployment rather than a laptop:
+    # the factory seeds it from the image once and reads both the cases and the
+    # citation off it from then on (ADR-0021 condition 4).
+    library = tmp_path / "cases"
+    library.mkdir()
+    monkeypatch.setenv(SIGNING_KEY_VARIABLE, encoded_private(generate()))
+    monkeypatch.setattr("backend.api.app.DEPLOYED_LIBRARY_MOUNT", library)
+
+    running = create_app()
+    assert cast(BenchRuns, running.state.bench).config.report.gate is None
+    assert list(library.glob("*.toml")), "the mount was not seeded from the image"
+
+    # What a gate run at a terminal does, and nothing else: it writes the citation
+    # into the library it holds. It cannot reach the process above — there is no edge
+    # from a different process to this one, which is the point.
+    cite(a_record(a_passing_gate()), library)
+
+    assert cast(BenchRuns, running.state.bench).config.report.gate is None, (
+        "a gate run in another process changed a running bench's citation"
+    )
+    assert (
+        TestClient(running).get(BENCH_GATE_ROUTE).json()["citation"]["cited"] is False
+    )
+
+    # And the next boot reads it off the library, which is where the durable answer is.
+    booted = cast(BenchRuns, create_app().state.bench).config.report.gate
+    assert booted == the_citation(library)
+    assert booted is not None and booted.document is not None
+
+
+def test_no_function_on_the_gate_run_side_reads_the_citation_the_bench_carries() -> (
+    None
+):
+    """The registry holds a snapshot of a config whose citation now moves.
+
+    `BenchGateRuns` is handed the `BenchConfig` the factory built, and `BenchRuns.cite`
+    replaces that record rather than mutating it — so from the first console gate run
+    the snapshot's `report.gate` is stale. That is deliberate: a gate run is held to
+    the configuration it started under, for the reason `GateRunRecord` carries its own
+    budget. It is only safe while this side never *reads* the field, so the absence is
+    asserted rather than assumed. A future reader of `report.gate` here would be
+    reading a citation this module is one restart behind on.
+    """
+    source = (API_DIR / "gate_runs.py").read_text(encoding="utf-8")
+    tree = ast.parse(source)
+
+    read = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Attribute)
+        and node.attr == "gate"
+        and isinstance(node.value, ast.Attribute)
+        and node.value.attr == "report"
+    ]
+    assert read == [], "gate_runs.py reads report.gate, which it is behind on"
 
 
 def test_the_citation_reaches_the_bench_through_one_edge_and_nothing_else(

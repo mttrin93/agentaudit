@@ -29,7 +29,16 @@ record (ADR-0006) and the library on a mounted volume (ADR-0021, condition 4).
 
 **Nothing here loads a case, and no case loader sees this file.** The library is
 `*.toml` and this is one `.json` beside them (`library.load_library`), for the same
-reason the lease is a dot-prefixed file and not a case (`lease.py`).
+reason the lease is a dot-prefixed file and not a case (`lease.py`). Writing it does
+not move the library's digest, which matters because the digest is what the citation
+claims.
+
+**A gate run that left no prose says so as an absence and not as a sentence.**
+`RecordedGateRun.document` is `None` for one started from the console, and the words a
+reader is given for that are written where they are read — on the screen, and in
+`GateCitation.stated()`. A field that were sometimes a file name and sometimes a
+paragraph is a field every consumer has to guess about, and the first one to guess
+wrong prints the paragraph as a path.
 
 **A gate run of any outcome replaces the citation, and never silently.** `cite`
 returns what it displaced, and the caller states it: a failed gate run overwriting a
@@ -68,18 +77,6 @@ One name and not a dated one, because there is one citation: a directory of them
 would be a reader's choice about which gate run a report cites, and that choice is
 the arithmetic ADR-0023 settles rather than a file listing. The dated records the
 citation points at are the history, and they are never overwritten.
-"""
-
-NO_DATED_DOCUMENT = (
-    "no dated document — this gate run was started from the console, which leaves "
-    "its record and no prose (ADR-0021). The figures are in the record named beside "
-    "this, in the same fields a command-line gate run writes them in"
-)
-"""What a console gate run's record says where a document's file name would be.
-
-A stated absence and not an empty string: a citation naming `""` is a citation
-pointing a reader at a file they will go looking for, and the reason there is none is
-a fact about which entry point ran rather than a gap in the record.
 """
 
 
@@ -212,7 +209,7 @@ def the_citation(library: Path) -> GateCitation | None:
                 cases=int(body["library"]["cases"]),
                 digest=str(body["library"]["digest"]),
             ),
-            document=str(body["document"]),
+            document=(None if body["document"] is None else str(body["document"])),
             record=str(body["record"]),
         )
     except (KeyError, TypeError, ValueError):

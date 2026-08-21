@@ -246,10 +246,12 @@ const TWO_ENTRY_POINTS = [
     'yours before running the command.',
   'This command and the control beside it are the two entry points, and they ask ' +
     'the same three attestation statements and present the same two figures before ' +
-    'anything is sent. Both leave the run’s figures as a record and both update the ' +
-    'gate run this bench cites. What differs is the prose: the command writes a ' +
-    'dated document for a person to read, and a gate run started here writes its ' +
-    'record and no document.',
+    'anything is sent. Both leave the run’s figures as a record and both write the ' +
+    'citation this bench carries. Two things differ. The command writes a dated ' +
+    'document for a person to read and a gate run started here does not. And a gate ' +
+    'run started here changes what this bench cites at once, while one run from a ' +
+    'terminal changes the library — so a bench already running picks it up when it ' +
+    'next starts, which is the same restart a retirement takes effect at.',
   'Neither can be answered by something that is not a person. The terminal reads ' +
     'an absent or piped answer as a refusal, and the browser posts an attestation ' +
     'the bench will not construct with a statement withheld — which is why nothing ' +

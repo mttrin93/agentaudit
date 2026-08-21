@@ -444,6 +444,34 @@ describe('the document is named and never parsed', () => {
     expect(outcome.reading.record.path).toMatch(/\.json$/)
   })
 
+  it('draws no path at all for a gate run that wrote no document', () => {
+    const fromTheConsole = { ...CERTIFIED, citation: { ...CITED, document: null } }
+    const outcome = block(gateScreen(fromTheConsole), 'outcome')
+    if (!outcome.reading.cited) {
+      throw new Error('a cited citation read as uncited')
+    }
+
+    // A gate run started from the console leaves the record and no prose, and the
+    // absence is a sentence where the path would be rather than a path-shaped
+    // paragraph. The record is still named, so nothing about the outcome is missing.
+    expect(outcome.reading.document.path).toBeNull()
+    expect(outcome.reading.document.statement).toMatch(/no dated document/i)
+    expect(outcome.reading.record.path).toBe(CITED.record)
+  })
+
+  it('states the difference between the two entry points rather than away', () => {
+    const statements = block(gateScreen(CERTIFIED), 'command').statements.join(' ')
+
+    // Both entry points now write the citation, which is the reversal — and the
+    // difference that survives it is a restart: a gate run from a terminal writes the
+    // library, and a bench already running reads it when it next starts (ADR-0023
+    // decision Five). A screen that said the two were identical would be stating the
+    // difference away rather than stating it.
+    expect(statements).toMatch(/both .*write the citation this bench carries/i)
+    expect(statements).toMatch(/at once/)
+    expect(statements).toMatch(/when it next starts/)
+  })
+
   it('says the citation is replaced by whatever the next gate run answers', () => {
     const writes = block(gateScreen(CERTIFIED), 'consequence').writes.join(' ')
 

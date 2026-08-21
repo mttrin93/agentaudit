@@ -191,8 +191,14 @@ class GateCitation:
     outcome: GateOutcome
     decided_on: date
     library: LibraryVersion
-    document: str
-    """Where the run that decided it is written down, so the citation is checkable."""
+    document: str | None
+    """Where the run that decided it is written down in prose, or `None`.
+
+    `None` is a gate run started from the console, which leaves the record below and
+    no dated document (ADR-0021, ADR-0023). A missing document is a fact about which
+    entry point ran and not a gap in the citation — the figures are reachable either
+    way, through `record` — so it is typed as an absence rather than papered over with
+    a sentence in a field a reader would follow as a path."""
 
     record: str
     """Where the same gate run is written down as fields, for the figures above.
@@ -213,11 +219,17 @@ class GateCitation:
         depends on an adjacent caption is a field that will eventually be wrong in
         the flattering direction (ADR-0018).
         """
+        prose = (
+            f"recorded in {self.document}, and as fields in {self.record}"
+            if self.document is not None
+            else f"recorded as fields in {self.record} and in no dated document — "
+            "this gate run was started from the console, which leaves the one and "
+            "not the other"
+        )
         return (
             f"the bench {self.outcome.value} its own gate on "
             f"{self.decided_on.isoformat()}, against its three agents of known "
-            f"construction, at {self.library.stated()} — recorded in "
-            f"{self.document}, and as fields in {self.record}, where every "
+            f"construction, at {self.library.stated()} — {prose}, where every "
             "per-family figure behind that answer is recoverable without reading a "
             "sentence. A fact about the instrument that produced the figures above, "
             "and not a verdict on this target: this target has rates, intervals and "
@@ -689,7 +701,9 @@ def citation(cited: GateCitation | None) -> dict[str, Any]:
     **Two addresses and no figures.** `document` is the prose and `record` is the
     same gate run as fields; between them a reader reaches every per-family figure
     without parsing a sentence, and neither of them is a figure on this block
-    (ADR-0023).
+    (ADR-0023). `document` is `null` for a gate run that left none, which is a third
+    fact and not an empty field: the figures are in `record` either way, and a reader
+    is never handed a path to a file nobody wrote.
     """
     if cited is None:
         return {"cited": False, "stated": UNCITED_GATE}

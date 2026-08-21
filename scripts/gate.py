@@ -105,6 +105,8 @@ from backend.bench.contract import TargetConfig
 from backend.bench.gate import GateResult, NotAGateRun, read_gate
 from backend.bench.gate_record import (
     RecordedGateRun,
+    document_named,
+    record_named,
     recorded_gate_run,
     write_the_record,
 )
@@ -479,14 +481,16 @@ def record_run(
     """
     directory.mkdir(parents=True, exist_ok=True)
     stamped = datetime.now(tz=UTC)
-    path = directory / f"gate-{stamped:%Y-%m-%dT%H-%M-%SZ}.md"
+    path = directory / document_named(stamped)
     recorded = recorded_gate_run(
         gate,
         decided_at=stamped.isoformat(),
         document=path.name,
         # The record names its own file, so the citation rendered off it points at
-        # what was written rather than at a name a third place composed (ADR-0023).
-        record=path.with_suffix(".json").name,
+        # what was written rather than at a name a third place composed. Both names
+        # come off `gate_record`, which is the one place either format lives —
+        # a console gate run dates its record the same way (ADR-0023).
+        record=record_named(stamped),
     )
     path.write_text(
         "\n".join(

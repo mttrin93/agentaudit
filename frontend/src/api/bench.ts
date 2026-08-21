@@ -373,6 +373,11 @@ export interface CoverageGap {
  * `record` is the same gate run as fields, so a reader reaches every per-family
  * figure without parsing a sentence (ADR-0023). Neither of them is a figure, and
  * nothing in this app opens either.
+ *
+ * **`document: null` is a third fact, not an empty field.** A gate run started from
+ * the console leaves the record and no dated prose, so there is no file name to
+ * carry — and the figures are in `record` either way. Typed as an absence so that no
+ * screen renders a sentence where it expected a path.
  */
 export type GateCitation =
   | {
@@ -380,7 +385,7 @@ export type GateCitation =
       outcome: string
       decided_on: string
       library: { cases: number; digest: string }
-      document: string
+      document: string | null
       record: string
       stated: string
     }

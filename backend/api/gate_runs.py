@@ -82,10 +82,14 @@ from typing import Protocol
 from backend.api.runs import PRESENT_WAIT_SECONDS, BenchConfig, PendingApproval
 from backend.bench.admission import admitted_library
 from backend.bench.calibration import CalibrationResult, PlantNonce, run_calibration
-from backend.bench.cited import NO_DATED_DOCUMENT, cite
+from backend.bench.cited import cite
 from backend.bench.contract import TargetConfig, TargetUnreachable
 from backend.bench.gate import GateResult, NotAGateRun, read_gate
-from backend.bench.gate_record import recorded_gate_run, write_the_record
+from backend.bench.gate_record import (
+    record_named,
+    recorded_gate_run,
+    write_the_record,
+)
 from backend.bench.goldset import load_gold_sets, measure_reliability
 from backend.bench.lease import LibraryBusy, held_by, holding_the_library
 from backend.bench.library import Case, LibraryVersion
@@ -435,6 +439,11 @@ class WrittenBack:
     outlives it: the decision is a fact about this bench right now, and the series
     on the case records is what the *next* gate run reads. A run that stored nothing
     says so with an empty tuple rather than by having no field.
+
+    **Three writes since ADR-0023, and all three are reported here.** The readings,
+    this gate run's own record as fields, and the citation the bench carries from now
+    on. The last of those is the one an operator has to be told about rather than be
+    able to look up, because it replaced something: `cited` is that sentence.
     """
 
     library: Path
@@ -940,6 +949,10 @@ def _write_back(
     still leaves the library citing this gate run for the next process to read: the
     difference between the two entry points is a restart, not a citation.
     """
+    # One clock for the whole write-back: the date on every reading and the stamp on
+    # the record are the same moment, so a run that crossed midnight between them
+    # cannot store a series dated one day and a record dated the next.
+    stamped = datetime.now(tz=UTC)
     runs = {run.target.name: run for run in result.target_runs}
     history = readings_of(
         record.cases,
@@ -951,7 +964,7 @@ def _write_back(
         # agents rather than from the declared string: a reading taken on a stub
         # fixture is stored, marked, and retires nothing (ADR-0022).
         measured_the_field=served.measured_the_field,
-        ran_on=datetime.now(tz=UTC).date(),
+        ran_on=stamped.date(),
         # The families the gate did not decide on. A reading from one is stored and
         # the rule is not applied to it: retirement declines on a family the bench
         # cannot vouch for (ADR-0016).
@@ -961,12 +974,14 @@ def _write_back(
     decisions: Sequence[RetirementDecision] = store(
         record.library, history, config.rule
     )
-    stamped = datetime.now(tz=UTC)
     recorded = recorded_gate_run(
         gate,
         decided_at=stamped.isoformat(),
-        document=NO_DATED_DOCUMENT,
-        record=f"gate-{stamped:%Y-%m-%dT%H-%M-%SZ}.json",
+        # No prose to point at: this entry point leaves the record and no document
+        # (ADR-0021), and the absence is typed rather than written as a sentence in a
+        # field a reader would follow as a path (ADR-0023).
+        document=None,
+        record=record_named(stamped),
     )
     write_the_record(recorded, record.library)
     replaced = cite(recorded, record.library)

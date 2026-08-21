@@ -21,7 +21,9 @@
  * paths are printed as the paths they are because this bench serves no route for
  * either — a hyperlink to something no route answers would be a broken link on the
  * front door, and how they are served is the gate screen's question rather than this
- * screen's.
+ * screen's. A gate run that wrote no document draws no `code` element at all, only
+ * the sentence saying which entry point it came from: the reading carries `path:
+ * null` for that, so there is nothing here that could print a paragraph as a path.
  *
  * **There is no control here that starts a gate run**, and that is a decision about
  * this screen rather than about the bench. A gate run attacks all three reference
@@ -548,9 +550,11 @@ function Citation({ reading }: { reading: GateReading }) {
             <code>{reading.record.path}</code>
           </p>
           <p className="aside">{reading.record.statement}</p>
-          <p>
-            <code>{reading.document.path}</code>
-          </p>
+          {reading.document.path === null ? null : (
+            <p>
+              <code>{reading.document.path}</code>
+            </p>
+          )}
           <p className="aside">{reading.document.statement}</p>
         </>
       ) : (

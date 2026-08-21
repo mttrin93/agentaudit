@@ -1304,9 +1304,13 @@ class CitedGate(BaseModel):
     """The date the run was decided, as the citation holds it: ISO, no locale."""
 
     library: CitedLibrary
-    document: str
-    """Where the run is written down, so the citation is checkable. A path the
-    caller may link and this route never opens."""
+    document: str | None
+    """Where the run is written down in prose, or `null` where it is written nowhere.
+
+    A path the caller may link and this route never opens. `null` is a gate run
+    started from the console, which leaves the record below and no dated document
+    (ADR-0021, ADR-0023) — a third fact rather than an empty field, so a caller never
+    renders a paragraph where it expected a file name."""
 
     record: str
     """Where the same gate run is written down as fields, for the figures this
@@ -2185,9 +2189,14 @@ class WroteBack(BaseModel):
     """What this gate run wrote to the case library, and where it wrote it.
 
     On the response because it is the half of a gate run that outlives it: the series
-    the *next* gate run reads, and the retirements this one marked. A run that wrote
+    the *next* gate run reads, the retirements this one marked, its own figures as
+    fields, and the citation this bench carries from now on. A run that wrote
     nothing is absent rather than a zero here — `written` is null until there is a
     write-back to report.
+
+    **`cited` is on the wire because a citation must not change in silence.** A gate
+    run that displaced a passing citation says so, in words, on its own reading — the
+    console's counterpart to the line the terminal prints (ADR-0023).
     """
 
     library: str
@@ -2645,7 +2654,7 @@ def create_app(
         return artefacts_response(bench.records(), bench.config.report)
 
     @app.get(BENCH_GATE_ROUTE)
-    def cite_the_gate_run_this_bench_last_passed() -> BenchGate:
+    def cite_the_gate_run_this_bench_last_made() -> BenchGate:
         """The rule this bench is held to, then the gate run it cites under it.
 
         The citation is a read of `ReportConfig.gate`, which is the same value the

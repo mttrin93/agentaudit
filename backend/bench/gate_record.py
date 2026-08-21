@@ -37,6 +37,7 @@ ADR-0010).
 """
 
 from collections.abc import Mapping
+from datetime import datetime
 from pathlib import Path
 
 from pydantic import BaseModel
@@ -45,6 +46,31 @@ from backend.bench.gate import GateResult, stated_outcome, stated_rate
 from backend.bench.library import Family
 from backend.bench.rule import DECLARED_RULE, GateRule
 from backend.bench.scorer import Excluded, FamilyOutcome, Rate
+
+GATE_RUN_STAMP = "%Y-%m-%dT%H-%M-%SZ"
+"""How a gate run's two files are dated, in one place because two entry points date
+them.
+
+The command line writes `gate-<stamp>.md` and `gate-<stamp>.json`; a gate run started
+from the console writes only the second, in the library. One format string rather than
+one per caller: the stamp is how a reader sorts one gate run against another, and two
+of them drifting apart would put a directory in an order nobody meant.
+"""
+
+
+def document_named(at: datetime) -> str:
+    """What the dated document of a gate run decided at that moment is called."""
+    return f"gate-{at.strftime(GATE_RUN_STAMP)}.md"
+
+
+def record_named(at: datetime) -> str:
+    """What the record of a gate run decided at that moment is called.
+
+    Beside `document_named` and never derived from its return value: the two names
+    are the same stamp with two suffixes, and a caller that took one and rewrote the
+    suffix would be a second rule for where a record lives.
+    """
+    return f"gate-{at.strftime(GATE_RUN_STAMP)}.json"
 
 
 class CitedLibrary(BaseModel):
@@ -370,12 +396,18 @@ class RecordedGateRun(BaseModel):
     decided_at: str
     """When this run was decided, as the document is dated: ISO, UTC, no locale."""
 
-    document: str
-    """The file name of the dated Markdown this record sits beside.
+    document: str | None
+    """The file name of the dated Markdown this record sits beside, or `None`.
 
-    Or the stated absence of one: a gate run started from the console leaves no dated
-    document (ADR-0021), and it says so here rather than naming a file a reader would
-    go looking for (`cited.NO_DATED_DOCUMENT`)."""
+    `None` is a gate run started from the console: it leaves this record and no prose
+    (ADR-0021), so there is no file name to carry. Deliberately not a sentence
+    standing in for one — a field that is sometimes a path and sometimes a paragraph
+    is a field every reader has to guess about, and a screen that printed it as a path
+    would print the paragraph as one. The words a reader is given for the absence live
+    where they are read — `GateCitation.stated()` and the console's own screens — and
+    are a rendering rather than a value.
+
+    No default, so a caller states which kind of gate run this was."""
 
     record: str
     """The file name this record itself is written under.
@@ -392,7 +424,7 @@ class RecordedGateRun(BaseModel):
 
 
 def recorded_gate_run(
-    gate: GateResult, *, decided_at: str, document: str, record: str
+    gate: GateResult, *, decided_at: str, document: str | None, record: str
 ) -> RecordedGateRun:
     """This gate run as a record, off the result the run left in memory.
 

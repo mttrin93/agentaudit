@@ -40,12 +40,12 @@ from __future__ import annotations
 import ast
 import json
 from collections.abc import Iterator, Sequence
+from datetime import UTC, datetime
 from pathlib import Path
 
 from backend.bench.admission import admitted_library
 from backend.bench.cited import (
     CITED_GATE_RUN,
-    NO_DATED_DOCUMENT,
     Replaced,
     citation_of,
     cite,
@@ -54,6 +54,8 @@ from backend.bench.cited import (
 from backend.bench.gate import GateResult
 from backend.bench.gate_record import (
     RecordedGateRun,
+    document_named,
+    record_named,
     recorded_gate_run,
     write_the_record,
 )
@@ -96,14 +98,19 @@ def a_record(
     gate: GateResult,
     *,
     decided_at: str = "2026-08-19T09:38:37+00:00",
-    document: str = "gate-2026-08-19T09-38-37Z.md",
+    at: datetime = datetime(2026, 8, 19, 9, 38, 37, tzinfo=UTC),
+    document: bool = True,
 ) -> RecordedGateRun:
-    """One gate run as the record both entry points write it in."""
+    """One gate run as the record both entry points write it in.
+
+    `document=False` is one started from the console, which leaves this record and no
+    prose — the two entry points are the same call with one field absent.
+    """
     return recorded_gate_run(
         gate,
         decided_at=decided_at,
-        document=document,
-        record=document.replace(".md", ".json"),
+        document=document_named(at) if document else None,
+        record=record_named(at),
     )
 
 
@@ -161,7 +168,7 @@ def test_a_reader_with_the_citation_reaches_the_figures_without_a_document(
     directory holds no `.md` at all, so the figures cannot have come from prose.
     """
     gate = a_passing_gate()
-    record = a_record(gate, document=NO_DATED_DOCUMENT)
+    record = a_record(gate, document=False)
     write_the_record(record, tmp_path)
     cite(record, tmp_path)
 
@@ -197,13 +204,13 @@ def test_a_console_gate_run_states_the_absent_document_and_still_names_a_record(
     citation says so where a file name would be rather than naming one a reader would
     go looking for. What is no longer different is the record.
     """
-    record = a_record(a_passing_gate(), document=NO_DATED_DOCUMENT)
+    record = a_record(a_passing_gate(), document=False)
     write_the_record(record, tmp_path)
     cite(record, tmp_path)
 
     cited = the_citation(tmp_path)
     assert cited is not None
-    assert cited.document == NO_DATED_DOCUMENT
+    assert cited.document is None
     assert "no dated document" in cited.stated()
     assert (tmp_path / cited.record).exists()
 
@@ -230,7 +237,7 @@ def test_a_failing_gate_run_replaces_a_passing_citation_and_names_what_it_took(
     failed = a_record(
         a_failing_gate(),
         decided_at="2026-08-20T11:00:00+00:00",
-        document="gate-2026-08-20T11-00-00Z.md",
+        at=datetime(2026, 8, 20, 11, 0, 0, tzinfo=UTC),
     )
     replaced = cite(failed, tmp_path)
 
@@ -284,7 +291,7 @@ def test_a_passing_gate_run_replacing_a_failure_is_not_announced_as_a_loss(
         a_record(
             a_passing_gate(),
             decided_at="2026-08-21T08:00:00+00:00",
-            document="gate-2026-08-21T08-00-00Z.md",
+            at=datetime(2026, 8, 21, 8, 0, 0, tzinfo=UTC),
         ),
         tmp_path,
     )

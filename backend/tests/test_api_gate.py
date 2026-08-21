@@ -260,6 +260,7 @@ def test_the_gate_document_is_named_and_never_opened() -> None:
     assert named.json()["citation"]["document"] == absent
     assert named.json()["citation"]["record"] == beside_it
 
+    assert CITED.document is not None
     on_disk = Path(CITED.document)
     assert on_disk.exists(), "the citation under test names a document in this repo"
     document = on_disk.read_text(encoding="utf-8")

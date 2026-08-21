@@ -1141,23 +1141,6 @@ code {
   min-width: 0;
 }
 
-.topbar {
-  padding: 0.8rem 5rem;
-  border-bottom: 1px solid var(--line);
-}
-
-.topbar .where {
-  margin: 0;
-  font-size: 0.9rem;
-  font-weight: 600;
-}
-
-/* Inside the frame the screen keeps its width and loses the top margin the
- * top bar now provides. */
-.console-body .screen {
-  padding-top: 2rem;
-}
-
 @media (max-width: 52rem) {
   .console {
     grid-template-columns: minmax(0, 1fr);
@@ -1171,8 +1154,7 @@ code {
 
   /* The sides give their width back where there is none to spare: 5rem each side
    * of a narrow window is half of it spent on margin. */
-  .screen,
-  .topbar {
+  .screen {
     padding-inline: 1.2rem;
   }
 

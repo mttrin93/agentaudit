@@ -23,12 +23,10 @@ import {
   ARTEFACTS_PATH,
   CONSOLE_PATH,
   GATE_PATH,
-  NOT_A_SCREEN,
   REGISTER_PATH,
   REPORT_PATTERN,
   RUN_PATTERN,
   SETTINGS_PATH,
-  THE_CONSOLE,
   railView,
   rememberTheRun,
   reportPath,
@@ -117,7 +115,7 @@ describe('the paths the shell may not move', () => {
   })
 })
 
-describe('the rail names where you are', () => {
+describe('the rail marks where you are', () => {
   it('lists every destination and marks the one you are standing on', () => {
     const offered = railView('/nowhere-at-all', null).destinations
     expect(offered.length).toBeGreaterThan(0)
@@ -129,7 +127,6 @@ describe('the rail names where you are', () => {
       expect(rail.destinations.filter((d) => d.current)).toEqual([
         { ...there, current: true },
       ])
-      expect(rail.where).toBe(there.name)
     }
   })
 
@@ -137,17 +134,13 @@ describe('the rail names where you are', () => {
     const nowhere = railView('/nowhere-at-all', null)
     expect(nowhere.destinations.length).toBeGreaterThan(0)
     expect(nowhere.destinations.some((d) => d.current)).toBe(false)
-    expect(nowhere.where).toBe(NOT_A_SCREEN)
     // The root is a screen rather than a redirect on its way to one: the landing
     // screen answers it, so it is a destination the rail names and marks like any
-    // other, and the top bar names it rather than saying where the console is off
-    // to next.
+    // other.
     const root = railView(CONSOLE_PATH, null)
     expect(root.destinations.filter((d) => d.current).map((d) => d.path)).toEqual([
       CONSOLE_PATH,
     ])
-    expect(root.where).not.toBe(NOT_A_SCREEN)
-    expect(root.where).not.toBe(THE_CONSOLE)
   })
 
   it('marks one place and never two, wherever you are', () => {
@@ -162,7 +155,6 @@ describe('the rail names where you are', () => {
     for (const path of paths) {
       const marked = everywhere(railView(path, 'run-1')).filter((d) => d.current)
       expect(marked.length).toBeLessThan(2)
-      expect(railView(path, 'run-1').where).not.toBe('')
     }
   })
 })
@@ -175,14 +167,12 @@ describe('a run is somewhere you can leave and come back to', () => {
       ['/runs/run-1', true],
       ['/runs/run-1/report', false],
     ])
-    expect(onTheRun.where).toBe('Run run-1')
 
     const onTheReport = railView(reportPath('run-1'), null)
     expect(onTheReport.run?.screens.map((s) => [s.path, s.current])).toEqual([
       ['/runs/run-1', false],
       ['/runs/run-1/report', true],
     ])
-    expect(onTheReport.where).toBe('Run run-1 — its report')
   })
 
   it('still offers the run you were watching after you have left it', () => {

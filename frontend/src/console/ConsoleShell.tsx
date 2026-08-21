@@ -1,5 +1,5 @@
 /**
- * The console shell: a rail, a top bar, and whichever screen the path names.
+ * The console shell: a rail, and whichever screen the path names.
  *
  * It is a layout route rather than a component each screen renders, which is the
  * whole of why nothing that worked yesterday stops working: the register, run and
@@ -77,9 +77,6 @@ export function ConsoleShell() {
       </nav>
 
       <div className="console-body">
-        <header className="topbar">
-          <p className="where">{rail.where}</p>
-        </header>
         <Outlet />
       </div>
     </div>

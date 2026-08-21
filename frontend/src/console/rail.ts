@@ -115,18 +115,6 @@ export function reportPath(runId: string): string {
 }
 
 /**
- * What the top bar falls back to when a standing destination cannot be named.
- *
- * It used to be what the root said while it redirected. The root is a screen now,
- * so it is named like every other destination and this is the last resort rather
- * than a state the console is routinely in.
- */
-export const THE_CONSOLE = 'The operator console'
-
-/** What it says on a path no screen answers, rather than saying nothing at all. */
-export const NOT_A_SCREEN = 'Not a screen this console has'
-
-/**
  * Which glyph a destination wants, as a closed set of names.
  *
  * A name and never a drawing: `railIcons.tsx` switches over this union with no
@@ -171,14 +159,12 @@ export interface RunInView {
   onScreen: boolean
 }
 
-/** Everything the shell needs to draw the rail and the top bar. */
+/** Everything the shell needs to draw the rail. */
 export interface Rail {
   /** The console's standing destinations, at most one of them current. */
   destinations: Destination[]
   /** The run you are working on, or `null` when this app knows of none. */
   run: RunInView | null
-  /** Where you are, as the top bar's own line. Never empty. */
-  where: string
 }
 
 /**
@@ -326,21 +312,7 @@ export function railView(pathname: string, remembered: string | null): Rail {
     runId === null
       ? null
       : { id: runId, screens: screensOf(runId, at), onScreen: inPath !== null }
-  return { destinations, run, where: whereYouAre(at, destinations) }
-}
-
-/** The top bar's line: the name of the place you are standing on. */
-function whereYouAre(at: Whereabouts, destinations: Destination[]): string {
-  switch (at.kind) {
-    case 'standing':
-      return destinations.find((there) => there.current)?.name ?? THE_CONSOLE
-    case 'run':
-      return `Run ${at.id}`
-    case 'report':
-      return `Run ${at.id} — its report`
-    case 'elsewhere':
-      return NOT_A_SCREEN
-  }
+  return { destinations, run }
 }
 
 /**

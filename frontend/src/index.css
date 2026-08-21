@@ -729,9 +729,9 @@ code {
  * scrolls itself rather than widening the page.
  *
  * At a narrow width the rail stops being a column and becomes a strip along the
- * top: the destinations wrap, the line under each one is dropped, and the reading
- * column gets the whole window. That is one breakpoint and no JavaScript, so there
- * is no width at which the console has navigation it cannot show.
+ * top: the destinations wrap and the reading column gets the whole window. That is
+ * one breakpoint and no JavaScript, so there is no width at which the console has
+ * navigation it cannot show.
  */
 .console {
   display: grid;
@@ -747,15 +747,9 @@ code {
 }
 
 .rail .mark {
-  margin: 0;
+  margin: 0 0 1.4rem;
   font-weight: 600;
   letter-spacing: 0.02em;
-}
-
-.rail-note {
-  margin: 0.4rem 0 1.4rem;
-  font-size: 0.8rem;
-  color: var(--quiet);
 }
 
 /* The run's id stays at every width: it is how you tell one run from another. */
@@ -810,13 +804,6 @@ code {
   font-weight: 600;
 }
 
-.rail .answers {
-  display: block;
-  margin-top: 0.25rem;
-  font-size: 0.78rem;
-  color: var(--quiet);
-}
-
 .console-body {
   min-width: 0;
 }
@@ -855,6 +842,11 @@ code {
     gap: 0 1.2rem;
   }
 
+  /* The mark's gap was the dropped note's; in the strip the names sit close under it. */
+  .rail .mark {
+    margin-bottom: 0.6rem;
+  }
+
   .rail li {
     border-top: 0;
   }
@@ -864,12 +856,6 @@ code {
     padding-left: 0;
     margin-left: 0;
     border-bottom: 2px solid var(--ink);
-  }
-
-  /* The rail's own prose is what a narrow window drops: the destinations stay. */
-  .rail .answers,
-  .rail-note {
-    display: none;
   }
 
   .rail-heading {

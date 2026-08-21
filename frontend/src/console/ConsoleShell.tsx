@@ -55,21 +55,12 @@ export function ConsoleShell() {
     <div className="console">
       <nav className="rail" aria-label="The console">
         <p className="mark">AgentAudit</p>
-        <p className="rail-note">
-          An adversarial test bench. Every figure it prints belongs to the screen
-          that measured it.
-        </p>
         <ul>
           {rail.destinations.map((there) => (
             <RailLink there={there} key={there.path} />
           ))}
         </ul>
-        {rail.run === null ? (
-          <p className="rail-note">
-            A run appears here once a target is registered, and stays for as long as
-            this tab is open.
-          </p>
-        ) : (
+        {rail.run === null ? null : (
           <>
             <h2 className="rail-heading">The run you are working on</h2>
             <p className="rail-id">
@@ -101,7 +92,6 @@ function RailLink({ there }: { there: Destination }) {
       <Link to={there.path} aria-current={there.current ? 'page' : undefined}>
         {there.name}
       </Link>
-      <span className="answers">{there.answers}</span>
     </li>
   )
 }

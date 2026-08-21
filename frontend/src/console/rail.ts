@@ -27,10 +27,16 @@
  * would satisfy only the first half. Remembering one run is not a list of runs:
  * this module holds the run you are working on, and never a count of them.
  *
- * **Nothing here carries a figure.** A destination has a name and a line saying
- * what it answers, and no rate, no band, no total and no colour standing in for a
- * verdict. The rail is where a reader would most easily be handed a number that
- * spans two families, so it is built out of a type that has nowhere to put one.
+ * **Nothing here carries a figure.** A destination has a name and a path, and no
+ * rate, no band, no total and no colour standing in for a verdict. The rail is
+ * where a reader would most easily be handed a number that spans two families, so
+ * it is built out of a type that has nowhere to put one.
+ *
+ * **And it does not explain itself.** Every destination used to carry a sentence
+ * about what its screen answers; a reader already standing in the console does not
+ * need the console described to them in the margin, and the narrow window had been
+ * hiding those sentences all along. The field is gone rather than unrendered, so
+ * nothing can put the prose back.
  */
 
 /**
@@ -111,18 +117,15 @@ export const THE_CONSOLE = 'The operator console'
 export const NOT_A_SCREEN = 'Not a screen this console has'
 
 /**
- * One place the rail can send you, and what it answers when you get there.
+ * One place the rail can send you.
  *
- * `answers` is a sentence about the screen and never about a result: the rail
- * describes the console, and every figure in this application belongs to the
- * screen that measured it.
+ * A name and a path, and nothing that describes the screen: the rail is what a
+ * reader navigates by, and every sentence about a screen belongs on the screen.
  */
 export interface Destination {
   /** The path, built here so no component invents one. */
   path: string
   name: string
-  /** What this screen answers, for a reader who has not been there yet. */
-  answers: string
   /** Whether this is where you are standing now. */
   current: boolean
 }
@@ -156,7 +159,6 @@ export interface Rail {
  */
 interface Place {
   name: string
-  answers: string
 }
 
 /**
@@ -171,59 +173,17 @@ interface Place {
  * engineer opening a deployed bench sees before it asks them for an endpoint.
  */
 const STANDING: readonly (Place & { path: string })[] = [
-  {
-    path: CONSOLE_PATH,
-    name: 'What this bench is',
-    answers:
-      'What this instrument does, and the gate run it last passed — a fact about ' +
-      'the bench, and never a verdict about a target.',
-  },
-  {
-    path: REGISTER_PATH,
-    name: 'Register a target',
-    answers:
-      'Describe the endpoint, plant the nonce, and make the three attestations ' +
-      'one at a time.',
-  },
-  {
-    path: GATE_PATH,
-    name: 'The gate',
-    answers:
-      'The rule this bench is held to, what the last gate run answered under it, ' +
-      'and the two ways to run another — from here, or from a terminal. Starting ' +
-      'one asks the three statements and shows both figures first.',
-  },
-  {
-    path: ARTEFACTS_PATH,
-    name: 'Signed artefacts',
-    answers:
-      'Every artefact this bench has signed, each with all three verification ' +
-      'results named, and the command a recipient runs.',
-  },
-  {
-    path: SETTINGS_PATH,
-    name: 'What it is set to',
-    answers:
-      'The key an artefact will be signed by and the key a verification is run ' +
-      'against, the case library, the four model settings and each layer’s own ' +
-      'ceiling. It states them and changes none of them.',
-  },
+  { path: CONSOLE_PATH, name: 'What this bench is' },
+  { path: REGISTER_PATH, name: 'Register a target' },
+  { path: GATE_PATH, name: 'The gate' },
+  { path: ARTEFACTS_PATH, name: 'Signed artefacts' },
+  { path: SETTINGS_PATH, name: 'What it is set to' },
 ]
 
 /** What a run's two screens are called in the rail. */
-const RUN_SCREEN: Place = {
-  name: 'The run',
-  answers:
-    'The approval interrupt while it holds, then where the run has got to, one ' +
-    'layer at a time.',
-}
+const RUN_SCREEN: Place = { name: 'The run' }
 
-const REPORT_SCREEN: Place = {
-  name: 'Its report',
-  answers:
-    'The signed artefact, its three verification results, and one family at a ' +
-    'time. A run with no report says so in the bench’s own words.',
-}
+const REPORT_SCREEN: Place = { name: 'Its report' }
 
 /**
  * Where a path is, as the few cases the console can be in.
@@ -286,7 +246,7 @@ export function runInPath(pathname: string): string | null {
 }
 
 function destination(place: Place, path: string, current: boolean): Destination {
-  return { path, name: place.name, answers: place.answers, current }
+  return { path, name: place.name, current }
 }
 
 /** The run's two screens, with the one you are on marked and both reachable. */

@@ -725,7 +725,7 @@ class BenchGateRuns:
                 record.settle(
                     GateRunStatus.RUNNING,
                     (
-                        f"confirmed by {approval.identity}: the gate run is going "
+                        f"Confirmed by {approval.identity}: the gate run is going "
                         "in the background, under the ceiling that was confirmed "
                         "and aborting rather than exceeding it. It holds this "
                         "bench's case library until it is finished"

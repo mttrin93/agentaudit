@@ -448,8 +448,6 @@ function LayerPanel({ reading }: { reading: LayerReading }) {
       <p>
         <strong>{reading.callsSpent} calls</strong> spent in this layer.
       </p>
-      <p className="aside">{reading.callsNote}</p>
-      <p className="aside">{reading.found}</p>
     </div>
   )
 }

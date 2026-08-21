@@ -506,11 +506,16 @@ SCORED_NO_ATTEMPT_YET = (
 )
 
 ADAPTIVE_NOT_REACHED = (
-    "the run has not reached the adaptive layer: it starts only once the whole "
-    "scored suite has finished (ADR-0010), so there is no episode and no turn yet. "
-    "Its findings so far are absent rather than zero — a zero would read as an "
-    "attacker that ran and found nothing"
+    "The run has not reached the adaptive layer: it starts only once the whole "
+    "scored suite has finished."
 )
+"""What a run says of an adaptive layer it has not started.
+
+One clause. The ADR that puts the layer second, and the sentence about findings
+absent rather than zero, came off the wording; the absence itself is not carried by
+prose and never was — `adaptive_findings` is `null` in exactly this state, which is
+what `test_api_runs.py` asserts beside this.
+"""
 
 
 class ScoredPosition(BaseModel):

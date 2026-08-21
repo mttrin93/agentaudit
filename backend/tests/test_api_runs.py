@@ -1018,7 +1018,8 @@ def test_a_run_that_has_not_reached_the_adaptive_layer_says_so_rather_than_zero(
     assert halted["scored"]["succeeded_attempts"] is None
     assert halted["adaptive"]["adaptive_findings"] is None
     assert "has not reached the adaptive layer" in halted["adaptive"]["statement"]
-    assert "absent rather than zero" in halted["adaptive"]["statement"]
+    # The scored layer still says it in words; the adaptive layer's sentence is one
+    # clause now, and what carries the absence there is the `null` asserted above.
     assert "absent rather than zero" in halted["scored"]["statement"]
     assert halted["scored"]["calls_spent"] == 0
 

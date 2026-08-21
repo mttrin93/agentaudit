@@ -512,7 +512,6 @@ describe('while the gate run is in flight', () => {
     // a zero there would read as a layer that ran and found nothing.
     expect(adaptive.reached).toBe(false)
     expect(adaptive.at).toBeNull()
-    expect(adaptive.found).toMatch(/absent rather than zero/)
 
     // Two spends and nothing that spans them. 61 + 0 is a number this view must not
     // contain, and so is the sum of the two once both layers have spent.

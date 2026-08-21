@@ -86,10 +86,24 @@ export interface LayerReading {
   statement: string
   /** Calls this layer has put on the wire. Its own figure, added to nothing. */
   callsSpent: number
-  callsNote: string
-  /** What this layer has found so far, or why that is absent rather than zero. */
-  found: string
 }
+
+/*
+ * `callsNote` and `found` were here, and both are gone.
+ *
+ * `callsNote` said that calls are not attempts and that the figure is this layer's
+ * alone; `found` said what the layer had found so far, or that it was absent rather
+ * than zero. Two standing paragraphs under every layer block on two screens, while
+ * the run they describe was moving.
+ *
+ * **What they explained is still true and is carried by the wire, not by prose.**
+ * `calls_spent` is per layer and there is no field anywhere that sums the two.
+ * `succeeded_attempts` and `adaptive_findings` are `null` — not `0` — until the layer
+ * has attempted something, which is the absent-rather-than-zero distinction itself,
+ * asserted in `test_api_runs.py`. What is gone from the screens with the prose is the
+ * two counts: a run in flight now shows its position and its calls, and what it found
+ * is read off the finished run's report.
+ */
 
 /** The scored layer: family, case, attempt — and a count of verdicts, not findings. */
 export function scoredReading(scored: ScoredProgress): LayerReading {
@@ -102,19 +116,6 @@ export function scoredReading(scored: ScoredProgress): LayerReading {
     at: at === null ? null : [at.family, at.case_id, `${at.attempt}`],
     statement: scored.statement,
     callsSpent: scored.calls_spent,
-    callsNote:
-      'Calls this layer has put on the wire, retries included, and the nonce ' +
-      'probe among them. Calls are not attempts, and this figure is this layer’s ' +
-      'alone.',
-    found:
-      scored.succeeded_attempts === null
-        ? 'No attempt has come back yet, so the attempts that succeeded are ' +
-          'absent rather than zero: a count over an empty population is not a ' +
-          'small number, and a zero beside a position in flight would read as a ' +
-          'target that resisted something it was never asked.'
-        : `${scored.succeeded_attempts} of the attempts recorded so far ` +
-          'succeeded. A count of verdicts and not of findings — a finding is a ' +
-          'verdict plus its narrative, and the report is where that is written.',
   }
 }
 
@@ -129,18 +130,6 @@ export function adaptiveReading(adaptive: AdaptiveProgress): LayerReading {
     at: at === null ? null : [at.family, `${at.episode}`, `${at.turn}`],
     statement: adaptive.statement,
     callsSpent: adaptive.calls_spent,
-    callsNote:
-      'Calls this layer has put on the wire, under its own ceiling. Enforced ' +
-      'separately from the scored layer’s, so neither can borrow what the other ' +
-      'did not spend.',
-    found:
-      adaptive.adaptive_findings === null
-        ? 'No episode has ended yet, so the routes found are absent rather than ' +
-          'zero: a zero here would read as an attacker that ran out of ideas, ' +
-          'which is the reading censored exists to keep apart.'
-        : `${adaptive.adaptive_findings} episode(s) found a route. An adaptive ` +
-          'finding carries no rate, no interval, no band and no D, and it is ' +
-          'never added to the scored layer’s count.',
   }
 }
 

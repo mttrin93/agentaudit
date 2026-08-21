@@ -1011,8 +1011,6 @@ function Layer({ layer }: { layer: LayerReading }) {
       <p>
         <span className="calls">{layer.callsSpent}</span> calls spent
       </p>
-      <p className="aside">{layer.callsNote}</p>
-      <p className="aside">{layer.found}</p>
     </div>
   )
 }

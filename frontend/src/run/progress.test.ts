@@ -93,15 +93,27 @@ describe('the scored layer', () => {
     expect(reading.statement).toContain('attempt 4')
   })
 
-  it('counts verdicts rather than findings, and absent is not zero', () => {
+  it('reports its position and its own calls, and counts nothing', () => {
     const counted = scoredReading(inTheScoredLayer().scored)
     const none = scoredReading(holdingItsInterrupt().scored)
 
-    expect(counted.found).toContain('13 of the attempts')
-    // A finding is a verdict plus its narrative, and this is a count of verdicts.
-    expect(counted.found).toContain('not of findings')
+    // The two standing paragraphs came off this reading: what the layer had found,
+    // and that calls are not attempts. What is left is a position, a spend and the
+    // bench's own sentence — and no count of verdicts anywhere in it, which used to
+    // be a number in prose.
+    expect(Object.keys(counted)).toEqual([
+      'layer',
+      'title',
+      'reached',
+      'units',
+      'at',
+      'statement',
+      'callsSpent',
+    ])
+    expect(counted.callsSpent).toBe(inTheScoredLayer().scored.calls_spent)
+    // A layer that has attempted nothing still says so by having no position, which
+    // is the absent-and-not-zero distinction the prose used to spell out.
     expect(none.at).toBeNull()
-    expect(none.found).toContain('absent rather than zero')
   })
 })
 
@@ -116,16 +128,20 @@ describe('the adaptive layer', () => {
     expect(reading.at).toEqual(['scope creep', '2', '5'])
   })
 
-  it('reports routes that carry no rate, and absent rather than zero', () => {
+  it('carries no count of routes found, and no position before it starts', () => {
     const counted = adaptiveReading(inTheScoredLayer().adaptive)
     const none = adaptiveReading(holdingItsInterrupt().adaptive)
 
-    expect(counted.found).toContain('6 episode(s) found a route')
-    expect(counted.found).toContain('no rate, no interval, no band and no D')
-    expect(counted.found).toContain('never added to the scored layer')
-    // A zero here would read as an attacker that ran out of ideas, which is the
-    // reading censored exists to keep apart.
-    expect(none.found).toContain('absent rather than zero')
+    // The routes-found count is off this reading, along with the sentence saying it
+    // carried no rate, no interval, no band and no D. Nothing in the value is that
+    // count now — asserted over every string, so it cannot come back in a sentence.
+    const said = Object.values(counted).join(' ')
+    expect(said).not.toContain('found a route')
+    expect(said).not.toContain(
+      `${inTheScoredLayer().adaptive.adaptive_findings} episode`,
+    )
+    expect(none.at).toBeNull()
+    expect(none.reached).toBe(false)
   })
 })
 

@@ -372,7 +372,11 @@ describe('the three attestation statements', () => {
     expect(new Set(consequences).size).toBe(3)
     expect(consequences[0]).toMatch(/this bench’s own three reference agents/)
     expect(consequences[1]).toMatch(/case library/)
-    expect(consequences[2]).toMatch(/830/)
+    // The call count came out of this one: what a gate run costs is the estimate the
+    // next screen puts up, per layer and against its ceiling, and a figure in a
+    // sentence beside a checkbox was a second place for it to be wrong.
+    expect(consequences[2]).toMatch(/billed to it/)
+    expect(consequences[2]).not.toMatch(/\d/)
     for (const [index, statement] of ATTESTATION_STATEMENTS.entries()) {
       expect(consequences[index]).not.toBe(statement.consequence)
     }
@@ -391,12 +395,11 @@ describe('nothing reaches the bench with a statement withheld', () => {
       if (request.kind !== 'blocked') {
         throw new Error('a gate run was buildable with a statement withheld')
       }
-      // Named rather than counted: an operator told "one statement is missing" has to
-      // find it, and the API's own refusal names them for the same reason.
-      const wording = ATTESTATION_STATEMENTS.find(
-        (statement) => statement.field === withheld,
-      )?.wording
-      expect(request.missing.join(' ')).toContain(`not attested: ${wording}`)
+      // Blocked, and it prints nothing at all: the list used to restate the sentence
+      // the operator is looking at an unticked box for. What the outcome has to carry
+      // is that there is no body — the assertion below — and `kind` is what carries
+      // the refusal.
+      expect(request.missing).toEqual([])
       // And no body anywhere in the outcome: there is nothing here to send.
       expect(fieldsOf(request)).not.toContain('attestation')
     },

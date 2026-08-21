@@ -179,10 +179,8 @@ const FOR_A_GATE_RUN: Record<keyof Attested, string> = {
     'it reads and marks retired what the rule retires, and that library is the one ' +
     'every run on this bench is measured with.',
   accepts_provider_policy_and_cost:
-    'The payloads reach your model provider under your credentials — about 830 ' +
-    'calls of them, plus the adjudicator’s against the gold set — so the policy ' +
-    'violations are recorded against your account and the inference is billed to ' +
-    'it. The next screen shows the two figures before anything is sent.',
+    'The payloads reach your model provider under your credentials so the policy ' +
+    'violations are recorded against your account and the inference is billed to it.',
 }
 
 /** One statement as this screen asks it: the record's wording, this consequence. */
@@ -235,11 +233,11 @@ export function nothingAttested(): Attesting {
   }
 }
 
-/** The statements that have not been made, in the wording they were asked in. */
-export function withheld(attesting: Attesting): string[] {
-  return GATE_RUN_STATEMENTS.filter(
+/** Whether any of the three statements has not been made. */
+export function anyWithheld(attesting: Attesting): boolean {
+  return GATE_RUN_STATEMENTS.some(
     (statement) => !attesting.attested[statement.field],
-  ).map((statement) => statement.wording)
+  )
 }
 
 /**
@@ -250,6 +248,16 @@ export function withheld(attesting: Attesting): string[] {
  */
 export type GateRunRequest =
   | { kind: 'ready'; body: StartGateRunBody }
+  /**
+   * Blocked, with the unfinished steps that have something to say — and `missing`
+   * may be empty.
+   *
+   * A withheld statement is the case that says nothing: the operator is looking at
+   * the box, and a line under it repeating the sentence beside it was the walk
+   * restated inside itself. It still blocks, which is what `kind` is for. Nothing
+   * reads `missing.length` to decide whether a gate run may start — `start()` asks
+   * this function again and refuses on anything that is not `ready`.
+   */
   | { kind: 'blocked'; missing: string[] }
 
 /**
@@ -270,9 +278,6 @@ export function gateRunRequest(attesting: Attesting): GateRunRequest {
         'wrote them',
     )
   }
-  missing.push(
-    ...withheld(attesting).map((wording) => `not attested: ${wording}`),
-  )
   if (attesting.price_per_call.trim() && !attesting.currency.trim()) {
     // `CallPrice`'s own guard, held here so the operator meets it as an unfinished
     // step rather than as a 422: an amount with a currency the bench chose is a
@@ -283,7 +288,11 @@ export function gateRunRequest(attesting: Attesting): GateRunRequest {
     )
   }
 
-  if (missing.length) {
+  // A statement withheld blocks and prints nothing. The walk will not let an
+  // operator past an unticked box, so this is not a state they can be sitting in and
+  // wondering about; what it stops is a body built from an incomplete declaration by
+  // any other path, which is what this function is for.
+  if (anyWithheld(attesting) || missing.length) {
     return { kind: 'blocked', missing }
   }
   const priced = attesting.price_per_call.trim()

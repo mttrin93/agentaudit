@@ -95,6 +95,12 @@ body {
  * inside of a card: a paragraph on the page is prose and gets the measure, and the
  * same tag nested in a `.family` or a `.citation` is that block's own text and takes
  * the block's width.
+ *
+ * **And the capped block is centred, not left-aligned.** A measure narrower than the
+ * page has slack in it, and slack that all lands on one side reads as a column that
+ * has slipped rather than as a measure that was chosen. `margin-inline: auto` splits
+ * it, so every block on the page has the same space to its left as to its right
+ * whichever of the two widths it takes.
  */
 .screen {
   max-width: 64rem;
@@ -114,6 +120,7 @@ body {
 .screen > section > footer,
 .screen > section > blockquote {
   max-width: var(--measure);
+  margin-inline: auto;
 }
 
 /*
@@ -127,6 +134,7 @@ body {
 .screen .runs,
 .screen .families:not(.per-family) {
   max-width: var(--measure);
+  margin-inline: auto;
 }
 
 .eyebrow {

@@ -437,6 +437,23 @@ describe('the document is named and never parsed', () => {
     }
     expect(outcome.reading.document.path).toBe(CITED.document)
     expect(outcome.reading.document.statement).toMatch(/does not read it/)
+    // And the record beside it, which is where the figures the scan above refuses to
+    // find actually are (ADR-0023). Named on the same terms and for the same reason:
+    // this screen points at it and opens nothing.
+    expect(outcome.reading.record.path).toBe(CITED.record)
+    expect(outcome.reading.record.path).toMatch(/\.json$/)
+  })
+
+  it('says the citation is replaced by whatever the next gate run answers', () => {
+    const writes = block(gateScreen(CERTIFIED), 'consequence').writes.join(' ')
+
+    // An operator meets the write-back before the control that starts one, and after
+    // ADR-0023 the citation is part of the write-back: a gate run replaces what this
+    // bench cites whatever it answers, so a failing one takes a passing citation off
+    // the bench. Learning that after pressing the control is learning it too late.
+    expect(writes).toMatch(/citation this bench carries/)
+    expect(writes).toMatch(/replaces whatever was cited before it/)
+    expect(writes).toMatch(/not the best answer it ever got/)
   })
 })
 

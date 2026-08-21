@@ -103,17 +103,24 @@ describe('the gate run the bench last passed', () => {
     }
   })
 
-  it('names the gate document and reads nothing out of it', () => {
+  it('names both files the citation points at, and reads neither', () => {
     const reading = gateReading(CITED)
     if (!reading.cited) {
       throw new Error('a cited citation read as uncited')
     }
 
     expect(reading.document.path).toBe(CITED.document)
+    // The record is the answer to the question the document could only have been
+    // given by parsing it: the same gate run as fields, named beside the prose
+    // (ADR-0023). It is an address on this screen and nothing more — no figure
+    // arrives from it, which is what the scan below is for.
+    expect(reading.record.path).toBe(CITED.record)
+    expect(reading.record.path).toMatch(/\.json$/)
+    expect(reading.record.statement).toMatch(/discrimination score/)
     // The per-family rates, the per-family `D`, κ and the three reference agents
-    // are in that document and are not in the citation. A view that had them would
+    // are in that record and are not in the citation. A view that had them would
     // have parsed the bench's own prose output (spec §75: per-family gate figures
-    // are out, and the sidecar that would supply them is a follow-up).
+    // are out, and the citation names the record rather than carrying it).
     const shown = everyString(reading).join(' ')
     for (const figure of [
       'D =',
@@ -147,7 +154,14 @@ describe('a bench that cites no gate run', () => {
     // And nowhere for a screen to draw a blank: no outcome, no date, no library
     // version, no document. A record with empty ones reads as a gate that failed.
     const held = reading as unknown as Record<string, unknown>
-    for (const absent of ['facts', 'document', 'outcome', 'decidedOn', 'library']) {
+    for (const absent of [
+      'facts',
+      'document',
+      'record',
+      'outcome',
+      'decidedOn',
+      'library',
+    ]) {
       expect(held[absent]).toBeUndefined()
     }
   })

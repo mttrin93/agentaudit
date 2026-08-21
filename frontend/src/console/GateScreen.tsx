@@ -882,6 +882,12 @@ function TheEstimate({
             <dt>{figure.label}</dt>
             <dd>
               <span className="calls">{figure.calls}</span>
+              {/*
+                The unit, said rather than left to be inferred: the big number is a
+                count of calls, and beside a currency in the next span it was read
+                as money by somebody who had every reason to.
+              */}
+              <span className="unit">calls</span>
               <span className="money">{figure.cost}</span>
               <span className="kind">{figure.kind}</span>
             </dd>

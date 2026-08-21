@@ -368,8 +368,7 @@ export function gateCostFigures(
       spends:
         `${estimate.scored.cases} live cases at ` +
         `${estimate.scored.attempts_per_case} attempts each, against all three ` +
-        'reference agents, plus the one probe that plants a nonce in each. Every ' +
-        'figure the decision turns on comes from here.',
+        'reference agents, plus the one probe that plants a nonce in each.',
     },
     {
       layer: 'adaptive',
@@ -382,8 +381,7 @@ export function gateCostFigures(
       spends:
         `Episodes an attacker drives itself, ${estimate.adaptive.episodes_per_family} ` +
         `per family per agent under a cap of ${estimate.adaptive.turns_per_episode} ` +
-        'turns. Nothing here is scored, so none of these calls reaches the gate ' +
-        'decision.',
+        'turns.',
     },
   ]
 }

@@ -504,6 +504,20 @@ a {
   font-variant-numeric: tabular-nums;
 }
 
+/*
+ * The unit beside the count, small, in the quiet grey.
+ *
+ * Set below the figure rather than inside it: *calls* at the figure's own size is
+ * a second thing shouting, and the number is what a reader is comparing against
+ * the ceiling under it.
+ */
+.figure .unit {
+  display: inline-block;
+  margin-right: 0.8rem;
+  font-size: 1rem;
+  color: var(--quiet);
+}
+
 .figure .money {
   display: inline-block;
   margin-right: 0.8rem;

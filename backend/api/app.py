@@ -2096,8 +2096,8 @@ class MayNotStart(BaseModel):
 
 
 THE_GATE_RUN_IS_AVAILABLE = (
-    "a gate run puts the whole library to three agents of known construction, then "
-    "writes each family’s discrimination score onto its record"
+    "A gate run evaluates the whole library to three agents of known construction, "
+    "then writes each family’s discrimination."
 )
 """The sentence a bench that may start one says about itself.
 

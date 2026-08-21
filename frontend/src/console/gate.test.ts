@@ -107,8 +107,8 @@ const OFFERED: StartControl = startControl({
   available: true,
   library: '/var/lib/agentaudit/cases',
   statement:
-    'a gate run puts the whole library to three agents of known construction, then ' +
-    'writes each family’s discrimination score onto its record',
+    'A gate run evaluates the whole library to three agents of known construction, ' +
+    'then writes each family’s discrimination.',
 })
 
 /** A bench that cannot, because this build ships no test equipment. */

@@ -508,7 +508,6 @@ export function GateScreen() {
       {stage === 'estimate' && started !== null ? (
         <TheEstimate
           view={gateInterruptView(started.estimate, started.library)}
-          held={started.statement}
           confirmed={confirmed}
           setConfirmed={setConfirmed}
           confirm={confirm}
@@ -851,10 +850,16 @@ function TheAttestation({
  * footer and a footer is where somebody puts a total. The response's own bounded
  * total is not on it at all: what an operator reads instead is each layer beside the
  * ceiling it is enforced against, which is the enforced limit (ADR-0007).
+ *
+ * **Without the record's own `statement`.** The gate run says of itself that it is
+ * halted at the approval interrupt, that nothing has been sent, spent or written,
+ * and that none of it happens until the estimate is answered. It is still on the
+ * record and still on the wire, where an auditor reading the run reads it; on the
+ * screen it was a paragraph about the state of a screen the operator is looking at,
+ * over the two figures they are there to answer.
  */
 function TheEstimate({
   view,
-  held,
   confirmed,
   setConfirmed,
   confirm,
@@ -862,7 +867,6 @@ function TheEstimate({
   busy,
 }: {
   view: GateInterruptView
-  held: string
   confirmed: boolean
   setConfirmed: (given: boolean) => void
   confirm: () => void
@@ -872,7 +876,6 @@ function TheEstimate({
   return (
     <section>
       <h2>What this gate run will cost</h2>
-      <p>{held}</p>
       <dl className="figures">
         {view.figures.map((figure) => (
           <div className="figure" key={figure.layer}>

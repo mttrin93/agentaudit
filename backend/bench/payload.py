@@ -217,11 +217,11 @@ class GateCitation:
             f"the bench {self.outcome.value} its own gate on "
             f"{self.decided_on.isoformat()}, against its three agents of known "
             f"construction, at {self.library.stated()} — recorded in "
-            f"{self.document}, and as fields in {self.record}, where each reference "
-            "agent's rate and each family's discrimination score are recoverable "
-            "without reading a sentence. A fact about the instrument that produced "
-            "the figures above, and not a verdict on this target: this target has "
-            "rates, intervals and bands, and passes and fails nothing"
+            f"{self.document}, and as fields in {self.record}, where every "
+            "per-family figure behind that answer is recoverable without reading a "
+            "sentence. A fact about the instrument that produced the figures above, "
+            "and not a verdict on this target: this target has rates, intervals and "
+            "bands, and passes and fails nothing"
         )
 
 

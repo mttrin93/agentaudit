@@ -33,13 +33,15 @@
  * by the component. What it may never grow is a second one: `gate.test.ts` pins the
  * one field named for something that happens, and any other fails there.
  *
- * **This screen's own figures still come from the citation, and the document is
- * still never parsed.** The per-family rates and each family's `D` of the *cited*
- * gate run are in its document and the citation carries none of them, so this
- * screen shows what the citation carries and names the rest. The figures for a gate
- * run started here come from the run itself, in memory, and are rendered by
- * `gaterun.ts` — which is why this module's scan for document-only figures still
- * holds: a screen that read the bench's own prose output would break on a rewording.
+ * **This screen's own figures still come from the citation, and nothing is ever
+ * parsed.** The per-family rates and each family's `D` of the *cited* gate run are
+ * in the **gate run record** the citation names, and the citation carries none of
+ * them (ADR-0023), so this screen shows what the citation carries and names where
+ * the rest is. The figures for a gate run started here come from the run itself, in
+ * memory, and are rendered by `gaterun.ts` — which is why this module's scan for
+ * document-only figures still holds: a screen that read the bench's own prose output
+ * would break on a rewording, and after ADR-0023 it has a `.json` to point at
+ * instead of a reason to try.
  *
  * **The citation is read through the front door's own reading.** `gateReading` is
  * imported rather than reimplemented: the citation's own two sentences are written
@@ -51,9 +53,9 @@
  * **The three reference agents are named, ordered, and carry no figure.** They are
  * the contrast the gate is decided on, so an operator reading the rule needs to know
  * what it was put to; each takes one step of one hue because they are ordered by
- * construction, and not one of them has a rate beside it — those are in the
- * document, and a coloured figure beside a name is the severity scale the report
- * exists to refuse (spec §75).
+ * construction, and not one of them has a rate beside it — those are in the record
+ * the citation names, and a coloured figure beside a name is the severity scale the
+ * report exists to refuse (spec §75).
  */
 
 import type { BenchGate, DeclaredRule } from '../api/bench'
@@ -162,7 +164,8 @@ const THE_RULE_IS_PRINTED =
 const THE_AGENTS_ARE_ORDERED =
   'The three agents the rule is put to, ordered by construction and named without a ' +
   'figure between them. What each of them scored on each family is in the gate run’s ' +
-  'document; the citation does not carry it, and this screen does not read it.'
+  'own record, named beside the citation above; the citation does not carry it, and ' +
+  'this screen does not read it.'
 
 /**
  * The three agents of known construction, in the order construction gives them.
@@ -215,9 +218,14 @@ function whatItWrites(rule: DeclaredRule): string[] {
       'never the last two of the series, because a model swap moves the score and a ' +
       'change of instrument is not the passage of time. Marked and never deleted, ' +
       'because a case the field caught up with is evidence that the field moved.',
-    'It writes a dated document of the run, which is the document the citation ' +
-      'above names. The curated history is written by hand and reads those records; ' +
-      'this one is the run itself.',
+    'It writes the run down three times and none of them is a summary of another: a ' +
+      'dated document for a person, the same run as fields for a program, and the ' +
+      'citation this bench carries from then on — into the provenance block of every ' +
+      'report it signs. The last one replaces whatever was cited before it, whatever ' +
+      'this run answers: the citation is what the bench last put itself through and ' +
+      'not the best answer it ever got, so a run that fails takes a passing citation ' +
+      'off this bench and says so. The curated history is written by hand and reads ' +
+      'those records; these are the run itself.',
     `It spends, on your own provider: the whole admitted library against all three ` +
       `agents at ${rule.attempts_per_case} attempts per case, and then the ` +
       'adaptive layer under a ceiling and a counter of its own. The terminal ' +
@@ -238,9 +246,12 @@ const TWO_ENTRY_POINTS = [
     'yours before running the command.',
   'This command and the control beside it are the two entry points, and they ask ' +
     'the same three attestation statements and present the same two figures before ' +
-    'anything is sent. What differs is what they leave: the command writes a dated ' +
-    'document of the run, and a gate run started here returns its figures and holds ' +
-    'them on the bench.',
+    'anything is sent. Both leave the run’s figures as a record and both write the ' +
+    'citation this bench carries. Two things differ. The command writes a dated ' +
+    'document for a person to read and a gate run started here does not. And a gate ' +
+    'run started here changes what this bench cites at once, while one run from a ' +
+    'terminal changes the library — so a bench already running picks it up when it ' +
+    'next starts, which is the same restart a retirement takes effect at.',
   'Neither can be answered by something that is not a person. The terminal reads ' +
     'an absent or piped answer as a refusal, and the browser posts an attestation ' +
     'the bench will not construct with a statement withheld — which is why nothing ' +

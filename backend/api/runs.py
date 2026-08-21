@@ -67,7 +67,7 @@ from __future__ import annotations
 import threading
 import uuid
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from enum import StrEnum
 
@@ -79,6 +79,7 @@ from backend.bench.adjudication import Completion
 from backend.bench.calibration import CalibrationResult, run_calibration
 from backend.bench.contract import TargetConfig, TargetFailure, TargetUnreachable
 from backend.bench.library import Case, Family, LibraryVersion, VerdictClass
+from backend.bench.payload import GateCitation
 from backend.bench.registration import Attestation, issue_nonce
 from backend.bench.rule import DECLARED_RULE, GateRule
 from backend.bench.signing import SignedArtefact
@@ -492,8 +493,38 @@ class BenchRuns:
         only by asking the bench the factory returned what it holds, and a check
         against the function that built it would be a check on a call nobody proved
         was made. Frozen, so reading it is not a way to change it.
+
+        One thing about it does move, and it moves through the named writer below and
+        nowhere else: the gate run this bench cites (ADR-0023).
         """
         return self._config
+
+    def cite(self, citation: GateCitation) -> None:
+        """Start citing this gate run, in this process, from now on.
+
+        The one writer on `BenchConfig`, and it takes a `GateCitation` rather than
+        anything a gate run produced: what reaches this bench is the citation, which
+        is provenance, and not a decision, a `GateResult` or a record of either. A
+        gate run's own registry is `BenchGateRuns` and no signature here names it —
+        this method is the single edge between the two, which is the shape ADR-0010
+        established and ADR-0021 applied to the gate-run axis.
+
+        **Why this exists at all.** ADR-0021 left the citation as whatever the
+        deployment declared, so a bench that had just passed its own gate went on
+        citing something else, and a deployment that declared nothing read as an
+        instrument with no certification. ADR-0023 reverses that: the durable record
+        is the citation in the library (`bench/cited.py`), which the next process
+        boots with, and this is how the process that made the gate run starts citing
+        it without waiting for a restart.
+
+        Replaced rather than mutated, under the same lock the records are kept under,
+        because `BenchConfig` and `ReportConfig` are frozen and a run that has already
+        built its payload keeps the citation it was signed with.
+        """
+        with self._lock:
+            self._config = replace(
+                self._config, report=replace(self._config.report, gate=citation)
+            )
 
     def issue(self) -> str:
         """Issue a nonce for a target the caller is about to register.

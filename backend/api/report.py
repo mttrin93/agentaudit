@@ -112,10 +112,22 @@ class ReportConfig:
     gate: GateCitation | None = None
     """The bench's own gate result, cited as provenance and never as a result.
 
-    A fact about the instrument, supplied by the deployment that knows which run
-    certified it (ADR-0018). `None` prints `UNCITED_GATE` — an uncited instrument is
-    a fact about the report, and a report that omitted the line would read as one
-    with nothing to declare.
+    A fact about the instrument (ADR-0018). `None` prints `UNCITED_GATE` — an uncited
+    instrument is a fact about the report, and a report that omitted the line would
+    read as one with nothing to declare.
+
+    **Where it comes from changed with ADR-0023.** It used to be supplied by the
+    deployment that knew which gate run certified the bench, and it stays declarable
+    that way — a caller constructing this record may still name one. What it is now,
+    by default, is the citation the case library records: a gate run writes it there
+    beside the readings it stored (`bench/cited.py`), `app.deployed_bench` reads it
+    off the library it booted with, and a gate run started from the console replaces
+    it in this process through one edge (`gate_runs.Cites`). So a bench that has
+    passed its own gate cites it without anyone editing a configuration, and a bench
+    whose last gate run failed cites *that*.
+
+    Still nothing this module reads or computes: `read_gate` is never called on a
+    target run and the citation arrives already made.
     """
 
     pinned: Ed25519PublicKey | None = None

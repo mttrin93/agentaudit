@@ -368,6 +368,16 @@ export interface CoverageGap {
  * the instrument rather than about a run. The backend writes both through one
  * serialiser (`payload.citation`), so this one type reads both and a test compares
  * them over the same run.
+ *
+ * **Two addresses and no figures.** `document` is the gate run in prose and
+ * `record` is the same gate run as fields, so a reader reaches every per-family
+ * figure without parsing a sentence (ADR-0023). Neither of them is a figure, and
+ * nothing in this app opens either.
+ *
+ * **`document: null` is a third fact, not an empty field.** A gate run started from
+ * the console leaves the record and no dated prose, so there is no file name to
+ * carry — and the figures are in `record` either way. Typed as an absence so that no
+ * screen renders a sentence where it expected a path.
  */
 export type GateCitation =
   | {
@@ -375,7 +385,8 @@ export type GateCitation =
       outcome: string
       decided_on: string
       library: { cases: number; digest: string }
-      document: string
+      document: string | null
+      record: string
       stated: string
     }
   | { cited: false; stated: string }
@@ -760,8 +771,8 @@ export const BENCH_GATE_PATH = '/bench/gate'
  * text `scripts/gate.py` writes into its own document — and the fields beside it
  * are the declared record's numbers, so a sentence on a screen that needs one can
  * name it rather than restate it in words. Not one field here is a measurement: a
- * gate run's per-family rates and its per-family `D` are in its document and are
- * in no response this app reads (spec §75).
+ * gate run's per-family rates and its per-family `D` are in the record its
+ * citation names, and are in no response this app reads (spec §75, ADR-0023).
  *
  * **Every threshold is typed and the screen prints the rule verbatim.** The
  * numbers are carried whole because the rule is a record and half a record invites
@@ -803,9 +814,11 @@ export interface BenchGate {
  * The rule this bench is held to, and the gate run it cites under it.
  *
  * The only read in this module whose subject is the instrument rather than a
- * target, and it takes no run id because it is not about a run. It reads what the
- * deployment declared and nothing a gate run this bench just made decided — those
- * are two different facts and they arrive on two different routes.
+ * target, and it takes no run id because it is not about a run. What it answers
+ * with is the gate run this bench last made: ADR-0023 reversed ADR-0021 on that,
+ * so a bench that has passed its own gate says so here without a deployment
+ * editing a configuration, and a bench whose last gate run failed says *that*.
+ * Reading a gate run and starting one are still two operations on two routes.
  *
  * **Nothing under `/bench` is a write, and starting a gate run is not here.** The
  * four functions below post to and read `/gate-runs`, which is its own route

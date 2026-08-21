@@ -25,6 +25,7 @@ import pytest
 from backend.bench.adaptive.scripted import SCRIPTED_ATTACKER
 from backend.bench.adjudication import Completion
 from backend.bench.calibration import CalibrationResult, TargetRun, run_calibration
+from backend.bench.cited import CITED_GATE_RUN, citation_of, cite, the_citation
 from backend.bench.evaluator import Verdict
 from backend.bench.gate import GateResult, NotAGateRun, read_gate
 from backend.bench.gate_record import recorded_gate_run
@@ -71,6 +72,7 @@ from scripts.gate import (
 
 GATE_SOURCE = Path(__file__).resolve().parents[1] / "bench" / "gate.py"
 RECORD_SOURCE = Path(__file__).resolve().parents[1] / "bench" / "gate_record.py"
+TERMINAL_SOURCE = Path(__file__).resolve().parents[2] / "scripts" / "gate.py"
 
 SEPARATES = (0, 15, 30)
 """Hardened, weak and trivial counts of thirty that pass the per-family rule."""
@@ -482,6 +484,113 @@ def test_the_gate_refuses_a_run_that_is_missing_a_reference_agent(
         _gate([run for run in gate_run.target_runs if run.target.name != "weak"])
 
 
+# --- the citation this entry point earns (ADR-0023) --------------------------
+
+
+def test_the_terminal_leaves_a_document_a_record_and_a_citation_naming_both(
+    gate_run: CalibrationResult, tmp_path: Path, library: list[Case]
+) -> None:
+    """Three artefacts, one reading, and the citation is the one that travels.
+
+    ADR-0023's first reversal from the command line's end. The document and the record
+    were already two renderings of one `GateResult` (#84); the citation is now a third,
+    taken off the record rather than composed beside it, which is why it can name both
+    files and why none of the three can disagree.
+
+    Written into the case library and not beside the document, because a citation is a
+    claim about a library at a version and it has to travel with the cases it
+    describes — which is also what lets the next process boot citing it
+    (`app.deployed_bench`).
+    """
+    gate = _gate(gate_run.target_runs, library=LibraryVersion.of(library))
+    documents = tmp_path / "gate-runs"
+    cases = tmp_path / "cases"
+    cases.mkdir()
+
+    written = _written(gate, gate_run, documents)
+    replaced = cite(written.recorded, cases)
+
+    cited = the_citation(cases)
+    assert cited is not None
+    assert cited == citation_of(written.recorded)
+    # The two names on the citation are the two files that were written.
+    assert cited.document == written.document.name
+    assert cited.record == written.record.name
+    assert (documents / cited.record).exists()
+    assert (documents / cited.document).exists()
+    # The outcome and the library version are the gate's own, not re-derived here.
+    assert cited.outcome is gate.decision.outcome
+    assert cited.library == gate.library
+    # And the citation went to the library, not to the directory the documents are in.
+    assert (cases / CITED_GATE_RUN).exists()
+    assert not (documents / CITED_GATE_RUN).exists()
+    assert "cited no gate run before now" in replaced.stated()
+
+    # The figures the citation does not carry are in the file it names, so a reader
+    # holding the citation never has to open the prose beside it.
+    figures = json.loads((documents / cited.record).read_text(encoding="utf-8"))
+    for outcome in gate.decision.outcomes:
+        one = next(
+            family
+            for family in figures["decision"]["families"]
+            if family["family"] == str(outcome.family)
+        )
+        assert one["discrimination"] == outcome.discrimination
+
+
+def test_the_terminal_cites_inside_the_lease_it_already_holds(
+    gate_run: CalibrationResult, tmp_path: Path, library: list[Case]
+) -> None:
+    """The citation is written in the block that holds the library, and only there.
+
+    Asserted over the entry point's own structure, because the property is about
+    *when* rather than about what comes back: the readings and the citation have to
+    land inside one critical section, or a second gate run can store its own readings
+    between them and the bench ends up citing a library version that no longer
+    describes the cases (ADR-0021 condition 5, ADR-0023).
+
+    `_run_it` is the whole of the lease — one `with holding_the_library(...)`, whose
+    body is the call to `run_the_gate` — so *inside `run_the_gate`* and *under the
+    lease* are the same place, and the assertion is that the citation is written there
+    and nowhere else in the module.
+    """
+    functions = {
+        node.name: node
+        for node in ast.walk(ast.parse(TERMINAL_SOURCE.read_text(encoding="utf-8")))
+        if isinstance(node, ast.FunctionDef)
+    }
+
+    holding = [
+        node for node in ast.walk(functions["_run_it"]) if isinstance(node, ast.With)
+    ]
+    assert [_calls_in(item) for item in holding] == [
+        {"holding_the_library", "Path", "run_the_gate"}
+    ], "the lease no longer wraps the whole of the gate run"
+
+    assert "cite" in _calls_in(functions["run_the_gate"])
+    cited_from = {name for name, node in functions.items() if "cite" in _calls_in(node)}
+    assert cited_from == {"run_the_gate"}, (
+        f"the citation is written from {sorted(cited_from)}, and only the block "
+        "holding the library may write it"
+    )
+
+    # And it is written into the library the lease is held on — the same directory the
+    # readings went to — rather than into the directory the documents are in. A
+    # citation beside the documents is a citation that does not travel with the cases
+    # it is a claim about, and `deployed_bench` would never find it.
+    [citing] = [
+        called
+        for called in ast.walk(functions["run_the_gate"])
+        if isinstance(called, ast.Call)
+        and isinstance(called.func, ast.Name)
+        and called.func.id == "cite"
+    ]
+    [_, directory] = citing.args
+    assert isinstance(directory, ast.Name) and directory.id == "cases_dir", (
+        "the terminal cites into something other than the library it just wrote to"
+    )
+
+
 def _gate(target_runs: Sequence[TargetRun], library: LibraryVersion | None = None):  # type: ignore[no-untyped-def]
     """Decide the gate over a run, naming the three agents by their roles."""
     return read_gate(
@@ -745,6 +854,21 @@ def _written(gate: GateResult, run: CalibrationResult, directory: Path) -> Writt
     return record_run(gate, run, load_library(CASES_DIR), directory, _declared_models())
 
 
+def _calls_in(node: ast.AST) -> set[str]:
+    """Every function called anywhere under that node, by the name it is called by.
+
+    Attribute calls come back under their attribute — `path.name` is `name` — which is
+    enough for the assertions above and keeps the reading from depending on how a
+    module happens to import what it calls.
+    """
+    return {
+        called.func.id if isinstance(called.func, ast.Name) else called.func.attr
+        for called in ast.walk(node)
+        if isinstance(called, ast.Call)
+        and isinstance(called.func, ast.Name | ast.Attribute)
+    }
+
+
 def _scored_block(document: str) -> str:
     """The document's scored-layer section, taken off its own fences."""
     _, _, after = document.partition(SCORED_FENCE)
@@ -894,7 +1018,10 @@ def test_nothing_reads_the_record_by_parsing_the_markdown(
     record = json.loads(written.record.read_text(encoding="utf-8"))
 
     off_the_result = recorded_gate_run(
-        gate, decided_at=record["decided_at"], document=record["document"]
+        gate,
+        decided_at=record["decided_at"],
+        document=record["document"],
+        record=record["record"],
     )
     assert json.loads(off_the_result.model_dump_json()) == record
 
@@ -997,7 +1124,10 @@ def test_a_family_the_bench_could_not_measure_is_absent_rather_than_scored_zero(
     )
 
     record = recorded_gate_run(
-        _result(decision), decided_at="2026-08-20T00:00:00+00:00", document="gate-x.md"
+        _result(decision),
+        decided_at="2026-08-20T00:00:00+00:00",
+        document="gate-x.md",
+        record="gate-x.json",
     )
 
     figures = {one.family: one for one in record.decision.families}
@@ -1044,7 +1174,10 @@ def test_the_record_carries_no_figure_spanning_two_families_or_two_layers() -> N
     decision = decide_gate(outcomes_for(*SIX_APART), reliability=judged(wrongful=fit))
 
     record = recorded_gate_run(
-        _result(decision), decided_at="2026-08-20T00:00:00+00:00", document="gate-x.md"
+        _result(decision),
+        decided_at="2026-08-20T00:00:00+00:00",
+        document="gate-x.md",
+        record="gate-x.json",
     )
 
     scores = [one.discrimination for one in record.decision.families]

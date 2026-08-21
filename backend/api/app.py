@@ -187,6 +187,7 @@ from backend.api.runs import (
 )
 from backend.bench.adaptive.budget import DECLARED_ADAPTIVE_BUDGET, AdaptiveBudget
 from backend.bench.admission import admitted_library
+from backend.bench.cited import the_citation
 from backend.bench.contract import NOT_A_SECURITY_RESULT, RetryPolicy, TargetConfig
 from backend.bench.gate_record import (
     CitedLibrary,
@@ -1278,7 +1279,7 @@ nothing here is reachable from a target's report.
 
 
 class CitedGate(BaseModel):
-    """A bench citing a gate run: its outcome, its date, its version, its document.
+    """A bench citing a gate run: its outcome, its date, its version, its two files.
 
     The outcome is one of three and this model is not only the passing one: a bench
     whose gate failed or was not decided cites it here in the same shape, because the
@@ -1286,10 +1287,12 @@ class CitedGate(BaseModel):
 
     `cited` is the field a caller branches on and it is a literal, so this shape and
     the one below are two facts rather than one record with empty fields. There is
-    no field here for a per-family figure: the reference agents' rates and the
-    per-family `D` live only in the document, and a route that read them out of it
-    would be parsing the bench's own prose (spec §75, "Per-family gate figures are
-    out").
+    still no field here for a per-family figure — the reference agents' rates and the
+    per-family `D` are in the **gate run record**, and a route that recovered them by
+    parsing the bench's own prose would break on a rewording (spec §75, "Per-family
+    gate figures are out"). What ADR-0023 added is `record`, which is that record's
+    name: an address, so those figures are reachable, and still not a figure on this
+    response.
     """
 
     cited: Literal[True] = True
@@ -1301,9 +1304,23 @@ class CitedGate(BaseModel):
     """The date the run was decided, as the citation holds it: ISO, no locale."""
 
     library: CitedLibrary
-    document: str
-    """Where the run is written down, so the citation is checkable. A path the
-    caller may link and this route never opens."""
+    document: str | None
+    """Where the run is written down in prose, or `null` where it is written nowhere.
+
+    A path the caller may link and this route never opens. `null` is a gate run
+    started from the console, which leaves the record below and no dated document
+    (ADR-0021, ADR-0023) — a third fact rather than an empty field, so a caller never
+    renders a paragraph where it expected a file name."""
+
+    record: str
+    """Where the same gate run is written down as fields, for the figures this
+    response does not carry.
+
+    The **gate run record**'s own file name (`gate_record.RecordedGateRun.record`),
+    so a reader of this response reaches each reference agent's rate and each
+    family's `D` without parsing the bench's own prose — the parse #75 refused to
+    write and ADR-0023 replaced with a pointer. Named here and opened by nothing:
+    this route still serves no per-family figure of its own."""
 
     stated: str
     """The citation in the bench's own words, whose subject is the bench."""
@@ -2172,15 +2189,30 @@ class WroteBack(BaseModel):
     """What this gate run wrote to the case library, and where it wrote it.
 
     On the response because it is the half of a gate run that outlives it: the series
-    the *next* gate run reads, and the retirements this one marked. A run that wrote
+    the *next* gate run reads, the retirements this one marked, its own figures as
+    fields, and the citation this bench carries from now on. A run that wrote
     nothing is absent rather than a zero here — `written` is null until there is a
     write-back to report.
+
+    **`cited` is on the wire because a citation must not change in silence.** A gate
+    run that displaced a passing citation says so, in words, on its own reading — the
+    console's counterpart to the line the terminal prints (ADR-0023).
     """
 
     library: str
     readings: int
     unread: list[str]
     retired: list[str]
+    record: str
+    """The file name this gate run's own figures were written under, in that
+    library. The console's counterpart to the dated record a command-line gate run
+    leaves beside its document (ADR-0023)."""
+
+    cited: str
+    """What citing this gate run did to the citation this library carried before it,
+    in words — because a replacement nobody is told about is the failure mode
+    ADR-0023 exists to refuse."""
+
     stated: str
 
 
@@ -2229,6 +2261,8 @@ def gate_run_reading(record: GateRunRecord, rule: GateRule) -> GateRunReading:
                 readings=written.readings,
                 unread=list(written.unread),
                 retired=list(written.retired),
+                record=written.record,
+                cited=written.cited,
                 stated=written.stated(),
             )
         ),
@@ -2286,21 +2320,36 @@ consequence and never about the cause, and it is appended to all three.
 
 def deployed_bench() -> BenchConfig:
     """What a bench is when the deployment declared nothing: the admitted library,
-    and the signing key from the environment, or no bench at all.
+    the gate run that library last recorded, and the signing key from the
+    environment, or no bench at all.
 
     The key is fetched through `signing.signing_key`, which stays the only line in
     this repository that reads `AGENTAUDIT_SIGNING_KEY`; the refusal it raises is
     re-raised with what booting anyway would have cost, and its type is unchanged so
     that a deployment catching `NoSigningKey` still catches this one.
+
+    **The citation is read off the library, and that is ADR-0023's other half.**
+    Until now this function declared none, so a live deployment's front door and gate
+    screen read *no gate run cited* even where the bench had passed one — true, and
+    misleading, and the same surface as a gate run not updating what the bench cites.
+    Now the cases and the citation come out of one directory: the gate run that wrote
+    its readings into this library also wrote the citation beside them
+    (`bench/cited.py`), so the claim and the cases it is a claim about cannot come
+    apart. A library that records no gate run still states the absence, which is a
+    fact about the bench and not a blank (`payload.UNCITED_GATE`).
+
+    Read from the mount where one is mounted, exactly as the cases are, so a gate run
+    started from the console survives the restart that follows it (ADR-0021,
+    condition 4).
     """
     try:
         key = signing_key()
     except NoSigningKey as missing:
         raise NoSigningKey(f"{missing}. {NO_KEY_NO_BOOT}") from missing
-    library = deployed_library()
+    library = deployed_library() or CASES_DIR
     return BenchConfig(
-        cases=admitted_library(library or CASES_DIR),
-        report=ReportConfig(signing_key=key),
+        cases=admitted_library(library),
+        report=ReportConfig(signing_key=key, gate=the_citation(library)),
     )
 
 
@@ -2360,7 +2409,11 @@ def create_app(
     bench = BenchRuns(config if config is not None else deployed_bench())
     if gate_runs is None:
         gate_runs = GateRunBench() if declared else deployed_gate_runs(bench.config)
-    gates = BenchGateRuns(bench.config, gate_runs)
+    # The one edge from a completed gate run back onto the bench a run is measured
+    # with: a `GateCitation` in, nothing out (ADR-0023, `gate_runs.Cites`). Wired
+    # here rather than held by either registry, so that neither of them names the
+    # other's record and the widening ADR-0021 forbids stays unavailable.
+    gates = BenchGateRuns(bench.config, gate_runs, cites=bench.cite)
     app = FastAPI(title="AgentAudit", version="0.1.0")
     app.state.bench = bench
     app.state.gate_runs = gates
@@ -2601,14 +2654,28 @@ def create_app(
         return artefacts_response(bench.records(), bench.config.report)
 
     @app.get(BENCH_GATE_ROUTE)
-    def cite_the_gate_run_this_bench_last_passed() -> BenchGate:
+    def cite_the_gate_run_this_bench_last_made() -> BenchGate:
         """The rule this bench is held to, then the gate run it cites under it.
 
-        The citation is a read of what the deployment declared
-        (`ReportConfig.gate`), which is the same value the provenance block of every
-        report this bench signs carries. One source of truth: it is not assembled
-        here, not read off the filesystem, and not parsed out of the document it
-        names.
+        The citation is a read of `ReportConfig.gate`, which is the same value the
+        provenance block of every report this bench signs carries. One source of
+        truth: it is not assembled here, not read off the filesystem on request, and
+        not parsed out of the document it names.
+
+        **What it cites is now the gate run this bench last made.** ADR-0021 left the
+        citation as whatever a deployment declared and recorded the question as shut;
+        ADR-0023 opens it. A gate run writes the citation into the library it wrote
+        its readings back to, `deployed_bench` reads it from there at boot, and a gate
+        run started from the console reaches this response without a restart through
+        one edge (`gate_runs.Cites`). So a bench that has passed its own gate says so
+        here, and a bench whose last gate run failed says *that* — the citation is
+        what the instrument last put itself through and never the best answer it ever
+        got.
+
+        **It names the record, and still serves no figure out of it.** The
+        per-family rates and each family's `D` are in the gate run record the
+        citation points at; this route hands over its name and opens neither it nor
+        the document (ADR-0023).
 
         **The rule comes first, and that is not a layout preference.** A pass or a
         fail means nothing without the bar it was decided against, so the declared
@@ -2622,10 +2689,10 @@ def create_app(
         while retiring the cases the rule retires. It is started at `POST /gate-runs`
         — its own family, and a path that says plainly it is not a read — behind the
         same three attestation statements and the same halt a terminal gate run asks
-        for (ADR-0021, `scripts/gate.py`). What this route serves is the citation the
-        *deployment* declared, which is a different fact from what a gate run this
-        bench just made decided: a completed gate run does not change what the bench
-        cites, and whether it should is a question this route does not answer.
+        for (ADR-0021, `scripts/gate.py`). Reading what a gate run decided and
+        starting one are still two different operations at two different methods on
+        two different paths — what ADR-0023 changed is which gate run this read
+        answers with, and not whether this route can start one.
         """
         return bench_gate(bench.config.report.gate)
 

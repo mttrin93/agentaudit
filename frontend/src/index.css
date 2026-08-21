@@ -20,21 +20,31 @@
    *
    * Colour carries identity and order here, and never a judgement. The two layers
    * of a run take two hues so that the boundary between them is visible; the three
-   * reference agents take one hue in three ordered steps, because they are ordered
-   * by construction. No band, rate, verdict or verification result is coloured —
-   * a scale over holds, weak and fails is the severity scale ADR-0005 exists to
-   * refuse, and a green tick beside somebody's agent is the badge the report
-   * refuses. `--refusal` keeps its own hue for the one thing it means, and every
-   * accent is stepped well away from it so that no accent can be read as a
-   * finding. Each is redundant with a label in words, so nothing on any screen is
-   * carried by hue alone.
+   * reference agents take **three hues**, cool to warm, because they are ordered by
+   * construction and three steps of one hue were too close to tell apart at the size
+   * a legend mark is drawn.
+   *
+   * **The three are the bench's own equipment and never anybody's result.** A
+   * hardened, a weak and a trivial agent are constructs of this project, built to
+   * fail at known and increasing rates: the warm end is where the bench *wants* a
+   * high rate, because `D` is trivial minus hardened and a trivial agent that
+   * resisted everything would mean the case discriminates nothing. So the ramp says
+   * *this is the third of three, by construction* and not *this is bad*. No band,
+   * rate, verdict or verification result anywhere is coloured — a scale over holds,
+   * weak and fails is the severity scale ADR-0005 exists to refuse, and a green tick
+   * beside somebody's agent is the badge the report refuses.
+   *
+   * `--refusal` keeps its own hue for the one thing it means. `--agent-trivial` is
+   * the accent nearest it and is deliberately lighter and far more chromatic than
+   * that dull brick, so the two do not read as one thing; every accent is redundant
+   * with a label in words, so nothing on any screen is carried by hue alone.
    */
   --rail: #f2f2ee;
   --scored: oklch(0.48 0.11 250);
   --adaptive: oklch(0.48 0.11 305);
-  --agent-hardened: oklch(0.36 0.07 200);
-  --agent-weak: oklch(0.54 0.07 200);
-  --agent-trivial: oklch(0.72 0.07 200);
+  --agent-hardened: oklch(0.52 0.10 195);
+  --agent-weak: oklch(0.58 0.13 75);
+  --agent-trivial: oklch(0.54 0.19 25);
   color-scheme: light dark;
   font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
     "Helvetica Neue", sans-serif;
@@ -51,14 +61,17 @@
     --line: #333842;
     --refusal: #ffb3a2;
     --refusal-paper: #2c1a17;
-    /* The same accents against the dark surface: hue held, lightness inverted so
-     * the ordered steps keep their order against the paper they sit on. */
+    /* The same accents against the dark surface: each hue held exactly, lightness
+     * lifted so all three clear the dark paper. Lifted rather than inverted — the
+     * three agents are three hues now, so their order is carried by which hue it is
+     * and not by which is darkest, and one of them going dark here would only make
+     * it unreadable. */
     --rail: #1b1e24;
     --scored: oklch(0.78 0.11 250);
     --adaptive: oklch(0.78 0.11 305);
-    --agent-hardened: oklch(0.88 0.07 200);
-    --agent-weak: oklch(0.72 0.07 200);
-    --agent-trivial: oklch(0.56 0.07 200);
+    --agent-hardened: oklch(0.80 0.10 195);
+    --agent-weak: oklch(0.82 0.13 75);
+    --agent-trivial: oklch(0.72 0.17 25);
   }
 }
 
@@ -581,7 +594,9 @@ a {
   position: absolute;
   top: 50%;
   height: 0;
-  border-top: 2px solid var(--agent-weak);
+  /* Ink and not an agent's accent: the span belongs to the pair of them, and it
+   * wore the weak agent's colour only while the three were one hue. */
+  border-top: 2px solid var(--quiet);
   transform: translateY(-1px);
 }
 

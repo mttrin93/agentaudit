@@ -189,7 +189,7 @@ has not run.
 
 ---
 
-## 3. `A_break` does not hold still between two runs of one declared configuration
+## 3. `A_break` does not hold still between two gate runs of one declared configuration
 
 ### The mechanism
 
@@ -885,4 +885,4 @@ Cross-references: [PLAN §13](../PLAN.md) (the prompts these notes are written a
 [docs/validation.md](./validation.md) (every measured figure quoted here, and what has never
 been validated), [docs/specs/signed-report-and-delivery.md](./specs/signed-report-and-delivery.md)
 (the spec that asked for these notes to be current rather than inherited), ADR-0005, ADR-0006,
-ADR-0010, ADR-0011, ADR-0016, ADR-0017, ADR-0022, ADR-0023, and issues #43, #98, #107 and #108.
+ADR-0010, ADR-0011, ADR-0016, ADR-0017, ADR-0022, ADR-0023, issues #43, #98 and #108, and PR #107.

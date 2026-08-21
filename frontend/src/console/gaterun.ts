@@ -175,10 +175,9 @@ const FOR_A_GATE_RUN: Record<keyof Attested, string> = {
     'somebody else’s system.',
   not_production:
     'The reference agents are test equipment and never reach a user. What a gate ' +
-    'run changes that is not disposable is the case library: it appends a ' +
-    'discrimination reading to every record it reads and marks retired what the ' +
-    'rule retires, and that library is the one every run on this bench is ' +
-    'measured with.',
+    'run changes is the case library: it appends a discrimination to every record ' +
+    'it reads and marks retired what the rule retires, and that library is the one ' +
+    'every run on this bench is measured with.',
   accepts_provider_policy_and_cost:
     'The payloads reach your model provider under your credentials — about 830 ' +
     'calls of them, plus the adjudicator’s against the gold set — so the policy ' +

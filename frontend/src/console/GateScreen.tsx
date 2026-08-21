@@ -89,7 +89,7 @@ import {
   type StartControl,
 } from './gaterun'
 import type { GateReading } from './landing'
-import { CONSOLE_PATH } from './rail'
+import { CONSOLE_PATH, THE_BENCH } from './rail'
 
 /** How often a gate run in flight is asked where it has got to. */
 const POLL_SECONDS = 2
@@ -258,7 +258,7 @@ export function GateScreen() {
         <h1>The gate: the rule, the last outcome, and running another</h1>
         <p className="steps">
           {WHAT_THIS_SCREEN_ANSWERS}{' '}
-          <Link to={CONSOLE_PATH}>What this bench is</Link> says the rest.
+          <Link to={CONSOLE_PATH}>{THE_BENCH}</Link> says the rest.
         </p>
       </header>
 

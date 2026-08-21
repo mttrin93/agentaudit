@@ -310,28 +310,6 @@ export function gateRunRequest(attesting: Attesting): GateRunRequest {
 
 // --- the estimate, per layer, before anything is sent ---------------------------
 
-export const NO_TOTAL_ON_PURPOSE =
-  'These are two figures and there is no third one. The scored layer is ' +
-  'arithmetic and exact — every live case at the declared attempts per case, ' +
-  'against each of the three agents — and the adaptive layer is a worst case, ' +
-  'because an attacker that chooses its own route has no exact cost. A blended ' +
-  'number would hide which half of the gate run is spending your budget, and an ' +
-  'averaged adaptive figure would invite one to exceed what you agreed to. Each ' +
-  'layer is enforced against its own ceiling below it, so neither can borrow what ' +
-  'the other did not spend.'
-
-export const NOTHING_HAS_BEEN_SENT =
-  'Nothing has been sent and not one case record has been written to. The gate ' +
-  'run is holding here — it has this bench’s case library and it has made no call ' +
-  '— and the first thing it does after you confirm is plant a nonce in each of ' +
-  'the three agents it started.'
-
-export const WHAT_IT_WRITES =
-  'Confirming this writes to the case library named above: a discrimination ' +
-  'reading appended to every case record the run reads, and a retirement marked ' +
-  'on any case the rule retires. Marked and never deleted. Declining writes ' +
-  'nothing at all.'
-
 /** `830`, or `≤ 288` when the figure is a bound. */
 function rendered(calls: number, kind: string): string {
   return kind === 'ceiling' ? `≤ ${calls}` : `${calls}`
@@ -389,24 +367,13 @@ export function gateCostFigures(
 /** The whole of what the interrupt puts in front of a person, as data. */
 export interface GateInterruptView {
   figures: readonly CostFigure[]
-  library: string
-  unblended: string
-  writesBack: string
-  nothingSent: string
 }
 
 /** The estimate as the screen shows it: two figures and the sentences beside them. */
 export function gateInterruptView(
   estimate: GateRunEstimate,
-  library: string,
 ): GateInterruptView {
-  return {
-    figures: gateCostFigures(estimate),
-    library,
-    unblended: NO_TOTAL_ON_PURPOSE,
-    writesBack: WHAT_IT_WRITES,
-    nothingSent: NOTHING_HAS_BEEN_SENT,
-  }
+  return { figures: gateCostFigures(estimate) }
 }
 
 /**

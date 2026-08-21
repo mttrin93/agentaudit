@@ -436,7 +436,7 @@ describe('nothing reaches the bench with a statement withheld', () => {
 
 describe('the estimate, before anything is sent', () => {
   it('is two figures against two ceilings, and no third figure anywhere', () => {
-    const view = gateInterruptView(ESTIMATE, '/var/lib/agentaudit/cases')
+    const view = gateInterruptView(ESTIMATE)
 
     expect(view.figures.map((figure) => figure.layer)).toEqual([
       'scored',
@@ -459,18 +459,12 @@ describe('the estimate, before anything is sent', () => {
       expect(said).not.toContain(blended)
     }
     expect(said.toLowerCase()).not.toContain('total')
-    expect(view.unblended).toMatch(/two figures and there is no third one/)
-  })
 
-  it('says what confirming writes, and it says it before the control', () => {
-    const view = gateInterruptView(ESTIMATE, '/var/lib/agentaudit/cases')
-
-    // A gate run is not a read, and this is the last screen before it happens.
-    expect(view.library).toBe('/var/lib/agentaudit/cases')
-    expect(view.writesBack).toMatch(/appended to every case record/)
-    expect(view.writesBack).toMatch(/never deleted/)
-    expect(view.writesBack).toMatch(/Declining writes nothing at all/)
-    expect(view.nothingSent).toMatch(/not one case record has been written to/)
+    // And nothing beside the figures. The paragraph that argued for two figures, the
+    // library path, what confirming writes and what has not been sent yet were all
+    // fields on this view and are all gone: the view is the two figures, and what
+    // decides whether anything is spent is `gateConfirmation` below.
+    expect(Object.keys(view)).toEqual(['figures'])
   })
 })
 

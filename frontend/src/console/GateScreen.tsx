@@ -507,7 +507,7 @@ export function GateScreen() {
 
       {stage === 'estimate' && started !== null ? (
         <TheEstimate
-          view={gateInterruptView(started.estimate, started.library)}
+          view={gateInterruptView(started.estimate)}
           confirmed={confirmed}
           setConfirmed={setConfirmed}
           confirm={confirm}
@@ -851,12 +851,14 @@ function TheAttestation({
  * total is not on it at all: what an operator reads instead is each layer beside the
  * ceiling it is enforced against, which is the enforced limit (ADR-0007).
  *
- * **Without the record's own `statement`.** The gate run says of itself that it is
- * halted at the approval interrupt, that nothing has been sent, spent or written,
- * and that none of it happens until the estimate is answered. It is still on the
- * record and still on the wire, where an auditor reading the run reads it; on the
- * screen it was a paragraph about the state of a screen the operator is looking at,
- * over the two figures they are there to answer.
+ * **The two figures, the box and the two buttons — and no prose between them.** The
+ * record's own `statement`, the sentence about there being no third figure, the
+ * library path, what confirming writes and what has not been sent yet were all here
+ * and are all gone. Every one of them is still on the wire, where an auditor reading
+ * the gate run reads them. What decides whether anything is spent is unchanged and is
+ * not prose: `gateConfirmation` builds a body only from an explicit yes on a halted
+ * gate run, and the two controls say which is which — *Decline — spend nothing*, and
+ * *Confirm and run the gate*.
  */
 function TheEstimate({
   view,
@@ -899,19 +901,6 @@ function TheEstimate({
           </div>
         ))}
       </dl>
-      <p className="aside">{view.unblended}</p>
-
-      <dl className="at">
-        <div>
-          <dt>writes to</dt>
-          <dd>
-            <code>{view.library}</code>
-          </dd>
-        </div>
-      </dl>
-      <p className="consequence">{view.writesBack}</p>
-      <p>{view.nothingSent}</p>
-
       <label className="declaration">
         <input
           type="checkbox"

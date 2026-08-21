@@ -608,36 +608,39 @@ a {
  * on the line is a legend that has to be decoded instead of read. Only position and
  * size differ below.
  *
- * Open — a ring in the agent's accent, filled with the paper — so the axis does not
- * run through the middle of the mark and three overlapping rates stay three rings
- * rather than one blob. The hue is identity and order, never rank, and it is
- * redundant with the name printed beside it in both places.
+ * Filled, in the agent's accent, with a hairline of paper around it. The ring is
+ * not decoration: it hides the axis where it would otherwise run through the mark,
+ * and it keeps two rates that landed on the same value legible as two marks instead
+ * of one blob. The hue is identity and order, never rank, and it is redundant with
+ * the name printed beside it in both places.
  */
 .dot {
   display: inline-block;
-  width: 0.5rem;
-  height: 0.5rem;
-  border: 1.5px solid var(--line);
+  width: 0.55rem;
+  height: 0.55rem;
+  border: 1.5px solid var(--paper);
   border-radius: 50%;
-  background: var(--paper);
+  background: var(--line);
 }
 
 .dot.hardened {
-  border-color: var(--agent-hardened);
+  background: var(--agent-hardened);
 }
 
 .dot.weak {
-  border-color: var(--agent-weak);
+  background: var(--agent-weak);
 }
 
 .dot.trivial {
-  border-color: var(--agent-trivial);
+  background: var(--agent-trivial);
 }
 
+/* Centred on the rate by transform rather than by a margin, so the mark stays on
+ * its own value if its size ever changes. */
 .family .plot .dot {
   position: absolute;
   top: 50%;
-  margin: -0.25rem 0 0 -0.25rem;
+  transform: translate(-50%, -50%);
 }
 
 /* Which dot is which, and the span beside the floor it had to clear. */

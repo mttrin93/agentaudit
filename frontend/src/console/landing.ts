@@ -22,12 +22,13 @@
  * would take for a gate the bench failed. Two shapes of one union, for the reason
  * the report's three kinds of nothing are three members of one (`report.ts`).
  *
- * **The document is named and never parsed.** The per-family rates and the
- * per-family `D` of a gate run live only in its document, and the citation does not
- * carry them; this screen shows what the citation carries and names the rest. A
- * screen that read the bench's own prose output would break on a rewording, and the
- * machine-readable sidecar that would supply those figures properly is a follow-up
- * rather than a parser bolted on here.
+ * **Both files are named and neither is parsed.** The per-family rates and the
+ * per-family `D` of a gate run are not on the citation; what the citation carries
+ * are two addresses — the dated document a person reads, and the **gate run
+ * record** that holds the same run as fields (ADR-0023). This screen shows what the
+ * citation carries and names the rest, in that order: the record first, because it
+ * is the one a reader after the arithmetic wants. A screen that read the bench's own
+ * prose output would break on a rewording, and the record is why it never has to.
  *
  * **The wording is the console's, and the facts are the citation's.** The citation's
  * own two sentences are written for a provenance block — they say *the figures
@@ -69,6 +70,12 @@ export const THE_DOCUMENT_IS_NAMED_AND_NEVER_PARSED =
   'than trust it. Those figures are in that document and not in this citation: ' +
   'this screen names the document and does not read it.'
 
+export const THE_RECORD_IS_THE_SAME_RUN_AS_FIELDS =
+  'The same gate run as fields, written beside the document: each agent’s rate on ' +
+  'each family, each family’s discrimination score, and the rule they were decided ' +
+  'under. This is where a reader who wants the arithmetic goes, and it is why ' +
+  'nothing here parses prose to find it.'
+
 /**
  * Where a gate run's own document is, for a reader who wants the arithmetic.
  *
@@ -78,6 +85,22 @@ export const THE_DOCUMENT_IS_NAMED_AND_NEVER_PARSED =
  * needs a route before it is an answer.
  */
 export interface CitedDocument {
+  /** The path the citation carries, verbatim. Nothing here opens it. */
+  path: string
+  statement: string
+}
+
+/**
+ * Where the same gate run is written down as fields, for the figures the citation
+ * does not carry.
+ *
+ * The **gate run record** the citation names (ADR-0023). The same shape as the
+ * document above and deliberately so: two addresses, one sentence each, and this
+ * screen opens neither. It is the answer to the question the document could only be
+ * given by parsing it — and a parser over a document written for a person is the
+ * thing this project refused to write twice.
+ */
+export interface CitedRecord {
   /** The path the citation carries, verbatim. Nothing here opens it. */
   path: string
   statement: string
@@ -96,6 +119,7 @@ export interface CitedGateReading {
   heading: string
   /** Outcome, date and library version, in the order a reader asks for them. */
   facts: CitedFact[]
+  record: CitedRecord
   document: CitedDocument
   aboutTheBench: string
 }
@@ -103,8 +127,9 @@ export interface CitedGateReading {
 /**
  * A bench citing no gate run, saying so where the citation would have been.
  *
- * No `facts` and no `document`: an uncited bench has no outcome, no date and no
- * library version, and a record with empty ones would be read as a gate it failed.
+ * No `facts`, no `record` and no `document`: an uncited bench has no outcome, no
+ * date, no library version and nothing written down anywhere, and a shape with empty
+ * ones would be read as a gate it failed.
  */
 export interface UncitedGateReading {
   cited: false
@@ -159,6 +184,10 @@ export function gateReading(gate: GateCitation): GateReading {
       { label: 'Decided on', value: gate.decided_on },
       { label: 'Library version', value: libraryVersion(gate.library) },
     ],
+    record: {
+      path: gate.record,
+      statement: THE_RECORD_IS_THE_SAME_RUN_AS_FIELDS,
+    },
     document: {
       path: gate.document,
       statement: THE_DOCUMENT_IS_NAMED_AND_NEVER_PARSED,

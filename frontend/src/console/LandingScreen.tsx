@@ -14,13 +14,14 @@
  * report screen already uses for a family with no rate, because a blank where an
  * outcome goes is read as a gate that failed.
  *
- * **The document is named, and it is named rather than linked.** Every per-family
- * rate and every discrimination score of that gate run is in it, and none of them is
- * on this page: the citation does not carry them, and this screen does not open the
- * document to find them. The path is printed as the path it is because this bench
- * serves no route for it — a hyperlink to something no route answers would be a
- * broken link on the front door, and how the document is served is the gate screen's
- * question rather than this screen's.
+ * **Both files are named, and named rather than linked.** Every per-family rate and
+ * every discrimination score of that gate run is in the record the citation names,
+ * and none of them is on this page: the citation does not carry them, and this
+ * screen opens neither the record nor the document to find them (ADR-0023). The
+ * paths are printed as the paths they are because this bench serves no route for
+ * either — a hyperlink to something no route answers would be a broken link on the
+ * front door, and how they are served is the gate screen's question rather than this
+ * screen's.
  *
  * **There is no control here that starts a gate run**, and that is a decision about
  * this screen rather than about the bench. A gate run attacks all three reference
@@ -543,6 +544,10 @@ function Citation({ reading }: { reading: GateReading }) {
               </div>
             ))}
           </dl>
+          <p>
+            <code>{reading.record.path}</code>
+          </p>
+          <p className="aside">{reading.record.statement}</p>
           <p>
             <code>{reading.document.path}</code>
           </p>

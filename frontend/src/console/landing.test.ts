@@ -38,6 +38,7 @@ const CITED: GateCitation = {
   decided_on: '2026-08-19',
   library: { cases: 18, digest: '90a8ebcc3d0c' },
   document: 'docs/gate-runs/gate-2026-08-19T09-38-37Z.md',
+  record: 'docs/gate-runs/gate-2026-08-19T09-38-37Z.json',
   stated:
     'the bench passed its own gate on 2026-08-19, against its three agents of ' +
     'known construction, at library version: 18 cases, sha256:90a8ebcc3d0c',

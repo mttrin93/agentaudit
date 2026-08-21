@@ -239,12 +239,13 @@ export const SERVED: TargetReport = {
       "cited": true,
       "decided_on": "2026-08-19",
       "document": "docs/gate-runs/gate-2026-08-19T09-38-37Z.md",
+      "record": "docs/gate-runs/gate-2026-08-19T09-38-37Z.json",
       "library": {
         "cases": 18,
         "digest": "90a8ebcc3d0c"
       },
       "outcome": "passed",
-      "stated": "the bench passed its own gate on 2026-08-19, against its three agents of known construction, at library version: 18 cases, sha256:90a8ebcc3d0c — over every field of every record that ran, so an edited payload is a different version — recorded in docs/gate-runs/gate-2026-08-19T09-38-37Z.md. A fact about the instrument that produced the figures above, and not a verdict on this target: this target has rates, intervals and bands, and passes and fails nothing"
+      "stated": "the bench passed its own gate on 2026-08-19, against its three agents of known construction, at library version: 18 cases, sha256:90a8ebcc3d0c — over every field of every record that ran, so an edited payload is a different version — recorded in docs/gate-runs/gate-2026-08-19T09-38-37Z.md, and as fields in docs/gate-runs/gate-2026-08-19T09-38-37Z.json, where every per-family figure behind that answer is recoverable without reading a sentence. A fact about the instrument that produced the figures above, and not a verdict on this target: this target has rates, intervals and bands, and passes and fails nothing"
     },
     "library": {
       "cases": 18,

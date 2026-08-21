@@ -210,6 +210,33 @@ class RetirementDecision:
 
     rule: GateRule = DECLARED_RULE
 
+    def __post_init__(self) -> None:
+        """The ground and the outcome have to agree, in both directions.
+
+        Enforced on the type rather than asserted in the docstring above, on the same
+        terms as `SuccessCondition` and `Case`: each direction is a decision a reader
+        cannot re-derive. A *not decided* with no ground declines and never says why —
+        and since the ground is what names the ADR that decided the refusal, the line
+        would cite nothing. A ground on any other outcome is a refusal recorded
+        against a decision that was not refused, and it prints as a contradiction.
+        """
+        declined = self.declined is not None
+        not_decided = self.outcome is RetirementOutcome.NOT_DECIDED
+        if not_decided and not declined:
+            raise ValueError(
+                f"{self.case_id} is not decided without saying which of the two "
+                "grounds refused the window. The rule declines on provenance or on "
+                "fitness, and a line that declines without naming one cites neither "
+                "the ADR that decided it nor the reading it was decided from"
+            )
+        if declined and not not_decided:
+            raise ValueError(
+                f"{self.case_id} is {self.outcome} and carries a ground for a "
+                "refusal, but a window that was not declined has nothing to refuse "
+                "it: the grounds are reached only on the branch that would otherwise "
+                "have retired the case"
+            )
+
     @property
     def scores(self) -> tuple[float, ...]:
         """`D` for each considered reading, in the order the runs happened."""
@@ -225,7 +252,7 @@ class RetirementDecision:
         scores are: the window is one model's by construction, so a decision cannot
         name a model its own readings were not taken on.
         """
-        return self.considered[-1].counts.model if self.considered else None
+        return self.considered[-1].model if self.considered else None
 
     @property
     def retires(self) -> bool:
@@ -315,8 +342,8 @@ def window_of(history: Sequence[GateReading]) -> tuple[GateReading, ...]:
     """
     if not history:
         return ()
-    model = history[-1].counts.model
-    return tuple(reading for reading in history if reading.counts.model == model)[-2:]
+    model = history[-1].model
+    return tuple(reading for reading in history if reading.model == model)[-2:]
 
 
 def declined_on(considered: Sequence[GateReading]) -> Declined | None:

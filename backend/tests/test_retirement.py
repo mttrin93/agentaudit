@@ -56,6 +56,8 @@ from backend.bench.library import (
 from backend.bench.registration import AttestationRecord, Registration
 from backend.bench.retirement import (
     AlreadyRetired,
+    Declined,
+    RetirementDecision,
     RetirementDisagrees,
     RetirementOutcome,
     RunHistory,
@@ -99,7 +101,7 @@ STUB = "stub:obedient"
 string a run is started with, because that is the thing an operator types."""
 
 
-def on(reading: GateReading, model: str, *, field: bool = True) -> GateReading:
+def on(reading: GateReading, model: str, *, of_the_field: bool = True) -> GateReading:
     """The same counts, read on another model — and whether that model was the field.
 
     The two travel together deliberately: provenance is a fact about the model the
@@ -109,11 +111,11 @@ def on(reading: GateReading, model: str, *, field: bool = True) -> GateReading:
     return replace(
         reading,
         counts=replace(reading.counts, model=model),
-        measured_the_field=field,
+        measured_the_field=of_the_field,
     )
 
 
-STUBBED = on(DECAYED, STUB, field=False)
+STUBBED = on(DECAYED, STUB, of_the_field=False)
 """The reading a free run produces on every case: D = 0.00, and not a measurement.
 
 The stub breaks all three reference agents identically by construction, so this is
@@ -308,8 +310,9 @@ def test_the_clock_restarts_on_a_model_swap() -> None:
 def test_readings_outside_the_window_are_kept_and_the_window_is_named() -> None:
     # Scoping the *window* is not editing the *series* (ADR-0006): the readings the
     # rule did not read are still on the record, and the line says which model the
-    # two it did read were taken on — so a reader can tell a window of two from a
-    # series of five.
+    # two it did read were taken on — so it names a window a reader can find in the
+    # series, rather than "the last two runs" of a series that spans two models. The
+    # readings outside the window were printed by the run that took them.
     series = [DECAYED, on(DECAYED, SWAPPED), DECAYED, DECAYED]
 
     decision = decide_retirement("data-leakage-001", series)
@@ -368,7 +371,7 @@ def test_a_stub_reading_can_never_move_an_outcome_to_retired() -> None:
         for provenance in product(models, repeat=3):
             for flags in product((True, False), repeat=3):
                 series = [
-                    replace(on(reading, model, field=field), fit_to_report=flag)
+                    replace(on(reading, model, of_the_field=field), fit_to_report=flag)
                     for reading, (model, field), flag in zip(
                         shape, provenance, flags, strict=True
                     )
@@ -377,7 +380,7 @@ def test_a_stub_reading_can_never_move_an_outcome_to_retired() -> None:
                 window = decision.considered
 
                 # No window ever spans two models, whatever the series.
-                assert len({reading.counts.model for reading in window}) <= 1
+                assert len({reading.model for reading in window}) <= 1
 
                 if decision.outcome is RetirementOutcome.RETIRED:
                     # Reachable only over two readings, both of the field, both fit,
@@ -418,6 +421,49 @@ def test_a_stub_reading_on_an_unfit_family_is_not_decided_once() -> None:
 
     assert decision.outcome is RetirementOutcome.NOT_DECIDED
     assert "not a measurement of the field" in decision.stated()
+
+
+def test_a_not_decided_decision_cannot_be_built_without_saying_which_ground() -> None:
+    # The pairing as a property of the type rather than a sentence in a docstring, on
+    # the same terms as `SuccessCondition.__post_init__` and `Case`: both directions
+    # are records a reader cannot re-derive. A *not decided* with no ground prints a
+    # line that declines and never says why — and the ADR that decided the refusal is
+    # named by the ground, so the line would cite nothing. A ground on any other
+    # outcome is a refusal recorded against a decision that was not refused, and it
+    # prints as an outright contradiction: retired, because the bench could not vouch
+    # for the family.
+    with pytest.raises(ValueError, match="which of the two grounds"):
+        RetirementDecision(
+            case_id="data-leakage-001",
+            outcome=RetirementOutcome.NOT_DECIDED,
+            considered=(STUBBED, STUBBED),
+        )
+
+    for outcome in (RetirementOutcome.LIVE, RetirementOutcome.RETIRED):
+        with pytest.raises(ValueError, match="was not declined"):
+            RetirementDecision(
+                case_id="data-leakage-001",
+                outcome=outcome,
+                considered=(DECAYED, DECAYED),
+                declined=Declined.UNFIT_FAMILY,
+            )
+
+    # And the rule itself never builds one of either shape: every outcome it can
+    # reach is constructed here, so this is the invariant and not an example.
+    for series in ([], [DECAYED], [DECAYED, DECAYED], [STUBBED, STUBBED]):
+        decision = decide_retirement("data-leakage-001", series)
+        assert (decision.declined is not None) is (
+            decision.outcome is RetirementOutcome.NOT_DECIDED
+        )
+
+
+def test_a_reading_names_the_model_it_was_taken_on() -> None:
+    # One walk, on the reading rather than at every call site: the model is a fact
+    # about the reading, and a rule that reached through `counts` for it would make
+    # every reader of the series depend on where a reading keeps its counts.
+    assert DECAYED.model == MODEL
+    assert STUBBED.model == STUB
+    assert DECAYED.model == DECAYED.counts.model
 
 
 def test_a_run_records_on_every_reading_whether_it_measured_the_field(

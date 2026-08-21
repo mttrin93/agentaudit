@@ -427,6 +427,17 @@ class GateReading:
     `backend/bench/` depend on `backend/targets/` to answer it.
     """
 
+    @property
+    def model(self) -> str:
+        """The model this reading was taken on.
+
+        One walk rather than one at every call site: the model is a fact about the
+        reading, and the retirement rule now reads it on every case (ADR-0022). A rule
+        that reached through `counts` for it would make every reader of the series
+        depend on where a reading happens to keep its counts.
+        """
+        return self.counts.model
+
 
 @dataclass(frozen=True)
 class Retirement:

@@ -171,10 +171,8 @@ export function startControl(start: GateRunStart): StartControl {
 const FOR_A_GATE_RUN: Record<keyof Attested, string> = {
   authorised_to_test:
     'The endpoints a gate run attacks are this bench’s own three reference agents, ' +
-    'which it starts and stops itself — so this statement is about the bench you ' +
-    'are operating rather than about somebody else’s system. It is recorded either ' +
-    'way, because a gate run that skipped the attestation would take a path no ' +
-    'operator’s run takes.',
+    'so this statement is about the bench you are operating rather than about ' +
+    'somebody else’s system.',
   not_production:
     'The reference agents are test equipment and never reach a user. What a gate ' +
     'run changes that is not disposable is the case library: it appends a ' +
@@ -470,15 +468,6 @@ export function gateDecline(identity: string, reason: string = ''): ApprovalBody
 export function gateProgress(reading: GateRunReading): readonly LayerReading[] {
   return [scoredReading(reading.scored), adaptiveReading(reading.adaptive)]
 }
-
-/**
- * Where the figures came from, when they came from the run this process just made.
- *
- * Said rather than assumed, because the same view draws the record of a gate run
- * this bench finished before a restart, and *which* reading an operator is looking
- * at is a fact about the figures rather than a detail of the plumbing.
- */
-export const FROM_THIS_PROCESS = 'read off the gate run this bench ran'
 
 // --- what it decided -------------------------------------------------------------
 

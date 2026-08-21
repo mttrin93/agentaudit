@@ -4,9 +4,10 @@
  *
  * Five claims, each of them a way this screen could quietly go wrong.
  *
- * **That the outcome is above the control.** The order is a property of the value
+ * **That the control is above the outcome.** The order is a property of the value
  * this module returns, so it is asserted over the sequence rather than hoped for in
- * markup.
+ * markup: the errand first, and the outcome at the foot of the page where the
+ * figures behind it are.
  *
  * **That the standing prose about what a gate run writes is gone from this screen.**
  * It was six paragraphs of consequence above the one control, and what actually
@@ -161,12 +162,14 @@ function block<K extends GateBlock['kind']>(
 }
 
 describe('the order the blocks are read in', () => {
-  it('puts the outcome above the control, and restates no rule at all', () => {
+  it('puts the control above the outcome, and restates no rule at all', () => {
     for (const bench of [CERTIFIED, FRESH]) {
-      // Two blocks: what the last gate run answered, then the way to run one. The
-      // rule and the write-back list that used to sit around them came off this
-      // screen — what guards the spend is the walk, not standing prose.
-      expect(gateScreen(bench).map((one) => one.kind)).toEqual(['outcome', 'start'])
+      // Two blocks: the way to run one, then what the last gate run answered. The
+      // control is the errand and it is first; the outcome is at the foot, under the
+      // figures it was decided on. The rule and the write-back list that used to sit
+      // around them came off this screen — what guards the spend is the walk, not
+      // standing prose.
+      expect(gateScreen(bench).map((one) => one.kind)).toEqual(['start', 'outcome'])
     }
   })
 })

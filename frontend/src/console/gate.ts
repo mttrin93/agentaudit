@@ -2,12 +2,11 @@
  * The operator's screen for one question: when was this instrument last validated,
  * and how do I do it again?
  *
- * Three blocks, in an order that is the content rather than the layout. **What the
- * last gate run answered**, or the stated absence of one. **Then
- * what a gate run does to the case library**, before anything that starts one,
- * because it is not a read-only action and an operator who learns that afterwards
- * learned it too late. **Then the way to run one** — the control this bench offers,
- * where it can, and the stated reason where it cannot.
+ * Two blocks, in an order that is the content rather than the layout. **The way to
+ * run one** — the control this bench offers, where it can, and the stated reason
+ * where it cannot. **Then what the last gate run answered**, or the stated absence
+ * of one, at the foot of the page: the component renders a run's own figures between
+ * the two, so the outcome sits under the arithmetic it was decided on.
  *
  * **The declared rule is not printed here any more, and neither are the three
  * agents it is put to.** This screen led with the whole of `GateRule.stated()` and
@@ -16,15 +15,14 @@
  * and the errand was underneath the specification of the instrument. The rule is
  * still declared where it was always decided, in `rule.py`, still carried on the
  * wire in `BenchGate.rule`, still printed whole on the signed report beside the
- * figures it was measured against — `clausesOf` below is what prints it there — and
- * every threshold in the consequence block is still read off it rather than written
- * here. What came off is the restatement, not the rule.
+ * figures it was measured against, and `clausesOf` below is what prints it there.
+ * What came off this screen is the restatement, not the rule.
  *
  * **The order of what is left is asserted, not merely intended.** This module
- * returns the blocks as a sequence and the component maps over it, so *above* is a
- * property of the value a test can read rather than of markup nobody checks. A
- * screen that offered the control before the write-back would fail in
- * `gate.test.ts`.
+ * returns the blocks as a sequence and the component renders them in it, so *above*
+ * is a property of the value a test can read rather than of markup nobody checks. A
+ * screen that put the outcome back over the control, or a clause of the rule back on
+ * the page, fails in `gate.test.ts`.
  *
  * **One control, and this screen is where it is.** A gate run is the whole live
  * library against all three reference agents, about 830 calls on the operator's own
@@ -155,10 +153,16 @@ export const REFERENCE_AGENTS: readonly ReferenceAgent[] = [
 ]
 
 /**
- * The outcome, then the way to start one.
+ * The way to start one, then the outcome.
  *
  * A sequence and not two fields, so that the order a reader meets them in is a
  * property of this value that a test can read rather than markup nobody checks.
+ *
+ * The control is first because it is the errand: an operator opens this screen to
+ * run a gate, and the outcome of the last one was standing between them and the one
+ * button on the page. The outcome goes to the foot, where the figures it was decided
+ * on are — the component puts a run's own blocks between the two, so *below the
+ * control* and *under its own arithmetic* are the same place.
  *
  * `start` is what the bench said about whether a gate run may begin here, already
  * read (`gaterun.startControl`). Passed in rather than fetched, because this module
@@ -171,14 +175,14 @@ export function gateScreen(
 ): GateBlock[] {
   return [
     {
-      kind: 'outcome',
-      heading: 'The last outcome',
-      reading: gateReading(bench.citation),
-    },
-    {
       kind: 'start',
       heading: 'Starting one',
       start,
+    },
+    {
+      kind: 'outcome',
+      heading: 'The last outcome',
+      reading: gateReading(bench.citation),
     },
   ]
 }

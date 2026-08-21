@@ -82,7 +82,6 @@ import {
 import {
   ALREADY_IN_FLIGHT,
   decidedView,
-  FROM_THIS_PROCESS,
   gateConfirmation,
   gateDecline,
   gateInterruptView,
@@ -140,8 +139,6 @@ const NOTHING_YET: Held = { bench: null, start: null, unavailable: '' }
  */
 interface Lastly {
   decided: DecidedRun | null
-  /** Where these figures came from, in words. Never empty beside a decision. */
-  from: string
   /** Why there are none, where there are none. */
   none: string
   unavailable: string
@@ -149,7 +146,6 @@ interface Lastly {
 
 const NOT_READ_YET: Lastly = {
   decided: null,
-  from: '',
   none: '',
   unavailable: '',
 }
@@ -249,12 +245,7 @@ export function GateScreen() {
           const decided = await gateRunReading(settled.gate_run_id)
           if (decided.decision !== null) {
             if (current) {
-              setLastly({
-                decided,
-                from: FROM_THIS_PROCESS,
-                none: '',
-                unavailable: '',
-              })
+              setLastly({ decided, none: '', unavailable: '' })
             }
             return
           }
@@ -275,20 +266,14 @@ export function GateScreen() {
                   decision: cited.run.decision,
                   written: null,
                 },
-                from: `${cited.stated}. Decided ${cited.run.decided_at}`,
                 none: '',
                 unavailable: '',
               }
-            : { decided: null, from: '', none: cited.stated, unavailable: '' },
+            : { decided: null, none: cited.stated, unavailable: '' },
         )
       } catch (unknown: unknown) {
         if (current) {
-          setLastly({
-            decided: null,
-            from: '',
-            none: '',
-            unavailable: `${unknown}`,
-          })
+          setLastly({ decided: null, none: '', unavailable: `${unknown}` })
         }
       }
     }
@@ -533,24 +518,27 @@ export function GateScreen() {
       ) : null}
 
       {/*
-        The bench's own sections first — the rule, the last outcome, what a gate run
-        writes, and the control that starts one — and a run's figures after them.
+        The control first, then a run's own figures, then the last outcome at the
+        foot — which is `gateScreen`'s sequence with the run's blocks landing between
+        its two.
 
-        The control was under the whole decision before: six family cards, the
-        exclusions and the write-back stood between the top of the page and the one
-        button on it, so a finished gate run looked like a screen that had lost its
-        control. This is also the order the rule requires of itself, since the rule
-        block is the first thing on the page and every outcome is below it.
+        The control is the errand and it stays at the top: it was under the whole
+        decision once, six family cards and the exclusions deep, so a finished gate
+        run looked like a screen that had lost its control. The outcome went the
+        other way for the same reason — it is what the run below it decided, so it
+        reads under the arithmetic rather than above it.
       */}
-      {blocks.map((block) => (
-        <Block
-          block={block}
-          begin={begin}
-          going={ourRunIsGoing}
-          ask={askTheBench}
-          key={block.kind}
-        />
-      ))}
+      {blocks
+        .filter((block) => block.kind === 'start')
+        .map((block) => (
+          <Block
+            block={block}
+            begin={begin}
+            going={ourRunIsGoing}
+            ask={askTheBench}
+            key={block.kind}
+          />
+        ))}
 
       {stage === 'watching' && reading !== null ? (
         <TheGateRun reading={reading} />
@@ -583,8 +571,20 @@ export function GateScreen() {
           </div>
         </section>
       ) : lastly.decided === null ? null : (
-        <TheLastDecided decided={lastly.decided} from={lastly.from} />
+        <TheLastDecided decided={lastly.decided} />
       )}
+
+      {blocks
+        .filter((block) => block.kind === 'outcome')
+        .map((block) => (
+          <Block
+            block={block}
+            begin={begin}
+            going={ourRunIsGoing}
+            ask={askTheBench}
+            key={block.kind}
+          />
+        ))}
     </main>
   )
 }
@@ -971,26 +971,21 @@ function TheGateRun({ reading }: { reading: GateRunReading }) {
  * reading of anything — it is that run's own decision, read once, so that closing
  * the tab does not lose what the gate measured.
  *
+ * **Without the sentence saying where the figures came from.** It headed the
+ * decision with a paragraph about the plumbing — read off the record, parsed out of
+ * no document, recomputed nowhere — above the figures themselves. The blocks below
+ * carry their own labels and their own decided date, and what the reading is read
+ * off is the same route either way.
+ *
  * **Without the declared-rule block.** This screen does not restate the declared
  * rule any more — a gate run's own copy would put seven clauses back above the
  * figures somebody opened this page to read. The rule a run was decided under is
  * printed whole on the report that run signs, beside those figures.
  */
-function TheLastDecided({
-  decided,
-  from,
-}: {
-  decided: DecidedRun
-  from: string
-}) {
+function TheLastDecided({ decided }: { decided: DecidedRun }) {
   const blocks = decidedView(decided).filter((block) => block.kind !== 'rule')
   return (
     <>
-      <section>
-        <h2>What the last gate run measured</h2>
-        <p className="aside">{from}</p>
-      </section>
-
       {blocks.map((block) => (
         <Decided block={block} key={block.kind} />
       ))}

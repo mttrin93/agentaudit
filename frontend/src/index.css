@@ -1107,10 +1107,12 @@ code {
 .rail .mark {
   margin: 0.2rem 0 2rem;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 0.82rem;
+  font-size: 0.95rem;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.19em;
+  /* Tracking eased as the size grows: the same 0.19em that opened the letters up
+   * small would push the mark past the rail's width here. */
+  letter-spacing: 0.15em;
 }
 
 .rail .mark span {

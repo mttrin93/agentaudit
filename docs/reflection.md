@@ -268,11 +268,17 @@ Four, and they are separable in this order.
 4. **The target moved.** The reference agents run on a provider model too, and the same
    argument applies to them.
 
-   **(3) and (4) are separated by holding one and moving the other**, which the
-   configuration already permits because the attacker model and the reference agents'
-   model are separately declared: a fixed attacker against reference agents on a fixed
-   model, and the same reference agents against a fixed attacker. A change on one side and
-   not the other attributes it.
+   **(3) and (4) are separated by moving one deliberately and measuring the size of the
+   move**, not by holding either still — a provider model cannot be held still, which is
+   what makes them rival explanations in the first place. The attacker model and the
+   reference agents' model are separately declared, and the swap machinery of #15 already
+   moves one of them, so each side yields a measured difference: swap the reference agents'
+   model with the attacker declaration unchanged, then the attacker's with the agents'
+   unchanged. Compare each difference against the same-configuration spread from (2). A
+   side whose deliberate swap moves `A_break` further than the no-change spread is
+   implicated; if neither does, neither is attributable and (2) stands. The residual — drift
+   in a model nobody swapped — is separable only in time, by two runs close together
+   against two far apart, and this repository has exactly two runs and no such design.
 
 **And the sharpest single observation is already inside both readings.** In both runs
 exactly one family broke — data leakage — exactly one agent broke it, the hardened agent
@@ -513,7 +519,12 @@ the repair for one instance of it. PR #102 names an assertion it deliberately le
 inequality — `position["attempt"] >= 1`, because which case the eighth message belongs to
 is the library's running order across three reference agents and not that test's business.
 That is the right answer there, and it is also indistinguishable in the source from an
-inequality written to make a race go away.
+inequality written to make a race go away. **What separates those two is cheap and is the
+same move in both cases: tighten it to an equality and run it.** If it fails every time,
+the exact value genuinely is not pinned by the design and the inequality is the honest
+assertion. If it fails intermittently, the inequality was standing in front of a race. If
+it passes, the slack was never needed. Nothing in the source distinguishes the three, and
+running it does.
 
 **A second instance was found while writing these notes and is open as #108.**
 `test_the_estimate_is_two_figures_against_two_ceilings_and_no_third` asserts that the two
@@ -807,17 +818,39 @@ for the code, the guard #107 arrived at — give the fact one home, so there is 
 keep in agreement.
 
 **This system is an agent and uses no RAG at all. When is prompt engineering sufficient, when
-is RAG the right tool, and what specifically makes this an agent problem rather than either?
-And where *would* RAG help this product?** PLAN §13 answers both in its own words, including
-the article mapping's case — it looks like a retrieval problem and is deliberately a fixed
-table, because a signed report must cite the same article for the same finding every time and
-a retrieval step would make that citation non-reproducible, which is ADR-0004's argument in a
-second place. The one thing this sprint adds is evidence rather than argument: the nearest
-retrieval candidate that exists in code is the precedent store, and it is deliberately on no
-path that decides anything. It feeds `suggest_remediation` only, it carries deterministic
-findings only, it strips target identity before the attacker sees anything, and two
-import-level tests stand behind those prohibitions rather than a docstring asking future
-contributors to respect them.
+is RAG the right tool, and what specifically makes this an agent problem rather than either?**
+Three answers, and this system contains an instance of each.
+
+*Prompt engineering is sufficient when the whole input is already in front of the model and
+the output is one transformation of it.* Both model calls on the scored side are that shape:
+adjudication reads one static transcript and returns one verdict, the narrative judge reads
+the same transcript and returns prose, neither looks anything up, and the quality of the
+first is settled by κ against a gold set rather than by argument. Adding retrieval to either
+would add an input nothing measured.
+
+*RAG is the right tool when the model needs a fact it does not have and the fact moves faster
+than the prompt can be rewritten.* The article mapping is the near-miss that marks the
+boundary: it looks like exactly that problem and is deliberately a fixed table, because a
+signed report must cite the same article for the same finding every time and a retrieval step
+would make the citation non-reproducible — ADR-0004's argument in a second place. The fact
+does not move fast enough to buy the non-reproducibility.
+
+*It is an agent problem because the central task is a sequence of actions whose next step is a
+function of what the last one returned, against an environment that answers back.* The
+adaptive attacker composes a probe, reads the reply and the tool trace, checks a canary and
+decides what to do next inside a turn budget. No prompt can be written in advance, because
+the target's replies are not known in advance, and nothing is retrievable, because what is
+needed does not exist yet. It is also the only part of the system whose output is a **route**
+rather than a text, which is why an episode has no denominator and why nothing the layer
+produces is scored (ADR-0010, ADR-0011).
+
+**Where *would* RAG help this product, and why is it deliberately absent?** PLAN §13 answers
+this one in its own words and this document does not restate it. What the sprint adds is
+evidence rather than argument: the nearest retrieval candidate that exists in code is the
+precedent store, and it is deliberately on no path that decides anything. It feeds
+`suggest_remediation` only, it carries deterministic findings only, it strips target identity
+before the attacker sees anything, and two import-level tests stand behind those prohibitions
+rather than a docstring asking future contributors to respect them.
 
 ---
 

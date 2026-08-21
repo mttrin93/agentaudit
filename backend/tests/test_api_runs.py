@@ -133,6 +133,17 @@ class Ledger:
     whatever the test last set it to.
     """
 
+    held: threading.Event = field(default_factory=threading.Event)
+    """Set the instant a message is held, and never by the test.
+
+    The difference between a moment held still and a moment caught. A run is one
+    thread and the gate blocks it inside the send, so between the arrival that
+    closes the gate and the release that opens it there is no line of bench code
+    left to execute: whatever the run state said when the message arrived, it still
+    says. A test that waits on this reads a frozen run; a test that polls until it
+    likes what it sees is racing a thread that is still moving.
+    """
+
     def __post_init__(self) -> None:
         self.gate.set()
 
@@ -141,6 +152,32 @@ class Ledger:
         self.hits += 1
         if self.hold_after is not None and self.hits > self.hold_after:
             self.gate.clear()
+            self.held.set()
+
+    def wait_until_held(self, seconds: float = 60.0) -> None:
+        """Block until a message is being held at the endpoint, or fail the test.
+
+        Waits for an event the run itself sets rather than for a duration, so there
+        is no number here that is a guess about how fast the machine is: `seconds`
+        is the point at which a run that is never going to arrive is declared a
+        failure, not the point at which the moment is assumed to have happened.
+        """
+        if not self.held.wait(seconds):
+            raise AssertionError(
+                f"no message was held at the endpoint within {seconds}s: "
+                f"{self.hits} arrived, and the gate closes after {self.hold_after}"
+            )
+
+    def release(self) -> None:
+        """Let the held message through, and hold nothing again.
+
+        Both halves, because `hold_after` closes the gate on *every* message past
+        its count: a test that only opened the gate would hold the next message for
+        ever and its run would never settle.
+        """
+        self.hold_after = None
+        self.held.clear()
+        self.gate.set()
 
 
 class Counted:
@@ -842,6 +879,10 @@ def test_progress_in_the_scored_layer_is_family_case_and_attempt(
     looks at it. Position is the three units of the scored layer and no others
     (CONTEXT.md), and the attempt is the ordinal a reader watches go by rather than
     a count of what the run has done.
+
+    Read once, at the moment the endpoint says it is holding the attempt, rather
+    than polled until the answer arrives: the position is a fact about a run frozen
+    on the wire, and a poll would be asserting on the scheduler.
     """
     with watched_reference() as watched, api([leakage_case]) as (client, bench):
         watched.ledger.hold_after = 1
@@ -850,10 +891,10 @@ def test_progress_in_the_scored_layer_is_family_case_and_attempt(
         record = _record(bench, started)
         _approve(client, started["run_id"])
         try:
-            body = progress_when(client, started["run_id"], "scored")
+            watched.ledger.wait_until_held()
+            body = _progress(client, started["run_id"])
         finally:
-            watched.ledger.hold_after = None
-            watched.ledger.gate.set()
+            watched.ledger.release()
         settled(record)
 
     scored = body["scored"]
@@ -882,6 +923,15 @@ def test_progress_in_the_adaptive_layer_is_family_episode_and_turn(
     flight, on the convention the scored layer already follows, where the attempt
     being sent is the attempt the position names.
 
+    The moment is held rather than caught, and the held message is what identifies
+    it. An episode is entered before its first step and a turn is entered before its
+    probe goes on the wire, so between those two lines there is a started episode on
+    turn *zero* — a position this test must not read, and the one a poll waiting for
+    *any* position would sometimes get. A probe at the endpoint is proof the turn was
+    entered, and the run is one thread blocked inside that send, so nothing moves
+    while this reads it. That also makes the count exact rather than lucky: eleven
+    scored calls have come back and the twelfth message is not a scored call at all.
+
     Then the run is let go, and the position is checked against the episodes the
     run actually recorded. An episode is not an attempt and a turn is not one
     either (ADR-0010), so these are read off `RunState.episodes` and never off
@@ -894,10 +944,10 @@ def test_progress_in_the_adaptive_layer_is_family_episode_and_turn(
         record = _record(bench, started)
         _approve(client, started["run_id"])
         try:
-            in_flight = progress_when(client, started["run_id"], "adaptive")
+            watched.ledger.wait_until_held()
+            in_flight = _progress(client, started["run_id"])
         finally:
-            watched.ledger.hold_after = None
-            watched.ledger.gate.set()
+            watched.ledger.release()
         settled(record)
         finished = _progress(client, started["run_id"])
 
@@ -1186,24 +1236,6 @@ def _progress(client: TestClient, run_id: str) -> dict[str, Any]:
     response = client.get(f"/runs/{run_id}")
     assert response.status_code == 200
     return cast(dict[str, Any], response.json())
-
-
-def progress_when(
-    client: TestClient, run_id: str, layer: str, seconds: float = 30.0
-) -> dict[str, Any]:
-    """Poll the progress route until the named layer has a position to report.
-
-    The run is on its own thread and the endpoint is holding a message, so *when*
-    it arrives at the held call is the scheduler's business. What is under test is
-    what it says once it is there.
-    """
-    deadline = time.monotonic() + seconds
-    while time.monotonic() < deadline:
-        body = _progress(client, run_id)
-        if body[layer]["position"] is not None:
-            return body
-        time.sleep(0.02)
-    raise AssertionError(f"the {layer} layer never reported a position")
 
 
 def _integers(body: Any) -> set[int]:

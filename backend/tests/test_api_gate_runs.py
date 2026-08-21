@@ -792,7 +792,7 @@ def test_a_second_gate_run_is_refused_while_the_first_holds_the_library(
     a screen draws a control.
     """
     library = a_library(tmp_path)
-    ledger = Ledger(hold_after=2)
+    ledger = Ledger(hold_after=1)
 
     with (
         watched_agents(ledger) as watched,
@@ -804,8 +804,10 @@ def test_a_second_gate_run_is_refused_while_the_first_holds_the_library(
         gating.client.post(approval_of(first["gate_run_id"]), json=a_confirmation())
 
         # Held at the endpoint, so the first gate run is genuinely in flight and
-        # genuinely holding the library while the second one asks.
-        _until(lambda: ledger.hits >= 2)
+        # genuinely holding the library while the second one asks. Waited on the
+        # hold rather than on a message count reached, so the run is stopped rather
+        # than merely somewhere past a number.
+        ledger.wait_until_held()
         assert (library / LEASE_FILE).exists()
         assert first["gate_run_id"] in (library / LEASE_FILE).read_text(
             encoding="utf-8"
@@ -823,10 +825,7 @@ def test_a_second_gate_run_is_refused_while_the_first_holds_the_library(
         assert listed["start"]["refusal"] == str(NotStartable.ALREADY_IN_FLIGHT)
         assert len(listed["gate_runs"]) == 1
 
-        # Cleared for good: `hold_after` closes the gate on *every* message past its
-        # count, so a test that only opened it would hold the next one for ever.
-        ledger.hold_after = None
-        ledger.gate.set()
+        ledger.release()
         [record] = gating.gates.records()
         settled(record)
 
@@ -877,7 +876,7 @@ def test_progress_is_reported_per_layer_while_the_gate_run_is_in_flight(
     nothing.
     """
     library = a_library(tmp_path)
-    ledger = Ledger(hold_after=8)
+    ledger = Ledger(hold_after=7)
 
     with (
         watched_agents(ledger) as watched,
@@ -887,7 +886,7 @@ def test_progress_is_reported_per_layer_while_the_gate_run_is_in_flight(
     ):
         body = started(gating)
         gating.client.post(approval_of(body["gate_run_id"]), json=a_confirmation())
-        _until(lambda: ledger.hits >= 8)
+        ledger.wait_until_held()
 
         reading = gating.client.get(f"{GATE_RUNS_ROUTE}/{body['gate_run_id']}").json()
 
@@ -920,10 +919,7 @@ def test_progress_is_reported_per_layer_while_the_gate_run_is_in_flight(
         }
         assert reading["decision"] is None
 
-        # Cleared for good: `hold_after` closes the gate on *every* message past its
-        # count, so a test that only opened it would hold the next one for ever.
-        ledger.hold_after = None
-        ledger.gate.set()
+        ledger.release()
         [record] = gating.gates.records()
         settled(record)
 

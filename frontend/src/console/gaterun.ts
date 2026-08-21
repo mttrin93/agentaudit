@@ -342,9 +342,16 @@ function rendered(calls: number, kind: string): string {
  *
  * `CostFigure` is the interrupt's own shape, reused because one layer's figure
  * beside the ceiling it is enforced against is the same reading whatever is being
- * estimated. What is not reused is the prose: a gate run's scored layer is three
- * agents rather than one target, and its adaptive layer decides nothing about
- * anybody.
+ * estimated. What is not reused is the prose under each: a gate run's scored layer
+ * is three agents rather than one target, and its adaptive layer decides nothing
+ * about anybody.
+ *
+ * The labels are the layer names and nothing else. They carried their standing
+ * gloss — *the half that decides the gate*, *which decides nothing* — on a screen
+ * whose question is what two numbers will cost, where which layer decides the gate
+ * is not what is being answered. That the adaptive layer decides nothing is
+ * ADR-0010, and it is carried by the type, by `AdaptiveEpisode` never being an
+ * `Attempt`, and by the rule the gate prints saying so — never by a label.
  */
 export function gateCostFigures(
   estimate: GateRunEstimate,
@@ -352,7 +359,7 @@ export function gateCostFigures(
   return [
     {
       layer: 'scored',
-      label: 'Scored layer — the half that decides the gate',
+      label: 'Scored layer',
       calls: rendered(estimate.scored.attempt_calls, estimate.scored.kind),
       kind: estimate.scored.kind,
       basis: estimate.scored.basis,
@@ -366,7 +373,7 @@ export function gateCostFigures(
     },
     {
       layer: 'adaptive',
-      label: 'Adaptive layer — which decides nothing',
+      label: 'Adaptive layer',
       calls: rendered(estimate.adaptive.turn_calls, estimate.adaptive.kind),
       kind: estimate.adaptive.kind,
       basis: estimate.adaptive.basis,

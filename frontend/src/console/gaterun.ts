@@ -66,6 +66,16 @@ import {
 import { clausesOf, REFERENCE_AGENTS, type RuleClause } from './gate'
 
 /** The status a gate run holds while it waits on a human, and on nothing else. */
+/**
+ * The bench's own name for *a gate run is going, so another may not start*.
+ *
+ * Named here because the console has to tell this refusal from the other three: the
+ * first three are facts about how the bench was built and waiting does not answer
+ * them, and this one is answered by waiting a moment. It is the only refusal the
+ * screen re-asks about.
+ */
+export const ALREADY_IN_FLIGHT = 'already_in_flight'
+
 export const AWAITING_APPROVAL = 'awaiting_approval'
 
 /** The status a gate run settles at once it has been decided under the rule. */

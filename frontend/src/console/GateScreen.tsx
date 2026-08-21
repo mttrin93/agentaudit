@@ -82,6 +82,7 @@ import {
   type RuleBlock,
 } from './gate'
 import {
+  ALREADY_IN_FLIGHT,
   decidedView,
   FROM_THIS_PROCESS,
   gateConfirmation,
@@ -105,6 +106,16 @@ import type { GateReading } from './landing'
 
 /** How often a gate run in flight is asked where it has got to. */
 const POLL_SECONDS = 2
+
+/**
+ * How many times *may another start yet* is re-asked after a gate run settles.
+ *
+ * The library's lease is released just after the run is marked decided, so the first
+ * answer can still be `already_in_flight`. Bounded rather than a loop: past this the
+ * refusal is somebody else's terminal run holding the library, which is a true
+ * answer and belongs on the screen.
+ */
+const LEASE_ASKS = 5
 
 /** What this screen is holding: the rule, the citation, and whether one may start. */
 interface Held {
@@ -314,9 +325,26 @@ export function GateScreen() {
          * which is true again now that the library has been given back. Without this
          * the control stays gone and the outcome stays stale until a reload.
          */
-        const answered = await readTheBench()
-        if (current) {
+        /*
+         * Asked more than once, because the lease outlives the status by a moment.
+         * `why_not` refuses while `held_by(library)` is true, and the library is
+         * given back just after the run is marked decided — so a single read here
+         * lands on `already_in_flight` and leaves the screen showing a refusal that
+         * stopped being true a second later. Only that one refusal is waited out:
+         * the other three are facts about how this bench was built, and waiting does
+         * not answer them.
+         */
+        for (let asked = 0; asked < LEASE_ASKS; asked += 1) {
+          const answered = await readTheBench()
+          if (!current) {
+            return
+          }
           setHeld(answered)
+          const start = answered.start
+          if (start === null || start.available || start.refusal !== ALREADY_IN_FLIGHT) {
+            return
+          }
+          await new Promise((wait) => setTimeout(wait, POLL_SECONDS * 1000))
         }
       } catch (unknown: unknown) {
         if (current) {
@@ -334,6 +362,21 @@ export function GateScreen() {
 
   const control: StartControl | null =
     held.start === null ? null : startControl(held.start)
+
+  /*
+   * Whether this screen has a gate run of its own under way.
+   *
+   * Read off the reading rather than off the stage alone, so the control comes back
+   * the moment the run is decided while the progress and the decision stay on the
+   * page: the stage remains `watching` because that is what the operator is looking
+   * at, and it is the *run* that has stopped, not the screen.
+   *
+   * This is not the screen deciding whether another may start — that answer is the
+   * bench's, and it is `held.start`. This only greys out the one control while a run
+   * this screen started is going, which is a fact the screen owns.
+   */
+  const ourRunIsGoing =
+    stage !== 'idle' && (reading === null || stillGoing(reading.status))
 
   const begin = () => {
     setRefused('')
@@ -483,7 +526,12 @@ export function GateScreen() {
         block is the first thing on the page and every outcome is below it.
       */}
       {blocks.map((block) => (
-        <Block block={block} begin={begin} key={block.kind} />
+        <Block
+          block={block}
+          begin={begin}
+          going={ourRunIsGoing}
+          key={block.kind}
+        />
       ))}
 
       {stage === 'watching' && reading !== null ? (
@@ -524,7 +572,15 @@ export function GateScreen() {
 }
 
 /** One block, in the order the reading gave it. Four kinds, four shapes. */
-function Block({ block, begin }: { block: GateBlock; begin: () => void }) {
+function Block({
+  block,
+  begin,
+  going,
+}: {
+  block: GateBlock
+  begin: () => void
+  going: boolean
+}) {
   switch (block.kind) {
     case 'rule':
       return <TheRule block={block} />
@@ -533,7 +589,7 @@ function Block({ block, begin }: { block: GateBlock; begin: () => void }) {
     case 'consequence':
       return <TheConsequence block={block} />
     case 'command':
-      return <TheCommand block={block} begin={begin} />
+      return <TheCommand block={block} begin={begin} going={going} />
   }
 }
 
@@ -610,7 +666,15 @@ function TheConsequence({ block }: { block: ConsequenceBlock }) {
  * says a gate run may not start here, what stands in its place is the sentence
  * saying why rather than a disabled button with nothing said about it.
  */
-function TheCommand({ block, begin }: { block: CommandBlock; begin: () => void }) {
+function TheCommand({
+  block,
+  begin,
+  going,
+}: {
+  block: CommandBlock
+  begin: () => void
+  going: boolean
+}) {
   const start = block.start
   return (
     <section>
@@ -633,9 +697,21 @@ function TheCommand({ block, begin }: { block: CommandBlock; begin: () => void }
               </dd>
             </div>
           </dl>
-          <button type="button" className="primary" onClick={begin}>
+          <button
+            type="button"
+            className="primary"
+            disabled={going}
+            onClick={begin}
+          >
             {start.label}
           </button>
+          {going ? (
+            <p className="aside">
+              A gate run started here is going. It holds an exclusive lease on the
+              case library while it runs, so this control comes back when that one is
+              decided — and the run below says where it has got to.
+            </p>
+          ) : null}
         </div>
       ) : (
         <div className="citation uncited">

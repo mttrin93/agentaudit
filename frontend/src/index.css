@@ -1,11 +1,11 @@
 /*
  * One stylesheet, and it is deliberately plain.
  *
- * The screens carry a lot of prose — three attestations with their consequences
- * spelled out, and two statements about what the bench cannot measure or verify —
- * and prose that is skimmed is prose that was not read. So the type is set for
- * reading in one column, and nothing here decorates a declaration into looking
- * like a form field.
+ * The screens carry prose — three attestations with their consequences spelled out,
+ * and statements about what the bench cannot measure or verify — and prose that is
+ * skimmed is prose that was not read. So the type is set for reading, in one column
+ * per screen, and nothing here decorates a declaration into looking like a form
+ * field.
  */
 
 :root {
@@ -40,8 +40,6 @@
    * with a label in words, so nothing on any screen is carried by hue alone.
    */
   --rail: #f2f2ee;
-  /* How wide prose is allowed to get, whatever the page around it does. */
-  --measure: 44rem;
   --scored: oklch(0.48 0.11 250);
   --adaptive: oklch(0.48 0.11 305);
   --agent-hardened: oklch(0.52 0.10 195);
@@ -83,58 +81,24 @@ body {
 }
 
 /*
- * The page is as wide as its widest grid; its prose is not.
+ * One width for everything on the page.
  *
- * Two numbers, because a screen here is two things at once. A row of cards wants
- * the width — the six families of a gate run, three at a card apiece, were wrapping
- * at four words a line inside a 44rem column. Prose wants a measure, and 64rem of
- * 14px text is about 130 characters, which is twice what anybody reads accurately.
+ * The prose and the grids share it: a paragraph runs the same length as the row of
+ * cards under it, so nothing on a screen reads as a column that has slipped inside a
+ * wider one. 64rem, which is what two family cards side by side need.
  *
- * So the page is 64rem and `--measure` caps the prose inside it. The cap is applied
- * to **direct children** of a header or a section, which is what keeps it off the
- * inside of a card: a paragraph on the page is prose and gets the measure, and the
- * same tag nested in a `.family` or a `.citation` is that block's own text and takes
- * the block's width.
- *
- * **And the capped block is centred, not left-aligned.** A measure narrower than the
- * page has slack in it, and slack that all lands on one side reads as a column that
- * has slipped rather than as a measure that was chosen. `margin-inline: auto` splits
- * it, so every block on the page has the same space to its left as to its right
- * whichever of the two widths it takes.
+ * **The cost is line length and it is real.** 64rem of this type is about 130
+ * characters, well past the 60-to-90 a reader tracks accurately, and this stylesheet
+ * used to cap prose at 44rem for exactly that reason. The screens are losing their
+ * prose — the rail says its names and stops explaining itself, the front door is a
+ * title and three cards — and one width across the page is the choice made here. If a
+ * screen ever reads badly, the lever is the page width and not a second measure
+ * inside it.
  */
 .screen {
   max-width: 64rem;
   margin: 0 auto;
   padding: 3rem 1.5rem 6rem;
-}
-
-.screen > header > h1,
-.screen > header > p,
-.screen > section > h2,
-.screen > section > h3,
-.screen > section > p,
-.screen > section > ol,
-.screen > section > ul,
-.screen > section > dl,
-.screen > section > label,
-.screen > section > footer,
-.screen > section > blockquote {
-  max-width: var(--measure);
-  margin-inline: auto;
-}
-
-/*
- * The blocks that hold prose take the measure; the blocks that hold figures do not.
- *
- * `.families.per-family` is six cards of numbers and is left to fill the page.
- * Plain `.families` is the report's and the questionnaire's — a stack of paragraphs,
- * one family each — and it reads at the measure like any other prose.
- */
-.screen .citation,
-.screen .runs,
-.screen .families:not(.per-family) {
-  max-width: var(--measure);
-  margin-inline: auto;
 }
 
 .eyebrow {
@@ -1015,11 +979,10 @@ code {
  * The console shell: a rail that persists, and a screen that does not move.
  *
  * The frame is a two-column grid rather than a fixed sidebar and a margin, because
- * the screens inside it set their prose in one 44rem column and that column has to
- * stay centred in what is left over — the reading measure is the whole reason the
- * stylesheet exists, and a shell that squeezed it would have taken away more than
- * it added. `minmax(0, 1fr)` rather than `1fr` so that a wide `pre` inside a screen
- * scrolls itself rather than widening the page.
+ * a screen inside it is one 64rem column and that column has to stay centred in
+ * what is left over rather than be pushed off by the rail. `minmax(0, 1fr)` rather
+ * than `1fr` so that a wide `pre` inside a screen scrolls itself rather than
+ * widening the page.
  *
  * At a narrow width the rail stops being a column and becomes a strip along the
  * top: the destinations wrap and the reading column gets the whole window. The
@@ -1131,7 +1094,7 @@ code {
   font-weight: 600;
 }
 
-/* Inside the frame the screen keeps its measure and loses the top margin the
+/* Inside the frame the screen keeps its width and loses the top margin the
  * top bar now provides. */
 .console-body .screen {
   padding-top: 2rem;

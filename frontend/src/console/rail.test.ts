@@ -231,7 +231,7 @@ describe('the rail carries no figure', () => {
     // A rate, a total, a count of runs: a rail is where a reader would most
     // easily be handed one, and a figure spanning two families is the thing this
     // application refuses to print (ADR-0005). Every place the rail offers is a
-    // name and a sentence about a screen.
+    // name and a path, and the name is now the whole of what it says.
     const rail = railView(reportPath('run-1'), 'run-1')
     const numbers = JSON.stringify(rail, (_key, value: unknown) =>
       typeof value === 'number' ? 'A FIGURE' : value,
@@ -239,7 +239,6 @@ describe('the rail carries no figure', () => {
     expect(numbers).not.toContain('A FIGURE')
     for (const place of everywhere(rail)) {
       expect(place.name).not.toMatch(/\d/)
-      expect(place.answers).not.toMatch(/\d/)
     }
   })
 })

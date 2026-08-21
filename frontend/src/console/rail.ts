@@ -27,10 +27,23 @@
  * would satisfy only the first half. Remembering one run is not a list of runs:
  * this module holds the run you are working on, and never a count of them.
  *
- * **Nothing here carries a figure.** A destination has a name and a line saying
- * what it answers, and no rate, no band, no total and no colour standing in for a
+ * **Nothing here carries a figure.** A destination has a name, a path and the name
+ * of a glyph, and no rate, no band, no total and no colour standing in for a
  * verdict. The rail is where a reader would most easily be handed a number that
  * spans two families, so it is built out of a type that has nowhere to put one.
+ *
+ * **And it does not explain itself.** Every destination used to carry a sentence
+ * about what its screen answers; a reader already standing in the console does not
+ * need the console described to them in the margin, and the narrow window had been
+ * hiding those sentences all along. The field is gone rather than unrendered, so
+ * nothing can put the prose back.
+ *
+ * **The glyph is named here and drawn elsewhere.** `icon` is a closed union, so
+ * this module says *which* drawing a destination wants and `railIcons.tsx` is the
+ * only place that knows what one looks like. There is no SVG in here for the same
+ * reason there is no component: this file is read by a node test with no DOM, and
+ * the union is what makes a destination naming an undrawn glyph a `tsc` error
+ * rather than an empty box on the page.
  */
 
 /**
@@ -75,10 +88,13 @@ export const ARTEFACTS_PATH = '/artefacts'
  * instrument, and a screen path that shadowed it would be a document request the dev
  * server proxies to the bench.
  *
- * The name is the plainest one and it is deliberately not *configure*: nothing on
- * this screen changes a setting, and there is no route on this bench that would take
- * one. Rotation stays in the environment and configuration stays on the command line
- * (ADR-0020).
+ * `/settings` and deliberately not `/configure`, which is the distinction still
+ * worth stating now that the rail's label is the plain word: nothing on this screen
+ * changes a setting, and there is no route on this bench that would take one. The
+ * screen states what the bench is set to and offers no control that alters it —
+ * rotation stays in the environment and configuration stays on the command line
+ * (ADR-0020) — so a path promising otherwise would be a promise no route here can
+ * keep.
  */
 export const SETTINGS_PATH = '/settings'
 
@@ -111,18 +127,36 @@ export const THE_CONSOLE = 'The operator console'
 export const NOT_A_SCREEN = 'Not a screen this console has'
 
 /**
- * One place the rail can send you, and what it answers when you get there.
+ * Which glyph a destination wants, as a closed set of names.
  *
- * `answers` is a sentence about the screen and never about a result: the rail
- * describes the console, and every figure in this application belongs to the
- * screen that measured it.
+ * A name and never a drawing: `railIcons.tsx` switches over this union with no
+ * `default`, so the seven members and the seven drawings are counted against each
+ * other by the compiler. Widening this without drawing the new one does not
+ * compile, which is the whole of the guard — and it is a union rather than a path
+ * key so that moving a path can never quietly detach a glyph.
+ */
+export type RailIcon =
+  | 'bench'
+  | 'target'
+  | 'gate'
+  | 'artefacts'
+  | 'settings'
+  | 'run'
+  | 'report'
+
+/**
+ * One place the rail can send you.
+ *
+ * A name, a path and a glyph's name, and nothing that describes the screen: the
+ * rail is what a reader navigates by, and every sentence about a screen belongs on
+ * the screen.
  */
 export interface Destination {
   /** The path, built here so no component invents one. */
   path: string
   name: string
-  /** What this screen answers, for a reader who has not been there yet. */
-  answers: string
+  /** Which glyph goes to the left of the name. Required: every place has one. */
+  icon: RailIcon
   /** Whether this is where you are standing now. */
   current: boolean
 }
@@ -156,7 +190,7 @@ export interface Rail {
  */
 interface Place {
   name: string
-  answers: string
+  icon: RailIcon
 }
 
 /**
@@ -171,59 +205,17 @@ interface Place {
  * engineer opening a deployed bench sees before it asks them for an endpoint.
  */
 const STANDING: readonly (Place & { path: string })[] = [
-  {
-    path: CONSOLE_PATH,
-    name: 'What this bench is',
-    answers:
-      'What this instrument does, and the gate run it last passed — a fact about ' +
-      'the bench, and never a verdict about a target.',
-  },
-  {
-    path: REGISTER_PATH,
-    name: 'Register a target',
-    answers:
-      'Describe the endpoint, plant the nonce, and make the three attestations ' +
-      'one at a time.',
-  },
-  {
-    path: GATE_PATH,
-    name: 'The gate',
-    answers:
-      'The rule this bench is held to, what the last gate run answered under it, ' +
-      'and the two ways to run another — from here, or from a terminal. Starting ' +
-      'one asks the three statements and shows both figures first.',
-  },
-  {
-    path: ARTEFACTS_PATH,
-    name: 'Signed artefacts',
-    answers:
-      'Every artefact this bench has signed, each with all three verification ' +
-      'results named, and the command a recipient runs.',
-  },
-  {
-    path: SETTINGS_PATH,
-    name: 'What it is set to',
-    answers:
-      'The key an artefact will be signed by and the key a verification is run ' +
-      'against, the case library, the four model settings and each layer’s own ' +
-      'ceiling. It states them and changes none of them.',
-  },
+  { path: CONSOLE_PATH, name: 'The bench', icon: 'bench' },
+  { path: REGISTER_PATH, name: 'Register a target', icon: 'target' },
+  { path: GATE_PATH, name: 'The gate', icon: 'gate' },
+  { path: ARTEFACTS_PATH, name: 'Signed artefacts', icon: 'artefacts' },
+  { path: SETTINGS_PATH, name: 'Settings', icon: 'settings' },
 ]
 
 /** What a run's two screens are called in the rail. */
-const RUN_SCREEN: Place = {
-  name: 'The run',
-  answers:
-    'The approval interrupt while it holds, then where the run has got to, one ' +
-    'layer at a time.',
-}
+const RUN_SCREEN: Place = { name: 'The run', icon: 'run' }
 
-const REPORT_SCREEN: Place = {
-  name: 'Its report',
-  answers:
-    'The signed artefact, its three verification results, and one family at a ' +
-    'time. A run with no report says so in the bench’s own words.',
-}
+const REPORT_SCREEN: Place = { name: 'Its report', icon: 'report' }
 
 /**
  * Where a path is, as the few cases the console can be in.
@@ -286,7 +278,7 @@ export function runInPath(pathname: string): string | null {
 }
 
 function destination(place: Place, path: string, current: boolean): Destination {
-  return { path, name: place.name, answers: place.answers, current }
+  return { path, name: place.name, icon: place.icon, current }
 }
 
 /** The run's two screens, with the one you are on marked and both reachable. */

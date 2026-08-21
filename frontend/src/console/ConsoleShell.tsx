@@ -31,6 +31,7 @@ import {
   theRunLastInView,
   type Destination,
 } from './rail'
+import { RailGlyph } from './railIcons'
 
 export function ConsoleShell() {
   const { pathname } = useLocation()
@@ -55,21 +56,12 @@ export function ConsoleShell() {
     <div className="console">
       <nav className="rail" aria-label="The console">
         <p className="mark">AgentAudit</p>
-        <p className="rail-note">
-          An adversarial test bench. Every figure it prints belongs to the screen
-          that measured it.
-        </p>
         <ul>
           {rail.destinations.map((there) => (
             <RailLink there={there} key={there.path} />
           ))}
         </ul>
-        {rail.run === null ? (
-          <p className="rail-note">
-            A run appears here once a target is registered, and stays for as long as
-            this tab is open.
-          </p>
-        ) : (
+        {rail.run === null ? null : (
           <>
             <h2 className="rail-heading">The run you are working on</h2>
             <p className="rail-id">
@@ -94,14 +86,20 @@ export function ConsoleShell() {
   )
 }
 
-/** One destination, marked when it is the one you are standing on. */
+/**
+ * One destination, marked when it is the one you are standing on.
+ *
+ * The glyph is inside the `<Link>` rather than beside it, so the whole of what a
+ * reader points at is the link — and it is decorative, so this stays a link whose
+ * accessible name is exactly the destination's name.
+ */
 function RailLink({ there }: { there: Destination }) {
   return (
     <li className={there.current ? 'current' : undefined}>
       <Link to={there.path} aria-current={there.current ? 'page' : undefined}>
+        <RailGlyph icon={there.icon} />
         {there.name}
       </Link>
-      <span className="answers">{there.answers}</span>
     </li>
   )
 }

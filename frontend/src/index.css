@@ -124,7 +124,12 @@ body {
 .screen {
   max-width: 64rem;
   margin: 0 auto;
-  padding: 3rem 1.5rem 6rem;
+  /* The sides are wide enough that a card's edge is never against the frame's:
+   * the rail is a hard edge on one side and the window is on the other, and a
+   * block of figures needs air between it and both. Kept equal to the top bar's
+   * own padding below, so the screen's content and the line above it start at the
+   * same place. */
+  padding: 3rem 2.5rem 6rem;
 }
 
 .eyebrow {
@@ -1137,7 +1142,7 @@ code {
 }
 
 .topbar {
-  padding: 0.8rem 1.5rem;
+  padding: 0.8rem 2.5rem;
   border-bottom: 1px solid var(--line);
 }
 
@@ -1162,6 +1167,13 @@ code {
     padding: 1rem 1.2rem;
     border-right: 0;
     border-bottom: 1px solid var(--line);
+  }
+
+  /* The sides give their width back where there is none to spare: 2.5rem each
+   * side of a narrow window is a fifth of it spent on margin. */
+  .screen,
+  .topbar {
+    padding-inline: 1.2rem;
   }
 
   .rail ul {

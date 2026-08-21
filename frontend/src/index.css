@@ -10,7 +10,15 @@
 
 :root {
   --ink: #16181d;
-  --paper: #fbfbfa;
+  --paper: #ffffff;
+  /*
+   * The ground the page sits on, behind the cards.
+   *
+   * Two surfaces where there used to be one: the paper is what a card is made of
+   * and the page is what it sits on, so a block of figures is an object with an
+   * edge rather than a region of the same colour with a line drawn round it.
+   */
+  --page: #f5f5f2;
   --quiet: #5b6170;
   --line: #d8d8d4;
   --refusal: #8c2f1f;
@@ -45,18 +53,36 @@
   --agent-hardened: oklch(0.52 0.10 195);
   --agent-weak: oklch(0.58 0.13 75);
   --agent-trivial: oklch(0.54 0.19 25);
+  /*
+   * One corner radius, and one step down for the small things inside a card.
+   *
+   * Named rather than repeated: `3px` was written at eleven places in this file,
+   * which is eleven chances for a card and the button inside it to disagree.
+   */
+  --radius: 10px;
+  --radius-sm: 6px;
+  /* Round enough to read as a pill whatever the text in it is. */
+  --radius-pill: 999px;
   color-scheme: light dark;
+  /*
+   * A step up from the browser default, because this is an instrument read at a
+   * desk rather than a page skimmed on a phone: every size in this stylesheet is in
+   * `rem`, so the whole scale moves with this one number and every proportion
+   * already chosen survives.
+   */
+  font-size: 17px;
   font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
     "Helvetica Neue", sans-serif;
   line-height: 1.55;
   color: var(--ink);
-  background: var(--paper);
+  background: var(--page);
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
     --ink: #eceef2;
-    --paper: #15171b;
+    --paper: #1c1f26;
+    --page: #14161a;
     --quiet: #9aa2b1;
     --line: #333842;
     --refusal: #ffb3a2;
@@ -77,7 +103,7 @@
 
 body {
   margin: 0;
-  background: var(--paper);
+  background: var(--page);
 }
 
 /*
@@ -169,7 +195,7 @@ textarea {
   color: var(--ink);
   background: transparent;
   border: 1px solid var(--line);
-  border-radius: 3px;
+  border-radius: var(--radius);
 }
 
 textarea {
@@ -216,7 +242,7 @@ fieldset {
   margin: 1.5rem 0;
   padding: 0.5rem 1rem 1rem;
   border: 1px solid var(--line);
-  border-radius: 3px;
+  border-radius: var(--radius);
 }
 
 legend {
@@ -231,7 +257,7 @@ legend {
   word-break: break-all;
   padding: 0.8rem;
   border: 1px dashed var(--line);
-  border-radius: 3px;
+  border-radius: var(--radius);
 }
 
 pre {
@@ -239,7 +265,7 @@ pre {
   padding: 0.8rem;
   font-size: 0.85rem;
   border: 1px solid var(--line);
-  border-radius: 3px;
+  border-radius: var(--radius);
 }
 
 .review {
@@ -259,7 +285,7 @@ pre {
 
 .refusal {
   border: 1px solid var(--refusal);
-  border-radius: 3px;
+  border-radius: var(--radius);
   background: var(--refusal-paper);
   color: var(--refusal);
   padding: 0.2rem 1rem 1rem;
@@ -279,11 +305,11 @@ pre {
 
 button {
   font: inherit;
-  padding: 0.55rem 1.1rem;
+  padding: 0.55rem 1.2rem;
   color: var(--ink);
   background: transparent;
   border: 1px solid var(--line);
-  border-radius: 3px;
+  border-radius: var(--radius);
   cursor: pointer;
 }
 
@@ -320,9 +346,9 @@ button:disabled {
 .does .card {
   display: flex;
   flex-direction: column;
-  padding: 1rem 1.1rem;
+  padding: 1.15rem 1.3rem;
   border: 1px solid var(--line);
-  border-radius: 3px;
+  border-radius: var(--radius);
 }
 
 .does .card h3 {
@@ -347,11 +373,11 @@ button:disabled {
  */
 .act {
   align-self: start;
-  padding: 0.45rem 0.9rem;
+  padding: 0.45rem 1rem;
   font-size: 0.9rem;
   text-decoration: none;
   border: 1px solid var(--line);
-  border-radius: 3px;
+  border-radius: var(--radius);
 }
 
 .act:hover {
@@ -422,10 +448,27 @@ a {
   margin: 1.5rem 0;
 }
 
+/* Every card-like block is made of paper and sits on the page. One rule, so a new
+ * block cannot arrive as a tinted region with a line round it. */
+.does .card,
+.family,
+.citation,
+.layer,
+.figure,
+.spend,
+.run,
+pre,
+fieldset,
+textarea,
+input,
+select {
+  background: var(--paper);
+}
+
 .layer {
   padding: 1rem;
   border: 1px solid var(--line);
-  border-radius: 3px;
+  border-radius: var(--radius);
   font-size: 0.95rem;
 }
 
@@ -498,9 +541,9 @@ a {
 }
 
 .family {
-  padding: 1rem 1.2rem;
+  padding: 1.15rem 1.3rem;
   border: 1px solid var(--line);
-  border-radius: 3px;
+  border-radius: var(--radius);
   font-size: 0.95rem;
 }
 
@@ -730,7 +773,7 @@ code {
   margin: 1.2rem 0 0;
   padding: 1rem 1.2rem;
   border: 1px solid var(--line);
-  border-radius: 3px;
+  border-radius: var(--radius);
   font-size: 0.95rem;
 }
 
@@ -998,10 +1041,10 @@ code {
 }
 
 .rail {
-  padding: 1.6rem 1.2rem 3rem;
-  background: var(--rail);
+  padding: 1.6rem 1rem 3rem;
+  background: var(--paper);
   border-right: 1px solid var(--line);
-  font-size: 0.9rem;
+  font-size: 0.95rem;
 }
 
 .rail .mark {
@@ -1032,14 +1075,28 @@ code {
   list-style: none;
 }
 
+/*
+ * A row rather than a ruled list entry.
+ *
+ * The dividers are gone: five names under one heading are a group already, and a
+ * rule between each of them draws four lines that say nothing. What marks the row
+ * you are standing on is the row itself — see `.current` below.
+ */
 .rail li {
-  padding: 0.6rem 0;
-  border-top: 1px solid var(--line);
+  border-radius: var(--radius-sm);
 }
 
 .rail li a {
+  display: block;
+  padding: 0.45rem 0.6rem;
   text-decoration: none;
   color: var(--quiet);
+}
+
+.rail li a:hover {
+  text-decoration: none;
+  background: var(--page);
+  border-radius: var(--radius-sm);
 }
 
 /*
@@ -1059,24 +1116,20 @@ code {
   vertical-align: -0.17em;
 }
 
-.rail li a:hover {
-  text-decoration: underline;
-}
-
 /*
- * Where you are, marked three ways and not one: the weight, the ink and the rule
- * down the side. A single grey-on-grey highlight is the marking a person on a
+ * Where you are, marked three ways and not one: the weight, the ink and the filled
+ * row behind them. A single grey-on-grey highlight is the marking a person on a
  * screen they have sat on for an hour cannot find.
  */
 .rail li.current {
-  border-left: 3px solid var(--ink);
-  padding-left: 0.7rem;
-  margin-left: -0.7rem;
+  background: var(--page);
 }
 
-.rail li.current a {
+.rail li.current a,
+.rail li.current a:hover {
   color: var(--ink);
   font-weight: 600;
+  background: transparent;
 }
 
 .console-body {

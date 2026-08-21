@@ -15,8 +15,9 @@ Three ground rules for reading it.
 
 **Nothing here is presented as fixed unless a merged change fixed it.** One entry — the
 retirement window, §5 — is closed, and names the ADR and the pull request that closed it.
-Two more, §6 and §7, are closed in the instance and open in the class, and each says
-which half is which. The other four are open.
+Two more, §6 and §7, are closed in an instance and open in the class, and each says which
+half is which; §6 also carries a **second instance that is open**, found while the section
+was being written. The other four are open.
 
 **Nothing here decides a repair.** Several entries end at an option list that
 [docs/validation.md](./validation.md) already records as open, and leaving it open is
@@ -856,8 +857,9 @@ rather than a docstring asking future contributors to respect them.
 
 ## What this document does not do
 
-- **It fixes nothing.** Four entries are open (§1, §2, §3, §4), one is closed (§5), and two
-  are closed in the instance and open in the class (§6, §7).
+- **It fixes nothing.** Four entries are open (§1, §2, §3, §4) and one is closed (§5). Two
+  are closed in an instance and open in the class (§6, §7), and §6's second instance
+  (#108) is open in both.
 - **It chooses no threshold.** `k`, `T`, an interval on `A_break` instead of a point, and a
   reading table that names the weak agent are all still open, and each is a change to a
   declared quantity. ADR-0003's discipline is that thresholds are declared in advance, not

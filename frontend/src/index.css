@@ -9,22 +9,57 @@
  */
 
 :root {
-  --ink: #16181d;
-  --paper: #ffffff;
   /*
-   * The ground the page sits on, behind the cards.
+   * One palette, and it is dark.
    *
-   * Two surfaces where there used to be one: the paper is what a card is made of
-   * and the page is what it sits on, so a block of figures is an object with an
-   * edge rather than a region of the same colour with a line drawn round it.
+   * There were two sets here — a light one and a dark one under a media query — which
+   * meant the bench looked like two different instruments depending on which machine
+   * it was read on. It is one instrument now: a near-black ground with a blue-green
+   * cast, wells cut into it rather than cards floating on it, and a single mint that
+   * the chrome is signed in.
+   *
+   * Ground, well and rail are three values within a few points of each other. What
+   * draws the edge of a block of figures is its hairline, not a change of shade, so
+   * the only things on any screen carrying real chroma are the accents below — and
+   * every accent means something.
    */
-  --page: #fafaf8;
-  --quiet: #5b6170;
-  --line: #d8d8d4;
-  --refusal: #8c2f1f;
-  --refusal-paper: #fdf2ef;
+  --ink: #e9f1ef;
   /*
-   * The shell's surface, and the accents the charts to come are drawn in.
+   * What a card is made of, and the ground it sits in.
+   *
+   * The well is *darker* than the page around it: a block of figures reads as a
+   * recess in the surface rather than a tile laid on it. The two stay within a few
+   * points of each other on purpose, and they have to — the hairline around a
+   * plotted dot is `--paper` painted over the axis, and it only hides the axis while
+   * the two surfaces agree.
+   */
+  --paper: #081015;
+  --page: #0a141c;
+  --quiet: #86949a;
+  --line: #253034;
+  --refusal: #ffc4b8;
+  --refusal-paper: #2a1618;
+  /*
+   * The rail, the darkest of the three surfaces, and the one lift above it.
+   *
+   * `--lift` is where-you-are and where-the-pointer-is: the row raised out of the
+   * rail. It lifts rather than tints, because a highlight that borrowed a hue would
+   * be saying *scored layer* or *hardened agent* about a navigation row.
+   */
+  --rail: #081016;
+  --lift: #1e262b;
+  /*
+   * The house mint, and the deep teal a filled control is cut out of.
+   *
+   * Chrome, and never data: the one control to press on a screen, and the ring
+   * around whatever the keyboard is on. It is deliberately not one of the five
+   * accents below — nothing about pressing a button says *scored layer* — and those
+   * five keep clear of its hue for the same reason.
+   */
+  --accent: #5ce5b2;
+  --accent-paper: #18333e;
+  /*
+   * The accents the charts are drawn in.
    *
    * Colour carries identity and order here, and never a judgement. The two layers
    * of a run take two hues so that the boundary between them is visible; the three
@@ -42,17 +77,19 @@
    * weak and fails is the severity scale ADR-0005 exists to refuse, and a green tick
    * beside somebody's agent is the badge the report refuses.
    *
-   * `--refusal` keeps its own hue for the one thing it means. `--agent-trivial` is
-   * the accent nearest it and is deliberately lighter and far more chromatic than
-   * that dull brick, so the two do not read as one thing; every accent is redundant
-   * with a label in words, so nothing on any screen is carried by hue alone.
+   * Five hues, as far apart as five can be put: blue, violet, cyan, amber, rose.
+   * Each is pitched light and chromatic enough to carry at the size of a dot on the
+   * near-black well, and each clears 4.5:1 against all three surfaces. `--refusal`
+   * keeps its own hue for the one thing it means — warmer and far less chromatic
+   * than the rose beside it, so the two do not read as one thing — and every accent
+   * is redundant with a label in words, so nothing on any screen is carried by hue
+   * alone.
    */
-  --rail: #f2f2ee;
-  --scored: oklch(0.48 0.11 250);
-  --adaptive: oklch(0.48 0.11 305);
-  --agent-hardened: oklch(0.52 0.10 195);
-  --agent-weak: oklch(0.58 0.13 75);
-  --agent-trivial: oklch(0.54 0.19 25);
+  --scored: oklch(0.80 0.12 245);
+  --adaptive: oklch(0.72 0.19 300);
+  --agent-hardened: oklch(0.84 0.11 195);
+  --agent-weak: oklch(0.88 0.15 92);
+  --agent-trivial: oklch(0.70 0.19 15);
   /*
    * One corner radius, and one step down for the small things inside a card.
    *
@@ -63,7 +100,9 @@
   --radius-sm: 6px;
   /* Round enough to read as a pill whatever the text in it is. */
   --radius-pill: 999px;
-  color-scheme: light dark;
+  color-scheme: dark;
+  /* The declaration boxes are real checkboxes, and they take the house mint too. */
+  accent-color: var(--accent);
   /*
    * The one number the whole type scale hangs off: every size in this stylesheet is
    * in `rem`, so this moves all of them together and every proportion already chosen
@@ -76,29 +115,6 @@
   line-height: 1.55;
   color: var(--ink);
   background: var(--page);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --ink: #eceef2;
-    --paper: #1c1f26;
-    --page: #16181d;
-    --quiet: #9aa2b1;
-    --line: #333842;
-    --refusal: #ffb3a2;
-    --refusal-paper: #2c1a17;
-    /* The same accents against the dark surface: each hue held exactly, lightness
-     * lifted so all three clear the dark paper. Lifted rather than inverted — the
-     * three agents are three hues now, so their order is carried by which hue it is
-     * and not by which is darkest, and one of them going dark here would only make
-     * it unreadable. */
-    --rail: #1b1e24;
-    --scored: oklch(0.78 0.11 250);
-    --adaptive: oklch(0.78 0.11 305);
-    --agent-hardened: oklch(0.80 0.10 195);
-    --agent-weak: oklch(0.82 0.13 75);
-    --agent-trivial: oklch(0.72 0.17 25);
-  }
 }
 
 body {
@@ -345,10 +361,38 @@ button {
   cursor: pointer;
 }
 
+/*
+ * The one filled control on a screen, cut out of the deep teal rather than out of
+ * the ink.
+ *
+ * It used to invert the page — paper text on an ink slab — which on white was a
+ * dark button and on this ground would be a near-white one: the brightest object on
+ * the screen, shouting over the figures it sits under. So the fill is the mint's own
+ * dark companion and the label is the mint, which is the only place chrome is allowed
+ * a hue.
+ */
 button.primary {
-  color: var(--paper);
-  background: var(--ink);
-  border-color: var(--ink);
+  color: var(--accent);
+  background: var(--accent-paper);
+  border-color: var(--accent);
+}
+
+/* An outlined control answers the pointer with the accent on its edge: on this
+ * ground the ink hairline it used to take was barely a change at all. */
+button:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+/*
+ * Where the keyboard is, said in the one colour chrome owns.
+ *
+ * Left to the browser before now, which on a light page was a ring you could find and
+ * on this one is a hairline against near-black. Offset so it sits outside the control
+ * rather than on its own border.
+ */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 button:disabled {
@@ -413,13 +457,13 @@ button:disabled {
 }
 
 .act:hover {
-  border-color: var(--ink);
+  border-color: var(--accent);
 }
 
 .act.lead {
-  color: var(--paper);
-  background: var(--ink);
-  border-color: var(--ink);
+  color: var(--accent);
+  background: var(--accent-paper);
+  border-color: var(--accent);
 }
 
 a {
@@ -500,6 +544,19 @@ textarea,
 input,
 select {
   background: var(--paper);
+}
+
+/*
+ * The one control whose text the browser still picks.
+ *
+ * `input` and `textarea` take the ink further up; a `select` did not, and with the
+ * fill set here and the label left to the browser the option showing was near-black
+ * on near-black. No screen renders one today — the settings screen is asserted to
+ * have none — but this file styles selects, and a fill without a colour beside it is
+ * the half that goes wrong the day one appears.
+ */
+select {
+  color: var(--ink);
 }
 
 .layer {
@@ -1082,7 +1139,7 @@ code {
 
 .rail {
   padding: 1.6rem 1rem 3rem;
-  background: var(--paper);
+  background: var(--rail);
   border-right: 1px solid var(--line);
   font-size: 0.95rem;
 }
@@ -1162,7 +1219,7 @@ code {
 
 .rail li a:hover {
   text-decoration: none;
-  background: var(--page);
+  background: var(--lift);
   border-radius: var(--radius-sm);
 }
 
@@ -1189,7 +1246,7 @@ code {
  * screen they have sat on for an hour cannot find.
  */
 .rail li.current {
-  background: var(--page);
+  background: var(--lift);
 }
 
 .rail li.current a,

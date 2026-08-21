@@ -26,8 +26,18 @@ a citation has rather than as the presence of empty ones: `cited: false` is a
 different fact from *did not pass*, and a response with `outcome: ""` in it is the
 second fact wearing the first one's clothes.
 
-**That the document is named and never read.** The citation names a path; nothing in
-this route opens it. Asserted twice — a bench citing a document that is not on this
+**That a deployment cites the gate run its own library recorded.** ADR-0021 left
+`deployed_bench` declaring no citation, so a live deployment read as an instrument
+with no certification even where it had passed a gate — true, and misleading, and the
+same surface as a gate run not updating what the bench cites. ADR-0023 reverses it,
+and the three tests at the end of this file are the reversal: the cases and the
+citation come out of one directory, an absent citation is still a stated absence
+rather than an invented pass, and the value the route serves is the value every
+report's provenance block is built from.
+
+**That both files are named and neither is read.** The citation names two paths — the
+dated document, and the gate run record ADR-0023 made it point at — and nothing in
+this route opens either. Asserted twice — a bench citing a document that is not on this
 filesystem still answers, and a bench citing one that is serves not one figure the
 document alone holds — because the useful failure is a future contributor deciding
 the screen would be nicer with the per-family rates and the per-family `D` in it,
@@ -62,7 +72,9 @@ from __future__ import annotations
 import json
 from datetime import date
 from pathlib import Path
+from typing import cast
 
+import pytest
 from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
 
@@ -75,13 +87,16 @@ from backend.api.app import (
     create_app,
 )
 from backend.api.report import ReportConfig
-from backend.api.runs import BenchConfig
+from backend.api.runs import BenchConfig, BenchRuns
+from backend.bench.cited import citation_of, cite
+from backend.bench.gate_record import write_the_record
 from backend.bench.library import Case, Family, LibraryVersion
-from backend.bench.payload import UNCITED_GATE, GateCitation
+from backend.bench.payload import UNCITED_GATE, GateCitation, citation
 from backend.bench.rule import DECLARED_RULE
 from backend.bench.scorer import GateOutcome
-from backend.bench.signing import generate
+from backend.bench.signing import SIGNING_KEY_VARIABLE, encoded_private, generate
 from backend.tests.test_api_report import completed
+from backend.tests.test_cited import a_passing_gate, a_record
 
 CITED = GateCitation(
     outcome=GateOutcome.PASSED,
@@ -91,6 +106,14 @@ CITED = GateCitation(
     record="docs/gate-runs/gate-2026-08-19T09-38-37Z.json",
 )
 """The gate run of 2026-08-19 — the one this repository's own bench last passed."""
+
+RECORDED = a_record(a_passing_gate())
+"""One gate run's record, as a library that has run one holds it (ADR-0023).
+
+Built through `gate_record.recorded_gate_run` rather than written as JSON here,
+because the assertions below are that the citation a deployment reads is rendered off
+this record — and a hand-written record would be exactly the second reading the
+arrangement exists to prevent."""
 
 
 def a_client(gate: GateCitation | None) -> TestClient:
@@ -205,28 +228,37 @@ def test_the_route_serves_the_same_citation_the_signed_provenance_carries(
 
 
 def test_the_gate_document_is_named_and_never_opened() -> None:
-    """The path is a link for the reader, not an input to this route.
+    """Both paths are links for the reader, not inputs to this route.
 
-    Two halves. A bench citing a document that is not on this filesystem answers
-    with the path it was given — nothing here reads it, so nothing here can fail on
-    it. And a bench citing one that *is* on this filesystem serves nothing the
+    Three halves now. A bench citing files that are not on this filesystem answers
+    with the paths it was given — nothing here reads either, so nothing here can fail
+    on them. A bench citing a document that *is* on this filesystem serves nothing the
     document alone holds: the three reference agents' rates and the per-family `D`
     are in it and are not in the citation, and the spec dropped them rather than
     parse them, so this is the assertion that fails when somebody lifts them out.
+
+    And the third is what ADR-0023 added: `record` names the same gate run as fields,
+    so those figures are *reachable* — and reachable is the whole difference. The
+    assertion is that the name is served verbatim and that the response still holds
+    no figure, because a route that had started inlining the record's contents would
+    be serving per-family figures the spec dropped, arriving from a file instead of
+    from prose.
     """
     absent = "docs/gate-runs/gate-2099-01-01T00-00-00Z.md"
-    assert not Path(absent).exists()
+    beside_it = absent.replace(".md", ".json")
+    assert not Path(absent).exists() and not Path(beside_it).exists()
     named = a_client(
         GateCitation(
             outcome=GateOutcome.NOT_DECIDED,
             decided_on=date(2099, 1, 1),
             library=LibraryVersion(cases=1, digest="0000deadbeef"),
             document=absent,
-            record=absent.replace(".md", ".json"),
+            record=beside_it,
         )
     ).get(BENCH_GATE_ROUTE)
     assert named.status_code == 200
     assert named.json()["citation"]["document"] == absent
+    assert named.json()["citation"]["record"] == beside_it
 
     on_disk = Path(CITED.document)
     assert on_disk.exists(), "the citation under test names a document in this repo"
@@ -272,8 +304,9 @@ def test_this_route_reads_and_the_one_that_starts_a_gate_run_is_elsewhere() -> N
     Three things at once. This route is a `GET` and nothing else. The two routes that
     write are the gate-run family's own, named by the constants that declare them, so
     a write appearing anywhere else with *gate* in its path fails here. And the
-    citation route is not one of them: it reads what a deployment declared, which is
-    a different fact from what a gate run this bench just made decided.
+    citation route is not one of them: reading what a gate run decided and starting
+    one are two operations, which is unchanged by ADR-0023 making the citation the
+    gate run this bench last made rather than the one a deployment declared.
     """
     app = create_app(BenchConfig(cases=[], report=ReportConfig(gate=CITED)))
     gate_routes = {
@@ -351,3 +384,87 @@ def test_nothing_under_the_bench_prefix_does_anything_but_read() -> None:
         (GATE_RUNS_ROUTE, "POST"),
         (GATE_RUN_APPROVAL_ROUTE, "POST"),
     }
+
+
+def test_a_deployment_cites_the_gate_run_its_own_library_recorded(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The gap four tickets declined to close: a deployment that has passed a gate.
+
+    `deployed_bench` declared no citation, so a live deployment's front door and gate
+    screen read *no gate run cited* even where the bench had passed one — true, and
+    misleading, and the same surface as a gate run not updating what the bench cites
+    (ADR-0023). The cases and the citation now come out of one directory, so the claim
+    and the cases it is a claim about cannot come apart.
+
+    Driven through the factory rather than through `deployed_bench` directly, because
+    the claim is about what a deployed *app* answers: a factory that read the citation
+    and dropped it would satisfy an assertion on the function and still serve
+    *uncited* on the route an operator opens.
+    """
+    mount = tmp_path / "cases"
+    mount.mkdir()
+    write_the_record(RECORDED, mount)
+    cite(RECORDED, mount)
+    monkeypatch.setenv(SIGNING_KEY_VARIABLE, encoded_private(generate()))
+    monkeypatch.setattr("backend.api.app.DEPLOYED_LIBRARY_MOUNT", mount)
+
+    body = TestClient(create_app()).get(BENCH_GATE_ROUTE).json()
+
+    expected = citation_of(RECORDED)
+    assert body["citation"] == citation(expected)
+    assert body["citation"]["outcome"] == expected.outcome.value
+    # And the figures are reachable from what the citation names, in the library the
+    # deployment is running on, without opening a document.
+    assert (mount / body["citation"]["record"]).exists()
+    assert list(mount.glob("*.md")) == []
+
+
+def test_a_deployment_whose_library_records_no_gate_run_states_the_absence(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """No citation in the library is a stated absence, not an invented pass.
+
+    The other half, and it has to be the other half rather than a fallback: a
+    deployment citing a gate run its own library has no record of would be a claim
+    nobody can check, which is worse than the blank ADR-0023 set out to remove.
+    """
+    mount = tmp_path / "cases"
+    mount.mkdir()
+    monkeypatch.setenv(SIGNING_KEY_VARIABLE, encoded_private(generate()))
+    monkeypatch.setattr("backend.api.app.DEPLOYED_LIBRARY_MOUNT", mount)
+
+    app = create_app()
+    body = TestClient(app).get(BENCH_GATE_ROUTE).json()
+
+    assert body["citation"] == {"cited": False, "stated": UNCITED_GATE}
+    # And the cases arrived: the library was seeded from the image, so it is the
+    # citation that is absent rather than the bench.
+    assert cast(BenchRuns, app.state.bench).config.cases
+    # The rule is still served, because an uncited instrument is held to the same bar.
+    assert body["rule"]["stated"] == DECLARED_RULE.stated()
+
+
+def test_the_citation_a_deployment_reads_is_the_one_its_reports_carry(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """One value, two carriers: the route the console reads and the signed payload.
+
+    The strongest form of *the citation and the record cannot disagree* on this
+    surface. `ReportConfig.gate` is what every report's provenance block is built
+    from, and the route serves the same object through the same serialiser — so a
+    deployment that read its citation off the library and then signed something else
+    is a state this asserts out of existence.
+    """
+    mount = tmp_path / "cases"
+    mount.mkdir()
+    cite(RECORDED, mount)
+    monkeypatch.setenv(SIGNING_KEY_VARIABLE, encoded_private(generate()))
+    monkeypatch.setattr("backend.api.app.DEPLOYED_LIBRARY_MOUNT", mount)
+
+    app = create_app()
+    carried = cast(BenchRuns, app.state.bench).config.report.gate
+    served = TestClient(app).get(BENCH_GATE_ROUTE).json()["citation"]
+
+    assert carried == citation_of(RECORDED)
+    assert citation(carried) == served

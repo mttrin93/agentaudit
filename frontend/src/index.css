@@ -270,6 +270,72 @@ button:disabled {
   opacity: 0.45;
 }
 
+/*
+ * The three things this console does, side by side on the front door.
+ *
+ * Cards rather than prose, because each one is an errand with a control at the end
+ * of it and a reader who came to start one should not have to read the other two to
+ * find it. `auto-fit` and not three fixed columns: the reading column is 44rem, so
+ * three cards are narrow by design and one column is what a phone gets.
+ *
+ * **Nothing in a card is a figure**, so there is no rule here for a rate, a band or
+ * a tint — the front door says what the console does, and every figure in this
+ * application belongs to the screen that measured it.
+ */
+.does {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  gap: 1rem;
+  margin: 1.5rem 0 0;
+}
+
+.does .card {
+  display: flex;
+  flex-direction: column;
+  padding: 1rem 1.1rem;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+}
+
+.does .card h3 {
+  margin-top: 0;
+}
+
+/* The description takes the slack, so the controls sit on one line across the row
+ * however unevenly the three sentences wrap. */
+.does .card p {
+  flex: 1;
+  margin: 0 0 1.1rem;
+  font-size: 0.9rem;
+  color: var(--quiet);
+}
+
+/*
+ * A link that opens a screen, set as the control it is.
+ *
+ * `button`'s own rule is left alone: these are anchors, because they navigate, and
+ * the styling is where the resemblance stops. `.lead` is the filled one — one per
+ * card set, on the errand to do first.
+ */
+.act {
+  align-self: start;
+  padding: 0.45rem 0.9rem;
+  font-size: 0.9rem;
+  text-decoration: none;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+}
+
+.act:hover {
+  border-color: var(--ink);
+}
+
+.act.lead {
+  color: var(--paper);
+  background: var(--ink);
+  border-color: var(--ink);
+}
+
 a {
   color: inherit;
 }

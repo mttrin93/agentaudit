@@ -1,46 +1,36 @@
 /**
- * The console's front door: what this instrument is, and whether it was validated.
+ * The console's front door: what this instrument is, and the three things it does.
  *
  * The root used to redirect to the registration form, which asked an engineer for
- * an endpoint before telling them what would be done to it — and before telling
- * them anything about the instrument that was going to measure their agent. This
- * screen answers the second question first: the bench's own gate citation, read
- * from `GET /bench/gate`, which is the same typed citation the provenance block of
- * every signed report carries.
+ * an endpoint before telling them what would be done to it. This screen says what
+ * the bench is in one paragraph, offers the three errands the console exists for —
+ * register a target, run the gate, check an artefact — and then lists what this
+ * bench has already done.
  *
- * **The citation region is where an absence is as visible as a pass.** A bench
- * citing no gate run gets the same heading, the same weight and a sentence in the
- * same place — drawn without the rows a citation would have had, in the idiom the
- * report screen already uses for a family with no rate, because a blank where an
- * outcome goes is read as a gate that failed.
+ * **The cards carry no figure, and none of them starts anything from here.** Each
+ * is a name, what that screen does, and a link to it. A gate run attacks all three
+ * reference agents, spends about 830 calls and writes back to the case library; it
+ * is started on the gate screen, where the rule, the write-back and the two figures
+ * are on the page beside it (ADR-0021). An operation with three attestation
+ * statements and a spend in front of it does not belong on the screen somebody
+ * lands on.
  *
- * **Both files are named, and named rather than linked.** Every per-family rate and
- * every discrimination score of that gate run is in the record the citation names,
- * and none of them is on this page: the citation does not carry them, and this
- * screen opens neither the record nor the document to find them (ADR-0023). The
- * paths are printed as the paths they are because this bench serves no route for
- * either — a hyperlink to something no route answers would be a broken link on the
- * front door, and how they are served is the gate screen's question rather than this
- * screen's. A gate run that wrote no document draws no `code` element at all, only
- * the sentence saying which entry point it came from: the reading carries `path:
- * null` for that, so there is nothing here that could print a paragraph as a path.
+ * **The bench's own gate citation is not on this screen any more, and this screen
+ * reads no route for it.** It used to be here, drawn so that an absence was as
+ * visible as a pass; it is on the gate screen, in that same idiom, beside the rule
+ * it was decided under and the document it wrote. A citation read apart from its
+ * rule is an outcome a reader cannot check, and the front door's answer about
+ * validation is now that there is a gate and one link to it. The cost is real and
+ * it is the one to watch: a bench that has never passed its gate no longer says so
+ * on the screen an engineer lands on.
  *
- * **There is no control here that starts a gate run**, and that is a decision about
- * this screen rather than about the bench. A gate run attacks all three reference
- * agents, spends about 830 calls and writes back to the case library; one can now be
- * started from the console, and the place it is started from is the gate screen,
- * where the rule, the write-back and the two figures are on the page beside it
- * (ADR-0021). The front door cites what the last one answered and links to that
- * screen: an operation with three attestation statements and a spend in front of it
- * does not belong on the screen somebody lands on.
- *
- * **The second region is the runs on the record**, read from `GET /runs`, so that a
- * run whose URL nobody kept is still reachable. Each row carries calls spent in two
- * columns — the scored layer's and the adaptive layer's — set side by side in two
- * hues and **never added into a third figure**: the two are enforced against two
- * separate ceilings, and a single number would say what a run cost without saying
- * which half of it cost that (ADR-0007, ADR-0010). There is no totals row on this
- * screen and the view model has no field for one.
+ * **The runs on the record** are read from `GET /runs`, so that a run whose URL
+ * nobody kept is still reachable. Each row carries calls spent in two columns — the
+ * scored layer's and the adaptive layer's — set side by side in two hues and
+ * **never added into a third figure**: the two are enforced against two separate
+ * ceilings, and a single number would say what a run cost without saying which half
+ * of it cost that (ADR-0007, ADR-0010). There is no totals row on this screen and
+ * the view model has no field for one.
  *
  * **The last region is the security questionnaire**, answered out of the attempts
  * of the most recent run that produced a signed report: a family per question, its
@@ -59,14 +49,10 @@
  * and the path to a report is never built here — it is read off the run, so this
  * screen cannot go looking somewhere the bench does not serve.
  *
- * The regions read their own routes and hold their own state, deliberately not one
- * between them: a bench that answered for its gate citation and not for its runs
- * has said one of the two things, and a single failure state would lose whichever
- * half arrived. The questionnaire is a third of them, and it is not folded into the
- * run list's even though it starts at the same route — a list of runs an operator
- * can navigate by is worth having whether or not a report could be read out of one
- * of them, and one failure state across the two would take the list down with the
- * answers.
+ * The two regions that read a route hold their own state, deliberately not one
+ * between them: a list of runs an operator can navigate by is worth having whether
+ * or not a report could be read out of one of them, and one failure state across
+ * the two would take the list down with the answers.
  *
  * The view models are `landing.ts`, `runs.ts` and `questionnaire.ts`, and they are
  * where the wording lives; this file is markup and is driven by hand, as every
@@ -77,18 +63,15 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 
 import {
-  benchGate,
   benchRuns,
   reportPayload,
   runProgress,
-  type BenchGate,
   type RunList,
 } from '../api/bench'
 import {
-  gateReading,
+  WHAT_THIS_CONSOLE_DOES,
   WHAT_THIS_INSTRUMENT_IS,
-  WHY_THE_GATE_IS_HERE,
-  type GateReading,
+  type ConsoleDoes,
 } from './landing'
 import {
   drawnFrom,
@@ -101,7 +84,7 @@ import {
   type Questionnaire,
   type QuestionnaireAnswer,
 } from './questionnaire'
-import { ARTEFACTS_PATH, GATE_PATH, REGISTER_PATH } from './rail'
+import { ARTEFACTS_PATH } from './rail'
 import {
   runsReading,
   TWO_COLUMNS_NEVER_ONE,
@@ -109,21 +92,6 @@ import {
   type RunsReading,
   type ScoredColumn,
 } from './runs'
-
-/**
- * What this screen is holding: the bench's own gate reading, or why it read none.
- *
- * The whole of `GET /bench/gate` — the declared rule and the citation — of which
- * this screen shows the citation. The rule is the gate screen's subject and is not
- * restated here: the front door says whether the instrument was validated, and the
- * bar it was validated against is one link away.
- */
-interface Held {
-  gate: BenchGate | null
-  unavailable: string
-}
-
-const NOTHING_YET: Held = { gate: null, unavailable: '' }
 
 /** What the second region is holding: the runs, or why it could not read them. */
 interface HeldRuns {
@@ -152,29 +120,8 @@ interface HeldAnswers {
 const NO_ANSWERS_YET: HeldAnswers = { answers: null, none: '', unavailable: '' }
 
 export function LandingScreen() {
-  const [held, setHeld] = useState<Held>(NOTHING_YET)
   const [runs, setRuns] = useState<HeldRuns>(NO_LIST_YET)
   const [asked, setAsked] = useState<HeldAnswers>(NO_ANSWERS_YET)
-
-  useEffect(() => {
-    let current = true
-    const read = async () => {
-      try {
-        const gate = await benchGate()
-        if (current) {
-          setHeld({ gate, unavailable: '' })
-        }
-      } catch (unknown: unknown) {
-        if (current) {
-          setHeld({ gate: null, unavailable: `${unknown}` })
-        }
-      }
-    }
-    void read()
-    return () => {
-      current = false
-    }
-  }, [])
 
   useEffect(() => {
     let current = true
@@ -244,44 +191,21 @@ export function LandingScreen() {
   return (
     <main className="screen">
       <header>
-        <p className="eyebrow">AgentAudit — the operator console</p>
-        <h1>An adversarial test bench, and its own certification</h1>
-        <p className="steps">
-          Six families of failure, each reported over its own denominator.{' '}
-          <Link to={REGISTER_PATH}>Register a target</Link> when you have read what
-          this bench has and has not been shown to do.
-        </p>
+        <h1>AgentAudit: an adversarial bench</h1>
       </header>
 
       <section>
-        <h2>What this instrument is</h2>
+        <h2>The instrument</h2>
         <p>{WHAT_THIS_INSTRUMENT_IS}</p>
       </section>
 
       <section>
-        <h2>Whether it has been validated</h2>
-        <p>{WHY_THE_GATE_IS_HERE}</p>
-        <p className="steps">
-          The rule it was decided under, what running another one writes back to the
-          case library, and the command that starts one are on{' '}
-          <Link to={GATE_PATH}>the gate screen</Link>.
-        </p>
-
-        {held.unavailable ? (
-          <div className="citation uncited" role="alert">
-            <h3>This bench did not answer for its own gate citation</h3>
-            <p>{held.unavailable}</p>
-            <p className="aside">
-              Not the same fact as a bench that cites no gate run: what is unknown
-              here is what the bench would have said, and nothing on this page
-              should be read as either answer.
-            </p>
-          </div>
-        ) : held.gate === null ? (
-          <p className="aside">Reading this bench’s own gate citation…</p>
-        ) : (
-          <Citation reading={gateReading(held.gate.citation)} />
-        )}
+        <h2>What this console does</h2>
+        <div className="does">
+          {WHAT_THIS_CONSOLE_DOES.map((card) => (
+            <Card card={card} key={card.path} />
+          ))}
+        </div>
       </section>
 
       <section>
@@ -526,41 +450,22 @@ function Spend({ column }: { column: ScoredColumn | AdaptiveColumn }) {
 }
 
 /**
- * The citation, or the stated absence of one, in the same region either way.
+ * One errand, with the control that starts it.
  *
- * Dashed rather than solid when there is nothing cited, and drawn without the rows
- * a citation would have filled: the absence is a sentence, and the surest way to be
- * read as a failed gate is to be drawn in the same box with an empty outcome in it.
+ * A `Link` and not a `button`, styled as the control it is: it navigates, and a
+ * button that navigates is a control a keyboard and a screen reader are told the
+ * wrong thing about. The lead card takes the filled treatment because it is the one
+ * errand an operator with nothing registered can usefully do, which is a fact about
+ * the order of the work rather than about the colour.
  */
-function Citation({ reading }: { reading: GateReading }) {
+function Card({ card }: { card: ConsoleDoes }) {
   return (
-    <div className={reading.cited ? 'citation' : 'citation uncited'}>
-      <h3>{reading.heading}</h3>
-      {reading.cited ? (
-        <>
-          <dl className="at">
-            {reading.facts.map((fact) => (
-              <div key={fact.label}>
-                <dt>{fact.label}</dt>
-                <dd>{fact.value}</dd>
-              </div>
-            ))}
-          </dl>
-          <p>
-            <code>{reading.record.path}</code>
-          </p>
-          <p className="aside">{reading.record.statement}</p>
-          {reading.document.path === null ? null : (
-            <p>
-              <code>{reading.document.path}</code>
-            </p>
-          )}
-          <p className="aside">{reading.document.statement}</p>
-        </>
-      ) : (
-        <p>{reading.statement}</p>
-      )}
-      <p className="aside">{reading.aboutTheBench}</p>
+    <div className="card">
+      <h3>{card.name}</h3>
+      <p>{card.does}</p>
+      <Link className={card.lead ? 'act lead' : 'act'} to={card.path}>
+        {card.act}
+      </Link>
     </div>
   )
 }

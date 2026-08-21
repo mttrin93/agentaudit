@@ -1,13 +1,20 @@
 /**
- * The front door's one claim: what this instrument is, and whether it was validated.
+ * The front door's copy, and the reading of the bench's own gate citation.
  *
  * A console opening on a registration form asks an engineer for an endpoint before
- * telling them what will be done to it, and — worse — before telling them whether
- * the instrument about to measure their agent has ever been shown to measure
- * anything. So the root screen states the bench's own gate citation: the outcome,
- * the date it was decided, and the library version it was earned at, out of the
- * same typed citation the bench already carries into the provenance block of every
- * report it signs (`GET /bench/gate`, ADR-0018).
+ * telling them what will be done to it. So the root screen says what the bench is
+ * and what the console does — `WHAT_THIS_INSTRUMENT_IS` and
+ * `WHAT_THIS_CONSOLE_DOES`, two paragraphs and three cards — and it says it in as
+ * few words as the claim survives in.
+ *
+ * **The citation is read here and drawn by the gate screen.** The outcome, the date
+ * it was decided and the library version it was earned at, out of the same typed
+ * citation the bench carries into the provenance block of every report it signs
+ * (`GET /bench/gate`, ADR-0018). The front door used to draw it and no longer does:
+ * a citation is only legible beside the rule it was decided under, and that rule is
+ * the gate screen's subject. The reading stayed in this module rather than moving
+ * into `gate.ts`, which imports it from here, because it is what a citation *says*
+ * and `gate.ts` is what the gate *requires*.
  *
  * **The subject is the bench, and every sentence here says so.** The gate is a
  * contrast between three agents of known construction; it has no definition for one
@@ -25,12 +32,12 @@
  * **Both files are named and neither is parsed.** The per-family rates and the
  * per-family `D` of a gate run are not on the citation; what the citation carries
  * are two addresses — the dated document a person reads, and the **gate run
- * record** that holds the same run as fields (ADR-0023). This screen shows what the
+ * record** that holds the same run as fields (ADR-0023). The gate screen shows what the
  * citation carries and names the rest, in that order: the record first, because it
  * is the one a reader after the arithmetic wants. A screen that read the bench's own
  * prose output would break on a rewording, and the record is why it never has to.
  *
- * **A gate run started from the console wrote no document, and this screen says so
+ * **A gate run started from the console wrote no document, and the reading says so
  * where the path would be.** Two shapes rather than one with an empty `path`, for the
  * same reason an uncited bench gets no `facts`: a blank where a file name goes is a
  * file name a reader goes looking for. The record is there either way, so nothing
@@ -51,18 +58,74 @@
 
 import type { GateCitation } from '../api/bench'
 
-export const WHAT_THIS_INSTRUMENT_IS =
-  'AgentAudit attacks an AI agent you own across six families of failure, at ten ' +
-  'attempts per case, and reports each family over its own denominator. It ' +
-  'produces rates, intervals and bands per family, and no total over them: the ' +
-  'six families measure six different things, and a single figure across them ' +
-  'would be one the bench does not stand behind.'
+import { ARTEFACTS_PATH, GATE_PATH, REGISTER_PATH } from './rail'
 
-export const WHY_THE_GATE_IS_HERE =
-  'Before a rate is worth reading, the instrument that produced it has to have ' +
-  'been shown to discriminate. The bench puts a stated, falsifiable rule to three ' +
-  'agents of its own construction — one hardened, one weak, one trivial — and that ' +
-  'rule can answer that the bench measures nothing. What it last answered is below.'
+export const WHAT_THIS_INSTRUMENT_IS =
+  'AgentAudit attacks an AI agent you own across six families of failure, ten ' +
+  'attempts per case, and reports each family over its own denominator: a rate, an ' +
+  'interval and a band each, and no total across them.'
+
+/**
+ * The three errands this console exists for, each with the control that starts it.
+ *
+ * Copy rather than markup, on the same terms as every other string in this module:
+ * the screen is markup driven by hand and the wording is here. `path` is taken off
+ * `rail.ts` and never written out, so a card cannot offer a screen at a path the
+ * router does not serve.
+ *
+ * **A card carries no figure**, which is why it is a fixed list of four strings and
+ * a flag rather than anything read off a route. There is no count of runs here, no
+ * rate, no outcome and nowhere to put one — the front door says what the console
+ * does, and every figure in this application belongs to the screen that measured it.
+ *
+ * **`lead` is the errand to do first, not a colour.** An operator with nothing
+ * registered can do exactly one of these three usefully, and that is the one the
+ * card set points at. The stylesheet spends the filled control on it.
+ */
+export interface ConsoleDoes {
+  /** The screen this card opens, off `rail.ts`. */
+  path: string
+  name: string
+  /** What that screen does, in the bench's own vocabulary. */
+  does: string
+  /** What its control says. */
+  act: string
+  /** Whether this is the one to do first. */
+  lead: boolean
+}
+
+export const WHAT_THIS_CONSOLE_DOES: readonly ConsoleDoes[] = [
+  {
+    path: REGISTER_PATH,
+    name: 'Register a target',
+    does:
+      'Issues the nonce you plant, records the three attestations, then estimates ' +
+      'the run in two figures. Nothing reaches your endpoint until you answer the ' +
+      'halt.',
+    act: 'Register',
+    lead: true,
+  },
+  {
+    path: GATE_PATH,
+    name: 'Run the gate',
+    does:
+      'The whole live library against all three reference agents, ten attempts per ' +
+      'case. It can fail, and a failure is a correct outcome. It writes D back onto ' +
+      'every case record it reads.',
+    act: 'Open the gate',
+    lead: false,
+  },
+  {
+    path: ARTEFACTS_PATH,
+    name: 'Check an artefact',
+    does:
+      'Every artefact this bench has signed, its three checks named one by one — ' +
+      'signature, rendering digest, arithmetic — and the command a recipient runs ' +
+      'over the bytes themselves.',
+    act: 'Open artefacts',
+    lead: false,
+  },
+]
 
 export const A_FACT_ABOUT_THE_BENCH =
   'This is a fact about the bench and never a verdict about a target. The gate is ' +

@@ -1054,8 +1054,7 @@ function FamilyFigure({ family }: { family: FamilyReading }) {
           {family.rates.map((rate) => (
             <li key={rate.agent}>
               <span className="who">{rate.agent}</span>{' '}
-              <span className="rate">{rate.rate}</span>{' '}
-              <span className="of">{rate.counts}</span>
+              <span className="rate">{rate.rate}</span>
             </li>
           ))}
         </ul>

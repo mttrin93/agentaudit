@@ -546,19 +546,6 @@ a {
   font-variant-numeric: tabular-nums;
 }
 
-/*
- * The denominator, quiet but present.
- *
- * Never dropped to make the line fit: a rate that leaves its denominator behind is
- * the over-claim this whole report exists to replace, and thirty attempts per agent
- * per family is the declared sample size rather than something a reader should have
- * to assume (ADR-0003).
- */
-.family .rates .of {
-  color: var(--quiet);
-  font-size: 0.76rem;
-}
-
 .family .score {
   margin: 0;
   white-space: nowrap;

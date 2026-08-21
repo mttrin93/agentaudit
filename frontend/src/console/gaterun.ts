@@ -651,7 +651,14 @@ function setAsideReads(barred: ExcludedFamily, floor: number): string {
   )
 }
 
-/** What a family that decided something reads: the verdict, then what it turned on. */
+/**
+ * What the line reads: the two conditions the per-family rule turns on.
+ *
+ * The verdict is not in it. `D` and the floor it had to clear are printed side by
+ * side above — `span = D 0.30 · ≥ 0.40` — so a family that did not pass says so in
+ * the two figures rather than in a word. `FamilyReading.verdict` still carries the
+ * word for a caller that wants it.
+ */
 function decidedReads(figures: FamilyFigures): string {
   const intervals = figures.intervals_separate
     ? 'intervals disjoint'
@@ -659,8 +666,7 @@ function decidedReads(figures: FamilyFigures): string {
   const ordering = figures.monotonic
     ? 'monotonic'
     : `${figures.inversions} inversion${figures.inversions === 1 ? '' : 's'}`
-  const verdict = figures.passes ? 'passes' : 'does not pass'
-  return `${verdict} · ${intervals} · ${ordering}`
+  return `${intervals} · ${ordering}`
 }
 
 /**

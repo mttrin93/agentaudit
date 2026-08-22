@@ -120,8 +120,13 @@ export function ArtefactsScreen() {
 function TheArtefacts({ reading }: { reading: ArtefactsReading }) {
   return (
     <>
+      {/*
+        No heading over the list. `Signed artefacts` at the head of the page said it,
+        and a second heading saying it again in the bench's voice put a line between the
+        title and the first thing under it. The section below keeps its own heading,
+        because what it holds is not artefacts.
+      */}
       <section>
-        <h2>What this bench has signed</h2>
         {reading.listed ? (
           <>
             {/*

@@ -342,7 +342,21 @@ function TargetStep({ declarations, declare }: StepProps) {
           type="password"
           value={declarations.auth_token}
           onChange={(event) => declare({ auth_token: event.target.value })}
+          placeholder="the credential your endpoint expects, if it expects one"
         />
+        {/*
+          The one field on this step that said nothing about itself, which is the one
+          field that is somebody's secret. What it is for is not guessable from its
+          name: it is the header on every call the bench makes, and it is the header
+          on every call to a reference agent too, because there is one code path
+          (`contract.py`). Empty is a real answer — an endpoint that needs no
+          credential is a normal endpoint on a laptop — and the bench sends the header
+          either way rather than branching on it.
+        */}
+        <span className="aside">
+          Sent as <code>Authorization: Bearer …</code> on every call to this endpoint.
+          Leave it empty if yours needs no credential.
+        </span>
       </label>
       <label>
         Agent type

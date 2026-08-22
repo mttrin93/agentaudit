@@ -76,6 +76,8 @@ import {
   payloads,
   nothingAttested,
   progressKeys,
+  answeringRows,
+  ANSWER_KEYS,
   startControl,
   stillGoing,
   type Attesting,
@@ -254,9 +256,9 @@ const IN_PROGRESS: FamilyProgress[] = [
     attempted: 17,
     of: 90,
     agents: [
-      { agent: 'hardened', attempted: 11, of: 30 },
-      { agent: 'weak', attempted: 6, of: 30 },
-      { agent: 'trivial', attempted: 0, of: 30 },
+      { agent: 'hardened', attempted: 11, of: 30, resisted: 9, succeeded: 2 },
+      { agent: 'weak', attempted: 6, of: 30, resisted: 4, succeeded: 2 },
+      { agent: 'trivial', attempted: 0, of: 30, resisted: 0, succeeded: 0 },
     ],
   },
   {
@@ -264,9 +266,9 @@ const IN_PROGRESS: FamilyProgress[] = [
     attempted: 4,
     of: 60,
     agents: [
-      { agent: 'hardened', attempted: 4, of: 20 },
-      { agent: 'weak', attempted: 0, of: 20 },
-      { agent: 'trivial', attempted: 0, of: 20 },
+      { agent: 'hardened', attempted: 4, of: 20, resisted: 4, succeeded: 0 },
+      { agent: 'weak', attempted: 0, of: 20, resisted: 0, succeeded: 0 },
+      { agent: 'trivial', attempted: 0, of: 20, resisted: 0, succeeded: 0 },
     ],
   },
   {
@@ -274,9 +276,9 @@ const IN_PROGRESS: FamilyProgress[] = [
     attempted: 0,
     of: 90,
     agents: [
-      { agent: 'hardened', attempted: 0, of: 30 },
-      { agent: 'weak', attempted: 0, of: 30 },
-      { agent: 'trivial', attempted: 0, of: 30 },
+      { agent: 'hardened', attempted: 0, of: 30, resisted: 0, succeeded: 0 },
+      { agent: 'weak', attempted: 0, of: 30, resisted: 0, succeeded: 0 },
+      { agent: 'trivial', attempted: 0, of: 30, resisted: 0, succeeded: 0 },
     ],
   },
 ]
@@ -646,6 +648,49 @@ describe('the legend over the six bars', () => {
     // Nothing to name is nothing drawn: three marks above an empty panel would say
     // this run has three agents and no families.
     expect(progressKeys({ ...IN_FLIGHT, families: [] })).toEqual([])
+  })
+})
+
+describe('how each family is answering', () => {
+  it('is one bar a family, the three agents summed, over the family’s denominator', () => {
+    const [first, second, third] = answeringRows(IN_FLIGHT)
+
+    expect(first.family).toBe('prompt_injection')
+    // 9 + 4 + 0 resisted and 2 + 2 + 0 succeeded, over the family's own 90: the three
+    // reference agents collapsed into one reading of the family, which is what the
+    // panel draws.
+    expect([first.resisted, first.succeeded]).toEqual([13, 4])
+    expect([first.held, first.broke]).toEqual(['14.4444%', '4.4444%'])
+    // Against the denominator and not against what has been attempted: a bar over the
+    // attempts made would be full from the first verdict on, which is a rate with its
+    // denominator taken off.
+    expect([second.resisted, second.succeeded]).toEqual([4, 0])
+    expect([second.held, second.broke]).toEqual(['6.6667%', '0%'])
+    // A family that has answered nothing draws nothing rather than two slivers.
+    expect([third.held, third.broke]).toEqual(['0%', '0%'])
+  })
+
+  it('is the two counts and the two lengths, and no share as a label', () => {
+    const [first] = answeringRows(IN_FLIGHT)
+
+    expect(Object.keys(first)).toEqual([
+      'family',
+      'resisted',
+      'succeeded',
+      'held',
+      'broke',
+    ])
+    // The share lives in the two lengths and in no label, because a percentage beside
+    // a verdict count is a rate with its interval taken off.
+    expect(`${first.family} ${first.resisted} ${first.succeeded}`).not.toContain('%')
+  })
+
+  it('names the two answers in words beside their colours', () => {
+    // Colour carries a verdict here, which it does nowhere else in this app, and
+    // *succeeded* is the attack working — so the two words are what say which is
+    // which, and the swatch is the redundant half.
+    expect(ANSWER_KEYS.map((key) => key.answer)).toEqual(['resisted', 'succeeded'])
+    expect(ANSWER_KEYS.map((key) => key.accent)).toEqual(['resisted', 'succeeded'])
   })
 })
 

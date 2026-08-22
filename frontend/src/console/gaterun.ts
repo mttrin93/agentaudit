@@ -518,6 +518,83 @@ function share(attempted: number, of: number): string {
   return `${Number(((attempted / of) * 100).toFixed(4))}%`
 }
 
+// --- how each family is answering, per agent, while it runs ----------------------
+
+/** One family's answers so far: the two counts, and the two lengths they draw. */
+export interface FamilyAnswers {
+  family: string
+  resisted: number
+  succeeded: number
+  /**
+   * How much of this family's denominator it has resisted, as a CSS width.
+   *
+   * Against `of` and not against what has been attempted so far. A bar drawn over the
+   * attempts made would be full from the first verdict onwards — a rate with no
+   * denominator, which is the one figure this project exists to stop being read. Drawn
+   * against the denominator, the two lengths fill as the run goes and what is left is
+   * visibly what has not been attempted yet.
+   */
+  held: string
+  /** And how much of it the attack got through, as a CSS width. */
+  broke: string
+}
+
+/**
+ * How each family is answering: one bar a family, the three agents summed into it.
+ *
+ * **What the sum is, and what it is not.** A family's attempts are spread over three
+ * reference agents of known construction — hardened, weak and trivial — and the
+ * trivial one is *built* to fail. So a third of every family's attempts are against an
+ * agent that is supposed to let the attack through, and the red on this bar has a floor
+ * that is nothing to do with any target. What the bar is good for is watching the run:
+ * green and red filling a family as its verdicts come back. What it is not is a
+ * measurement of anything, and it is not what the bench decides on — the decision is
+ * per family per agent, with an interval and a band beside every rate, and it is read
+ * off the report the run signs (ADR-0005).
+ *
+ * The summing happens here and not on the wire, where `AgentProgress` keeps the three
+ * apart: this is a drawing the console makes, and the route still serves the three
+ * readings that the drawing collapses.
+ */
+export function answeringRows(reading: GateRunReading): readonly FamilyAnswers[] {
+  return reading.families.map((family) => {
+    const resisted = family.agents.reduce((all, one) => all + one.resisted, 0)
+    const succeeded = family.agents.reduce((all, one) => all + one.succeeded, 0)
+    return {
+      family: family.family,
+      resisted,
+      succeeded,
+      held: share(resisted, family.of),
+      broke: share(succeeded, family.of),
+    }
+  })
+}
+
+/**
+ * The two answers, named, in the order an attempt is read in: held, then did not.
+ *
+ * **The only place in this app where colour carries a verdict**, and the words are
+ * therefore not decoration. Everywhere else a hue means identity or order — the two
+ * layers, the three agents — and ADR-0005 spends its length refusing a severity scale;
+ * this is a live green and red on somebody's equipment, which an operator watching a
+ * run asked for.
+ *
+ * What keeps it honest is the sense being printed: `succeeded` is the *attack*
+ * succeeding, so red against the trivial agent is the contrast working and not a
+ * defect. Nothing about these two colours is a rate, a band, or a per-family verdict
+ * — the decision is still the report's, with its intervals beside it.
+ */
+export const ANSWER_KEYS: readonly AnswerKey[] = [
+  { answer: 'resisted', accent: 'resisted' },
+  { answer: 'succeeded', accent: 'succeeded' },
+]
+
+/** One mark in the answering panel's legend: a verdict, and the colour it is drawn in. */
+export interface AnswerKey {
+  answer: string
+  accent: string
+}
+
 /** One mark in the panel's legend: an agent, and the accent its segments take. */
 export interface ProgressKey {
   agent: string

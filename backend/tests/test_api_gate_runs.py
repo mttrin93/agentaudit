@@ -996,11 +996,23 @@ def test_the_six_families_and_the_last_payloads_are_reported_while_it_runs(
             ]
             assert sum(one["attempted"] for one in row["agents"]) == row["attempted"]
             assert sum(one["of"] for one in row["agents"]) == row["of"]
-            # No verdict count anywhere on the row. A per-family success count while
-            # the run is in flight is an interim rate with no interval beside it.
+            # No verdict count on the *row*. The three agents' verdicts are three
+            # readings and never one: the trivial agent is built to fail, so a family
+            # total over the three would be two thirds broken by construction and
+            # would say nothing about any of them.
             assert set(row) == {"family", "attempted", "of", "agents"}
             for one in row["agents"]:
-                assert set(one) == {"agent", "attempted", "of"}
+                assert set(one) == {
+                    "agent",
+                    "attempted",
+                    "of",
+                    "resisted",
+                    "succeeded",
+                }
+                # Every attempt made has exactly one verdict, so the two split what
+                # was attempted and neither is a rate: no denominator is divided here
+                # and none of the three is added to another.
+                assert one["resisted"] + one["succeeded"] == one["attempted"]
 
         # Something has been attempted by now, and no field on the reading holds the
         # six rows added together.

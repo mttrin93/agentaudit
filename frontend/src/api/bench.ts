@@ -1129,16 +1129,24 @@ export interface GateRunReading {
 }
 
 /**
- * One reference agent's share of one family, over its own denominator.
+ * One reference agent's share of one family: how far, and how it is going.
  *
- * Two counts and nothing that says how it went. The three arrive in construction
- * order — hardened, weak, trivial — read off the record's own roles rather than off
- * a name.
+ * Two counts for how far and two for how the attempts made so far were answered. The
+ * three arrive in construction order — hardened, weak, trivial — read off the record's
+ * own roles rather than off a name.
+ *
+ * `resisted` and `succeeded` split `attempted` and neither is a rate: they are drawn
+ * against `of`, this agent's own denominator, so a bar of them fills as the run goes
+ * instead of reading as a finished figure. In the attacker's sense, as everything in
+ * this bench is counted — `succeeded` is the attack working, so a trivial agent with a
+ * high `succeeded` is the contrast doing its job.
  */
 export interface AgentProgress {
   agent: string
   attempted: number
   of: number
+  resisted: number
+  succeeded: number
 }
 
 /**

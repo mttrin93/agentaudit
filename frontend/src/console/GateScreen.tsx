@@ -91,12 +91,15 @@ import {
   familyRows,
   payloads,
   progressKeys,
+  answeringRows,
+  ANSWER_KEYS,
   GATE_RUN_STATEMENTS,
   nothingAttested,
   startControl,
   stillGoing,
   type Attesting,
   type DecidedBlock,
+  type FamilyAnswers,
   type FamilyRow,
   type PayloadRow,
   type ProgressKey,
@@ -972,13 +975,14 @@ function TheGateRun({ reading }: { reading: GateRunReading }) {
         </div>
 
         {/*
-          How far each family has got, then the call it is on.
+          Two readings of the same six families, side by side: how far each has got,
+          and how each is answering.
 
-          Two questions and a reader is watching both, so the order is *how far* and
-          then *what is happening*: a run's shape before its detail. Stacked rather
-          than in two columns — six short bars beside a paragraph of somebody's
-          traffic left the bars in the top third of a column the reply had set the
-          height of.
+          Two columns because they are two readings of the same six, in the same
+          order: the left says *how much of the work is done* in one bar a family, the
+          right says *how it is going* in one bar an agent. Both are drawn against the
+          same denominators, so no length on the right can outrun the one for the same
+          family on the left.
         */}
         <div className="watching">
           <div className="progress">
@@ -988,16 +992,33 @@ function TheGateRun({ reading }: { reading: GateRunReading }) {
               <FamilyBar row={row} key={row.family} />
             ))}
           </div>
-          <div className="payloads">
-            <h3>The last call</h3>
-            {payloads(reading).length === 0 ? (
-              <p className="aside">
-                Nothing has come back yet. The exchange appears here as it does.
-              </p>
-            ) : (
-              payloads(reading).map((one) => <Payload one={one} key={one.key} />)
-            )}
+          <div className="answering">
+            <h3>How each family is answering</h3>
+            <p className="legend">
+              {ANSWER_KEYS.map((key) => (
+                <span className="key" key={key.answer}>
+                  <span className={`swatch ${key.accent}`} aria-hidden="true" />
+                  {key.answer}
+                </span>
+              ))}
+            </p>
+            {answeringRows(reading).map((row) => (
+              <FamilyAnswer row={row} key={row.family} />
+            ))}
           </div>
+        </div>
+
+        {/* The call it is on, under both, at the width of the page: an exchange is a
+            paragraph of somebody's traffic and it reads badly in half a column. */}
+        <div className="payloads">
+          <h3>The last call</h3>
+          {payloads(reading).length === 0 ? (
+            <p className="aside">
+              Nothing has come back yet. The exchange appears here as it does.
+            </p>
+          ) : (
+            payloads(reading).map((one) => <Payload one={one} key={one.key} />)
+          )}
         </div>
       </section>
 
@@ -1093,6 +1114,39 @@ function Keys({ keys }: { keys: readonly ProgressKey[] }) {
         </span>
       ))}
     </p>
+  )
+}
+
+/**
+ * One family, and how it is answering: one bar, green then red, over its denominator.
+ *
+ * The same row as the bar beside it, answering the other question — so the two counts
+ * are the family's and the length of each is taken against the same 90 the left bar
+ * fills. What is left of the bar is what has not been attempted yet, which is what
+ * keeps a length here from reading as a finished figure.
+ *
+ * **The one place this app colours a verdict**, which is why the two colours are named
+ * in words above the six. And it is a live reading of a run, not a measurement: a third
+ * of a family's attempts are against an agent built to fail, so the red has a floor
+ * that is nothing to do with a target. The rate that *is* a measurement is per family
+ * per agent with its interval and its band beside it, on the report the run signs
+ * (ADR-0005).
+ */
+function FamilyAnswer({ row }: { row: FamilyAnswers }) {
+  return (
+    <div className="family-bar">
+      {/* The name and no figure beside it. The slot to its right holds `17 / 90` on
+          the bar to the left — what has been attempted, out of what will be — and a
+          second pair of numbers in the same place, meaning something else, is a
+          fraction a reader would read as that one. */}
+      <p className="family-name">
+        <span className="name">{readFamily(row.family)}</span>
+      </p>
+      <div className="track">
+        <span className="segment resisted" style={{ width: row.held }} />
+        <span className="segment succeeded" style={{ width: row.broke }} />
+      </div>
+    </div>
   )
 }
 

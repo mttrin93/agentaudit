@@ -112,6 +112,24 @@
   --sent: oklch(0.78 0.13 255);
   --reply: oklch(0.72 0.17 30);
   /*
+   * The two answers an attempt can have, and the only verdict colour in this file.
+   *
+   * Everything else here is identity or order. This pair is a judgement, drawn while a
+   * gate run goes because an operator watching one asked to see how it is going — and
+   * it is confined to that: the answering panel and nothing else. No band, no rate, no
+   * `D`, no verification result and no family's verdict is coloured anywhere, and the
+   * decision is still read off the report with its intervals beside it (ADR-0005).
+   *
+   * **In the attacker's sense, which is why the two words are printed above the bars.**
+   * `--succeeded` is the *attack* succeeding. Red thickening down the three agents is
+   * the contrast doing its job — the trivial agent is built to fail, and one that
+   * resisted everything would mean the case discriminates nothing — so red here is not
+   * a defect and green is not a pass. The words carry that; the colours only make the
+   * three bars comparable at a glance.
+   */
+  --resisted: oklch(0.80 0.14 162);
+  --succeeded: oklch(0.68 0.19 20);
+  /*
    * One corner radius, and one step down for the small things inside a card.
    *
    * Named rather than repeated: `3px` was written at eleven places in this file,
@@ -1195,28 +1213,40 @@ code {
 }
 
 /*
- * A run being watched: how far it has got, then the call it is on.
+ * A run being watched: the same six families twice, side by side.
  *
- * One column and not two. The six bars and the exchange answer two questions, and
- * they were set side by side for that reason — but the bars are six short lines and
- * an exchange is a paragraph of somebody's traffic, so a column tall enough for the
- * reply left the bars sitting in the top third of the page beside it. Stacked, each
- * gets the width of the page: the shape of the run first, then the one call behind
- * its last verdict.
+ * Two columns because they are two readings of the same six, in the same order, and a
+ * reader watching a run wants both at once — how much of the work is done, and how it
+ * is going. Both are drawn against the same denominators, so no length on the right can
+ * outrun the one for the same family on the left. `minmax(0, 1fr)` twice
+ * so a long family name wraps inside its own column instead of widening the page, and
+ * one breakpoint where the window cannot hold two.
+ *
+ * The exchange is *not* in here. It was, and a paragraph of somebody's traffic set the
+ * height of a column six short bars then sat in the top third of.
  */
 .watching {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 1.5rem;
   margin-top: 1.5rem;
 }
 
-.watching h3 {
+.watching h3,
+.payloads h3 {
   margin: 0 0 0.8rem;
   font-size: 0.95rem;
 }
 
-/* Set apart from the bars above it, because it is the answer to a second question and
- * not the seventh row of the first. */
-.watching .payloads {
-  margin-top: 1.6rem;
+.watching .progress,
+.watching .answering {
+  min-width: 0;
+}
+
+/* Under both columns and at the width of the page, set apart from them: it answers a
+ * different question and is not the seventh row of either. */
+.payloads {
+  margin-top: 1.8rem;
 }
 
 /*
@@ -1236,6 +1266,12 @@ code {
   gap: 0.8rem;
   margin: 0 0 0.3rem;
   font-size: 0.85rem;
+}
+
+/* The answering panel's rows carry no count, so there is nothing to push the name away
+ * from and it is not spread across the row. */
+.answering .family-name {
+  justify-content: flex-start;
 }
 
 .family-name .name {
@@ -1279,6 +1315,38 @@ code {
 
 .track .segment.trivial {
   background: var(--agent-trivial);
+}
+
+.track .segment.resisted {
+  background: var(--resisted);
+}
+
+.track .segment.succeeded {
+  background: var(--succeeded);
+}
+
+.answering .legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.9rem;
+  margin: 0 0 0.8rem;
+  font-size: 0.76rem;
+  color: var(--quiet);
+}
+
+.answering .legend .key {
+  display: inline-flex;
+  gap: 0.35rem;
+  align-items: center;
+  white-space: nowrap;
+}
+
+.swatch.resisted {
+  background: var(--resisted);
+}
+
+.swatch.succeeded {
+  background: var(--succeeded);
 }
 
 /*
@@ -1582,5 +1650,13 @@ code {
 
   .rail-heading {
     margin-top: 1rem;
+  }
+}
+
+/* One column where the window cannot hold two: the progress first, a run's shape
+ * before how it is going. */
+@media (max-width: 60rem) {
+  .watching {
+    grid-template-columns: minmax(0, 1fr);
   }
 }

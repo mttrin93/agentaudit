@@ -196,6 +196,7 @@ from backend.bench.completion import (
     declared_model,
 )
 from backend.bench.contract import NOT_A_SECURITY_RESULT, RetryPolicy, TargetConfig
+from backend.bench.evaluator import Verdict
 from backend.bench.gate_record import (
     CitedLibrary,
     DeclaredRule,
@@ -2369,18 +2370,34 @@ class WroteBack(BaseModel):
 
 
 class AgentProgress(BaseModel):
-    """One reference agent's share of one family, over its own denominator.
+    """One reference agent's share of one family: how far, and how it is going.
 
-    A count and the count it is out of, and nothing that says how it went. The three
-    are ordered by construction — hardened, weak, trivial — because that is the order
-    the contrast is built in and the order every other surface reads them in; the
-    order is read off `GateRunRecord.roles`, which the equipment answered, and never
-    off the name.
+    Two counts for how far — a count and the count it is out of — and two for how the
+    attempts made so far were answered. The three agents are ordered by construction —
+    hardened, weak, trivial — because that is the order the contrast is built in and
+    the order every other surface reads them in; the order is read off
+    `GateRunRecord.roles`, which the equipment answered, and never off the name.
+
+    **`resisted` and `succeeded` are counts and not a rate.** They split `attempted`,
+    they are never divided here, and the screen draws each against `of` — this agent's
+    own denominator — so what is drawn fills as the run goes and cannot be read as a
+    finished figure. A rate needs its interval and its band beside it, and those belong
+    to the decision (ADR-0005): what these two answer is *how is it going*, which is a
+    live reading an operator watching a run asked to be able to see, and not *what did
+    it measure*, which is on the report the run signs.
+
+    **In the attacker's sense, like every other count in this bench.** `succeeded` is
+    the attack working, so a high `succeeded` against the trivial agent is the contrast
+    doing its job and not a defect: `D` is trivial minus hardened, and a trivial agent
+    that resisted everything would mean the case discriminates nothing. Anything
+    drawing these two in a colour has to say which is which in words.
     """
 
     agent: str
     attempted: int
     of: int
+    resisted: int
+    succeeded: int
 
 
 class FamilyProgress(BaseModel):
@@ -2394,9 +2411,11 @@ class FamilyProgress(BaseModel):
     fraction of a family's attempts is a share of the work and would be read as a
     rate.
 
-    **And no count of verdicts.** How well a family is going is a rate with an
-    interval and a band beside it, and it belongs to the decision or to nothing.
-    A live success count is that rate with the interval taken off.
+    **And no count of verdicts on the row.** The three agents carry their own
+    (`AgentProgress`), and the three are three readings rather than one: the trivial
+    agent is built to fail, so a family total over the three would be two thirds broken
+    by construction and would say nothing about any of them — least of all about a
+    target, which is what a reader would take it for.
     """
 
     family: str
@@ -2511,19 +2530,32 @@ def _families(record: GateRunRecord, rule: GateRule) -> list[FamilyProgress]:
     Six rows whether or not a family has started, because a family missing from the
     list while the run is on another one would read as a family this run is not
     doing. The counts are `RunState.attempts` grouped by family and agent — the same
-    grouping the rates are built from, without the division.
+    grouping the rates are built from, without the division — and the verdicts are that
+    same grouping counted a second way.
     """
     made: dict[tuple[str, str], int] = {}
+    held: dict[tuple[str, str], int] = {}
     for attempt in record.run_state.attempts:
         key = (str(attempt.family), attempt.target_name)
         made[key] = made.get(key, 0) + 1
+        if attempt.verdict is Verdict.RESISTED:
+            held[key] = held.get(key, 0) + 1
     rows: list[FamilyProgress] = []
     for family in Family:
         name = str(family)
         cases = sum(1 for case in record.cases if case.family is family)
         each = cases * rule.attempts_per_case
         agents = [
-            AgentProgress(agent=role, attempted=made.get((name, role), 0), of=each)
+            AgentProgress(
+                agent=role,
+                attempted=made.get((name, role), 0),
+                of=each,
+                resisted=held.get((name, role), 0),
+                # Subtracted rather than counted a second time: every attempt carries
+                # one verdict, so the two are one partition and cannot drift apart by
+                # a verdict this branch had not heard of.
+                succeeded=made.get((name, role), 0) - held.get((name, role), 0),
+            )
             for role in record.roles
         ]
         rows.append(

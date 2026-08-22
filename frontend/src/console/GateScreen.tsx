@@ -673,7 +673,7 @@ function TheStart({
             <p className="aside">
               A gate run started here is going. It holds an exclusive lease on the
               case library while it runs, so this control comes back when that one is
-              decided — and the run below says where it has got to.
+              decided.
             </p>
           ) : null}
         </div>

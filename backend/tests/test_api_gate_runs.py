@@ -1013,7 +1013,10 @@ def test_the_six_families_and_the_last_payloads_are_reported_while_it_runs(
         )
 
         recent = reading["recent"]
-        assert 1 <= len(recent) <= 5, "the tail, and never the whole transcript log"
+        # The last exchange and only it. A tail of five was five copies of the same
+        # attack in a column — the screen shows what is happening now, and what
+        # happened before it is in the record the run writes.
+        assert len(recent) == 1, "the last call, and never the transcript log"
         for payload in recent:
             assert set(payload) == {
                 "family",

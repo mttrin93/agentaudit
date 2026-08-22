@@ -972,12 +972,13 @@ function TheGateRun({ reading }: { reading: GateRunReading }) {
         </div>
 
         {/*
-          How far each family has got, beside the attempts behind the last calls.
+          How far each family has got, then the call it is on.
 
-          Two columns because they answer two different questions and a reader is
-          watching both: the left is *how far*, the right is *what is happening*. At
-          a narrow width they stack, the progress first — a run's shape before its
-          detail.
+          Two questions and a reader is watching both, so the order is *how far* and
+          then *what is happening*: a run's shape before its detail. Stacked rather
+          than in two columns — six short bars beside a paragraph of somebody's
+          traffic left the bars in the top third of a column the reply had set the
+          height of.
         */}
         <div className="watching">
           <div className="progress">
@@ -988,10 +989,10 @@ function TheGateRun({ reading }: { reading: GateRunReading }) {
             ))}
           </div>
           <div className="payloads">
-            <h3>The last calls</h3>
+            <h3>The last call</h3>
             {payloads(reading).length === 0 ? (
               <p className="aside">
-                Nothing has come back yet. The exchanges appear here as they do.
+                Nothing has come back yet. The exchange appears here as it does.
               </p>
             ) : (
               payloads(reading).map((one) => <Payload one={one} key={one.key} />)
@@ -1096,7 +1097,7 @@ function Keys({ keys }: { keys: readonly ProgressKey[] }) {
 }
 
 /**
- * One attempt: what the bench sent, what the agent answered, and the verdict.
+ * One attempt: what the bench sent, and what the agent answered.
  *
  * The two halves are set apart the way an exchange reads — the attack, then the
  * reply — and the verdict is a line of words under them. Nothing here is coloured by
@@ -1106,12 +1107,54 @@ function Keys({ keys }: { keys: readonly ProgressKey[] }) {
 function Payload({ one }: { one: PayloadRow }) {
   return (
     <div className="payload">
-      <p className="sent">{one.sent}</p>
-      <p className="reply">{one.reply}</p>
-      <p className="kind">
-        {one.verdict} · {one.how} · {one.where} · {one.wire}
-      </p>
+      <div className="turn sent">
+        <Speaker />
+        <p className="bubble">{one.sent}</p>
+      </div>
+      <div className="turn reply">
+        <p className="bubble">{one.reply}</p>
+        <Speaker />
+      </div>
     </div>
+  )
+}
+
+/**
+ * One speaker's mark: the same drawing on both turns, in that turn's own colour.
+ *
+ * The same glyph deliberately. Both ends of this exchange are agents — the bench's
+ * attacker and the target answering it — and drawing them as two different creatures
+ * would say something about the pair that is not true. What differs is which side of
+ * the card the turn sits on, which is the order the two happened in: the attack, then
+ * the answer to it. The colour is redundant with that side, and the line under both
+ * names the agent that was being attacked.
+ *
+ * Hand-drawn at 16px in `currentColor`, the rail's own idiom, so the colour comes off
+ * the stylesheet and no fourth dependency arrives to draw one glyph. Decorative:
+ * `aria-hidden`, because the speaker is named in words on the line beside it.
+ */
+function Speaker() {
+  return (
+    <svg
+      className="speaker"
+      viewBox="0 0 16 16"
+      width="16"
+      height="16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.25"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <circle cx="8" cy="1.9" r="0.85" />
+      <path d="M8 2.75V4.6" />
+      <rect x="3" y="4.6" width="10" height="8.4" rx="2.2" />
+      <path d="M1.4 8.2v2.2M14.6 8.2v2.2" />
+      <path d="M6.3 8.1v1.3M9.7 8.1v1.3" />
+      <path d="M6.5 11.3h3" />
+    </svg>
   )
 }
 

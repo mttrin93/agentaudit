@@ -91,6 +91,27 @@
   --agent-weak: oklch(0.88 0.15 92);
   --agent-trivial: oklch(0.70 0.19 15);
   /*
+   * The two sides of an exchange: which end of the wire said this.
+   *
+   * Identity again, and the plainest kind — the bench's own message, and the target's
+   * answer to it. Not a verdict: *succeeded* and *resisted* are the two answers this
+   * bench counts, they are the same two words whichever side is coloured, and they
+   * stay a line of plain words under the exchange where no hue reaches them. A warm
+   * mark on a reply says *the target is speaking* and not *this reply was bad*.
+   *
+   * Used inside `.payload` and nowhere else, which is what keeps them from being read
+   * as two of the five above: the card carries no rate, no band, no layer and no
+   * reference agent, so there is nothing in it for a blue to be the scored layer of
+   * or a red to be the trivial agent's.
+   *
+   * And nothing here is carried by hue alone — an exchange is ordered, so the turn on
+   * the left is the attack and the one answering it from the right is the answer,
+   * whichever way the two are coloured. The line beneath them names the agent, the
+   * verdict and what the wire did, in words.
+   */
+  --sent: oklch(0.78 0.13 255);
+  --reply: oklch(0.72 0.17 30);
+  /*
    * One corner radius, and one step down for the small things inside a card.
    *
    * Named rather than repeated: `3px` was written at eleven places in this file,
@@ -1174,17 +1195,16 @@ code {
 }
 
 /*
- * A run being watched: how far it has got beside what it is doing.
+ * A run being watched: how far it has got, then the call it is on.
  *
- * Two columns, and they are two questions. The left is the six families over six
- * denominators; the right is the exchanges as they come back. `minmax(0, 1fr)` twice
- * so a long reply wraps inside its own column instead of widening the page, and one
- * breakpoint where the window cannot hold two.
+ * One column and not two. The six bars and the exchange answer two questions, and
+ * they were set side by side for that reason — but the bars are six short lines and
+ * an exchange is a paragraph of somebody's traffic, so a column tall enough for the
+ * reply left the bars sitting in the top third of the page beside it. Stacked, each
+ * gets the width of the page: the shape of the run first, then the one call behind
+ * its last verdict.
  */
 .watching {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 1.5rem;
   margin-top: 1.5rem;
 }
 
@@ -1193,16 +1213,18 @@ code {
   font-size: 0.95rem;
 }
 
-.watching .progress,
+/* Set apart from the bars above it, because it is the answer to a second question and
+ * not the seventh row of the first. */
 .watching .payloads {
-  min-width: 0;
+  margin-top: 1.6rem;
 }
 
 /*
  * One family's row: the name and its two counts on one line, the bar under them.
  *
  * The counts are tabular so six rows of them line up as a column of figures, and the
- * name is mono because a family is an identifier the record keeps.
+ * name is the family read as words (`readFamily`) rather than the identifier the
+ * record keeps.
  */
 .family-bar {
   margin-bottom: 0.9rem;
@@ -1310,9 +1332,23 @@ code {
 /*
  * One exchange: what went out, what came back, and the verdict under them.
  *
- * The reply is indented and the two are set in the mono face, because they are the
- * bytes on the wire rather than this application's prose. Both clamp: a long reply is
- * a scroll away, and the panel keeps its shape while the run fills it.
+ * Two turns as a dialogue: the attack in a box against the left of the card with its
+ * mark beside it, the answer in a box against the right with its own. Read as a
+ * dialogue because that is what it is — the reply used to be told from the message by
+ * an indent and a hairline, which is a difference a reader has to look for in a card
+ * of mono text.
+ *
+ * Boxes and not tinted bubbles: what draws the edge of a block here is its hairline,
+ * as everywhere else in this file, and the only chroma in the card is the two marks.
+ * Both turns are set in the same ink, too — the answer was quieter than the attack for
+ * a while, and a reply drawn dimmer than the message reads as the less important half
+ * of the exchange when it is the half the whole verdict is read off.
+ * The words stay in the mono face because they are the bytes on the wire rather than
+ * this application's prose.
+ *
+ * The exchange and nothing else. A line of the verdict, how it was reached, the case
+ * and what the wire did used to sit under the two turns; the card is the traffic now,
+ * and the verdict with the facts it turns on is in the record the run writes.
  */
 .payload {
   padding: 0.7rem 0.8rem;
@@ -1323,31 +1359,45 @@ code {
   font-size: 0.85rem;
 }
 
-.payload .sent,
-.payload .reply {
-  margin: 0 0 0.4rem;
+/* One turn: the mark and the box it belongs to, the answer's pair reversed and pushed
+ * to the other side so the two read as a dialogue and not as two paragraphs. */
+.payload .turn {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  margin-bottom: 0.7rem;
+}
+
+.payload .turn.reply {
+  justify-content: flex-end;
+}
+
+/* Short of the full width, so each box is visibly against its own side of the card
+ * rather than filling it and leaving only the mark to say whose turn it is. */
+.payload .bubble {
+  max-width: 85%;
+  margin: 0;
+  padding: 0.5rem 0.65rem;
+  background: var(--page);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   overflow-wrap: anywhere;
 }
 
-.payload .reply {
-  padding-left: 0.8rem;
-  border-left: 2px solid var(--line);
-  color: var(--quiet);
+.payload .speaker {
+  flex: none;
+  width: 1.25rem;
+  height: 1.25rem;
+  margin-top: 0.5rem;
 }
 
-/* The verdict, how it was reached, where it came from and what the wire did — one
- * quiet line of words, and not one of them coloured by its answer. */
-.payload .kind {
-  margin: 0;
-  font-size: 0.8rem;
-  color: var(--quiet);
+.payload .turn.sent .speaker {
+  color: var(--sent);
 }
 
-@media (max-width: 60rem) {
-  .watching {
-    grid-template-columns: minmax(0, 1fr);
-  }
+.payload .turn.reply .speaker {
+  color: var(--reply);
 }
 
 /*

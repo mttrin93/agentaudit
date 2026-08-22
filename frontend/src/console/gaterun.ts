@@ -566,7 +566,11 @@ export interface PayloadRow {
 }
 
 /**
- * The last few attempts, as the route ordered them: newest first.
+ * The last attempt the route served, which is one, or none before the first.
+ *
+ * A list rather than a value, and mapped rather than read at `[0]`, because the empty
+ * case is a state the screen draws in words — and because how many the route serves is
+ * the route's answer, not this module's assumption about it.
  *
  * Nothing here is a finding. A finding is a verdict plus its narrative and it is
  * written in the report; this is the verdict, the exchange behind it, and the two

@@ -1116,6 +1116,13 @@ export interface GateRunReading {
   scored: ScoredProgress
   adaptive: AdaptiveProgress
   families: FamilyProgress[]
+  /**
+   * The last attempt only, or empty before the first has come back.
+   *
+   * A list of one and not a field, because *nothing has come back yet* is a real
+   * state and an empty list says it without a null. The route carried five for a
+   * while; the sequence of what a run did is on the record it writes, not here.
+   */
   recent: AttemptPayload[]
   decision: GateDecided | null
   written: WroteBack | null

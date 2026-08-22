@@ -2432,12 +2432,19 @@ class AttemptPayload(BaseModel):
     sends: int
 
 
-RECENT_ATTEMPTS = 5
+RECENT_ATTEMPTS = 1
 """How many attempts the reading carries the payloads of.
 
-The tail and never the log: a gate run makes hundreds, the screen shows the last
-few as they go by, and a response that grew with the run is a response whose size is
-a function of how long somebody has been watching.
+**The last one**, and never the log: a gate run makes hundreds, and a response that
+grew with the run would be a response whose size is a function of how long somebody
+has been watching. It carried five for a while, and five was a column of near-copies
+— the same case against the same agent, one attempt apart — where the question the
+panel answers is *what is happening now*. What happened before it is in the record the
+run writes and on the report it signs, which is where a reader who wants the sequence
+should be reading it.
+
+A list of one rather than a field, because *nothing has come back yet* is a real state
+and an empty list says it without a null.
 """
 
 
@@ -2531,7 +2538,7 @@ def _families(record: GateRunRecord, rule: GateRule) -> list[FamilyProgress]:
 
 
 def _recent(record: GateRunRecord) -> list[AttemptPayload]:
-    """The last few attempts, newest first, with the exchange behind each verdict."""
+    """The last attempt and the exchange behind its verdict. Empty before the first."""
     tail = record.run_state.attempts[-RECENT_ATTEMPTS:]
     return [
         AttemptPayload(

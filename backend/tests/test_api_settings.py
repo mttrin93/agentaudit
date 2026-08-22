@@ -314,6 +314,13 @@ def test_the_library_version_is_the_live_half_and_the_retired_are_counted_and_ke
     assert library["retired"] == 3
     assert "never deleted" in str(library["kept"])
 
+    # The agent types the live half has cases for, in one sorted list and off the
+    # records rather than from a constant: a console offering a kind no case names
+    # would be offering a registration that silently skips every case.
+    assert library["agent_types"] == sorted(
+        {kind for case in live for kind in case.applies_to}
+    )
+
     # And nothing here is their sum. Seven is a case count nothing runs: the live
     # half is what a run attempts and the retired half is what it no longer does.
     assert 7.0 not in numbers_in(library)

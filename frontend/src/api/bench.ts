@@ -1447,6 +1447,14 @@ export interface LoadedLibrary {
   live: { cases: number; digest: string }
   stated: string
   retired: number
+  /**
+   * The kinds of agent the live half has cases for, sorted, off the records.
+   *
+   * What a screen may *offer*, and never a set to be inside of: an agent type is the
+   * operator's own word for their own agent, and a kind the library has no case for is
+   * a skip per case with its reason on it rather than a refused registration.
+   */
+  agent_types: string[]
   kept: string
   statement: string
 }

@@ -81,6 +81,7 @@ const CONFIGURED: BenchSettings = {
     live: { cases: 23, digest: 'aabbccddeeff' },
     stated: 'library version: twenty-three cases, over every field of every record.',
     retired: 2,
+    agent_types: ['assistant', 'document'],
     kept: 'retired cases are counted and kept, and never deleted.',
     statement: 'the version is over the cases a run scores.',
   },

@@ -1738,6 +1738,23 @@ class LoadedLibrary(BaseModel):
     retired: int
     """How many cases are marked retired and kept. Never a deletion."""
 
+    agent_types: list[str]
+    """The kinds of agent the live half has cases written for, sorted.
+
+    **A suggestion and not a closed set.** An agent type is the operator's own word
+    for their own agent, and `applicability.applies` compares it against each case's
+    `applies_to` with no vocabulary to be inside of — deliberately, because a closed
+    set here would refuse to register a target of a kind the bench had not thought of,
+    while the honest answer to an agent type the library has no cases for is a skip
+    per case with its reason on it. This list is what a console can *offer*, and an
+    operator may still type a word that is not on it.
+
+    Off the records rather than from a constant beside them, so a case added for a new
+    kind of agent puts that kind in front of the next operator to register one. Sorted
+    for a stable response, and deduplicated: `applies_to` is a tuple per case and the
+    same kind is named by many.
+    """
+
     kept: str = RETIRED_IS_KEPT
     statement: str = THE_VERSION_IS_OVER_THE_LIVE_HALF
 
@@ -1758,6 +1775,10 @@ def loaded_library(cases: Sequence[Case]) -> LoadedLibrary:
         live=CitedLibrary(cases=version.cases, digest=version.digest),
         stated=version.stated(),
         retired=len(retired_cases(cases)),
+        # The live half only: a kind whose every case has retired is a kind a run no
+        # longer attempts, and offering it would be offering a registration that
+        # attempts nothing.
+        agent_types=sorted({kind for case in live for kind in case.applies_to}),
     )
 
 

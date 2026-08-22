@@ -303,7 +303,10 @@ label {
   color: var(--quiet);
 }
 
+/* A select is drawn as a field, because it is one: the same box, the same width and
+ * the same label above it as the text fields it sits between. */
 input,
+select,
 textarea {
   display: block;
   width: 100%;
@@ -721,14 +724,14 @@ select {
 /*
  * The one control whose text the browser still picks.
  *
- * `input` and `textarea` take the ink further up; a `select` did not, and with the
- * fill set here and the label left to the browser the option showing was near-black
- * on near-black. No screen renders one today — the settings screen is asserted to
- * have none — but this file styles selects, and a fill without a colour beside it is
- * the half that goes wrong the day one appears.
+ * The fill is set above with the other surfaces and the ink with the other fields; what
+ * is left here is the list a browser draws itself. `color-scheme: dark` on the root is
+ * what keeps the open menu dark, and the options take the browser's own colours inside
+ * it — the one place in this app where a surface is not this stylesheet's.
  */
-select {
+select option {
   color: var(--ink);
+  background: var(--paper);
 }
 
 /*

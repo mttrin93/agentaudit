@@ -33,6 +33,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 
 import {
+  benchSettings,
   issueNonce,
   runStanding,
   startRun,
@@ -103,9 +104,38 @@ export function RegisterScreen() {
   const [issued, setIssued] = useState<NonceIssued | null>(null)
   const [refusal, setRefusal] = useState('')
   const [busy, setBusy] = useState(false)
+  /**
+   * The agent types the loaded library has cases for, to offer beside the field.
+   *
+   * Empty until the bench answers, and empty for good if it does not: the field is
+   * free text either way and a registration is never blocked on this list arriving.
+   * Read off the library rather than kept as a constant here, so a case written for a
+   * new kind of agent puts that kind in front of the next operator to register one.
+   */
+  const [kinds, setKinds] = useState<readonly string[]>([])
 
   const declare = useCallback((changed: Partial<Declarations>) => {
     setDeclarations((current) => ({ ...current, ...changed }))
+  }, [])
+
+  useEffect(() => {
+    let current = true
+    const read = async () => {
+      try {
+        const settings = await benchSettings()
+        if (current) {
+          setKinds(settings.library.agent_types)
+        }
+      } catch {
+        // Nothing to say and nothing to do: the field takes any word, and a suggestion
+        // list that could not be read is one an operator never sees rather than an
+        // error over a form they can complete without it.
+      }
+    }
+    void read()
+    return () => {
+      current = false
+    }
   }, [])
 
   /**
@@ -221,7 +251,7 @@ export function RegisterScreen() {
       ) : null}
 
       {current === 'target' ? (
-        <TargetStep declarations={declarations} declare={declare} />
+        <TargetStep declarations={declarations} declare={declare} kinds={kinds} />
       ) : null}
       {current === 'plant' ? (
         <PlantStep
@@ -307,7 +337,68 @@ interface StepProps {
   declare: (changed: Partial<Declarations>) => void
 }
 
-function TargetStep({ declarations, declare }: StepProps) {
+/** Nothing chosen yet: the placeholder option, and not a kind of agent. */
+const NOTHING_CHOSEN = ''
+
+/**
+ * The agent type: the kinds this library has cases for, as a list to pick from.
+ *
+ * **The list is read off the library, not kept here.** A case written for a new kind of
+ * agent puts that kind in front of the next operator to register one, and a kind whose
+ * every case has retired stops being offered.
+ *
+ * **It is a closed list on this screen and an open field everywhere else, which is a
+ * decision worth naming.** The bench compares this word against each case's
+ * `applies_to` and `applicability.py` keeps that comparison open on purpose: a kind the
+ * library has no case for is answered by skipping those cases, per case with the reason
+ * on it, rather than by refusing the registration. `POST /runs` still takes any word,
+ * so that door is open to the API and the command line. What this screen offers is the
+ * words that will actually match a case — an operator picking one is an operator whose
+ * run attempts something.
+ *
+ * Where the bench did not answer there is no list to draw, and the field is text: a
+ * registration is not blocked on a suggestion arriving.
+ */
+function AgentType({
+  declarations,
+  declare,
+  kinds,
+}: StepProps & { kinds: readonly string[] }) {
+  if (kinds.length === 0) {
+    return (
+      <label>
+        Agent type
+        <input
+          value={declarations.agent_type}
+          onChange={(event) => declare({ agent_type: event.target.value })}
+          placeholder="what kind of agent this is"
+        />
+      </label>
+    )
+  }
+  return (
+    <label>
+      Agent type
+      <select
+        value={declarations.agent_type}
+        onChange={(event) => declare({ agent_type: event.target.value })}
+      >
+        <option value={NOTHING_CHOSEN}>what kind of agent this is</option>
+        {kinds.map((kind) => (
+          <option value={kind} key={kind}>
+            {kind}
+          </option>
+        ))}
+      </select>
+    </label>
+  )
+}
+
+function TargetStep({
+  declarations,
+  declare,
+  kinds,
+}: StepProps & { kinds: readonly string[] }) {
   return (
     <section>
       {/*
@@ -358,14 +449,7 @@ function TargetStep({ declarations, declare }: StepProps) {
           Leave it empty if yours needs no credential.
         </span>
       </label>
-      <label>
-        Agent type
-        <input
-          value={declarations.agent_type}
-          onChange={(event) => declare({ agent_type: event.target.value })}
-          placeholder="what kind of agent this is"
-        />
-      </label>
+      <AgentType declarations={declarations} declare={declare} kinds={kinds} />
       <label>
         Sends per message
         <input
@@ -374,10 +458,13 @@ function TargetStep({ declarations, declare }: StepProps) {
           value={declarations.sends}
           onChange={(event) => declare({ sends: Number(event.target.value) })}
         />
+        {/* Without the rest: that the enforced ceiling is built from this figure
+            rather than from a constant, and that a send is not an attempt. Both are
+            true and both are enforced — `sends` is what the ceiling is computed from,
+            and `CONTEXT.md` keeps the two words apart — and the estimate is where an
+            operator meets the ceiling this number produced. */}
         <span className="aside">
-          How many times one message may go on the wire to this endpoint. The
-          enforced ceiling is built from it, so it is your declaration rather than
-          a constant inside the bench — and it is not attempts.
+          How many times one message may go on the wire to this endpoint.
         </span>
       </label>
       <label>
@@ -394,10 +481,10 @@ function TargetStep({ declarations, declare }: StepProps) {
           value={declarations.currency}
           onChange={(event) => declare({ currency: event.target.value })}
         />
-        <span className="aside">
-          Required when a price is declared. An amount in a currency the bench
-          chose is a figure you did not state.
-        </span>
+        {/* Without the reason. That an amount in a currency the bench chose is a
+            figure the operator did not state is the argument for the field existing,
+            and the field exists. */}
+        <span className="aside">Required when a price is declared.</span>
       </label>
       <label className="declaration">
         <input
@@ -405,12 +492,15 @@ function TargetStep({ declarations, declare }: StepProps) {
           checked={declarations.note_planted}
           onChange={(event) => declare({ note_planted: event.target.checked })}
         />
+        {/* One sentence, in plain words. It said four things: that the note is
+            third-party, that the bench cannot check it, that declaring it absent
+            skips the family and is not charged for, and that a run without it would
+            report a zero that reads as a defence. The last is the reason the box
+            exists and the others are how it works — what an operator has to decide is
+            whether the note is there. */}
         <span>
-          A third-party note the indirect-prompt-injection family needs is in place.
-          The bench does not serve that content and cannot check it. Declared
-          absent, the family is not run and the estimate does not charge for it —
-          run without the note it would report a clean zero that reads as a defence
-          and is not one.
+          The planted note that the indirect prompt injection family reads is in
+          place. Without it, that family is skipped rather than run.
         </span>
       </label>
     </section>

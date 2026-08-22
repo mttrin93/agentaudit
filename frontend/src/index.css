@@ -742,10 +742,12 @@ select {
   margin-top: 0;
 }
 
+/* `D` at a figure's size and not a headline's: it is the card's one number, and at
+ * 1.8rem it was the largest thing in the region and read as the outcome. */
 .family .calls {
   display: inline-block;
   margin-right: 0.8rem;
-  font-size: 1.8rem;
+  font-size: 1.25rem;
   font-variant-numeric: tabular-nums;
 }
 
@@ -797,6 +799,14 @@ select {
 .family .score {
   margin: 0;
   white-space: nowrap;
+}
+
+/* The verdict under the card, at the size of the legend above it: one word, and the
+ * figures it was reached from are what the card is for. */
+.family > .kind {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--quiet);
 }
 
 /*
@@ -984,12 +994,19 @@ code {
  * the library version — take the next, and at a narrower width they redistribute
  * rather than one column stretching to hold a sha256.
  *
+ * The columns are capped as well as floored, and what is left over falls between them:
+ * a box with three facts in it spread each one a third of a wide page apart, which is
+ * three islands rather than a group, and a box with six had columns wide enough to hold
+ * a sentence. Capped and spread, the pairs stay a group and the box is as
+ * wide-margined on one side as the other.
+ *
  * `margin-bottom: 0` because the sentence that used to follow the figures is gone: a
  * grid's own bottom margin under the last row, inside the box's padding, is a gap
  * where a paragraph was.
  */
 .citation .at {
-  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 16rem));
+  justify-content: space-between;
   gap: 0.9rem 1.2rem;
   margin-bottom: 0;
 }

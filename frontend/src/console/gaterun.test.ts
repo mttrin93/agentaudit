@@ -795,6 +795,10 @@ describe('what the gate run decided', () => {
       ])
       expect(reading.score).toBe(SCORES[index].toFixed(2))
       expect(reading.verdict).toBe(index < 4 ? 'passes' : 'does not pass')
+      // The line under the card is the verdict in one word. What that verdict turned
+      // on — the intervals and the ordering — is printed whole on the report the run
+      // signs, and this card is the figures.
+      expect(reading.reads).toBe(index < 4 ? 'passed' : 'not passed')
     }
 
     // And nothing that adds two of them. The fixture's six scores were chosen so

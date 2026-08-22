@@ -702,24 +702,29 @@ export interface AgentRate {
  * score: a reader who wants the six ranked has to do it themselves, and the bench
  * does not hand them a ranking it does not stand behind (ADR-0005).
  *
- * **`span` is `D` drawn rather than a second figure.** The bar runs from the
- * hardened rate to the trivial one, which is what `D` is by definition — trivial
- * minus hardened — so the drawing and the number are the same measurement twice and
- * cannot disagree.
+ * **The bar is `D` drawn rather than a second figure.** It runs from the hardened rate
+ * to the trivial one, which is what `D` is by definition — trivial minus hardened — so
+ * the drawing and the number are the same measurement twice and cannot disagree. It is
+ * `from` and `width` and nothing in words: `span = D 0.30` was printed under it for a
+ * while, which made three printings of one figure on one card.
  */
 export interface FamilyReading {
   family: string
   rates: AgentRate[]
   /** `D` as the bare figure, or an em dash where this family decided nothing. */
   score: string
-  /** `span = D 0.83 · ≥ 0.40`, the figure beside the bar it had to clear. */
-  span: string
   /** Where the span bar starts, as a CSS percentage. */
   from: string
   /** How long the span bar is, as a CSS percentage. `D` at the plot's scale. */
   width: string
   /**
-   * What the line reads, in one sentence: the verdict, then what it turned on.
+   * What the line under the card reads: the verdict in one word.
+   *
+   * *passed* or *not passed*, and not what the verdict turned on. It read
+   * `intervals disjoint · monotonic` — the two conditions the per-family rule tests —
+   * which is the rule's own working shown on every card whether or not anybody was
+   * reading for it. The rule is printed whole on the report the run signs, beside the
+   * figures it was applied to, and `D` is above this line either way.
    *
    * Or, for a family the decision set aside, the exclusion and its reading —
    * ADR-0015 asks the exclusion to name the family, the reason *and* the figure
@@ -831,24 +836,6 @@ function setAsideReads(barred: ExcludedFamily, floor: number): string {
 }
 
 /**
- * What the line reads: the two conditions the per-family rule turns on.
- *
- * The verdict is not in it. `D` and the floor it had to clear are printed side by
- * side above — `span = D 0.30 · ≥ 0.40` — so a family that did not pass says so in
- * the two figures rather than in a word. `FamilyReading.verdict` still carries the
- * word for a caller that wants it.
- */
-function decidedReads(figures: FamilyFigures): string {
-  const intervals = figures.intervals_separate
-    ? 'intervals disjoint'
-    : 'intervals overlap'
-  const ordering = figures.monotonic
-    ? 'monotonic'
-    : `${figures.inversions} inversion${figures.inversions === 1 ? '' : 's'}`
-  return `${intervals} · ${ordering}`
-}
-
-/**
  * One family's card, off its figures and the exclusion the decision recorded for it.
  *
  * `barred` is required rather than defaulted, on the same terms as the record's own
@@ -882,12 +869,13 @@ function familyReading(
       at: at(rate.value),
     })),
     score: aside ? '—' : figures.discrimination.toFixed(2),
-    span: aside
-      ? 'span = D — · excluded'
-      : `span = D ${figures.discrimination.toFixed(2)} · ≥ ${rule.discrimination_floor.toFixed(2)}`,
     from: span.from,
     width: span.width,
-    reads: aside ? setAsideReads(barred, rule.kappa_floor) : decidedReads(figures),
+    reads: aside
+      ? setAsideReads(barred, rule.kappa_floor)
+      : figures.passes
+        ? 'passed'
+        : 'not passed',
     set_aside: aside,
     verdict: figures.passes ? 'passes' : 'does not pass',
     stated: figures.stated,

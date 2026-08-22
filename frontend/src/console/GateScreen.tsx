@@ -948,11 +948,12 @@ function TheEstimate({
  * block this screen no longer prints.
  */
 function TheGateRun({ reading }: { reading: GateRunReading }) {
-  // Without the rule block: this screen does not restate the declared rule any
-  // more, and a gate run's own copy of it would put seven clauses back above the
-  // figures the operator started the run to read. The rule a run was decided under
-  // is on the report the run signs, printed whole beside those figures.
-  const decided = decidedView(reading).filter((block) => block.kind !== 'rule')
+  // Without the rule block, for the reason `TheLastDecided` gives, and without what
+  // the run wrote back: both are on the record and on the report, and neither is what
+  // an operator has this screen open for.
+  const decided = decidedView(reading).filter(
+    (block) => block.kind !== 'rule' && block.kind !== 'written',
+  )
   return (
     <>
       <section>
@@ -1046,9 +1047,16 @@ function TheGateRun({ reading }: { reading: GateRunReading }) {
  * rule any more — a gate run's own copy would put seven clauses back above the
  * figures somebody opened this page to read. The rule a run was decided under is
  * printed whole on the report that run signs, beside those figures.
+ *
+ * **And without what it wrote back.** The library it appended to, how many readings,
+ * which cases were retired and which got none is a record of a write, not a reading of
+ * a gate: the run's own document holds it, `gaterun.test.ts` still reads the block, and
+ * the case library is where somebody checks that the write happened.
  */
 function TheLastDecided({ decided }: { decided: DecidedRun }) {
-  const blocks = decidedView(decided).filter((block) => block.kind !== 'rule')
+  const blocks = decidedView(decided).filter(
+    (block) => block.kind !== 'rule' && block.kind !== 'written',
+  )
   return (
     <>
       {blocks.map((block) => (
@@ -1276,8 +1284,14 @@ function Decided({ block }: { block: DecidedBlock }) {
     case 'families':
       return (
         <section>
+          {/*
+            Without the standing sentence. *Six families, six lines, and nothing that
+            adds two of them* said what the layout already is: six cards with no
+            seventh figure anywhere and nowhere to put one. It is still on the block,
+            where `gaterun.test.ts` reads it beside the assertion that no sum or mean
+            of the six appears in the view.
+          */}
           <h2>{block.heading}</h2>
-          <p className="aside">{block.statement}</p>
           <div className="families per-family">
             {block.families.map((family) => (
               <FamilyFigure family={family} key={family.family} />
@@ -1364,6 +1378,12 @@ function FamilyFigure({ family }: { family: FamilyReading }) {
         ))}
       </div>
 
+      {/*
+        Which dot is which, and no figure beside them. `span = D 0.30` was the third
+        printing of `D` on one card — the number above, the bar under it, and then the
+        pair in words — and the one a reader had to parse to find out it said nothing
+        the other two had not.
+      */}
       <p className="legend">
         <span>
           {family.rates.map((rate) => (
@@ -1373,7 +1393,6 @@ function FamilyFigure({ family }: { family: FamilyReading }) {
             </span>
           ))}
         </span>
-        <span className="kind">{family.span}</span>
       </p>
       <p className="kind">{family.reads}</p>
     </div>

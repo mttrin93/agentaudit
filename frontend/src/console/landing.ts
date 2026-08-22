@@ -268,10 +268,13 @@ export function gateReading(gate: GateCitation): GateReading {
     heading:
       OUTCOME_HEADINGS[gate.outcome] ??
       `This bench’s last gate run is recorded as ${gate.outcome}`,
+    // Lower case, like every other labelled fact in this console — the outcome box's
+    // `families passing`, a layer's `family`, `case`, `attempt`. Three capitalised
+    // labels in one box read as a different kind of thing than the labels beside them.
     facts: [
-      { label: 'Outcome', value: gate.outcome },
-      { label: 'Decided on', value: gate.decided_on },
-      { label: 'Library version', value: libraryVersion(gate.library) },
+      { label: 'outcome', value: gate.outcome },
+      { label: 'decided on', value: gate.decided_on },
+      { label: 'library version', value: libraryVersion(gate.library) },
     ],
     record: {
       path: gate.record,

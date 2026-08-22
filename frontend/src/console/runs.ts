@@ -101,11 +101,12 @@ export interface RunReading {
   /** The operator's own name for the endpoint. Never the endpoint. */
   target: string
   /**
-   * When the run went on the record, carried exactly as the record holds it.
+   * When the run went on the record, as a date and a clock time in UTC.
    *
-   * Not reformatted: the record's timestamp is UTC with its offset on it, and a
-   * console that rendered it in the reader's locale would be showing a different
-   * instant from the one the bench will quote back.
+   * Read in UTC and never in the reader's locale: the record holds an instant, and a
+   * console that rendered it against the reader's own clock would be naming a
+   * different one from the one the bench will quote back. `recordedIn` says what is
+   * dropped and what is not.
    */
   recordedAt: string
   /** Where the run got to, named. Never a blank and never a colour. */
@@ -145,6 +146,30 @@ const STANDINGS: Record<string, string> = {
   failed: 'Failed',
 }
 
+/**
+ * One recorded instant, as a date and a clock time with its zone written out.
+ *
+ * The record's timestamp is microseconds and an offset — `2026-08-19T09:38:37.512345+00:00`
+ * — which is a string an operator parses rather than reads. What comes back is the same
+ * instant in UTC, and the zone is printed rather than assumed: a bare `09:38` is a time
+ * a reader takes for their own.
+ *
+ * The seconds stay. This is a list somebody scans to find one run again, and two runs
+ * started half a minute apart must not arrive as the same line. The microseconds go:
+ * nothing on this screen is told apart by them.
+ */
+function recordedIn(stamped: string): string {
+  const at = new Date(stamped)
+  if (Number.isNaN(at.getTime())) {
+    // A stamp this screen cannot read is served as the record's own text. Wrong is
+    // worse than raw: an unparseable instant rendered as a guess would be a different
+    // instant from the one the bench will quote back.
+    return stamped
+  }
+  const inUtc = at.toISOString()
+  return `${inUtc.slice(0, 10)} ${inUtc.slice(11, 19)} UTC`
+}
+
 /** The standing, named — and an unfamiliar one carried through as itself. */
 function standingOf(status: string): string {
   return STANDINGS[status] ?? status
@@ -182,7 +207,7 @@ function runReading(row: RunRow): RunReading {
     id: row.run_id,
     path: runPath(row.run_id),
     target: row.target,
-    recordedAt: row.recorded_at,
+    recordedAt: recordedIn(row.recorded_at),
     standing: standingOf(row.status),
     statement: row.statement,
     scored: {

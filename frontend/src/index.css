@@ -769,14 +769,12 @@ a {
  * block cannot arrive as a tinted region with a line round it. */
 .does .card,
 .family,
-.run,
+.signed,
 .artefact,
 .figure,
 .citation,
 .layer,
-.figure,
-.spend,
-.run,
+.ledger-wrap,
 pre,
 fieldset,
 textarea,
@@ -1201,37 +1199,8 @@ code {
   word-break: break-all;
 }
 
-/*
- * The runs on the record, as a list of blocks and never as a table.
- *
- * The choice is the whole of the layout. A table of two numeric columns has a
- * footer, and a footer is where somebody puts a total — which here would be an
- * adaptive figure added to a scored one, against two ceilings that are enforced
- * separately (ADR-0007, ADR-0010). A list of runs has nowhere to put one, which is
- * the same argument the interrupt's two cost figures are set as two blocks on.
- *
- * The list numbering is dropped: the rows are ordered most recent first, and a
- * column of ordinals beside them would be a count of somebody's runs on a screen
- * whose whole point is that every figure belongs to the thing that measured it.
- */
-.runs {
-  display: grid;
-  gap: 0.8rem;
-  list-style: none;
-  margin: 1.2rem 0 0;
-  padding: 0;
-}
-
-.run {
-  padding: 1.2rem 1.3rem;
-  border-radius: var(--radius);
-}
-
-.run h3 {
-  margin: 0 0 0.2rem;
-  font-size: 1rem;
-}
-
+/* Under a heading, the line that says where the thing got to: the artefact screen's
+ * own subheading, quiet and one size down from the words above it. */
 .standing {
   margin: 0 0 0.4rem;
   font-size: 0.85rem;
@@ -1239,61 +1208,154 @@ code {
 }
 
 /*
- * The two spends, side by side, each in its own hue.
+ * The signed artefacts on the record, one per line.
  *
- * Two hues at matched lightness and chroma so that the boundary between the layers
- * is visible and neither reads as the more serious of the two — colour carries
- * identity here and never a judgement, and the layer is written out in words above
- * every figure so nothing is carried by hue alone. They wrap onto two rows on a
- * narrow window rather than shrinking, because two figures squeezed side by side
- * start to look like one figure and its subtotal.
+ * A line and not a block: what a reader wants off each one is the name they gave the
+ * target and the id they will quote when they send it, and two of those sit across a
+ * line with room to spare. The sentence about how the signature settled, and the line
+ * saying which run it was signed for, are on the artefact's own screen; per row on a
+ * list they were a paragraph each, and the one word an engineer scans for was inside
+ * it.
+ *
+ * The runs above are a table for the other reason: they are figures, and figures
+ * compare down a column. Neither is a list of blocks any more, and nothing here
+ * summarises either.
+ *
+ * The list numbering is dropped: the rows are ordered most recent first, and a column
+ * of ordinals beside them would be a count of somebody's runs on a screen whose whole
+ * point is that every figure belongs to the thing that measured it.
  */
-.spends {
+.signed {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
-  gap: 1rem;
-  margin: 0.8rem 0 0;
+  gap: 0;
+  list-style: none;
+  margin: 1.2rem 0 0;
+  padding: 0;
 }
 
-.spend {
-  padding: 0.2rem 0 0.2rem 0.8rem;
-  border-left: 3px solid var(--line);
+.signed li {
+  display: flex;
+  align-items: baseline;
+  gap: 0.9rem;
+  padding: 0.7rem 1.1rem;
+  font-size: 0.92rem;
+  border-bottom: 1px solid var(--line);
 }
 
-.spend.scored {
-  border-left-color: var(--scored);
+/* No rule under the last line, for the reason the run table has none: a line under
+ * the bottom of a list is where a count of it would sit. */
+.signed li:last-child {
+  border-bottom: none;
 }
 
-.spend.adaptive {
-  border-left-color: var(--adaptive);
-}
-
-.spend .layer-name {
-  margin: 0;
+/* The id, pushed to the far end of the line: it is what a sender quotes, read digit by
+ * digit rather than at speed, and it is not the thing the eye should land on first. */
+.signed code {
+  margin-left: auto;
   font-size: 0.8rem;
+  color: var(--quiet);
+}
+
+/*
+ * The word an artefact that did not verify carries, and the only reason a line on this
+ * list is longer than the others.
+ *
+ * Not coloured. No verdict, band or rate is coloured anywhere in this console
+ * (ADR-0005), and *did not verify* is the outcome of a check on the evidence — read as
+ * a red mark it would be read as a judgement on the target instead.
+ */
+.not-to-send {
   font-weight: 600;
-  letter-spacing: 0.04em;
+}
+
+/*
+ * The runs on the record, as a table — the only table in this stylesheet.
+ *
+ * Everywhere else two figures are set as two blocks, on the argument that a table of
+ * two numeric columns has a foot and a foot is where somebody puts a total: an
+ * adaptive figure added to a scored one, against two ceilings that are enforced
+ * separately (ADR-0007, ADR-0010). Here the layout is not what carries that. The two
+ * columns are two types that cannot be handed to one another, `runs.ts` adds,
+ * averages and counts nothing, and the markup has no `tfoot`. What the rows buy in
+ * exchange is the thing a stack of blocks cannot give: one run per line, so a reader
+ * compares runs instead of reading each of them in turn.
+ *
+ * There is no rule under the last row, and that is deliberate — a line under the
+ * bottom of a column of figures is the line a total sits on.
+ *
+ * It scrolls itself on a narrow window rather than letting cells wrap: a run is one
+ * row at every width.
+ */
+.ledger-wrap {
+  margin: 1.2rem 0 0;
+  overflow-x: auto;
+  border-radius: var(--radius);
+}
+
+.ledger {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.92rem;
+}
+
+.ledger th,
+.ledger td {
+  padding: 0.75rem 1.1rem;
+  text-align: left;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--line);
+}
+
+.ledger thead th {
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
+  color: var(--quiet);
 }
 
-.spend.scored .layer-name {
-  color: var(--scored);
+.ledger tbody th {
+  font-weight: 600;
 }
 
-.spend.adaptive .layer-name {
-  color: var(--adaptive);
+.ledger tbody tr:last-child th,
+.ledger tbody tr:last-child td {
+  border-bottom: none;
 }
 
-.spend .calls {
-  margin: 0.1rem 0;
-  font-size: 1.4rem;
+/*
+ * The recorded instant, in the face the ids and the nonce are set in: it is a date and
+ * a clock time in UTC with the zone on it, scanned digit by digit down the column to
+ * find one run again, and tabular figures are what keep the columns of digits under
+ * each other.
+ */
+.recorded {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.82rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--quiet);
+}
+
+/*
+ * The two spend columns, right-aligned in tabular figures so the digits line up down
+ * the column and a wide number cannot hide beside a narrow one.
+ *
+ * Each column is written in its own hue, at matched lightness and chroma so that
+ * neither reads as the more serious of the two — colour carries identity here and
+ * never a judgement, and the heading says which layer in words, so nothing is carried
+ * by hue alone.
+ */
+.ledger .calls-cell {
+  text-align: right;
   font-variant-numeric: tabular-nums;
 }
 
-.spend .kind {
-  margin: 0;
-  font-size: 0.8rem;
-  color: var(--quiet);
+.ledger .calls-cell.scored {
+  color: var(--scored);
+}
+
+.ledger .calls-cell.adaptive {
+  color: var(--adaptive);
 }
 
 /*
@@ -1768,16 +1830,8 @@ code {
   color: var(--quiet);
 }
 
-/* The run's id stays at every width: it is how you tell one run from another. */
-.rail-id {
-  margin: 0.2rem 0 0.5rem;
-  font-size: 0.78rem;
-  color: var(--quiet);
-  word-break: break-all;
-}
-
 .rail-heading {
-  margin: 1.8rem 0 0.2rem;
+  margin: 1.8rem 0 0.6rem;
   font-size: 0.8rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;

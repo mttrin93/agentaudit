@@ -238,6 +238,33 @@ describe('the three verification results', () => {
     expect(outcomes).toContain('unsigned')
   })
 
+  /**
+   * The word the list carries, which is the only thing on a row that says not to send
+   * it.
+   *
+   * Three outcomes and three different words, asserted as three: a list that named a
+   * contradicted artefact the way it names a verified one would be inviting somebody
+   * to send the one artefact this screen exists to stop. The word is not a substitute
+   * for the three results — those are on the row too, and the test above reads them —
+   * it is what survives on a list that prints no sentence.
+   */
+  it('says how each artefact settled in a word, and never in the same word', () => {
+    const [sendable, unpinned, unsigned, altered] = listed(LISTED).artefacts
+
+    expect(sendable.settledInAWord).toBe('Verified')
+    expect(unpinned.settledInAWord).toBe('Did not verify')
+    expect(unsigned.settledInAWord).toBe('Did not verify')
+    expect(altered.settledInAWord).toBe('Did not verify')
+    expect(sendable.settledInAWord).not.toBe(unpinned.settledInAWord)
+
+    // And the word never stands alone as the account of what happened: the sentence
+    // it was cut down from is still on the row for the artefact's own screen.
+    for (const artefact of listed(LISTED).artefacts) {
+      expect(artefact.verification.heading).not.toBe('')
+      expect(artefact.verification.heading).not.toBe(artefact.settledInAWord)
+    }
+  })
+
   it('names a failure by its own outcome rather than by a shared mark', () => {
     const [, unpinned, unsigned, altered] = listed(LISTED).artefacts
 

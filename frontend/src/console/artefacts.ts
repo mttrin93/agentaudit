@@ -46,7 +46,11 @@
  */
 
 import type { ArtefactList, ArtefactRow } from '../api/bench'
-import { verificationReading, type VerificationReading } from '../report/report'
+import {
+  verificationReading,
+  type Settled,
+  type VerificationReading,
+} from '../report/report'
 
 import { reportPath, runPath } from './rail'
 
@@ -107,12 +111,36 @@ export interface ArtefactReading {
   /** The three files, in the order a verifier reads them. */
   files: FileReading[]
   /**
+   * How it settled, in one word, for a list that shows no sentence.
+   *
+   * Three words and not two: *not established* is its own fact — nothing was
+   * contradicted and not all three were proved — and a list that showed it as either
+   * of its neighbours would be doing the inference ADR-0017 exists to prevent. It is a
+   * word and never a mark, and the sentence behind it is on `verification.heading`,
+   * which the artefact's own screen prints.
+   */
+  settledInAWord: string
+  /**
    * The three results, the two claims, and whose check this was.
    *
    * The report screen's own reading, unchanged: three outcomes named individually,
    * two claims stated separately, and `checkedBy` on every one of them.
    */
   verification: VerificationReading
+}
+
+/**
+ * The three outcomes, each in the shortest words that still name it.
+ *
+ * *Did not verify* rather than *failed*: what failed is one of three named results,
+ * and this word says only that the artefact is not one to send. The result that
+ * failed is beside it on the artefact's own screen, and no word here stands in for
+ * reading it.
+ */
+const SETTLED_IN_A_WORD: Record<Settled, string> = {
+  verified: 'Verified',
+  contradicted: 'Did not verify',
+  not_established: 'Not established',
 }
 
 /**
@@ -176,6 +204,7 @@ export function artefactsReading(list: ArtefactList): ArtefactsReading {
  * fewer than three results without that function losing one.
  */
 function artefactReading(row: ArtefactRow): ArtefactReading {
+  const verification = verificationReading(row.verification)
   return {
     id: row.run_id,
     target: row.target,
@@ -187,6 +216,7 @@ function artefactReading(row: ArtefactRow): ArtefactReading {
       path: file.path,
       holds: file.holds,
     })),
-    verification: verificationReading(row.verification),
+    settledInAWord: SETTLED_IN_A_WORD[verification.settled],
+    verification,
   }
 }

@@ -172,7 +172,7 @@ describe('the runs on the record', () => {
       'Aborted',
       'Unanswered',
     ])
-    expect(rows[0].recordedAt).toBe('2026-08-19T09:38:37.512345+00:00')
+    expect(rows[0].recordedAt).toBe('2026-08-19 09:38:37 UTC')
     expect(rows[0].statement).toBe('the run finished and its report is served')
 
     // Each row links to the run it names, at the path the rail builds.
@@ -195,9 +195,61 @@ describe('the runs on the record', () => {
   })
 
   it('keeps the order the bench listed them in, most recent first', () => {
-    expect(rowsOf(LISTED).map((there) => there.recordedAt)).toEqual(
-      LISTED.runs.map((served) => served.recorded_at),
+    expect(rowsOf(LISTED).map((there) => there.recordedAt)).toEqual([
+      '2026-08-19 09:38:37 UTC',
+      '2026-08-18 22:04:01 UTC',
+      '2026-08-17 07:15:59 UTC',
+    ])
+    expect(rowsOf(LISTED).map((there) => there.id)).toEqual(
+      LISTED.runs.map((served) => served.run_id),
     )
+  })
+
+  /**
+   * The instant, read as a date and a clock time — and read in UTC.
+   *
+   * The three claims are the three ways this could name the wrong moment. That the
+   * seconds survive, because two runs half a minute apart must not arrive as one line.
+   * That an offset is converted rather than dropped: a stamp written at `11:38+02:00`
+   * is `09:38` in the zone this screen says it is showing, and a screen that printed
+   * the wall clock with `UTC` after it would be off by the offset. And that a stamp
+   * this screen cannot read comes through as the record's own text, because a
+   * guessed instant is worse than a raw one.
+   */
+  it('reads the instant as a date and a clock time in UTC', () => {
+    const [there] = rowsOf({
+      statement: LISTED.statement,
+      runs: [
+        row({
+          run_id: 'aaaabbbb-cccc-dddd-eeee-ffff00001111',
+          target: 'other-side-of-the-world',
+          recorded_at: '2026-08-19T11:38:37.512345+02:00',
+          status: 'completed',
+          statement: 'the run finished and its report is served',
+          scored: 181,
+          adaptive: 96,
+        }),
+      ],
+    })
+
+    expect(there.recordedAt).toBe('2026-08-19 09:38:37 UTC')
+
+    const [unreadable] = rowsOf({
+      statement: LISTED.statement,
+      runs: [
+        row({
+          run_id: 'aaaabbbb-cccc-dddd-eeee-ffff00002222',
+          target: 'a-stamp-this-screen-cannot-read',
+          recorded_at: 'the ninth of never',
+          status: 'completed',
+          statement: 'the run finished and its report is served',
+          scored: 181,
+          adaptive: 96,
+        }),
+      ],
+    })
+
+    expect(unreadable.recordedAt).toBe('the ninth of never')
   })
 })
 

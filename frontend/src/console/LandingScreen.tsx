@@ -260,9 +260,16 @@ export function LandingScreen() {
 /**
  * The artefacts on the record, or the stated fact that there are none.
  *
- * The runs' own shape — an ordered list of blocks, no table, nothing summarising the
- * column — because these are the same runs seen from the other end: one that finished
- * and was signed. The order is the route's, most recent first, and nothing is filtered:
+ * One line per artefact: the name the operator gave the target, and the id they will
+ * quote when they send it. These are the same runs the table above lists, seen from the
+ * other end — one that finished and was signed — and the line is a link, so everything
+ * else about an artefact is one click away rather than printed here.
+ *
+ * The name links to the report and there is no second link to the run. Both screens
+ * are reachable from either, the run is named on the report, and a row with two links
+ * makes a reader choose between them before they have read anything.
+ *
+ * The order is the route's, most recent first, and nothing is filtered:
  * an artefact whose signature did not verify is the one an engineer most needs to see,
  * and its own line says how it settled.
  */
@@ -275,20 +282,23 @@ function Artefacts({ reading }: { reading: ArtefactsReading }) {
     )
   }
   return (
-    <ol className="runs">
+    <ol className="signed">
       {reading.artefacts.map((artefact) => (
-        <li className="run" key={artefact.id}>
-          <h3>
-            <Link to={artefact.reportPath}>{artefact.target}</Link>
-          </h3>
-          <p className="standing">
-            Signed for the run recorded {artefact.recordedAt}
-          </p>
-          <p className="consequence">{artefact.verification.heading}</p>
-          <p className="aside">
-            <code>{artefact.id}</code> —{' '}
-            <Link to={artefact.runPath}>the run</Link>
-          </p>
+        <li key={artefact.id}>
+          <Link to={artefact.reportPath}>{artefact.target}</Link>
+          {/*
+            The word only when it is not *verified*.
+            A verified artefact is the case this list has nothing to add about, and one
+            that did not verify is the whole reason the list exists — so the line for it
+            is the one that carries a word. Nothing is inferred from silence that is not
+            also written down: the artefact's own screen names all three results on every
+            artefact, verified ones included (ADR-0017), and that screen is one click
+            along the name at the head of this line.
+          */}
+          {artefact.verification.settled === 'verified' ? null : (
+            <span className="not-to-send">{artefact.settledInAWord}</span>
+          )}
+          <code>{artefact.id}</code>
         </li>
       ))}
     </ol>
@@ -298,18 +308,33 @@ function Artefacts({ reading }: { reading: ArtefactsReading }) {
 /**
  * The runs on the record, or the stated fact that there are none.
  *
- * An ordered list rather than a table, and that is the load-bearing choice: a table
- * of two numeric columns has a footer, and a footer is where a total goes. A list
- * of runs has no footer to put one in, so the two figures stay two figures — the
- * same argument the interrupt's two cost figures are set as two blocks on
- * (`.figures` in the stylesheet).
+ * A table now, where this was a list of blocks. The list was chosen so that there
+ * would be nowhere to put a total — a table of two numeric columns has a foot, and a
+ * foot is where somebody adds an adaptive figure to a scored one against two ceilings
+ * that are enforced separately (ADR-0007, ADR-0010). The invariant did not move to the
+ * layout: it is carried by the two column *types*, which cannot be handed to one
+ * another and so cannot be reduced, and by `runs.ts` adding, averaging and counting
+ * nothing. What this markup owes that decision is one thing — **there is no `tfoot`
+ * here, and a row of sums is not a row this component knows how to draw.**
+ *
+ * No caption under the rows. The record's sentence about the two columns — they are
+ * not added, there is no total, no average and no figure spanning two runs — is four
+ * clauses saying what the screen already shows by having two headed columns and no
+ * third. `RunsReading.statement` is still built and still tested.
+ *
+ * **A zero keeps its meaning from the standing beside it.** The per-layer sentences —
+ * *nothing: this layer put no call on the operator's endpoint* — do not fit a cell, and
+ * the standing column is what now distinguishes a run nobody answered from a cheap one:
+ * `Unanswered`, `Declined` and `Failed` say why a row spent nothing. The sentences are
+ * still built and still tested in `runs.ts`; nothing on this screen prints them, and
+ * the run's own screen says the same thing in its own words off `progress.ts`.
  */
 function Runs({ reading }: { reading: RunsReading }) {
-  // With no runs, the heading and nothing under it. It carried the record's own
-  // sentence — nothing registered in this process, a fact about the bench and not about
-  // any target, register one and it appears here — which is three clauses under a
-  // heading that says the whole of it. `RunsReading.statement` is still built and still
-  // tested.
+  // With no runs, the heading and nothing under it — and no head of a table drawn over
+  // nothing. It carried the record's own sentence — nothing registered in this process,
+  // a fact about the bench and not about any target, register one and it appears here —
+  // which is three clauses under a heading that says the whole of it.
+  // `RunsReading.statement` is still built and still tested.
   if (!reading.listed) {
     return (
       <div className="citation uncited">
@@ -318,46 +343,66 @@ function Runs({ reading }: { reading: RunsReading }) {
     )
   }
   return (
-    <ol className="runs">
-      {reading.runs.map((run) => (
-        <li className="run" key={run.id}>
-          <h3>
-            <Link to={run.path}>{run.target}</Link>
-          </h3>
-          <p className="standing">
-            {run.standing} — recorded {run.recordedAt}
-          </p>
-          <p className="aside">
-            <code>{run.id}</code>
-          </p>
-          <p className="aside">{run.statement}</p>
-          <div className="spends">
-            <Spend column={run.scored} />
-            <Spend column={run.adaptive} />
-          </div>
-        </li>
-      ))}
-    </ol>
+    <div className="ledger-wrap">
+      <table className="ledger">
+        <thead>
+          <tr>
+            <th scope="col">Target</th>
+            <th scope="col">Standing</th>
+            <th scope="col">Recorded</th>
+            {/*
+              The two spend columns are headed in the two accents, and the words say
+              which layer each is: colour carries identity here and never a judgement,
+              and it is redundant with the heading so nothing is read off hue alone.
+            */}
+            <th scope="col" className="calls-cell scored">
+              Scored calls
+            </th>
+            <th scope="col" className="calls-cell adaptive">
+              Adaptive calls
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {reading.runs.map((run) => (
+            <tr key={run.id}>
+              {/*
+                The target is the row's header and the link back to the run: an operator
+                who did not keep the URL finds it here, under the name they gave the
+                endpoint and never the endpoint.
+              */}
+              <th scope="row">
+                <Link to={run.path}>{run.target}</Link>
+              </th>
+              <td>{run.standing}</td>
+              {/*
+                A date and a clock time in UTC, with the zone written out — read in the
+                reader's locale it would name a different instant from the one the bench
+                quotes back. `runs.recordedIn` is where the digits are chosen.
+              */}
+              <td className="recorded">{run.recordedAt}</td>
+              <Calls column={run.scored} />
+              <Calls column={run.adaptive} />
+            </tr>
+          ))}
+        </tbody>
+        {/* No `tfoot`. See the note above this component: that absence is the point. */}
+      </table>
+    </div>
   )
 }
 
 /**
- * One layer's spend, in its own hue and under its own name.
+ * One layer's calls, in its own hue, right-aligned against the next row's.
  *
  * The union rather than one shared column type, so that this component is the only
- * place in the app that has seen both — and all it does with them is draw them
- * apart. The accent is a class name and the colour is the stylesheet's, and the
- * layer is written out in words beside it so the distinction survives a reader who
- * cannot see the two hues apart.
+ * place in the app that has seen both — and all it does with them is draw them apart.
+ * The accent is a class name and the colour is the stylesheet's, and the column it sits
+ * under names the layer in words, so the distinction survives a reader who cannot see
+ * the two hues apart.
  */
-function Spend({ column }: { column: ScoredColumn | AdaptiveColumn }) {
-  return (
-    <div className={`spend ${column.accent}`}>
-      <p className="layer-name">{column.layer}</p>
-      <p className="calls">{column.calls}</p>
-      <p className="kind">{column.statement}</p>
-    </div>
-  )
+function Calls({ column }: { column: ScoredColumn | AdaptiveColumn }) {
+  return <td className={`calls-cell ${column.accent}`}>{column.calls}</td>
 }
 
 /**

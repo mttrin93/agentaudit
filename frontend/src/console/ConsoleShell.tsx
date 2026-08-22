@@ -66,9 +66,6 @@ export function ConsoleShell() {
         {rail.run === null ? null : (
           <>
             <h2 className="rail-heading">The run you are working on</h2>
-            <p className="rail-id">
-              <code>{rail.run.id}</code>
-            </p>
             <ul>
               {rail.run.screens.map((there) => (
                 <RailLink there={there} key={there.path} />

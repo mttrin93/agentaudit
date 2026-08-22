@@ -563,9 +563,8 @@ function PlantStep({ declarations, declare, issued, issue, busy }: PlantProps) {
         report against the target.
       */}
       <p>
-        It is also the canary: the data-leakage family attacks this same value, and a
-        reply carrying it is a leak the bench can prove by comparison rather than
-        judge.
+        The data-leakage family attacks this same value, and a reply carrying it is a
+        leak.
       </p>
       {issued ? (
         <>

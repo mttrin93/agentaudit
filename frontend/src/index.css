@@ -975,6 +975,25 @@ code {
   margin-top: 0;
 }
 
+/*
+ * The facts in even columns, four or so a row, and the box ends with the last of them.
+ *
+ * The shared `.at` grid is two columns of label-then-value, which put six facts in a
+ * ragged 2×3 with a short number alone beside a digest. Even columns with a floor
+ * instead: the four counts fall on one line and the two long values — the agents and
+ * the library version — take the next, and at a narrower width they redistribute
+ * rather than one column stretching to hold a sha256.
+ *
+ * `margin-bottom: 0` because the sentence that used to follow the figures is gone: a
+ * grid's own bottom margin under the last row, inside the box's padding, is a gap
+ * where a paragraph was.
+ */
+.citation .at {
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: 0.9rem 1.2rem;
+  margin-bottom: 0;
+}
+
 .citation code {
   word-break: break-all;
 }

@@ -1258,9 +1258,18 @@ function Decided({ block }: { block: DecidedBlock }) {
         <section>
           <h2>{block.heading}</h2>
           <div className="citation">
+            {/*
+              The outcome and its figures, and no sentence about the plumbing.
+
+              `block.statement` is the record's own line saying every figure here was
+              read off the attempts the run made and parsed out of no document. True,
+              and it is a claim about how this response is built rather than about what
+              was decided — which is what the box is for. It stays on the wire, where an
+              auditor reading the gate run reads it, and the route's tests are what hold
+              it true.
+            */}
             <h3>{block.outcome}</h3>
             <Facts facts={block.facts} />
-            <p className="aside">{block.statement}</p>
           </div>
         </section>
       )

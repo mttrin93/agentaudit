@@ -32,13 +32,10 @@
  */
 
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
 
 import { benchSettings, type BenchSettings } from '../api/bench'
-import { GATE_PATH } from './rail'
 import {
   settingsScreen,
-  WHAT_THIS_SCREEN_ANSWERS,
   type AgentsBlock,
   type CeilingsBlock,
   type KeysBlock,
@@ -80,14 +77,16 @@ export function SettingsScreen() {
 
   return (
     <main className="screen">
+      {/*
+        The name of the screen and nothing over or under it.
+        The eyebrow named the app on a page inside the app; the line under the title
+        said what the screen answers and then pointed at the gate, which the rail is
+        already pointing at. *Stated here, changed elsewhere* was the title's second
+        half and is the first thing every block below says about its own setting.
+        `WHAT_THIS_SCREEN_ANSWERS` is still built and still exported.
+      */}
       <header>
-        <p className="eyebrow">AgentAudit — what this instrument is set to</p>
-        <h1>Settings: stated here, changed elsewhere</h1>
-        <p className="steps">
-          {WHAT_THIS_SCREEN_ANSWERS}{' '}
-          <Link to={GATE_PATH}>The gate</Link> says what the bench last answered
-          under its own rule.
-        </p>
+        <h1>Settings</h1>
       </header>
 
       {held.unavailable ? (

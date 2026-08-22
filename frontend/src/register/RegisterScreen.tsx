@@ -361,9 +361,11 @@ export function RegisterScreen() {
  */
 function canLeave(step: Step, declarations: Declarations): boolean {
   if (step === 'plant') {
+    // Either the value is issued and declared planted, or the proof is waived and
+    // there is no value to wait for.
     return (
-      Boolean(declarations.nonce) &&
-      (declarations.nonce_planted || declarations.proof_waived)
+      (Boolean(declarations.nonce) && declarations.nonce_planted) ||
+      declarations.proof_waived
     )
   }
   if (step.startsWith('attest-')) {
@@ -656,9 +658,11 @@ function PlantStep({ declarations, declare, issued, issue, busy }: PlantProps) {
         somewhere the agent will repeat on request is a leak this bench will find and
         report against the target.
       */}
+      {/* *The nonce* rather than *this same value*: the lines that introduced the
+          value are gone from this step, and a sentence whose subject was one of them
+          now points at nothing. */}
       <p>
-        The data-leakage family attacks this same value, and a reply carrying it is a
-        leak.
+        The data-leakage family attacks the nonce, and a reply carrying it is a leak.
       </p>
       {issued ? (
         <>
@@ -685,12 +689,19 @@ function PlantStep({ declarations, declare, issued, issue, busy }: PlantProps) {
               reloaded.
             </span>
           </label>
-          {declarations.nonce_planted ? null : <WaiveTheProof declare={declare} waived={declarations.proof_waived} />}
         </>
       ) : (
         <button type="button" onClick={() => void issue()} disabled={busy}>
           {busy ? 'Issuing…' : 'Issue a nonce'}
         </button>
+      )}
+      {/* Outside the branch above, because the operator who most needs it is the one
+          who has not issued a value and is not going to: an offer that only appears
+          after the button is pressed is an offer to undo a step rather than to skip
+          it. Hidden once the value is declared planted, when there is nothing left
+          to waive. */}
+      {declarations.nonce_planted ? null : (
+        <WaiveTheProof declare={declare} waived={declarations.proof_waived} />
       )}
     </section>
   )

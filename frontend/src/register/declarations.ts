@@ -210,9 +210,14 @@ export function registrationRequest(
         'built from this figure',
     )
   }
-  if (!declarations.nonce) {
+  if (declarations.proof_waived) {
+    // Nothing to require. The value is the proof of control and the leakage canary,
+    // and this run has waived the first and dropped the second: a nonce issued for
+    // it would be a value nobody plants, nothing checks and one family no longer
+    // needs (ADR-0007, as amended).
+  } else if (!declarations.nonce) {
     missing.push('no nonce has been issued, so there is nothing planted to prove')
-  } else if (!declarations.nonce_planted && !declarations.proof_waived) {
+  } else if (!declarations.nonce_planted) {
     // Two ways past this step and the second one is not silence. Either the value
     // is planted, or the operator has said in as many words that the run may start
     // without the proof — and until one of them is stated, the walk is unfinished

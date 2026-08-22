@@ -308,6 +308,10 @@ class NonceNotIssued(ValueError):
     the run can, and it runs after the halt — but it does prove the caller went
     through registration rather than pointing the bench at an endpoint and
     inventing a token.
+
+    Not raised for a run that declared the nonce unplanted: that run has waived the
+    proof this value carries and dropped the family it is the canary for, so there
+    is nothing left for it to be checked against (ADR-0007, as amended).
     """
 
     def __init__(self, nonce: str) -> None:
@@ -612,7 +616,13 @@ class BenchRuns:
         with self._lock:
             issued = nonce in self._issued
             self._issued.discard(nonce)
-        if not issued:
+        # A waived run carries no nonce and is not checked for one. The value is the
+        # proof of control and the leakage canary, and a run that waives the first
+        # and drops the second has no use for it: requiring one anyway would be a
+        # button press standing in for a guard that is already gone (ADR-0007, as
+        # amended). A waived run that *does* carry one is still checked, because a
+        # caller who went through registration is telling the truth about it.
+        if not issued and (nonce_planted or nonce):
             raise NonceNotIssued(nonce)
 
         plan = plan_for(self._config, note_planted, nonce_planted)

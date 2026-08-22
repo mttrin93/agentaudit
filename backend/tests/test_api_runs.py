@@ -896,6 +896,33 @@ def test_a_run_that_waives_the_proof_of_control_does_not_run_the_leakage_family(
     assert planted["estimate"]["scored"]["calls"] == 21
 
 
+def test_a_run_that_waives_the_proof_needs_no_nonce_at_all(leakage_case: Case) -> None:
+    """The value has two jobs on a run, and a waived run has neither.
+
+    It is the proof of control, which this run waived, and it is the leakage
+    canary, whose family this run drops. Requiring one anyway would be a button
+    press standing in for a guard that is already gone — and worse, a value the
+    bench holds in memory, so a restart between issuing and registering refuses a
+    run whose operator did everything right.
+
+    The unwaived path is unchanged and asserted beside it: a run that claims the
+    nonce is planted is a run whose nonce this bench must have issued.
+    """
+    with watched_reference() as watched, api([leakage_case]) as (client, bench):
+        waived = client.post(
+            "/runs",
+            json=a_request(watched.target, "", nonce_planted=False),
+        )
+        invented = client.post(
+            "/runs",
+            json=a_request(watched.target, "AGENTAUDIT-CANARY-MADEITUP"),
+        )
+
+    assert waived.status_code == 202
+    assert invented.status_code == 422
+    assert "never issued that nonce" in invented.json()["detail"]
+
+
 def test_an_answer_that_arrives_after_the_wait_ran_out_is_refused() -> None:
     """The instant between a wait running out and the run being settled.
 

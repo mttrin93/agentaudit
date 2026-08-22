@@ -64,6 +64,15 @@ status: accepted
     and a document that presented them alike would be the relaxation costing a
     recipient something rather than the operator.
 
+  **A waived run carries no nonce.** The value has two jobs and that run has
+  neither: it is the proof of control, which was waived, and it is the leakage
+  canary, whose family was dropped. So `POST /runs` does not check the issued set
+  for one — requiring a value nobody plants and nothing reads would be a button
+  press standing in for a guard that is already gone, and a bench that holds issued
+  nonces in memory would refuse a run whose operator did everything asked of them
+  and waited through a restart. A waived run that does carry a nonce is still
+  checked against the issued set.
+
   What this gives up is real and is not recovered by any of the three: on a waived
   run, nothing separates an operator testing their own agent from anyone testing
   anyone's, which is the property the decision above was written to establish. The

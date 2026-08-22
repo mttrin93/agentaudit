@@ -166,9 +166,20 @@ describe('the nonce', () => {
 
     const blocked = registrationRequest(unplanted)
     const ready = registrationRequest(waived)
+    // The operator this exists for is the one who never issued a value at all:
+    // waiving the proof and dropping the family it is the canary for leaves nothing
+    // for a nonce to do, so the walk may not go on requiring one.
+    const never = registrationRequest({
+      ...fullyDeclared(),
+      nonce: '',
+      nonce_planted: false,
+      proof_waived: true,
+    })
 
     expect(blocked.kind).toBe('blocked')
     expect(ready.kind).toBe('ready')
+    expect(never.kind).toBe('ready')
+    expect(never.kind === 'ready' && never.body.nonce).toBe('')
     // What the bench acts on is the value, not the waiver: it drops the leakage
     // family and records control as unproved on the strength of this field.
     expect(ready.kind === 'ready' && ready.body.nonce_planted).toBe(false)

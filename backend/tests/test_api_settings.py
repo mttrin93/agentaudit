@@ -51,6 +51,7 @@ from fastapi.testclient import TestClient
 from backend.api.app import (
     BENCH_GATE_RECORD_ROUTE,
     BENCH_GATE_ROUTE,
+    BENCH_NOTES_ROUTE,
     BENCH_SETTINGS_ROUTE,
     GATE_RUN_APPROVAL_ROUTE,
     GATE_RUNS_ROUTE,
@@ -489,6 +490,7 @@ def test_no_route_under_the_bench_prefix_changes_a_setting() -> None:
     assert under_bench == {
         (BENCH_GATE_ROUTE, "GET"),
         (BENCH_GATE_RECORD_ROUTE, "GET"),
+        (BENCH_NOTES_ROUTE, "GET"),
         (BENCH_SETTINGS_ROUTE, "GET"),
     }
 

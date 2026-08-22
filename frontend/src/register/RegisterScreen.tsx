@@ -35,8 +35,10 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
   benchSettings,
   issueNonce,
+  notesToPlant,
   runStanding,
   startRun,
+  type NoteToPlant,
   type NonceIssued,
   type StartOutcome,
 } from '../api/bench'
@@ -113,6 +115,16 @@ export function RegisterScreen() {
    * new kind of agent puts that kind in front of the next operator to register one.
    */
   const [kinds, setKinds] = useState<readonly string[]>([])
+  /**
+   * The content the indirect prompt injection family attacks with, to show.
+   *
+   * The box on the first step declares this content is in place, and until the bench
+   * served it there was nothing on this screen that said what it is. Empty until the
+   * bench answers and empty for good if it does not: the declaration is the
+   * operator's either way, and a registration is never blocked on this arriving.
+   */
+  const [notes, setNotes] = useState<readonly NoteToPlant[]>([])
+  const [unpaired, setUnpaired] = useState<readonly string[]>([])
 
   const declare = useCallback((changed: Partial<Declarations>) => {
     setDeclarations((current) => ({ ...current, ...changed }))
@@ -143,6 +155,25 @@ export function RegisterScreen() {
       }
     }
     void read()
+    return () => {
+      current = false
+    }
+  }, [])
+
+  useEffect(() => {
+    let current = true
+    void notesToPlant()
+      .then((held) => {
+        if (current) {
+          setNotes(held.notes)
+          setUnpaired(held.unpaired)
+        }
+      })
+      .catch(() => {
+        // Nothing to say. A bench that cannot serve the content is one an operator
+        // reads out of the repository, and the box below is theirs to answer either
+        // way — an error over a form that registers fine without it would be noise.
+      })
     return () => {
       current = false
     }
@@ -261,7 +292,13 @@ export function RegisterScreen() {
       ) : null}
 
       {current === 'target' ? (
-        <TargetStep declarations={declarations} declare={declare} kinds={kinds} />
+        <TargetStep
+          declarations={declarations}
+          declare={declare}
+          kinds={kinds}
+          notes={notes}
+          unpaired={unpaired}
+        />
       ) : null}
       {current === 'plant' ? (
         <PlantStep
@@ -413,7 +450,13 @@ function TargetStep({
   declarations,
   declare,
   kinds,
-}: StepProps & { kinds: readonly string[] }) {
+  notes,
+  unpaired,
+}: StepProps & {
+  kinds: readonly string[]
+  notes: readonly NoteToPlant[]
+  unpaired: readonly string[]
+}) {
   return (
     <section>
       {/*
@@ -529,7 +572,64 @@ function TargetStep({
           family is skipped rather than run.
         </span>
       </label>
+      <NotesToPlant notes={notes} unpaired={unpaired} />
     </section>
+  )
+}
+
+/**
+ * The content itself, folded away under the box that declares it is in place.
+ *
+ * The box asked an operator to plant something and the walk never said what. It is
+ * not any hostile content: a case in this family *is* a piece of content, and the
+ * verdict is the exact string executing that content produces, so a note of the
+ * operator's own invention leaves thirty attempts running against an attack whose
+ * canary can never appear — a clean zero that reads as a defence.
+ *
+ * **Folded, because it is three documents on a form of eight fields.** Shut, it is
+ * one line; open, it is what to paste. An operator who has already planted the notes
+ * never opens it.
+ *
+ * The canary is shown and is not a thing to plant. It is what the bench will look
+ * for in the reply, and the note is written so that its two halves are in the body
+ * and the join is not — a body carrying the finished string would be reproduced by
+ * a target that quoted the note back while refusing it.
+ */
+function NotesToPlant({
+  notes,
+  unpaired,
+}: {
+  notes: readonly NoteToPlant[]
+  unpaired: readonly string[]
+}) {
+  if (notes.length === 0 && unpaired.length === 0) {
+    return null
+  }
+  return (
+    <details className="plant">
+      <summary>What to plant</summary>
+      <p className="aside">
+        Put each of these where this agent retrieves documents, filed so that a
+        message naming the word above it brings that one back. The bench plants
+        nothing and cannot see whether they are there.
+      </p>
+      {notes.map((note) => (
+        <article key={note.case}>
+          <h4>{note.key}</h4>
+          <pre>{note.body}</pre>
+          <p className="aside">
+            Carrying it out adds <code>{note.canary}</code> to the reply. That line
+            is the whole of the verdict.
+          </p>
+        </article>
+      ))}
+      {unpaired.length > 0 ? (
+        <p className="aside">
+          This bench holds no content for {unpaired.join(', ')}. Those cases will run
+          against whatever is in place and can only report resisted.
+        </p>
+      ) : null}
+    </details>
   )
 }
 

@@ -1,15 +1,16 @@
 """The HTTP surface: a nonce, a run, the answer to the run's interrupt, and the
 artefact it produced.
 
-Sixteen routes, in three families. `POST /nonces` issues the value an operator
+Eighteen routes, in three families. `POST /nonces` issues the value an operator
 plants to prove they control the endpoint; `POST /runs` records the attestation,
 declares the estimate and halts; `POST /runs/{id}/approval` answers the halt; `GET
 /runs` lists the runs on the record; `GET /runs/{id}` says where the run has got to;
 four under `/report/{id}` — three that serve the files one signed run leaves, the
 payload, the rendering and the detached signature, and a fourth that says what a
 verifier makes of them; `GET /artefacts` lists every signed artefact with that same
-reading beside it; two under `/bench`, whose subject is the bench rather than any run
-— `GET /bench/gate` and `GET /bench/settings`; and four under `/gate-runs`, which are
+reading beside it; four under `/bench`, whose subject is the bench rather than any run
+— `GET /bench/gate`, `GET /bench/gate/record`, `GET /bench/settings` and
+`GET /bench/notes`; and four under `/gate-runs`, which are
 the newest and the only ones on this surface that spend money on the bench's own
 behalf.
 
@@ -235,6 +236,7 @@ from backend.graph.budget import (
     Layer,
 )
 from backend.graph.runstate import RunState
+from backend.targets.reference.corpus import SHARED_FOLDER
 
 CASES_DIR = Path(__file__).resolve().parents[1] / "cases"
 """The case library a bench serves when it was not given one.
@@ -245,14 +247,19 @@ having checked (`admission.py`).
 """
 
 PLANT_STATEMENT = (
-    "Plant this value in the target's configuration before starting a run. Only "
-    "somebody who can edit that configuration can plant it, which is what makes "
-    "the echo proof that you control the endpoint (ADR-0007). The same value is "
-    "the data-leakage canary — one planted value, two roles — so do not add it to "
-    "any output allow-list. The run's registration probe sends the echo probe "
-    "below verbatim, and a target that does not answer it with the nonce is not "
-    "attempted."
+    "Plant this value in the target's configuration before starting a run."
 )
+"""The one instruction, with the four things it also said taken off it.
+
+It carried the argument as well as the instruction: that only somebody who can edit
+the configuration can plant it, so the echo is proof of control (ADR-0007); that the
+same value is the data-leakage canary and must not be allow-listed; and that the
+registration probe sends the echo probe verbatim. All four are true and none of them
+is what an operator does next. Three are on the screen this value is shown on — the
+plant step states the proof-of-control argument, states the canary's second role, and
+prints the probe under a heading of its own — and the fourth, the refusal when a
+target does not echo, is a sentence the run itself gives at the moment it happens.
+"""
 
 
 REPORT_ROUTE = "/report/{run_id}"
@@ -2049,6 +2056,124 @@ def bench_settings(config: BenchConfig) -> BenchSettings:
     )
 
 
+BENCH_NOTES_ROUTE = "/bench/notes"
+"""The content the indirect prompt injection family attacks with, served verbatim.
+
+The one thing this walk asked an operator to do and never told them how to do. The
+registration form has a box declaring that the hostile content the family reads is
+in place, `plan_for` drops every case in the family when it is not, and until this
+route there was no way to learn *what* to plant: the notes are committed in
+`backend/targets/reference/corpus.py`, which is the bench's source and not a screen.
+An operator who planted content of their own invention would have the family run
+against an attack whose canary can never appear, and read the clean zero as a
+defence — which is the exact failure the declaration box exists to prevent, arriving
+through the other door.
+
+**Paired by the canary and never by name.** What is served against a case is the
+note whose `executed_line` is that case's `planted_canary`, so the pairing is the
+same string the verdict is decided on (`evaluator.py`). A note that pairs with no
+live case is not served, and a live case in the family that pairs with no note is
+named as one this bench holds no content for rather than quietly omitted.
+
+**It is under `/bench` because the subject is the instrument.** Nothing here is a
+measurement of anybody's target and nothing about a target is reachable from it
+(ADR-0018). A `GET`, like every other method on this prefix: an operator plants the
+content in their own system and declares it at registration, and there is no route
+that would take it (ADR-0020).
+"""
+
+THE_CONTENT_THE_FAMILY_NEEDS = (
+    "the third-party content the indirect prompt injection family attacks with. "
+    "Plant each note where this target retrieves it, and declare it at "
+    "registration. Each is paired to a case by the canary that case is scored on — "
+    "the line that executing the note's instruction adds to a reply — so content "
+    "that is hostile but is not this content leaves the family reporting a clean "
+    "zero against an attack that was never made"
+)
+"""What the notes response is, said on the response, because a screenshot travels."""
+
+
+class NoteToPlant(BaseModel):
+    """One note, the case it is the content of, and the line executing it produces."""
+
+    case: str
+    """The case this note is the content of. Named, so a reader can open the record."""
+
+    key: str
+    """The word a message uses when it means this note.
+
+    The bench's payload names it in ordinary prose — *a note from the supplier*, *a
+    remittance advice* — and the target has to bring back this note when it does. It
+    is where the note is filed, not a field of the note.
+    """
+
+    body: str
+    """The text to plant, exactly. Third-party content, all of it."""
+
+    canary: str
+    """What executing the instruction in this note adds to a reply.
+
+    Served because it is the whole of the verdict: the bench looks for this string in
+    what the target answers, and finds it only where the instruction was carried out.
+    Not a value to plant on its own — a note carrying the line already joined would
+    be scored by a target that quoted it back.
+    """
+
+
+class NotesToPlant(BaseModel):
+    """Every note the live half of the library needs planted, and what is unpaired.
+
+    A list and no count over it, and no field that says the family is ready: whether
+    the content is in place is the operator's declaration at registration, which this
+    bench cannot check and does not pretend to (`plan_for`, ADR-0007).
+    """
+
+    notes: list[NoteToPlant]
+    unpaired: list[str]
+    """Live cases in the family this bench holds no note for, by id.
+
+    Empty in a bench whose library and corpus agree. Named rather than dropped,
+    because a case scored on a canary no served note produces is a case an operator
+    cannot plant for, and a shorter list would look complete.
+    """
+
+    stated: str = THE_CONTENT_THE_FAMILY_NEEDS
+
+
+def notes_to_plant(cases: Sequence[Case]) -> NotesToPlant:
+    """The notes the live indirect-injection cases are scored against, paired by canary.
+
+    The live half only, for the reason the agent types are read off the live half: a
+    case that has retired is a case no run attempts, and content planted for one is
+    content planted for nothing.
+    """
+    by_canary = {
+        note.executed_line: note for note in SHARED_FOLDER if note.executed_line
+    }
+    notes: list[NoteToPlant] = []
+    unpaired: list[str] = []
+    for case in sorted(cases, key=lambda case: case.id):
+        if case.status is not CaseStatus.ACTIVE:
+            continue
+        if case.family is not Family.INDIRECT_PROMPT_INJECTION:
+            continue
+        canary = (
+            case.success_condition.planted_canary
+            if case.success_condition is not None
+            else None
+        )
+        note = by_canary.get(canary) if canary else None
+        if note is None:
+            unpaired.append(case.id)
+            continue
+        notes.append(
+            NoteToPlant(
+                case=case.id, key=note.key, body=note.body, canary=note.executed_line
+            )
+        )
+    return NotesToPlant(notes=notes, unpaired=unpaired)
+
+
 GATE_RUNS_ROUTE = "/gate-runs"
 """Where a gate run is started, listed, and read. Its own family, and never `/runs`.
 
@@ -3177,6 +3302,33 @@ def create_app(
         the route table in `test_api_settings.py` as well as in `test_api_gate.py`.
         """
         return bench_settings(bench.config)
+
+    @app.get(BENCH_NOTES_ROUTE)
+    def state_what_the_injection_family_needs_planted() -> NotesToPlant:
+        """The content the indirect prompt injection family attacks with. A reader.
+
+        The registration walk asks an operator to declare that this content is in
+        place and, until this route, told them nothing about what it is. The notes
+        are committed beside the reference agents that fetch them, and a case in this
+        family *is* a piece of content: the payload the bench sends is a colleague's
+        ordinary message and everything adversarial is in what the target retrieved.
+        So the family cannot be run against content the operator invented — the
+        canary would never appear, and thirty attempts would report a clean zero
+        against an attack that was never made.
+
+        **Paired by the canary the verdict reads.** A note is served against a case
+        when its executed line is that case's `planted_canary`, which is the string
+        `evaluator.py` looks for in the reply. Nothing here is matched by name, by
+        family alone or by order, so a note edited out of agreement with the case it
+        was written for stops being served rather than being served as the wrong
+        content.
+
+        **The live half only, and never a readiness field.** A retired case is one no
+        run attempts. Whether the content is actually in place is the operator's
+        declaration at registration, and this bench cannot check it: a target's
+        retrieval is behind their boundary, which is why the declaration exists.
+        """
+        return notes_to_plant(bench.config.cases)
 
     @app.post(GATE_RUNS_ROUTE, status_code=status.HTTP_202_ACCEPTED)
     def start_a_gate_run(

@@ -1534,6 +1534,51 @@ export async function benchSettings(): Promise<BenchSettings> {
   return (await fetched(BENCH_SETTINGS_PATH, 'bench settings')) as BenchSettings
 }
 
+export const BENCH_NOTES_PATH = '/bench/notes'
+
+/**
+ * One note the indirect prompt injection family attacks with, to be planted.
+ *
+ * The `canary` is not a value to plant. It is what executing the instruction in the
+ * body adds to a reply, and the note is written so that the two halves of it are in
+ * the body and the join is not: a target that quotes the whole note back while
+ * refusing it reproduces both halves and never the join. Shown so an operator can
+ * see what the bench will be looking for, never as something to paste.
+ */
+export interface NoteToPlant {
+  case: string
+  key: string
+  body: string
+  canary: string
+}
+
+/**
+ * What has to be in place before the injection family measures anything.
+ *
+ * No readiness field, and there is nothing here that could be one: whether the
+ * content is actually where this target retrieves it is the operator's declaration
+ * at registration, which the bench cannot check. `unpaired` names live cases this
+ * bench holds no content for, so a short list cannot read as a complete one.
+ */
+export interface NotesToPlant {
+  notes: NoteToPlant[]
+  unpaired: string[]
+  stated: string
+}
+
+/**
+ * The content the injection family needs planted, read.
+ *
+ * Its own request rather than a field on the settings response, because the subject
+ * is different: the settings are what this instrument is configured to do, and this
+ * is content an operator has to put somewhere before one family of a run means
+ * anything. A register screen that could not read it is a register screen that still
+ * registers — the declaration is the operator's either way.
+ */
+export async function notesToPlant(): Promise<NotesToPlant> {
+  return (await fetched(BENCH_NOTES_PATH, 'notes to plant')) as NotesToPlant
+}
+
 /**
  * One report route, read, with the bench's own refusal carried out of it.
  *

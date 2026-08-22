@@ -374,6 +374,38 @@ legend {
   color: var(--quiet);
 }
 
+/*
+ * The content to plant, folded away under the box that declares it is in place.
+ *
+ * Shut by default and shut is the point: it is three documents on a form of eight
+ * fields, and an operator who planted them last week never opens it. Open, it is
+ * what to paste — so the bodies are `pre`, at the size the echo probe is shown at,
+ * and nothing between them competes with them for attention.
+ */
+details.plant {
+  margin-top: 1rem;
+}
+
+details.plant summary {
+  cursor: pointer;
+  color: var(--accent);
+  font-size: 0.9rem;
+}
+
+details.plant article {
+  margin-top: 1rem;
+}
+
+/* The word a message uses when it means this note — where it is filed, not a
+   heading over it. Set as the key it is rather than as a title. */
+details.plant h4 {
+  margin: 0 0 0.3rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--quiet);
+}
+
 .nonce {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 1.15rem;

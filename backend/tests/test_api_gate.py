@@ -81,6 +81,7 @@ from fastapi.testclient import TestClient
 from backend.api.app import (
     BENCH_GATE_RECORD_ROUTE,
     BENCH_GATE_ROUTE,
+    BENCH_NOTES_ROUTE,
     BENCH_SETTINGS_ROUTE,
     GATE_RUN_APPROVAL_ROUTE,
     GATE_RUN_ROUTE,
@@ -344,10 +345,13 @@ def test_nothing_under_the_bench_prefix_does_anything_but_read() -> None:
     spend money and write to the case library. So every method on every route here is
     `GET`, and a write appearing under this prefix fails here whatever it is called.
 
-    The prefix has a second route now — `GET /bench/settings`, the reader that states
-    what this bench is configured to do — and it is named here rather than allowed
-    for, because the claim this test makes is about the whole set and not about how
-    many are in it. `test_api_settings.py` asserts the same equality from its own end.
+    Every route on the prefix is named here rather than allowed for, because the claim
+    this test makes is about the whole set and not about how many are in it:
+    `GET /bench/settings` states what this bench is configured to do, and
+    `GET /bench/notes` serves the content the injection family attacks with — content
+    an operator plants in their own system and declares at registration, which is why
+    even that one is a read. `test_api_settings.py` asserts the same equality from its
+    own end.
 
     **ADR-0021 did not weaken this one.** A gate run can now be started over HTTP,
     and it is started at `POST /gate-runs` — a route whose path says plainly that it
@@ -367,6 +371,7 @@ def test_nothing_under_the_bench_prefix_does_anything_but_read() -> None:
     assert under_bench == {
         (BENCH_GATE_ROUTE, "GET"),
         (BENCH_GATE_RECORD_ROUTE, "GET"),
+        (BENCH_NOTES_ROUTE, "GET"),
         (BENCH_SETTINGS_ROUTE, "GET"),
     }
 

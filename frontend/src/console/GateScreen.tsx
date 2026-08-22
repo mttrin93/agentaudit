@@ -89,6 +89,7 @@ import {
   gateRunRequest,
   familyRows,
   payloads,
+  progressKeys,
   GATE_RUN_STATEMENTS,
   nothingAttested,
   startControl,
@@ -97,6 +98,7 @@ import {
   type DecidedBlock,
   type FamilyRow,
   type PayloadRow,
+  type ProgressKey,
   type DecidedRun,
   type Fact,
   type FamilyReading,
@@ -951,7 +953,17 @@ function TheGateRun({ reading }: { reading: GateRunReading }) {
     <>
       <section>
         <h2>Where it has got to</h2>
-        <p>{reading.statement}</p>
+        {/*
+          Without the served sentence.
+
+          `reading.statement` is one paragraph of running prose — what was decided,
+          who confirmed it, how many readings were appended, where the records are,
+          which run this one displaces, the digest — above the figures an operator
+          opened this screen to read. Every fact in it is a labelled field on a block
+          below or on the report the run signs, and a reader who has to parse a
+          paragraph to find a figure that is drawn under it is reading it twice. The
+          sentence stays on the wire, where the record and the report both use it.
+        */}
         <div className="layers">
           {gateProgress(reading).map((layer) => (
             <Layer layer={layer} key={layer.layer} />
@@ -969,6 +981,7 @@ function TheGateRun({ reading }: { reading: GateRunReading }) {
         <div className="watching">
           <div className="progress">
             <h3>How far each family has got</h3>
+            <Keys keys={progressKeys(reading)} />
             {familyRows(reading).map((row) => (
               <FamilyBar row={row} key={row.family} />
             ))}
@@ -1043,13 +1056,41 @@ function FamilyBar({ row }: { row: FamilyRow }) {
       <div className="track">
         {row.segments.map((segment) => (
           <span
-            className={`segment ${segment.agent}`}
+            className={`segment ${segment.accent}`}
             style={{ width: segment.width }}
             key={segment.agent}
           />
         ))}
       </div>
     </div>
+  )
+}
+
+/**
+ * Which colour is which agent, once above the six bars.
+ *
+ * **The mark is the thing it labels.** A length of track and not a dot, for the reason
+ * the stylesheet gives beside `.dot`: a legend whose mark is not the mark on the
+ * drawing has to be decoded instead of read.
+ *
+ * **And every mark carries its agent's name.** Three colours in an order with nothing
+ * beside them are read as three grades, which is the severity scale ADR-0005 exists to
+ * refuse. The word beside each mark is what says which agent it is; the hue only says
+ * which of three, and nothing here is carried by hue alone.
+ */
+function Keys({ keys }: { keys: readonly ProgressKey[] }) {
+  if (keys.length === 0) {
+    return null
+  }
+  return (
+    <p className="legend">
+      {keys.map((key) => (
+        <span className="key" key={key.agent}>
+          <span className={`swatch ${key.accent}`} aria-hidden="true" />
+          {key.agent}
+        </span>
+      ))}
+    </p>
   )
 }
 

@@ -75,6 +75,7 @@ import {
   GATE_RUN_STATEMENTS,
   payloads,
   nothingAttested,
+  progressKeys,
   startControl,
   stillGoing,
   type Attesting,
@@ -620,6 +621,31 @@ describe('how far each family has got', () => {
     // And no percentage in any label: the share is a CSS width and never a figure,
     // because a figure there would be a rate with no interval beside it.
     expect(said).not.toContain('%')
+  })
+})
+
+describe('the legend over the six bars', () => {
+  it('names the agents the rows draw, in that order, and takes their accents', () => {
+    const keys = progressKeys(IN_FLIGHT)
+
+    // Three keys for six bars: the six rows share the three agents, so a legend per
+    // row would be the same three words five times over.
+    expect(keys.map((key) => key.agent)).toEqual(['hardened', 'weak', 'trivial'])
+    // The same token the segment is drawn in, read off the rows themselves, so the
+    // swatch beside a name and the segment in every bar cannot take two colours for
+    // the one agent — a legend that has to be decoded is worse than none.
+    const [first] = familyRows(IN_FLIGHT)
+    expect(keys.map((key) => key.accent)).toEqual(['hardened', 'weak', 'trivial'])
+    expect(keys.map((key) => key.accent)).toEqual(
+      first.segments.map((segment) => segment.accent),
+    )
+    expect(keys.every((key) => key.accent !== '')).toBe(true)
+  })
+
+  it('draws no legend for a run that was served no families', () => {
+    // Nothing to name is nothing drawn: three marks above an empty panel would say
+    // this run has three agents and no families.
+    expect(progressKeys({ ...IN_FLIGHT, families: [] })).toEqual([])
   })
 })
 

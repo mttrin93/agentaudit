@@ -1214,6 +1214,54 @@ code {
 }
 
 /*
+ * Which colour is which agent, once for the six bars.
+ *
+ * The mark is a length of the track and not a dot, for the reason `.dot` gives at
+ * length above: the legend has to draw the identical thing the bar draws, or it is
+ * decoded instead of read. Three marks and never eighteen — the six rows share the
+ * three agents, and a legend per row would be the same three words five times over.
+ *
+ * Every mark has its agent's name printed beside it, so nothing in this panel is
+ * carried by hue alone.
+ */
+.progress .legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.9rem;
+  margin: 0 0 0.8rem;
+  font-size: 0.76rem;
+  color: var(--quiet);
+}
+
+.progress .legend .key {
+  display: inline-flex;
+  gap: 0.35rem;
+  align-items: center;
+  white-space: nowrap;
+}
+
+/* The segment's own dimensions, off the bar and at the size of a mark. */
+.swatch {
+  display: inline-block;
+  width: 0.9rem;
+  height: 0.45rem;
+  background: var(--line);
+  border-radius: var(--radius-pill);
+}
+
+.swatch.hardened {
+  background: var(--agent-hardened);
+}
+
+.swatch.weak {
+  background: var(--agent-weak);
+}
+
+.swatch.trivial {
+  background: var(--agent-trivial);
+}
+
+/*
  * One exchange: what went out, what came back, and the verdict under them.
  *
  * The reply is indented and the two are set in the mono face, because they are the

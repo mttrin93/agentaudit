@@ -454,6 +454,14 @@ export function gateProgress(reading: GateRunReading): readonly LayerReading[] {
 /** One agent's share of a family's bar: its two counts, and the width to draw. */
 export interface FamilySegment {
   agent: string
+  /**
+   * The stylesheet's token for this agent's step of the ramp. Order, not rank.
+   *
+   * Read off the one list the console names the agents by, the same way a rate's mark
+   * is (`accentFor`), so the swatch in the legend and the segment in the bar cannot
+   * come out two colours for the one agent.
+   */
+  accent: string
   attempted: number
   of: number
   /**
@@ -493,6 +501,7 @@ export function familyRows(reading: GateRunReading): readonly FamilyRow[] {
     of: family.of,
     segments: family.agents.map((agent) => ({
       agent: agent.agent,
+      accent: accentFor(agent.agent),
       attempted: agent.attempted,
       of: agent.of,
       width: share(agent.attempted, family.of),
@@ -506,6 +515,39 @@ function share(attempted: number, of: number): string {
     return '0%'
   }
   return `${Number(((attempted / of) * 100).toFixed(4))}%`
+}
+
+/** One mark in the panel's legend: an agent, and the accent its segments take. */
+export interface ProgressKey {
+  agent: string
+  accent: string
+}
+
+/**
+ * What the three colours are, once for the panel and never once per row.
+ *
+ * Six bars share three colours, so six legends would be the same three words five
+ * times over. The keys are read off the rows themselves rather than off
+ * `REFERENCE_AGENTS`, so the legend can only ever name the agents this run is drawing
+ * and in the order it draws them — the equipment's own order, never inferred from a
+ * name — and a swatch cannot take a colour no segment takes.
+ *
+ * Empty where no family was served: three marks above an empty panel would say this
+ * run has three agents and no families.
+ *
+ * What keeps the ramp from reading as a grade is the name printed beside every mark —
+ * the marks are in construction order and each is redundant with its agent's own
+ * word, so no reader is left inferring an order from hue.
+ */
+export function progressKeys(reading: GateRunReading): readonly ProgressKey[] {
+  const [first] = familyRows(reading)
+  if (first === undefined) {
+    return []
+  }
+  return first.segments.map((segment) => ({
+    agent: segment.agent,
+    accent: segment.accent,
+  }))
 }
 
 /** One attempt as the screen reads it: the exchange, the verdict, and where from. */

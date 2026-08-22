@@ -124,7 +124,16 @@ function TheArtefacts({ reading }: { reading: ArtefactsReading }) {
         <h2>What this bench has signed</h2>
         {reading.listed ? (
           <>
-            <p>{reading.statement}</p>
+            {/*
+              The route's sentence about the list is not printed over it.
+              Six clauses, and every one of them a thing the list shows by being the
+              list: three results per row named individually, two claims stated apart,
+              three files under the names a verifier reads, no combined mark, no figure,
+              and a run that was never signed absent because it has no artefact. A
+              paragraph asserting all six sat between the heading and the first
+              artefact. `reading.statement` is still built and still tested, and the
+              claims the last two clauses are about are on every row below.
+            */}
             <ul className="artefacts">
               {reading.artefacts.map((artefact) => (
                 <li className="artefact" key={artefact.id}>

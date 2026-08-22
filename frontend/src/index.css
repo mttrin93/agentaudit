@@ -206,13 +206,17 @@ body {
 /*
  * Between the phone and the desk, the gutter gives way before the content does.
  *
- * A 10rem gutter inside a frame this size would leave the family cards too narrow
- * to sit two abreast, and the cards are what the width is for. The breakpoint is on
- * the frame rather than the window because the rail is beside it.
+ * A 10rem gutter inside a frame this size would leave the family cards too narrow to
+ * sit two abreast, and the cards are what the width is for. 6rem rather than the 4rem
+ * it was: at 4rem the content ran almost to the frame's edge on a laptop and the page
+ * read as a screen filled rather than a page set, and two cards still have room to
+ * spare at this width. A narrow window gives it back further down, where the rail
+ * becomes a strip and 6rem a side is more of the page than is left over. The
+ * breakpoint is on the frame rather than the window because the rail is beside it.
  */
 @media (max-width: 78rem) {
   .screen {
-    padding-inline: 4rem;
+    padding-inline: 6rem;
   }
 }
 

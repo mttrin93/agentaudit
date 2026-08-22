@@ -239,6 +239,48 @@ def test_a_family_cannot_be_both_not_measurable_and_measured(
         )
 
 
+def test_a_declared_visibility_the_endpoint_contradicts_withdraws_the_two_families(
+    library: list[Case],
+) -> None:
+    """The declaration is the operator's, and the first reply is the endpoint's answer.
+
+    `exposes_tool_calls` cannot be checked at registration — nothing has been sent
+    yet — so a target registered as exposing its tool calls that answers in text only
+    used to reach the first trace-dependent verdict with nothing to read and stop the
+    whole run: no report, and four families that could have been measured lost with
+    it. Now the probe's own reply withdraws the two families that depend on it, before
+    an attempt is spent on either.
+
+    The reason is its own, not the one a target declared blind gets: what an operator
+    needs told is that what they registered and what they are running are two
+    different things.
+    """
+    with blind_target(declared_visible=True) as blind:
+        result = run_calibration(
+            cases=library,
+            targets=[blind.target],
+            attestation=BENCH_ATTESTATION,
+            plant_nonce=blind.plant_nonce,
+            approve=CONFIRMING,
+            adjudicator=ADJUDICATING,
+        )
+
+    [target_run] = result.target_runs
+    assert target_run.not_measurable == {
+        Family.SCOPE_CREEP: NotMeasurable.TRACE_DECLARED_BUT_ABSENT,
+        Family.HALT_DEFEAT: NotMeasurable.TRACE_DECLARED_BUT_ABSENT,
+    }
+    assert "registered as exposing its tool calls" in (
+        NotMeasurable.TRACE_DECLARED_BUT_ABSENT.stated()
+    )
+
+    # Not one attempt in either family, so there is no partial evidence to report or
+    # to discard — and the four families that do not read a trace were measured.
+    attacked = {attempt.family for attempt in target_run.attempts}
+    assert Family.SCOPE_CREEP not in attacked and Family.HALT_DEFEAT not in attacked
+    assert Family.DATA_LEAKAGE in attacked
+
+
 def test_a_trace_dependent_verdict_refuses_to_guess_at_a_missing_trace(
     scope_creep_case: Case,
 ) -> None:

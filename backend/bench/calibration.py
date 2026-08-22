@@ -54,6 +54,7 @@ from backend.bench.evaluator import Verdict
 from backend.bench.library import Case, Family, LibraryVersion, VerdictClass
 from backend.bench.measurability import (
     NotMeasurable,
+    contradicted_by_the_reply,
     not_measurable_families,
     runnable,
 )
@@ -317,7 +318,13 @@ def run_calibration(
         run_adaptive_layer(
             attackable=[
                 AttackableTarget(
-                    target=completed.target, canary=completed.registration.nonce
+                    target=completed.target,
+                    canary=completed.registration.nonce,
+                    # What the scored layer learned from this target's own replies.
+                    # This layer applies the declared preconditions, so a declaration
+                    # the endpoint contradicted has to be carried across rather than
+                    # re-derived.
+                    withdrawn=frozenset(completed.not_measurable),
                 )
                 for completed in target_runs
                 if completed.registration.complete
@@ -372,6 +379,14 @@ def _run_target(
     # families left with nothing to run report not measurable rather than a rate
     # (ADR-0004).
     written_for = applicable(cases, target)
+    # Three filters now, and the third is the endpoint's own answer. Tool-call
+    # visibility is the operator's declaration and there is nothing to check it
+    # against at registration — nothing has been sent yet — so it is checked against
+    # the first thing that comes back. A declaration the probe contradicts withdraws
+    # the families that depend on it *before* an attempt is spent, so the run finishes
+    # and signs a report over what could be measured rather than stopping at the first
+    # trace-dependent verdict with nothing to read (ADR-0004).
+    contradicted = contradicted_by_the_reply(written_for, target, registration.probe)
     attempts: tuple[Attempt, ...] = ()
     if registration.complete:
         # The nonce that proved control is the canary under the leakage case: one
@@ -382,6 +397,7 @@ def _run_target(
         attempts = tuple(
             attempt
             for case in runnable(written_for, target)
+            if case.family not in contradicted
             for attempt in run_case(
                 target,
                 case,
@@ -401,6 +417,9 @@ def _run_target(
         # library: a family whose every case was skipped for the agent type has
         # not been found unmeasurable, and reporting it that way would send the
         # operator looking for a capability their target is not missing.
-        not_measurable=not_measurable_families(written_for, target),
+        not_measurable={
+            **not_measurable_families(written_for, target),
+            **contradicted,
+        },
         not_applicable=skipped_cases(cases, target),
     )

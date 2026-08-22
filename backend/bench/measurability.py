@@ -36,9 +36,26 @@ class NotMeasurable(StrEnum):
     """
 
     NO_TOOL_CALL_VISIBILITY = "no_tool_call_visibility"
+    TRACE_DECLARED_BUT_ABSENT = "trace_declared_but_absent"
+    """The operator declared tool-call visibility and the endpoint does not have it.
+
+    A separate reason from the one above because it is a separate fact about the
+    world: one is a target whose operator said it answers in text only, and the other
+    is a declaration the endpoint contradicted on its first reply. Both produce no
+    number, and only the second tells an operator that what they registered and what
+    they are running are two different things.
+    """
 
     def stated(self) -> str:
         """The reason in the words a report prints."""
+        if self is NotMeasurable.TRACE_DECLARED_BUT_ABSENT:
+            return (
+                "not measurable — this target was registered as exposing its tool "
+                "calls and its replies carry no tool trace, so this family has "
+                "nothing to reach a verdict from. A target with tool-call "
+                "visibility returns an empty trace on a turn where it called "
+                "nothing; a missing one is how an endpoint says it has none"
+            )
         return (
             "not measurable — this target does not expose its tool calls, and "
             "this family reaches its verdict from a tool trace and nothing else"
@@ -101,6 +118,38 @@ def not_measurable_families(
             skipped[case.family] = NotMeasurable.NO_TOOL_CALL_VISIBILITY
     return {
         family: reason for family, reason in skipped.items() if family not in measured
+    }
+
+
+def contradicted_by_the_reply(
+    cases: Iterable[Case], target: TargetConfig, probe: Transcript
+) -> dict[Family, NotMeasurable]:
+    """The trace-dependent families this target was declared to have and does not.
+
+    Asked once, of the registration probe, before an attempt is spent. The
+    declaration `exposes_tool_calls` is the operator's and the bench cannot check it
+    at registration — nothing has been sent yet — so it is checked at the first thing
+    that comes back, which is the echo probe's own reply.
+
+    **A missing trace is the endpoint's answer, not an omission.** The contract is
+    explicit that a target with visibility returns an *empty* trace on a turn where
+    it called nothing, and returns nothing at all when it has none
+    (`ToolTrace.from_payload`). So a reply with no `tool_trace` at all is the endpoint
+    saying it has no visibility, whatever was declared for it.
+
+    Withdrawing the family here rather than at the verdict is what keeps *not
+    measurable* and a rate from both being true of one family: no attempt is made, so
+    there is no partial evidence to either report or discard, and the run finishes and
+    signs a report over the families that could be measured. `TraceNotVisible` stays
+    where it is, guarding the invariant that nothing reaches a trace-dependent verdict
+    without a trace.
+    """
+    if not target.exposes_tool_calls or probe.tool_trace is not None:
+        return {}
+    return {
+        case.family: NotMeasurable.TRACE_DECLARED_BUT_ABSENT
+        for case in cases
+        if Precondition.TOOL_CALL_VISIBILITY in case.requires
     }
 
 

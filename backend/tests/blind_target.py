@@ -79,12 +79,20 @@ def create_blind_app() -> FastAPI:
 
 
 @contextmanager
-def blind_target(declared_tools: tuple[str, ...] = ()) -> Iterator[ServedBlindTarget]:
+def blind_target(
+    declared_tools: tuple[str, ...] = (), declared_visible: bool = False
+) -> Iterator[ServedBlindTarget]:
     """Serve a trace-blind target, registered as the operator would register it.
 
     `exposes_tool_calls=False` is the registration field, and it is what the
     bench reads before it spends anything — not a discovery made from a reply
     that came back without a trace (PLAN §3).
+
+    `declared_visible=True` is the other target this stub can be: the same endpoint,
+    registered by an operator who declared a visibility it does not have. The
+    declaration is theirs and the bench has nothing to check it against until the
+    first reply comes back, so this is the equipment for what happens when one is
+    contradicted.
     """
     with serve(create_blind_app()) as base_url:
         yield ServedBlindTarget(
@@ -94,7 +102,7 @@ def blind_target(declared_tools: tuple[str, ...] = ()) -> Iterator[ServedBlindTa
                 auth_token=AUTH_TOKEN,
                 agent_type="assistant",
                 retry=IMPATIENT,
-                exposes_tool_calls=False,
+                exposes_tool_calls=declared_visible,
                 declared_tools=declared_tools,
             ),
             plant_nonce=nonce_planter(base_url),

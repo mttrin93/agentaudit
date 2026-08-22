@@ -59,6 +59,20 @@ class AttackableTarget:
     target: TargetConfig
     canary: str
 
+    withdrawn: frozenset[Family] = frozenset()
+    """Families the scored layer withdrew after the target's own first reply.
+
+    A target registered as exposing its tool calls whose replies carry none has had
+    the two trace-dependent families withdrawn before an attempt was spent on either
+    (`measurability.contradicted_by_the_reply`). The same withdrawal has to reach
+    here, because this layer applies the *declared* preconditions and would otherwise
+    hand the attacker an objective whose success condition nothing can check — an
+    episode censored by construction, and a crash at the first check.
+
+    Carried on this record rather than re-derived, so the two layers cannot come to
+    disagree about which families this target can be measured on.
+    """
+
 
 def run_adaptive_layer(
     attackable: Sequence[AttackableTarget],
@@ -73,7 +87,8 @@ def run_adaptive_layer(
     draw = rng if rng is not None else random.Random()
     blinding = Blinding.over([entry.target for entry in attackable], rng=draw)
     objectives = {
-        entry.target.name: objectives_for(cases, entry.target) for entry in attackable
+        entry.target.name: objectives_for(cases, entry.target, entry.withdrawn)
+        for entry in attackable
     }
 
     episodes: list[AdaptiveEpisode] = []
@@ -101,7 +116,11 @@ def run_adaptive_layer(
     return tuple(episodes)
 
 
-def objectives_for(cases: Sequence[Case], target: TargetConfig) -> dict[Family, Case]:
+def objectives_for(
+    cases: Sequence[Case],
+    target: TargetConfig,
+    withdrawn: frozenset[Family] = frozenset(),
+) -> dict[Family, Case]:
     """One deterministic objective per family, for the families this target can
     answer.
 
@@ -112,9 +131,15 @@ def objectives_for(cases: Sequence[Case], target: TargetConfig) -> dict[Family, 
     would produce episodes that are censored by construction — the attacker
     reading as weak because the bench gave it a question this target cannot be
     asked.
+
+    `withdrawn` is the third filter, and it is the endpoint's own answer rather than a
+    declaration: a family the scored layer withdrew because the target's replies carry
+    no trace is a family whose objective nothing here could check either.
     """
     objectives: dict[Family, Case] = {}
     for case in runnable(applicable(cases, target), target):
+        if case.family in withdrawn:
+            continue
         if case.verdict_class is VerdictClass.DETERMINISTIC:
             objectives.setdefault(case.family, case)
     return objectives

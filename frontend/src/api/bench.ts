@@ -489,6 +489,52 @@ export interface RunProgress extends RunStanding {
   adaptive: AdaptiveProgress
   transport: TransportOutcome | null
   report: ReportLocation | null
+  recent: AttemptExchange[]
+  families: FamilyRun[]
+}
+
+/**
+ * One attempt as evidence: what went out, what came back, and how it was scored.
+ *
+ * The bench serves the last one and never the log, so this arrives as a list of at
+ * most one and *nothing has come back yet* is the empty list rather than a null.
+ *
+ * `verdict` is the attacker's point of view, which is the sense this whole bench
+ * counts in: *succeeded* is the attack working.
+ */
+export interface AttemptExchange {
+  family: string
+  case_id: string
+  agent: string
+  attempt: number
+  sent: string
+  reply: string
+  verdict: string
+  verdict_class: string
+  status_code: number
+  sends: number
+}
+
+/**
+ * How far one family has got against this target, and how it is answering.
+ *
+ * The counts are the bench's and this app divides none of them: `resisted` and
+ * `succeeded` partition `attempted`, and a screen draws each against `of`, which is
+ * the family's own denominator on this run's plan. What fills as the run goes is a
+ * length; the rate that is a measurement arrives on the report with its interval and
+ * its band beside it (ADR-0005).
+ *
+ * `not_run` is the reason a family is out of the plan, or empty. A family the caller's
+ * declarations dropped has a denominator of zero, and a zero over zero drawn as an
+ * empty bar would read as one that has not started yet.
+ */
+export interface FamilyRun {
+  family: string
+  attempted: number
+  of: number
+  resisted: number
+  succeeded: number
+  not_run: string
 }
 
 /** What one run's scored layer put on the wire, against the scored ceiling. */

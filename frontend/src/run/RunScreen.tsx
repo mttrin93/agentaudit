@@ -53,12 +53,20 @@ import {
 } from './interrupt'
 import {
   adaptiveReading,
+  familyRows,
+  payloads,
   scoredReading,
   standing,
   stillGoing,
+  type FamilyRow,
   type LayerReading,
+  type PayloadRow,
   type Standing,
 } from './progress'
+// The two verdict colours and the two words beside them, from the one place they are
+// declared. A second copy here would be a second answer to *which green is resisted*,
+// and the two would only have to disagree once.
+import { ANSWER_KEYS } from '../console/gaterun'
 
 const POLL_SECONDS = 2
 /**
@@ -396,6 +404,60 @@ function Progress({
           spent. There is no third figure here: an attempt and a turn are not the
           same thing, so nothing on this screen adds them.
         </p>
+
+        {/*
+          The same two readings the gate screen draws while a gate run goes, over one
+          target instead of three agents: how far each family has got, and how each is
+          answering. Both are drawn against the same denominator — this run's plan, one
+          family at a time — so no length on the right can outrun the one for the same
+          family on the left, and what is left of either bar is what has not been
+          attempted yet.
+        */}
+        <div className="watching">
+          <div className="progress">
+            <h3>How far each family has got</h3>
+            {/* One key, because one target made these attempts. It earns its line
+                anyway: nothing on this bench is carried by hue alone, and it holds
+                the six rows here level with the six beside them. */}
+            <p className="legend">
+              <span className="key">
+                <span className="swatch scored" aria-hidden="true" />
+                attempted
+              </span>
+            </p>
+            {familyRows(progress).map((row) => (
+              <FamilyBar row={row} key={row.family} />
+            ))}
+          </div>
+          <div className="answering">
+            <h3>How each family is answering</h3>
+            <p className="legend">
+              {ANSWER_KEYS.map((key) => (
+                <span className="key" key={key.answer}>
+                  <span className={`swatch ${key.accent}`} aria-hidden="true" />
+                  {key.answer}
+                </span>
+              ))}
+            </p>
+            {familyRows(progress).map((row) => (
+              <FamilyAnswer row={row} key={row.family} />
+            ))}
+          </div>
+        </div>
+
+        {/* The call it is on, under both columns and at the width of the page: an
+            exchange is a paragraph of somebody's traffic and it reads badly in half
+            a column. */}
+        <div className="payloads">
+          <h3>The last call</h3>
+          {payloads(progress).length === 0 ? (
+            <p className="aside">
+              Nothing has come back yet. The exchange appears here as it does.
+            </p>
+          ) : (
+            payloads(progress).map((one) => <Payload one={one} key={one.key} />)
+          )}
+        </div>
       </section>
 
       {progress.report ? (
@@ -424,6 +486,122 @@ function Progress({
         </section>
       ) : null}
     </>
+  )
+}
+
+/**
+ * One family, and how much of its work is done: one bar over its own denominator.
+ *
+ * The count beside the name is the two figures the bar is drawn from, so the length
+ * is checkable rather than believable. A family the plan dropped has no bar at all —
+ * an empty track over a denominator of zero reads as one that has not started yet,
+ * and this one is never going to.
+ */
+function FamilyBar({ row }: { row: FamilyRow }) {
+  return (
+    <div className="family-bar">
+      <p className="family-name">
+        <span className="name">{row.name}</span>
+        <span className="count">
+          {row.notRun ? 'not run' : `${row.attempted} / ${row.of}`}
+        </span>
+      </p>
+      {/* The empty track is drawn for a family that is not run as well, so the six
+          rows here and the six beside them stay level with each other. Which of the
+          two kinds of empty it is, is the word in the slot above — `not run` rather
+          than `0 / 30` — and the reason is under both columns, said once. */}
+      <div className="track">
+        <span className="segment scored" style={{ width: row.done }} />
+      </div>
+    </div>
+  )
+}
+
+/**
+ * One family, and how it is answering: one bar, green then red, over the same
+ * denominator.
+ *
+ * The one place this screen colours a verdict, which is why the two colours are named
+ * in words above the six. It is a live reading of a run and not a measurement: what is
+ * left of the bar is what has not been attempted yet, and the rate — with its interval
+ * and its band — is on the report the run signs (ADR-0005).
+ *
+ * No figure beside the name. The slot to its right holds `20 / 30` on the bar to the
+ * left, and a second pair of numbers in the same place meaning something else is a
+ * fraction a reader would read as that one.
+ */
+function FamilyAnswer({ row }: { row: FamilyRow }) {
+  return (
+    <div className="family-bar">
+      <p className="family-name">
+        <span className="name">{row.name}</span>
+      </p>
+      <div className="track">
+        <span className="segment resisted" style={{ width: row.held }} />
+        <span className="segment succeeded" style={{ width: row.broke }} />
+      </div>
+    </div>
+  )
+}
+
+/**
+ * One attempt: what the bench sent, and what the target answered.
+ *
+ * The two halves are set apart the way an exchange reads — the attack, then the reply
+ * — and nothing here is coloured by its verdict: *succeeded* and *resisted* are the
+ * two answers this bench counts, and a green one beside a red one is the severity
+ * scale ADR-0005 exists to refuse. Which it was is in the bar above, where the two
+ * words are printed beside the two colours.
+ */
+function Payload({ one }: { one: PayloadRow }) {
+  return (
+    <div className="payload">
+      <div className="turn sent">
+        <Speaker />
+        <p className="bubble">{one.sent}</p>
+      </div>
+      <div className="turn reply">
+        <p className="bubble">{one.reply}</p>
+        <Speaker />
+      </div>
+    </div>
+  )
+}
+
+/**
+ * One speaker's mark: the same drawing on both turns, in that turn's own colour.
+ *
+ * The same glyph deliberately. Both ends of this exchange are agents — the bench's
+ * attacker and the target answering it — and drawing them as two different creatures
+ * would say something about the pair that is not true. What differs is which side of
+ * the card the turn sits on, which is the order the two happened in: the attack, then
+ * the answer to it.
+ *
+ * Hand-drawn at 16px in `currentColor`, the rail's own idiom, so the colour comes off
+ * the stylesheet and no dependency arrives to draw one glyph.
+ */
+function Speaker() {
+  return (
+    <svg
+      className="speaker"
+      viewBox="0 0 16 16"
+      width="16"
+      height="16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.25"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <circle cx="8" cy="1.9" r="0.85" />
+      <path d="M8 2.75V4.6" />
+      <rect x="3" y="4.6" width="10" height="8.4" rx="2.2" />
+      <path d="M1.4 8.2v2.2M14.6 8.2v2.2" />
+      <path d="M6.3 8.1v1.3M9.7 8.1v1.3" />
+      <path d="M6.5 11.3h3" />
+    </svg>
   )
 }
 

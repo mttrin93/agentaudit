@@ -32,6 +32,8 @@
 import { readFamily } from '../families'
 import type {
   AdaptiveProgress,
+  AttemptExchange,
+  FamilyRun,
   RunProgress,
   ScoredProgress,
   TransportOutcome,
@@ -320,4 +322,87 @@ export function progressView(progress: RunProgress): ProgressView {
     scored: scoredReading(progress.scored),
     adaptive: adaptiveReading(progress.adaptive),
   }
+}
+
+// --- the six families, while the run is going ------------------------------------
+
+/**
+ * One family's row: the counts it was served, and the three lengths they draw.
+ *
+ * The same reading the gate screen draws for a gate run, over one target instead of
+ * three agents (`console/gaterun.ts`). Two readings of the same six families, in the
+ * same order: how much of the work is done, and how it has been going.
+ *
+ * **Three lengths against one denominator.** `done` is the share of this family's
+ * attempts that have come back, and `held` and `broke` are how those same attempts
+ * were answered — all three taken against `of`, so what is left of a bar is what has
+ * not been attempted yet. Drawn against the attempts made so far instead, the two
+ * verdict lengths would fill the bar from the first verdict onwards: a rate with no
+ * denominator, which is the one figure this project exists to stop being read
+ * (ADR-0005).
+ */
+export interface FamilyRow {
+  family: string
+  name: string
+  attempted: number
+  of: number
+  notRun: string
+  done: string
+  held: string
+  broke: string
+}
+
+/**
+ * The six families as rows, in the order the route served them.
+ *
+ * The counts are carried and never recomputed — a console that added arithmetic to a
+ * served figure would be a second scorer. What is computed here is a width, which is
+ * a length and not a number anybody reads.
+ */
+export function familyRows(progress: RunProgress): readonly FamilyRow[] {
+  return progress.families.map((family: FamilyRun) => ({
+    family: family.family,
+    name: readFamily(family.family),
+    attempted: family.attempted,
+    of: family.of,
+    notRun: family.not_run,
+    done: share(family.attempted, family.of),
+    held: share(family.resisted, family.of),
+    broke: share(family.succeeded, family.of),
+  }))
+}
+
+/** A segment's length, and `0%` for a family that has not started or has no cases. */
+function share(count: number, of: number): string {
+  if (of === 0 || count === 0) {
+    return '0%'
+  }
+  return `${Number(((count / of) * 100).toFixed(4))}%`
+}
+
+// --- the last exchange -----------------------------------------------------------
+
+/** One attempt drawn as an exchange: the attack, and the answer to it. */
+export interface PayloadRow {
+  key: string
+  sent: string
+  reply: string
+}
+
+/**
+ * The last attempt the route served, which is one, or none before the first.
+ *
+ * A list rather than a value, and mapped rather than read at `[0]`, because the empty
+ * case is a state the screen draws in words — and because how many the route serves is
+ * the route's answer, not this module's assumption about it.
+ *
+ * Nothing here is a finding. A finding is a verdict plus its narrative and it is
+ * written in the report; this is the exchange, and the screen draws it uncoloured.
+ */
+export function payloads(progress: RunProgress): readonly PayloadRow[] {
+  return progress.recent.map((one: AttemptExchange) => ({
+    key: `${one.case_id}/${one.attempt}`,
+    sent: one.sent,
+    reply: one.reply,
+  }))
 }

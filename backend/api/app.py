@@ -712,8 +712,63 @@ class RunProgress(BaseModel):
     """Where to fetch the report, once there is one. `None` until the run
     completes."""
 
+    recent: list[AttemptPayload]
+    """The last attempt, and the exchange behind the verdict it reached.
 
-def progress_for(record: RunRecord) -> RunProgress:
+    One and never the log: a run makes a hundred and eighty, and a response that grew
+    with the run would be a response whose size is a function of how long somebody has
+    been watching. What happened before it is on the report the run signs.
+
+    A list of one rather than a field, because *nothing has come back yet* is a real
+    state and an empty list says it without a null.
+    """
+
+    families: list[FamilyRun]
+    """The six families, each over its own denominator. Six rows and no seventh.
+
+    The reading a person watching a run asked for: the position above says which
+    attempt is in flight, and says nothing about how much of the work is done or how
+    it has been going. Six rows whether or not a family has started, because a family
+    missing while the run is on another one would read as one this run is not doing.
+
+    Nothing here is added across rows and nothing is divided. A run-wide count would
+    be a total over six denominators, and a fraction of a family's attempts is a share
+    of the work that a reader would take for a rate — the rate is on the report, with
+    its interval and its band beside it (ADR-0005).
+    """
+
+
+class FamilyRun(BaseModel):
+    """How far one family has got against this target, and how it is answering.
+
+    The target-run twin of `FamilyProgress`, and flat where that one nests, because a
+    gate run attacks three agents and this attacks one. Same counts, same attacker's
+    sense: `succeeded` is the attack working.
+
+    **Counts and never a rate.** `resisted` and `succeeded` split `attempted`, they
+    are never divided here, and both are drawn against `of` — this family's own
+    denominator — so what a screen draws fills as the run goes and cannot be read as a
+    finished figure. What these answer is *how is it going*, which is a live reading;
+    *what did it measure* is the report's, where a rate arrives with its interval and
+    its band (ADR-0005).
+    """
+
+    family: str
+    attempted: int
+    of: int
+    resisted: int
+    succeeded: int
+    not_run: str = ""
+    """Why this family is not in the plan, in the bench's own words, or empty.
+
+    A family the caller's declarations dropped has a denominator of zero, and a zero
+    over zero drawn as an empty bar would read as a family that has not started yet.
+    The gap the plan already recorded is carried here so the row says which it is
+    (ADR-0015's shape: the family, and the reason, together).
+    """
+
+
+def progress_for(record: RunRecord, rule: GateRule) -> RunProgress:
     """One run as a caller polling it sees it, per layer and with no blend."""
     return RunProgress(
         run_id=record.run_id,
@@ -723,7 +778,74 @@ def progress_for(record: RunRecord) -> RunProgress:
         adaptive=_adaptive_progress(record.run_state),
         transport=_transport(record),
         report=_report(record),
+        recent=_recent_attempt(record),
+        families=_run_families(record, rule),
     )
+
+
+def _recent_attempt(record: RunRecord) -> list[AttemptPayload]:
+    """The last attempt this run made, and the exchange behind its verdict.
+
+    The same shape and the same one-at-a-time rule the gate run's reading uses, off the
+    same `RunState.attempts` — one definition of *an attempt as evidence*, so the two
+    screens cannot come to disagree about what an exchange looks like.
+    """
+    return [
+        AttemptPayload(
+            family=str(attempt.family),
+            case_id=attempt.case_id,
+            agent=attempt.target_name,
+            # One-based on the way out, for `_scored_progress`' own reason: a reader
+            # counts "the third attempt" and the record holds an index into ten.
+            attempt=attempt.index + 1,
+            sent=_message(attempt.transcript.sent),
+            reply=attempt.transcript.reply_text,
+            verdict=str(attempt.verdict),
+            verdict_class=str(attempt.verdict_class),
+            status_code=attempt.transcript.status_code,
+            sends=attempt.transcript.sends,
+        )
+        for attempt in record.run_state.attempts[-RECENT_ATTEMPTS:]
+    ]
+
+
+def _run_families(record: RunRecord, rule: GateRule) -> list[FamilyRun]:
+    """The six families, each over its own denominator, in the enum's own order.
+
+    The counts are `RunState.attempts` grouped by family — the same grouping the
+    rates are built from, without the division — and the verdicts are that same
+    grouping counted a second way. The denominator is this run's *plan*, not the
+    library: a family whose cases were dropped by a declaration is a family this run
+    will make no attempt in, and a denominator taken off the library would leave a bar
+    that can never fill.
+    """
+    made: dict[str, int] = {}
+    held: dict[str, int] = {}
+    for attempt in record.run_state.attempts:
+        name = str(attempt.family)
+        made[name] = made.get(name, 0) + 1
+        if attempt.verdict is Verdict.RESISTED:
+            held[name] = held.get(name, 0) + 1
+    rows: list[FamilyRun] = []
+    for family in Family:
+        name = str(family)
+        cases = sum(1 for case in record.plan.cases if case.family is family)
+        attempted = made.get(name, 0)
+        gap = record.plan.gaps.get(family)
+        rows.append(
+            FamilyRun(
+                family=name,
+                attempted=attempted,
+                of=cases * rule.attempts_per_case,
+                resisted=held.get(name, 0),
+                # Subtracted rather than counted a second time: every attempt carries
+                # one verdict, so the two are one partition and cannot drift apart by
+                # a verdict this branch had not heard of.
+                succeeded=attempted - held.get(name, 0),
+                not_run="" if gap is None else gap.stated(),
+            )
+        )
+    return rows
 
 
 def _scored_progress(state: RunState) -> ScoredProgress:
@@ -2589,11 +2711,14 @@ class FamilyProgress(BaseModel):
 class AttemptPayload(BaseModel):
     """One attempt as evidence: what went on the wire, what came back, the verdict.
 
-    **Served because the three agents are this bench's own equipment.** A gate run
-    attacks constructs of this project, started and stopped by it, so a transcript
-    here is the bench talking to itself — no operator's target, and nobody else's
-    traffic. `GET /runs/{id}` serves nothing of the kind for a target run and this is
-    not a precedent for it.
+    **Served for a gate run because the three agents are this bench's own
+    equipment**, and for a target run because an operator watching their own agent
+    being attacked asked to see the exchange behind the verdict that just landed. The
+    two are not the same disclosure and the difference is worth naming: a gate run's
+    transcript is the bench talking to itself, and a target run's is the operator's
+    own agent answering. It is served on the run's own route, one attempt at a time
+    and never as a log, and it does not reach the artefact — a report carries figures
+    and the boundary of the claim, never the traffic (ADR-0008).
 
     `verdict` is the attacker's point of view, which is the sense the whole bench
     counts in: *succeeded* is the attack working. `verdict_class` is how that was
@@ -3084,7 +3209,7 @@ def create_app(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"no run {run_id} was started by this bench",
             )
-        return progress_for(record)
+        return progress_for(record, bench.config.rule)
 
     def servable(run_id: str) -> SignedArtefact:
         """This run's signed artefact, or the named reason there is none to serve.

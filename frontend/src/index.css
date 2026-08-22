@@ -628,6 +628,11 @@ button:disabled {
   color: var(--quiet);
 }
 
+/* The same boxes under the two columns of bars, set off from them. */
+.watching + .said {
+  margin-top: 1.5rem;
+}
+
 /*
  * A switch drawn on, and it is a drawing.
  *
@@ -1534,6 +1539,17 @@ code {
   background: var(--agent-trivial);
 }
 
+/* One target's own progress, in the scored layer's colour.
+ *
+ * A gate run's bar is three segments because a gate run attacks three agents; a
+ * target run's is one, and the hue says which layer the attempts were made in rather
+ * than which of three made them. Nothing here says how it went — that is the bar
+ * beside it, where the two colours are named in words.
+ */
+.track .segment.scored {
+  background: var(--scored);
+}
+
 .track .segment.resisted {
   background: var(--resisted);
 }
@@ -1556,6 +1572,11 @@ code {
   gap: 0.35rem;
   align-items: center;
   white-space: nowrap;
+}
+
+/* The scored layer's own colour, for the one key a target run's progress needs. */
+.swatch.scored {
+  background: var(--scored);
 }
 
 .swatch.resisted {

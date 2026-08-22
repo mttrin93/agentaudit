@@ -46,6 +46,7 @@ from backend.bench.calibration import run_calibration
 from backend.bench.contract import TargetConfig, TargetFailure
 from backend.bench.library import Case, Family, LibraryVersion
 from backend.bench.registration import Attestation
+from backend.bench.rule import DECLARED_RULE
 from backend.bench.signing import (
     SIGNING_KEY_VARIABLE,
     NoSigningKey,
@@ -1008,6 +1009,88 @@ def test_progress_in_the_scored_layer_is_family_case_and_attempt(
     assert scored["succeeded_attempts"] is None
 
 
+def test_a_run_reports_each_family_over_its_own_denominator_while_it_goes(
+    leakage_case: Case, injection_case: Case
+) -> None:
+    """Six rows, six denominators, and no seventh figure anywhere on the response.
+
+    The position says which attempt is in flight and nothing about how much of the
+    work is done — the reading somebody watching a run actually wants. Six rows
+    whether or not a family has started, because a family missing while the run is on
+    another one would read as one this run is not doing.
+
+    The denominator is the *plan* and never the library: this run declared the
+    injection note unplanted, so that family will make no attempt and a bar drawn
+    against the library's three cases could never fill. It carries the reason
+    instead.
+
+    `resisted` and `succeeded` partition `attempted`, and neither is divided here: a
+    rate arrives with an interval and a band, on the report (ADR-0005).
+    """
+    cases = [leakage_case, injection_case]
+    with watched_reference() as watched, api(cases) as (client, bench):
+        nonce = registered(client, watched)
+        started = client.post("/runs", json=a_request(watched.target, nonce)).json()
+        record = _record(bench, started)
+        _approve(client, started["run_id"])
+        settled(record)
+        body = _progress(client, started["run_id"])
+
+    families = {row["family"]: row for row in body["families"]}
+    assert list(families) == [str(family) for family in Family]
+
+    leakage = families[str(leakage_case.family)]
+    assert leakage["of"] == DECLARED_RULE.attempts_per_case
+    assert leakage["attempted"] == leakage["of"]
+    assert leakage["resisted"] + leakage["succeeded"] == leakage["attempted"]
+    assert leakage["not_run"] == ""
+
+    # Declared unplanted by `a_request`, so the family is out of the plan and the row
+    # says so rather than showing an empty bar that nothing will ever fill.
+    injection = families[str(injection_case.family)]
+    assert (injection["of"], injection["attempted"]) == (0, 0)
+    assert "third-party note" in injection["not_run"]
+
+    # A family this library has no case for is a row of zeroes and no reason: it is
+    # not a gap the caller declared, it is a family this run has nothing to attempt.
+    unwritten = families[str(Family.HALT_DEFEAT)]
+    assert (unwritten["of"], unwritten["not_run"]) == (0, "")
+
+
+def test_a_run_carries_the_last_exchange_and_never_the_log(leakage_case: Case) -> None:
+    """One attempt, and the exchange behind the verdict it reached.
+
+    What an operator watching their own agent being attacked asked for: the payload
+    that just went out and the reply that came back. One and never the log — a
+    response that grew with the run would be a response whose size is a function of
+    how long somebody has been watching, and the sequence is on the report the run
+    signs.
+
+    The transcript reaches this route and stops there. It is not in the artefact: a
+    report carries figures and the boundary of the claim, and the traffic stays off a
+    document that leaves the building (ADR-0008).
+    """
+    with watched_reference() as watched, api([leakage_case]) as (client, bench):
+        nonce = registered(client, watched)
+        started = client.post("/runs", json=a_request(watched.target, nonce)).json()
+        record = _record(bench, started)
+        _approve(client, started["run_id"])
+        settled(record)
+        body = _progress(client, started["run_id"])
+
+    [recent] = body["recent"]
+    last = record.run_state.attempts[-1]
+    assert recent["case_id"] == last.case_id
+    assert recent["attempt"] == last.index + 1
+    assert recent["reply"] == last.transcript.reply_text
+    assert recent["sent"] and recent["verdict"] == str(last.verdict)
+
+    # The exchange is on the route and nowhere near the document.
+    assert record.report is not None
+    payload = client.get(f"/report/{started['run_id']}")
+    assert recent["reply"] not in payload.text
+
+
 def test_progress_in_the_adaptive_layer_is_family_episode_and_turn(
     leakage_case: Case,
 ) -> None:
@@ -1162,6 +1245,10 @@ def test_calls_spent_and_findings_are_per_layer_and_never_blended(
         "adaptive",
         "transport",
         "report",
+        # Two readings that are per family and per attempt rather than per layer, and
+        # neither adds anything: six rows over six denominators, and the last exchange.
+        "families",
+        "recent",
     }
     blended = state.calls_spent
     assert blended == state.spent_in(Layer.SCORED) + state.spent_in(Layer.ADAPTIVE)

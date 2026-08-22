@@ -4,6 +4,26 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--
+      One typeface, linked rather than vendored.
+
+      The stylesheet's stack resolved to whatever the machine called `system-ui`, which
+      made the bench a different instrument on a Mac, a GNOME desktop and a Windows
+      laptop — the same complaint the palette answered by having one dark palette
+      instead of two. Inter is a neutral grotesque with tabular figures, which this app
+      leans on everywhere a count is set beside another count.
+
+      Two `preconnect`s and a `display=swap`: the page renders in the fallback stack and
+      re-renders in Inter when it arrives, so a machine with no network gets the type it
+      has today and never a blank screen. Four weights, and no italic — nothing in this
+      app is set in italic.
+    -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
     <title>AgentAudit</title>
   </head>
   <body>

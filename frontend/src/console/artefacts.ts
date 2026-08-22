@@ -53,6 +53,7 @@ import {
 } from '../report/report'
 
 import { reportPath, runPath } from './rail'
+import { recordedIn } from './runs'
 
 export const WHAT_THIS_SCREEN_ANSWERS =
   'Every signed artefact this bench has produced, with the three verification ' +
@@ -102,7 +103,13 @@ export interface ArtefactReading {
   id: string
   /** The operator's own name for the endpoint. Never the endpoint (ADR-0008). */
   target: string
-  /** When the run went on the record, carried exactly as the record holds it. */
+  /**
+   * When the run went on the record, as a date and a clock time in UTC.
+   *
+   * The run list's own reading of the same instant (`runs.recordedIn`), because it is
+   * the same instant off the same record: two screens naming one moment in two forms
+   * is two moments to the person reading both.
+   */
   recordedAt: string
   /** Where that run's screen is. */
   runPath: string
@@ -208,7 +215,7 @@ function artefactReading(row: ArtefactRow): ArtefactReading {
   return {
     id: row.run_id,
     target: row.target,
-    recordedAt: row.recorded_at,
+    recordedAt: recordedIn(row.recorded_at),
     runPath: runPath(row.run_id),
     reportPath: reportPath(row.run_id),
     files: row.files.map((file) => ({

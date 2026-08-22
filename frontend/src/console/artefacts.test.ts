@@ -339,6 +339,20 @@ describe('the two claims', () => {
     }
   })
 
+  /**
+   * The recorded instant, read the way the run list reads it.
+   *
+   * One record, one moment, and two screens naming it: an operator who reads the run
+   * list and then this one is looking at two forms of the same instant, and two forms
+   * are two moments to the person holding both. Asserted here rather than trusted to
+   * the import, because the run list's own test is what pins the form.
+   */
+  it('reads the recorded instant as the run list does', () => {
+    for (const artefact of listed(LISTED).artefacts) {
+      expect(artefact.recordedAt).toBe('2026-08-19 09:38:37 UTC')
+    }
+  })
+
   it('says on every artefact that the bench computed the results', () => {
     const reading = listed(LISTED)
 

@@ -2,10 +2,18 @@
  * The artefacts an engineer can send, with the three results over each one.
  *
  * One block per artefact, in the console's own idiom: the reading column, labelled
- * uncoloured facts, `.checks` and `.check.did-not-hold` for the three results, the
- * three files as links under the names they arrive with, and `.command` for the line
- * a recipient pastes. Nothing new was invented for this screen; what it adds is one
- * more thing the existing idiom says.
+ * uncoloured facts, and `.check.did-not-hold` for a result that did not hold. Nothing
+ * new was invented for this screen; what it adds is one more thing the existing idiom
+ * says.
+ *
+ * **A box names its facts and does not explain them.** Three results, two claims and
+ * three files, each as a row of items — the verifier's sentence under each result, the
+ * claims' statements and what each file holds are on the report, which the name at the
+ * top of every box links to. One box carrying all of it was taller than the window,
+ * and a page of four was a document rather than a list of things to send.
+ *
+ * The command a recipient runs is not on this screen. `reading.command` is still built
+ * and still tested, and a recipient is handed a directory rather than this page.
  *
  * **A result is marked by its name and a border, never by a colour alone.** Every
  * check prints the verifier's own outcome — `signature_valid`, `unsigned`,
@@ -19,14 +27,17 @@
  * re-derivability over the scored layer alone, as two statements. A row that showed
  * one result would let its reader infer the strongest claim from the weakest.
  *
- * **Every row says whose check it is.** The bench computed these readings over the
- * bytes it holds; the command below is what makes the answer a recipient's. Said per
- * artefact rather than once in a footer, because what circulates is one block.
+ * **Whose check this is, is said where it is acted on.** The bench computed these
+ * readings over the bytes it holds, and that is not the check a recipient makes —
+ * `checkedBy` says so on every artefact in the reading, and the report screen prints
+ * it beside the figures somebody is about to send. This screen is the list they get
+ * to it from.
  *
  * **The files are links because there are routes.** Unlike the gate document, which
  * the gate screen names rather than links, all three of these are served — and each
  * arrives with the filename a verifier reads it by, so a browser saving the three
- * lands them in a directory that verifies with nothing in between.
+ * lands them in a directory that verifies with nothing in between. The filename is the
+ * link's text for that reason: it is what the saved file will be called.
  */
 
 import { useEffect, useState } from 'react'
@@ -146,7 +157,6 @@ function TheArtefacts({ reading }: { reading: ArtefactsReading }) {
                 </li>
               ))}
             </ul>
-            <p className="aside">{reading.checkedByTheBench}</p>
           </>
         ) : (
           <div className="citation uncited">
@@ -155,78 +165,87 @@ function TheArtefacts({ reading }: { reading: ArtefactsReading }) {
           </div>
         )}
       </section>
-
-      <section>
-        <h2>How a recipient checks one</h2>
-        <pre className="command">{reading.command}</pre>
-        <p>{reading.commandStatement}</p>
-      </section>
     </>
   )
 }
 
-/** One artefact: what it is of, its three results, its two claims, its three files. */
+/**
+ * One artefact: what it is of, its three results, its two claims, its three files.
+ *
+ * Every one of those is still here and every one of them is short. What went are the
+ * sentences under them: the verifier's paragraph under each of the three results, the
+ * two claims' statements, the line saying what each file holds, and the heading that
+ * said in a sentence what the three outcomes say in three words. A box that printed
+ * all of it ran past the height of the window on one artefact, and a list of four was
+ * a document — which is the wrong shape for the thing an engineer opens to see whether
+ * this is the one to send.
+ *
+ * The claims keep their labels and lose their statements, because the labels are the
+ * scope — *the whole document*, *the scored layer only* — and the scope is the part
+ * that must not be inferred (ADR-0010, ADR-0017). Both are on the report the name at
+ * the top of the box links to, in the words the report uses.
+ *
+ * `checkedBy` and `notAQualityClaim` are not printed. Both are still built and still
+ * tested on every artefact, and both are on the report the title links to — where a
+ * reader who is deciding whether to send this has the figures in front of them, which
+ * is where *these are the bench's own readings, not a recipient's check* is the
+ * sentence that changes what they do next. Repeated under four boxes on a list it was
+ * the longest thing on the page and the thing nobody read twice.
+ */
 function TheArtefact({ artefact }: { artefact: ArtefactReading }) {
   return (
     <>
       <h3>
         <Link to={artefact.reportPath}>{artefact.target}</Link>
       </h3>
-      <p className="standing">Signed for the run recorded {artefact.recordedAt}</p>
       <p className="aside">
-        <code>{artefact.id}</code> — <Link to={artefact.runPath}>the run</Link>
+        <code>{artefact.id}</code> — recorded {artefact.recordedAt} —{' '}
+        <Link to={artefact.runPath}>the run</Link>
       </p>
 
-      <p className="consequence">{artefact.verification.heading}</p>
-      <dl className="checks">
+      <ul className="checks-line">
         {artefact.verification.checks.map((check) => (
           <TheCheck check={check} key={check.name} />
         ))}
-      </dl>
+      </ul>
 
-      <h4>The two claims this artefact carries, printed together</h4>
-      <dl className="review">
+      {/*
+        Two items and never one line with a separator in it: integrity over the whole
+        document and re-derivability over the scored layer alone are two claims, and a
+        string holding both is a reader's invitation to read one.
+      */}
+      <ul className="claims-line">
         {artefact.verification.claims.map((claim) => (
-          <div key={claim.label}>
-            <dt>{claim.label}</dt>
-            <dd>{claim.statement}</dd>
-          </div>
+          <li key={claim.label}>{claim.label}</li>
         ))}
-      </dl>
+      </ul>
 
-      <h4>The three files, under the names a verifier reads them by</h4>
-      <ul className="files">
+      <ul className="files-line">
         {artefact.files.map((file) => (
           <li key={file.filename}>
             <a href={file.path}>
               <code>{file.filename}</code>
-            </a>{' '}
-            — {file.holds}
+            </a>
           </li>
         ))}
       </ul>
-
-      <p className="aside">{artefact.verification.checkedBy}</p>
-      <p className="aside">{artefact.verification.notAQualityClaim}</p>
     </>
   )
 }
 
 /**
- * One of the three results: its name, its outcome, and the verifier's sentence.
+ * One of the three results: its name and its outcome.
  *
  * The outcome is printed in the same element the class draws, so the fact is carried
  * by words and the border only repeats it. *Unsigned* and *signed by a key you did
  * not pin* are different facts about the sender, and one cross would show them
- * identically — which is why there is no cross.
+ * identically — which is why there is no cross. The verifier's sentence about each
+ * result is on the report; the outcome is its own name and reads without one.
  */
 function TheCheck({ check }: { check: CheckReading }) {
   return (
-    <div className={check.held ? 'check' : 'check did-not-hold'}>
-      <dt>
-        {check.name}: <strong>{check.outcome}</strong>
-      </dt>
-      <dd>{check.statement}</dd>
-    </div>
+    <li className={check.held ? 'check' : 'check did-not-hold'}>
+      {check.name}: <strong>{check.outcome}</strong>
+    </li>
   )
 }

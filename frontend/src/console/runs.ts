@@ -157,8 +157,11 @@ const STANDINGS: Record<string, string> = {
  * The seconds stay. This is a list somebody scans to find one run again, and two runs
  * started half a minute apart must not arrive as the same line. The microseconds go:
  * nothing on this screen is told apart by them.
+ *
+ * Exported for the artefact list, which reads the same recorded instant off the same
+ * record: the two screens name one moment, so they say it in one form.
  */
-function recordedIn(stamped: string): string {
+export function recordedIn(stamped: string): string {
   const at = new Date(stamped)
   if (Number.isNaN(at.getTime())) {
     // A stamp this screen cannot read is served as the record's own text. Wrong is

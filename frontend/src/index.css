@@ -1489,6 +1489,48 @@ code {
  * it is a name that has to be typed or matched rather than read at speed — and what
  * makes the directory verifiable is that all three arrive under exactly these names.
  */
+/*
+ * An artefact's three results, three names and three files, each set as a row of items
+ * rather than a stack of paragraphs.
+ *
+ * The box used to print the verifier's sentence under every result, both claims'
+ * statements, and what each of the three files holds — one artefact ran past the height
+ * of the window, and a list of four was a document. Every fact is still named; what
+ * went is the prose under the names, which the report the title links to carries in
+ * full.
+ *
+ * They wrap on a narrow window rather than scrolling: these are three independent
+ * facts, and a row that scrolls hides the third.
+ */
+.checks-line,
+.claims-line,
+.files-line {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 1.4rem;
+  margin: 0.6rem 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.9rem;
+}
+
+/* A result that did not hold keeps its rule and its colour, on the side of the item
+ * rather than the side of a block: it is still the only mark on this screen, and it is
+ * still redundant with the outcome printed beside it (ADR-0005). */
+.checks-line .check {
+  padding: 0;
+  font-size: 0.9rem;
+}
+
+.checks-line .check.did-not-hold {
+  padding-left: 0.6rem;
+}
+
+.claims-line,
+.files-line {
+  color: var(--quiet);
+}
+
 .files {
   margin: 0.4rem 0 1.2rem;
   padding-left: 1.2rem;

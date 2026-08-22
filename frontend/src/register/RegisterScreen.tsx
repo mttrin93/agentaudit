@@ -70,13 +70,22 @@ const STEPS = [
 
 type Step = (typeof STEPS)[number]
 
+/**
+ * One short title a step, and the title is the whole of the header.
+ *
+ * They were sentences — *The endpoint, and what it costs to call it*, *What the bench
+ * will be able to see* — under an eyebrow naming the app and a screen, over a line
+ * counting the steps. Three lines of chrome above a form of four fields. The name of
+ * the step is the one thing a heading has to say; what the step is *for* is the prose
+ * inside it, which every step already carries.
+ */
 const STEP_TITLES: Record<Step, string> = {
-  target: 'The endpoint, and what it costs to call it',
+  target: 'The endpoint',
   plant: 'Plant the nonce',
   'attest-0': 'Attestation 1 of 3',
   'attest-1': 'Attestation 2 of 3',
   'attest-2': 'Attestation 3 of 3',
-  tools: 'What the bench will be able to see',
+  tools: 'What the bench will see',
   register: 'Register',
 }
 
@@ -185,13 +194,19 @@ export function RegisterScreen() {
   const current = STEPS[step]
   return (
     <main className="screen">
+      {/*
+        The title, and nothing over or under it.
+
+        The eyebrow said *AgentAudit — registration*: the app's name is in the rail on
+        every screen and the rail's current row says which screen this is. The line
+        under it counted the steps and said that nothing is sent by this screen — the
+        count goes with it, and so does the claim, which was standing on all seven
+        steps including the one whose button sends. What is *actually* sent, and when,
+        is the halt this walk ends at: three attestations and two figures, and no call
+        to anybody's endpoint until an operator answers it.
+      */}
       <header>
-        <p className="eyebrow">AgentAudit — registration</p>
         <h1>{STEP_TITLES[current]}</h1>
-        <p className="steps">
-          Step {step + 1} of {STEPS.length}. Nothing is sent to your endpoint by
-          this screen.
-        </p>
       </header>
 
       {refusal ? (
@@ -295,12 +310,16 @@ interface StepProps {
 function TargetStep({ declarations, declare }: StepProps) {
   return (
     <section>
-      <p>
-        The endpoint the bench will attack, and the price you pay per call on it.
-        The price is yours to declare: a run with none reports its cost as{' '}
-        <em>not priced</em> rather than as zero, because an unknown cost and a free
-        run are different facts.
-      </p>
+      {/*
+        The line, without what an unpriced run reports.
+
+        It went on: the price is yours to declare, and a run with none reports its cost
+        as *not priced* rather than as zero, because an unknown cost and a free run are
+        different facts. That distinction is real and it is kept where it is enforced —
+        the estimate prints *not priced* on a run with no price, and the record carries
+        no zero for one. It is not something an operator needs told before typing a URL.
+      */}
+      <p>The endpoint the bench will attack, and the price you pay per call on it.</p>
       <label>
         Name
         <input

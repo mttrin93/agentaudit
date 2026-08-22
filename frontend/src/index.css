@@ -148,13 +148,17 @@
    * survives. Set explicitly rather than left to the browser's default, so that the
    * scale is a decision in this file and turning it is one edit.
    *
-   * 15px rather than the browser's 16: a bench is read at a desk on a wide screen, and
+   * 14px rather than the browser's 16: a bench is read at a desk on a wide screen, and
    * a screen of figures at 16 was set for a page of prose. Turning this and nothing
    * else is the point of the lever — the measures, the gutters and the card padding
    * are `rem` too, so the page comes in by the same proportion as its type and no
    * relationship chosen anywhere in this file is disturbed.
+   *
+   * The gutters are the one thing turned with it rather than by it. Every `rem` on the
+   * page narrows when this number does, gutters included, so holding the *same* gutter
+   * in px while the type came down took the numbers below going up.
    */
-  font-size: 15px;
+  font-size: 14px;
   /*
    * Inter, with the old stack behind it.
    *
@@ -203,26 +207,27 @@ body {
   box-sizing: border-box;
   max-width: 72rem;
   margin: 0 auto;
-  /* 10rem a side, which is the gutter of the page this was measured against. The
-   * rail is a hard edge on one side and the window is on the other, and a block of
-   * figures needs air between it and both. */
-  padding: 3rem 10rem 6rem;
+  /* 12rem a side. The rail is a hard edge on one side and the window is on the other,
+   * and a block of figures needs air between it and both — more of it than the 10rem
+   * this was, because the screens now hold rows and lines rather than paragraphs and a
+   * row set close to the frame reads as a page that ran out of room. */
+  padding: 3rem 12rem 6rem;
 }
 
 /*
  * Between the phone and the desk, the gutter gives way before the content does.
  *
- * A 10rem gutter inside a frame this size would leave the family cards too narrow to
- * sit two abreast, and the cards are what the width is for. 6rem rather than the 4rem
- * it was: at 4rem the content ran almost to the frame's edge on a laptop and the page
- * read as a screen filled rather than a page set, and two cards still have room to
- * spare at this width. A narrow window gives it back further down, where the rail
+ * A 12rem gutter inside a frame this size would leave the family cards too narrow to
+ * sit two abreast, and the cards are what the width is for. 7.5rem, up from 6rem with
+ * the type: at 4rem, which it was before that, the content ran almost to the frame's
+ * edge on a laptop and the page read as a screen filled rather than a page set, and two
+ * cards still have room to spare at this width. A narrow window gives it back further down, where the rail
  * becomes a strip and 6rem a side is more of the page than is left over. The
  * breakpoint is on the frame rather than the window because the rail is beside it.
  */
 @media (max-width: 78rem) {
   .screen {
-    padding-inline: 6rem;
+    padding-inline: 7.5rem;
   }
 }
 
@@ -291,9 +296,13 @@ h4 {
  * whose only job is to divide it. What still draws an edge is a card — a family, a
  * citation, a figure — and there an edge says *this is one object* rather than
  * *these two things are different*.
+ *
+ * 1.9rem, down from 2.6. The gap was set when a section opened on a heading and a
+ * paragraph explaining it; a screen of rows and short lines needs less of it before
+ * the space reads as a section that lost its content rather than one that ended.
  */
 section {
-  padding-top: 2.6rem;
+  padding-top: 1.9rem;
 }
 
 label {

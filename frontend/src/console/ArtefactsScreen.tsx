@@ -37,11 +37,9 @@ import type { CheckReading } from '../report/report'
 
 import {
   artefactsReading,
-  WHAT_THIS_SCREEN_ANSWERS,
   type ArtefactReading,
   type ArtefactsReading,
 } from './artefacts'
-import { CONSOLE_PATH, THE_BENCH } from './rail'
 
 /** What this screen is holding: the artefacts, or why it has none of them. */
 interface Held {
@@ -76,14 +74,16 @@ export function ArtefactsScreen() {
 
   return (
     <main className="screen">
+      {/*
+        The name of the screen and nothing over or under it.
+        The eyebrow said which app this is on a page inside the app, and the line under
+        the title said what the screen answers in five clauses — one of them the way
+        back to the bench, which the rail is already showing. Read in order they were a
+        title with a title above it and a paragraph below it, and the artefacts were
+        below that. `WHAT_THIS_SCREEN_ANSWERS` is still built and still exported.
+      */}
       <header>
-        <p className="eyebrow">AgentAudit — the documents that travel</p>
-        <h1>Signed artefacts, and what a verifier makes of them</h1>
-        <p className="steps">
-          {WHAT_THIS_SCREEN_ANSWERS}{' '}
-          <Link to={CONSOLE_PATH}>{THE_BENCH}</Link> lists the runs behind
-          them.
-        </p>
+        <h1>Signed artefacts</h1>
       </header>
 
       {held.unavailable ? (

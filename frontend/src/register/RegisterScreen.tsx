@@ -507,15 +507,26 @@ function TargetStep({
           checked={declarations.note_planted}
           onChange={(event) => declare({ note_planted: event.target.checked })}
         />
-        {/* One sentence, in plain words. It said four things: that the note is
-            third-party, that the bench cannot check it, that declaring it absent
-            skips the family and is not charged for, and that a run without it would
-            report a zero that reads as a defence. The last is the reason the box
-            exists and the others are how it works — what an operator has to decide is
-            whether the note is there. */}
+        {/*
+          *Content*, not a *planted note*, and the word `plant` is why.
+
+          This walk plants a nonce two steps later — a value that goes in the target's
+          system prompt and proves the operator controls the endpoint — and this box
+          used to say *the planted note … is in place*. Two unrelated things called
+          planting, four lines apart, and an operator read the box as something to do
+          with the nonce step. The nonce is planted; this is content the agent reads.
+
+          One sentence, in plain words: it said four things — that the content is
+          third-party, that the bench cannot check it, that declaring it absent skips
+          the family and is not charged for, and that a run without it would report a
+          zero that reads as a defence. The last is the reason the box exists and the
+          others are how it works; what an operator has to decide is whether the
+          content is there.
+        */}
         <span>
-          The planted note that the indirect prompt injection family reads is in
-          place. Without it, that family is skipped rather than run.
+          The hostile content the indirect prompt injection family reads is in place —
+          in a document, a message or a page this agent will fetch. Without it, that
+          family is skipped rather than run.
         </span>
       </label>
     </section>

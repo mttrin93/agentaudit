@@ -51,8 +51,7 @@ export const ATTESTATION_STATEMENTS: readonly Statement[] = [
     wording: 'this endpoint is a staging or sandbox environment',
     consequence:
       'A run makes 181 calls in the scored layer alone, every one of them an ' +
-      'attack, and some of them will succeed. Whatever this agent can do to ' +
-      'real data, a successful attempt may do to it.',
+      'attack, and some of them will succeed.',
   },
   {
     field: 'accepts_provider_policy_and_cost',

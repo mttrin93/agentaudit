@@ -23,6 +23,7 @@ import {
   A_FACT_ABOUT_THE_BENCH,
   gateReading,
   type GateReading,
+  THE_FAMILIES,
 } from './landing'
 
 /**
@@ -70,6 +71,35 @@ function facts(reading: GateReading): Record<string, string> {
   }
   return Object.fromEntries(reading.facts.map((fact) => [fact.label, fact.value]))
 }
+
+describe('the six families, said once', () => {
+  it('is one short sentence a family, in the enum’s own order', () => {
+    expect(THE_FAMILIES.map((one) => one.family)).toEqual([
+      'indirect_prompt_injection',
+      'scope_creep',
+      'wrongful_commitment',
+      'data_leakage',
+      'halt_defeat',
+      'disclosure_denial',
+    ])
+    // Short, and one sentence: the region is six lines a reader takes in at once, and
+    // a paragraph a family is the region this page keeps removing.
+    for (const one of THE_FAMILIES) {
+      expect(one.says.length).toBeLessThan(110)
+      expect(one.says.split('. ')).toHaveLength(1)
+      expect(one.says.endsWith('.')).toBe(true)
+    }
+  })
+
+  it('carries no figure, because a family is not a measurement of one', () => {
+    const said = THE_FAMILIES.map((one) => one.says).join(' ')
+
+    // No rate, no count, no floor, and no word that would be read as one: what a
+    // family *is* has nothing to do with how a target answered it.
+    expect(said).not.toMatch(/[0-9]/)
+    expect(said.toLowerCase()).not.toMatch(/rate|attempts|denominator|interval|κ/)
+  })
+})
 
 describe('the gate run the bench last passed', () => {
   it('states the outcome, the date it was decided and the version it was earned at', () => {

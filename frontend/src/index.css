@@ -519,23 +519,109 @@ button:disabled {
  * the styling is where the resemblance stops. `.lead` is the filled one — one per
  * card set, on the errand to do first.
  */
+/*
+ * The three errands' controls, and all three are drawn the same.
+ *
+ * The filled mint was spent on the lead card alone — register first, because an
+ * operator with nothing registered can usefully do one of the three — and the other two
+ * were outlined in the hairline every block on the page is edged with, which made them
+ * read as the disabled halves of a set. All three are doors, they are the only doors on
+ * this screen, and the order of the cards is what says which to open first.
+ */
+/*
+ * The six families, each in a sentence: two columns of three on a page, one on a phone.
+ *
+ * A definition list and not cards, because a card is a door and none of these is one —
+ * the region says what the six words on every other screen mean, and a reader passes
+ * through it once. The name is set in the ink and the sentence under it in the quiet,
+ * so the six names read as a column even where the sentences run to two lines.
+ */
+.said {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr));
+  gap: 1rem;
+  margin: 0;
+}
+
+/* One family to a box, in the idiom every other block on the page is made of: paper,
+ * a hairline, and the same radius. */
+.said > div {
+  padding: 0.9rem 1rem;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.said dt {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+  font-weight: 600;
+}
+
+.said dd {
+  margin: 0.3rem 0 0;
+  font-size: 0.9rem;
+  color: var(--quiet);
+}
+
+/*
+ * A switch drawn on, and it is a drawing.
+ *
+ * The six families are the library this bench ships and every run attacks all of them,
+ * so the mark says *on by default* and there is nothing here to turn off. It is a
+ * `span` with `role="img"` rather than a checkbox: a control that refused to move would
+ * be a worse lie than a picture that never claimed to be one, and nothing in this app
+ * is drawn as an affordance it does not have.
+ *
+ * In the house mint, which is what this stylesheet signs its chrome in — not the
+ * answering panel's green, which means a verdict and is confined to the card that
+ * carries one.
+ */
+.switch {
+  flex: none;
+  position: relative;
+  width: 1.75rem;
+  height: 1rem;
+  background: var(--line);
+  border-radius: var(--radius-pill);
+}
+
+.switch::after {
+  content: '';
+  position: absolute;
+  top: 0.125rem;
+  left: 0.125rem;
+  width: 0.75rem;
+  height: 0.75rem;
+  background: var(--ink);
+  border-radius: 50%;
+}
+
+.switch.on {
+  background: var(--accent);
+}
+
+.switch.on::after {
+  left: auto;
+  right: 0.125rem;
+  background: var(--paper);
+}
+
 .act {
   align-self: start;
   padding: 0.45rem 1rem;
   font-size: 0.9rem;
   text-decoration: none;
-  border: 1px solid var(--line);
+  color: var(--accent);
+  background: var(--accent-paper);
+  border: 1px solid var(--accent);
   border-radius: var(--radius);
 }
 
 .act:hover {
-  border-color: var(--accent);
-}
-
-.act.lead {
-  color: var(--accent);
-  background: var(--accent-paper);
-  border-color: var(--accent);
+  border-color: var(--ink);
 }
 
 a {

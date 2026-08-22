@@ -32,67 +32,42 @@
  * of it cost that (ADR-0007, ADR-0010). There is no totals row on this screen and
  * the view model has no field for one.
  *
- * **The last region is the security questionnaire**, answered out of the attempts
- * of the most recent run that produced a signed report: a family per question, its
- * rate over that family's own denominator, its interval and confidence, and what
- * that family does not test. It is the block this whole project points at — the
- * displaced default is a questionnaire filled in from recollection, under
- * commercial pressure, for a reader who cannot check a line of it (ADR-0001).
- * **Nothing in it spans two families** — no total, no average, no rank, no posture
- * figure — and the three kinds of nothing stay three, because a family the bench
- * could not measure printed as a zero is an untested control reported as a defended
- * one (`questionnaire.ts`).
+ * **The last region is the six families**, one sentence each: what the failure *is*,
+ * the agent doing the thing, with no figure anywhere in it. An operator meets
+ * `indirect prompt injection` on four screens before anything on any of them says what
+ * one is, and this is where it is said.
  *
- * **It reads no new route.** The runs on the record say which runs completed, each
- * run's own record says where its report is served, and the report is the payload
- * the report screen already reads. Nothing was added to the API for this region,
- * and the path to a report is never built here — it is read off the run, so this
- * screen cannot go looking somewhere the bench does not serve.
+ * **Where the security questionnaire was.** That region answered a questionnaire out of
+ * the most recent signed report — a family per question, its rate over that family's
+ * own denominator, its interval and confidence — and it is the block this project
+ * points at, against the displaced default of a questionnaire filled in from
+ * recollection for a reader who cannot check a line of it (ADR-0001). It is off this
+ * screen and not out of the bench: `questionnaire.ts` still builds it, its tests still
+ * hold every claim in it, and a rate with its interval beside it is what the report
+ * screen is for. This screen now reads exactly one route, `GET /runs`.
  *
- * The two regions that read a route hold their own state, deliberately not one
- * between them: a list of runs an operator can navigate by is worth having whether
- * or not a report could be read out of one of them, and one failure state across
- * the two would take the list down with the answers.
- *
- * The view models are `landing.ts`, `runs.ts` and `questionnaire.ts`, and they are
- * where the wording lives; this file is markup and is driven by hand, as every
- * screen in this app is.
+ * The view models are `landing.ts` and `runs.ts`, and they are where the wording
+ * lives; this file is markup and is driven by hand, as every screen in this app is.
  */
 
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 
 import { readFamily } from '../families'
-import {
-  benchRuns,
-  reportPayload,
-  runProgress,
-  type RunList,
-} from '../api/bench'
+import { benchArtefacts, benchRuns, type ArtefactList, type RunList } from '../api/bench'
 import {
   WHAT_THIS_CONSOLE_DOES,
   WHAT_THIS_INSTRUMENT_IS,
   type ConsoleDoes,
+  THE_FAMILIES,
 } from './landing'
 import {
-  drawnFrom,
-  NO_SIGNED_REPORT_YET,
-  ONE_FAMILY_PER_ANSWER,
-  questionnaire,
-  theRunsToDrawFrom,
-  WHAT_THIS_BLOCK_ANSWERS,
-  type AnsweredQuestion,
-  type Questionnaire,
-  type QuestionnaireAnswer,
-} from './questionnaire'
-import { ARTEFACTS_PATH } from './rail'
-import {
   runsReading,
-  TWO_COLUMNS_NEVER_ONE,
   type AdaptiveColumn,
   type RunsReading,
   type ScoredColumn,
 } from './runs'
+import { artefactsReading, type ArtefactsReading } from './artefacts'
 
 /** What the second region is holding: the runs, or why it could not read them. */
 interface HeldRuns {
@@ -102,27 +77,17 @@ interface HeldRuns {
 
 const NO_LIST_YET: HeldRuns = { list: null, unavailable: '' }
 
-/**
- * What the last region is holding: the answers, or which kind of nothing it has.
- *
- * Three empty fields and not one, because *no run has produced a signed report* and
- * *the bench did not answer* are two different facts, and neither is an answer to a
- * question on the block. A single `unavailable` would report the first as the
- * second, which is a bench that looks broken to an operator whose bench is merely
- * new.
- */
-interface HeldAnswers {
-  answers: Questionnaire | null
-  /** Why there is no report to answer from, when there is none. */
-  none: string
+/** What the artefacts region is holding: the list, or why it could not read it. */
+interface HeldArtefacts {
+  list: ArtefactList | null
   unavailable: string
 }
 
-const NO_ANSWERS_YET: HeldAnswers = { answers: null, none: '', unavailable: '' }
+const NO_ARTEFACTS_LIST_YET: HeldArtefacts = { list: null, unavailable: '' }
 
 export function LandingScreen() {
   const [runs, setRuns] = useState<HeldRuns>(NO_LIST_YET)
-  const [asked, setAsked] = useState<HeldAnswers>(NO_ANSWERS_YET)
+  const [signed, setSigned] = useState<HeldArtefacts>(NO_ARTEFACTS_LIST_YET)
 
   useEffect(() => {
     let current = true
@@ -144,42 +109,25 @@ export function LandingScreen() {
     }
   }, [])
 
-  /**
-   * The most recent run that produced a signed report, read for its answers.
+  /*
+   * The artefacts, on their own state and deliberately not on the runs' state.
    *
-   * Walked most-recent-first rather than assuming the newest completed run has an
-   * artefact, because completing and being signed are two facts: the run's own
-   * record is what advertises where its report is, and a run with none says why in
-   * its own words. In practice the walk stops at the first candidate — a bench with
-   * no signing key refuses to boot (ADR-0020) — so this is a fallback rather than a
-   * loop that runs.
+   * A list of runs an operator can navigate by is worth having whether or not the
+   * artefacts could be read, and one failure state across the two would take the list
+   * down with them — the same reason the questionnaire that used to be here held its
+   * own.
    */
   useEffect(() => {
     let current = true
     const read = async () => {
       try {
-        const list = await benchRuns()
-        for (const row of theRunsToDrawFrom(list)) {
-          const progress = await runProgress(row.run_id)
-          if (progress.report === null) {
-            continue
-          }
-          const payload = await reportPayload(progress.report.path)
-          if (current) {
-            setAsked({
-              answers: questionnaire(payload, drawnFrom(row)),
-              none: '',
-              unavailable: '',
-            })
-          }
-          return
-        }
+        const list = await benchArtefacts()
         if (current) {
-          setAsked({ answers: null, none: NO_SIGNED_REPORT_YET, unavailable: '' })
+          setSigned({ list, unavailable: '' })
         }
       } catch (unknown: unknown) {
         if (current) {
-          setAsked({ answers: null, none: '', unavailable: `${unknown}` })
+          setSigned({ list: null, unavailable: `${unknown}` })
         }
       }
     }
@@ -210,13 +158,17 @@ export function LandingScreen() {
       </section>
 
       <section>
+        {/*
+          The heading and then the runs.
+
+          Two paragraphs stood here. One said what the two columns are and why they are
+          never added — which the rows say by being two columns with two headings and no
+          third; the reason they are not added is `runs.ts`'s to hold, and it holds it
+          where the columns are built. The other pointed at the signed artefacts screen,
+          which is a row in the rail on the left of this page and a card two sections
+          above it.
+        */}
         <h2>Your runs</h2>
-        <p>{TWO_COLUMNS_NEVER_ONE}</p>
-        <p className="steps">
-          The artefact a completed run left behind, with its three verification
-          results named individually and the three files a recipient checks, is on{' '}
-          <Link to={ARTEFACTS_PATH}>the signed artefacts screen</Link>.
-        </p>
 
         {runs.unavailable ? (
           <div className="citation uncited" role="alert">
@@ -236,156 +188,110 @@ export function LandingScreen() {
       </section>
 
       <section>
-        <h2>The security questionnaire, answered from attempts</h2>
-        <p>{WHAT_THIS_BLOCK_ANSWERS}</p>
-        <p>{ONE_FAMILY_PER_ANSWER}</p>
+        {/*
+          The artefacts, in the shape the runs above them are in.
 
-        {asked.unavailable ? (
+          A summary and not the artefacts screen: the target, when the run went on the
+          record, the one line naming how its three checks settled, and the two links a
+          reader wants — the report a recipient may already hold, and the run it came
+          from. The three results one by one, the two claims and the three files a
+          verifier saves are on the signed artefacts screen, which is a rail row and a
+          card at the top of this page.
+        */}
+        <h2>Your artefacts</h2>
+
+        {signed.unavailable ? (
           <div className="citation uncited" role="alert">
-            <h3>This bench did not answer for the report these answers come from</h3>
-            <p>{asked.unavailable}</p>
+            <h3>This bench did not answer for its artefacts</h3>
+            <p>{signed.unavailable}</p>
             <p className="aside">
-              Not the same fact as a bench with no signed report, and not an answer
-              to any question below: what is unknown here is what it would have
-              answered, so nothing is <em>not tested</em>, <em>not measurable</em> or
-              a rate of zero on the strength of this.
+              Not the same fact as a bench that has signed nothing: what is unknown
+              here is what it would have listed, so nothing below should be read as{' '}
+              <em>none</em>.
             </p>
           </div>
-        ) : asked.none ? (
-          <div className="citation uncited">
-            <h3>No run on this bench has produced a signed report</h3>
-            <p>{asked.none}</p>
-          </div>
-        ) : asked.answers === null ? (
-          <p className="aside">Reading the most recent signed report…</p>
+        ) : signed.list === null ? (
+          <p className="aside">Reading the artefacts on the record…</p>
         ) : (
-          <Answers questionnaire={asked.answers} />
+          <Artefacts reading={artefactsReading(signed.list)} />
         )}
+      </section>
+
+      {/*
+        The six families, each in a sentence, where the questionnaire region was.
+
+        That region answered a questionnaire out of the most recent signed report — a
+        family per question, its rate over its own denominator, its interval and its
+        confidence — and it was the block this project points at. It is gone from this
+        screen and not from the bench: `questionnaire.ts` still builds it and its tests
+        still hold every claim about it, and the report screen is where a reader meets a
+        rate with its interval beside it.
+
+        What is here instead is what this page was missing: an operator meets
+        `indirect prompt injection` on four screens before anything says what one is.
+        Six sentences, no figure in any of them, and the names read as words.
+      */}
+      <section>
+        <h2>The families</h2>
+        <dl className="said">
+          {THE_FAMILIES.map((one) => (
+            <div key={one.family}>
+              <dt>
+                {readFamily(one.family)}
+                {/*
+                  A switch drawn on and not a switch. These six are the library the
+                  bench ships and every run attacks all of them, so there is nothing
+                  here to turn off — a real control that refused to move would be a
+                  worse lie than a mark that never claimed to be one. `role="img"` with
+                  a label, because it is a picture of a state and not a checkbox: a
+                  keyboard never lands on it and a screen reader reads the words.
+                */}
+                <span className="switch on" role="img" aria-label="on by default" />
+              </dt>
+              <dd>{one.says}</dd>
+            </div>
+          ))}
+        </dl>
       </section>
     </main>
   )
 }
 
 /**
- * The answers, and the one run every one of them was drawn from.
+ * The artefacts on the record, or the stated fact that there are none.
  *
- * A stack of blocks and never a table, for the reason the report screen's families
- * are: a table of rates wants a footer, and the footer is where a reader is handed
- * the figure across six families that this bench does not stand behind (ADR-0005).
- * The blocks reuse the report screen's own `.family` idiom, uncoloured — no band,
- * no rate and no answer here is tinted, because a colour scale over *holds*, *weak*
- * and *fails* is the severity scale the report exists to refuse.
+ * The runs' own shape — an ordered list of blocks, no table, nothing summarising the
+ * column — because these are the same runs seen from the other end: one that finished
+ * and was signed. The order is the route's, most recent first, and nothing is filtered:
+ * an artefact whose signature did not verify is the one an engineer most needs to see,
+ * and its own line says how it settled.
  */
-function Answers({ questionnaire: asked }: { questionnaire: Questionnaire }) {
-  const from = asked.drawnFrom
-  return (
-    <>
-      <div className="citation">
-        <h3>Drawn from one run</h3>
-        <dl className="at">
-          <div>
-            <dt>target</dt>
-            <dd>{from.target}</dd>
-          </div>
-          <div>
-            <dt>recorded</dt>
-            <dd>{from.recordedAt}</dd>
-          </div>
-          <div>
-            <dt>run</dt>
-            <dd>
-              <code>{from.runId}</code>
-            </dd>
-          </div>
-        </dl>
-        <p>
-          <Link to={from.path}>Read the signed report these answers came out of</Link>
-        </p>
-        <p className="aside">{from.statement}</p>
-      </div>
-
-      <div className="families">
-        {asked.answers.map((answer) => (
-          <TheAnswer answer={answer} key={keyFor(answer)} />
-        ))}
-      </div>
-    </>
-  )
-}
-
-/** One answer per family, and per category the bench never tests. */
-function keyFor(answer: QuestionnaireAnswer): string {
-  return answer.kind === 'not_tested'
-    ? `not_tested-${answer.category}`
-    : `${answer.kind}-${answer.family}`
-}
-
-/**
- * One question, in four shapes.
- *
- * Three of the four carry no figure at all and are drawn without the place a figure
- * would go — dashed, with the reason where the rate would have been — because the
- * surest way for *withheld*, *not measurable* or *not tested* to be read as a zero
- * is to be drawn in the same box with an empty number in it.
- */
-function TheAnswer({ answer }: { answer: QuestionnaireAnswer }) {
-  if (answer.kind === 'answered') {
-    return <Answered answer={answer} />
-  }
-  if (answer.kind === 'not_tested') {
+function Artefacts({ reading }: { reading: ArtefactsReading }) {
+  if (!reading.listed) {
     return (
-      <div className="family absent">
-        <h3>{answer.category}</h3>
-        <p className="at">not tested — {answer.reason}</p>
-        <p>{answer.stated}</p>
-        <p className="aside">{answer.note}</p>
+      <div className="citation uncited">
+        <h3>No signed artefact on the record</h3>
       </div>
     )
   }
   return (
-    <div className="family absent">
-      <h3>{readFamily(answer.family)}</h3>
-      <p>{answer.question}</p>
-      <p className="at">
-        {answer.kind === 'withheld' ? 'rate not published' : 'not measurable'} —{' '}
-        {answer.reason}
-      </p>
-      <p>{answer.stated}</p>
-      <p className="aside">{answer.note}</p>
-    </div>
-  )
-}
-
-/**
- * One question this bench answered, with the rate beside its own denominator.
- *
- * The counts are set beside the rate and not under it: a figure an engineer pastes
- * into a customer's document travels as far as the line it is on, and a rate that
- * leaves its denominator behind is the over-claim this block replaces.
- */
-function Answered({ answer }: { answer: AnsweredQuestion }) {
-  return (
-    <div className="family">
-      <h3>{readFamily(answer.family)}</h3>
-      <p>{answer.question}</p>
-      <p>
-        <span className="calls">{answer.rate}</span>
-        <span className="kind">{answer.counts}</span>
-      </p>
-      <p>
-        Interval: <strong>{answer.interval}</strong> at {answer.confidence}{' '}
-        confidence, around this family’s rate and no other’s.
-      </p>
-      <p>
-        Band: <strong>{answer.band}</strong> — {answer.bandReads}
-      </p>
-      {answer.limits.map((limit) => (
-        <p className="aside" key={limit.identifier}>
-          {limit.identifier}: these cases test one case within it. They do not test{' '}
-          {limit.doesNotTest}.
-        </p>
+    <ol className="runs">
+      {reading.artefacts.map((artefact) => (
+        <li className="run" key={artefact.id}>
+          <h3>
+            <Link to={artefact.reportPath}>{artefact.target}</Link>
+          </h3>
+          <p className="standing">
+            Signed for the run recorded {artefact.recordedAt}
+          </p>
+          <p className="consequence">{artefact.verification.heading}</p>
+          <p className="aside">
+            <code>{artefact.id}</code> —{' '}
+            <Link to={artefact.runPath}>the run</Link>
+          </p>
+        </li>
       ))}
-    </div>
+    </ol>
   )
 }
 
@@ -399,11 +305,15 @@ function Answered({ answer }: { answer: AnsweredQuestion }) {
  * (`.figures` in the stylesheet).
  */
 function Runs({ reading }: { reading: RunsReading }) {
+  // With no runs, the heading and nothing under it. It carried the record's own
+  // sentence — nothing registered in this process, a fact about the bench and not about
+  // any target, register one and it appears here — which is three clauses under a
+  // heading that says the whole of it. `RunsReading.statement` is still built and still
+  // tested.
   if (!reading.listed) {
     return (
       <div className="citation uncited">
         <h3>No runs on the record</h3>
-        <p>{reading.statement}</p>
       </div>
     )
   }
@@ -455,16 +365,19 @@ function Spend({ column }: { column: ScoredColumn | AdaptiveColumn }) {
  *
  * A `Link` and not a `button`, styled as the control it is: it navigates, and a
  * button that navigates is a control a keyboard and a screen reader are told the
- * wrong thing about. The lead card takes the filled treatment because it is the one
- * errand an operator with nothing registered can usefully do, which is a fact about
- * the order of the work rather than about the colour.
+ * wrong thing about.
+ *
+ * All three take the same treatment. The filled one used to be the lead card's alone,
+ * which left the other two outlined in the same hairline every block on the page is
+ * edged with — three doors, one of them drawn as a door. `lead` still says which errand
+ * comes first, and the order of the cards is where a reader sees it.
  */
 function Card({ card }: { card: ConsoleDoes }) {
   return (
     <div className="card">
       <h3>{card.name}</h3>
       <p>{card.does}</p>
-      <Link className={card.lead ? 'act lead' : 'act'} to={card.path}>
+      <Link className="act" to={card.path}>
         {card.act}
       </Link>
     </div>

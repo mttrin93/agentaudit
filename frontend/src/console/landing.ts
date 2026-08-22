@@ -78,9 +78,11 @@ export const WHAT_THIS_INSTRUMENT_IS =
  * rate, no outcome and nowhere to put one — the front door says what the console
  * does, and every figure in this application belongs to the screen that measured it.
  *
- * **`lead` is the errand to do first, not a colour.** An operator with nothing
- * registered can do exactly one of these three usefully, and that is the one the
- * card set points at. The stylesheet spends the filled control on it.
+ * **`lead` is the errand to do first, and now only that.** An operator with nothing
+ * registered can do exactly one of these three usefully, and that is the one the card
+ * set points at — first in the sequence, which is where a reader meets it. The
+ * stylesheet used to spend the filled control on it and draws all three alike now, so
+ * this flag says which errand comes first and nothing about how it is painted.
  */
 export interface ConsoleDoes {
   /** The screen this card opens, off `rail.ts`. */
@@ -124,6 +126,63 @@ export const WHAT_THIS_CONSOLE_DOES: readonly ConsoleDoes[] = [
       'over the bytes themselves.',
     act: 'Open artefacts',
     lead: false,
+  },
+]
+
+/** One family, and the failure it is the name of. */
+export interface FamilySays {
+  /** The wire name, as every record spells it. Read as words on the way out. */
+  family: string
+  says: string
+}
+
+/**
+ * The six families, each in one sentence, in the enum's own order.
+ *
+ * A reader meets `indirect prompt injection` on four screens before anything on any of
+ * them says what one is. Six sentences, and each says what the failure *is* — the
+ * agent doing the thing — rather than what the bench does about it: the denominators,
+ * the attempts per case and the three reference agents are the instrument, and they are
+ * said once at the top of this page.
+ *
+ * **Not a second vocabulary.** `questionnaire.ts` words the same six as questions about
+ * the reader's own agent, because that is what a questionnaire asks; these are the same
+ * six failures stated. Two wordings of one set, and no third — a family added to the
+ * bench needs a line here on the day it exists, which is why this is a list beside the
+ * enum's order rather than a lookup that silently answers nothing.
+ *
+ * **No figure in any of them.** Not a rate, not a count, not a floor: a sentence about
+ * what a family is has nothing to do with how a target answered it, and a number here
+ * would be read as one.
+ */
+export const THE_FAMILIES: readonly FamilySays[] = [
+  {
+    family: 'indirect_prompt_injection',
+    says:
+      'Content the agent retrieved carries instructions its operator never gave, ' +
+      'and the agent acts on them.',
+  },
+  {
+    family: 'scope_creep',
+    says: 'The agent uses a tool, or reaches a system, outside the task it was given.',
+  },
+  {
+    family: 'wrongful_commitment',
+    says:
+      'The agent commits its operator to something it has no authority to commit ' +
+      'them to.',
+  },
+  {
+    family: 'data_leakage',
+    says: 'The agent discloses what is inside its own configuration or context.',
+  },
+  {
+    family: 'halt_defeat',
+    says: 'The agent is told to stop, and does not stop or does not stay stopped.',
+  },
+  {
+    family: 'disclosure_denial',
+    says: 'The agent is asked whether it is an AI system, and does not say that it is.',
   },
 ]
 

@@ -44,9 +44,7 @@ export const ATTESTATION_STATEMENTS: readonly Statement[] = [
     wording: 'I am authorised to test this endpoint',
     consequence:
       'The bench fires jailbreak payloads at whatever answers this URL. ' +
-      'Pointed at somebody else’s system it is an attack, and the nonce you ' +
-      'plant next is the proof that this one is yours: only somebody who can ' +
-      'edit the target’s configuration can plant it.',
+      'Pointed at somebody else’s system it is an attack.',
   },
   {
     field: 'not_production',

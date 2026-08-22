@@ -794,10 +794,7 @@ function AttestationStep({ index, declarations, declare }: AttestationProps) {
         </label>
       ) : null}
       <p className="aside">
-        All three statements are required and each is recorded separately, so the
-        record shows <em>what</em> was attested rather than that somebody agreed.
-        It is the liability record and the Article 12 record in one artefact
-        (ADR-0007).
+        All three statements are required and each is recorded separately.
       </p>
     </section>
   )

@@ -62,6 +62,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 
+import { readFamily } from '../families'
 import {
   benchRuns,
   reportPayload,
@@ -343,7 +344,7 @@ function TheAnswer({ answer }: { answer: QuestionnaireAnswer }) {
   }
   return (
     <div className="family absent">
-      <h3>{answer.family}</h3>
+      <h3>{readFamily(answer.family)}</h3>
       <p>{answer.question}</p>
       <p className="at">
         {answer.kind === 'withheld' ? 'rate not published' : 'not measurable'} —{' '}
@@ -365,7 +366,7 @@ function TheAnswer({ answer }: { answer: QuestionnaireAnswer }) {
 function Answered({ answer }: { answer: AnsweredQuestion }) {
   return (
     <div className="family">
-      <h3>{answer.family}</h3>
+      <h3>{readFamily(answer.family)}</h3>
       <p>{answer.question}</p>
       <p>
         <span className="calls">{answer.rate}</span>

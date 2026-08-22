@@ -36,6 +36,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 
+import { readFamily } from '../families'
 import {
   reportPayload,
   reportVerification,
@@ -222,7 +223,7 @@ function TheReport({ view, where }: { view: ReportView; where: ReportLocation })
         <p className="aside">{view.adaptive.reproducibility}</p>
         {view.adaptive.episodes.map((episode) => (
           <p key={`${episode.family}-${episode.description}`}>
-            <strong>{episode.family}</strong> — {episode.outcome}, over{' '}
+            <strong>{readFamily(episode.family)}</strong> — {episode.outcome}, over{' '}
             {episode.turns}. {episode.description}.
           </p>
         ))}
@@ -260,7 +261,7 @@ function TheHeadline({ headline }: { headline: Headline }) {
       {headline.defeated.map((defeat) => (
         <div className="defeat" key={defeat.control}>
           <h3>
-            {defeat.control} — claims {defeat.family}
+            {defeat.control} — claims {readFamily(defeat.family)}
           </h3>
           <p>{defeat.stated}</p>
           <p className="aside">Broken by {defeat.brokenBy.join(', ')}.</p>
@@ -315,7 +316,7 @@ function TheFamily({ answer }: { answer: FamilyAnswer }) {
   if (answer.kind === 'withheld') {
     return (
       <div className="family absent">
-        <h3>{answer.family}</h3>
+        <h3>{readFamily(answer.family)}</h3>
         <p className="at">rate not published — {answer.reason}</p>
         <p>{answer.stated}</p>
         <p className="aside">{answer.note}</p>
@@ -325,7 +326,7 @@ function TheFamily({ answer }: { answer: FamilyAnswer }) {
   if (answer.kind === 'not_measurable') {
     return (
       <div className="family absent">
-        <h3>{answer.family}</h3>
+        <h3>{readFamily(answer.family)}</h3>
         <p className="at">not measurable — {answer.reason}</p>
         <p>{answer.stated}</p>
         <p className="aside">{answer.note}</p>
@@ -335,7 +336,7 @@ function TheFamily({ answer }: { answer: FamilyAnswer }) {
   const figures = answer.figures
   return (
     <div className="family">
-      <h3>{answer.family}</h3>
+      <h3>{readFamily(answer.family)}</h3>
       <p>
         <span className="calls">{figures.rate}</span>
         <span className="kind">{figures.counts}</span>

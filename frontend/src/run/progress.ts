@@ -29,6 +29,7 @@
  * this module for an episode that resisted, so nothing here can assign one.
  */
 
+import { readFamily } from '../families'
 import type {
   AdaptiveProgress,
   RunProgress,
@@ -113,7 +114,7 @@ export function scoredReading(scored: ScoredProgress): LayerReading {
     title: 'Scored layer',
     reached: scored.reached,
     units: SCORED_UNITS,
-    at: at === null ? null : [at.family, at.case_id, `${at.attempt}`],
+    at: at === null ? null : [readFamily(at.family), at.case_id, `${at.attempt}`],
     statement: scored.statement,
     callsSpent: scored.calls_spent,
   }
@@ -127,7 +128,7 @@ export function adaptiveReading(adaptive: AdaptiveProgress): LayerReading {
     title: 'Adaptive layer',
     reached: adaptive.reached,
     units: ADAPTIVE_UNITS,
-    at: at === null ? null : [at.family, `${at.episode}`, `${at.turn}`],
+    at: at === null ? null : [readFamily(at.family), `${at.episode}`, `${at.turn}`],
     statement: adaptive.statement,
     callsSpent: adaptive.calls_spent,
   }

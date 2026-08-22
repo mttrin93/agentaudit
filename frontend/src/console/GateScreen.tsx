@@ -72,6 +72,7 @@ import {
   type GateRunStart,
   type GateRunStarted,
 } from '../api/bench'
+import { readFamily } from '../families'
 import type { LayerReading } from '../run/progress'
 import {
   gateScreen,
@@ -1048,7 +1049,7 @@ function FamilyBar({ row }: { row: FamilyRow }) {
   return (
     <div className="family-bar">
       <p className="family-name">
-        <span className="name">{row.family}</span>
+        <span className="name">{readFamily(row.family)}</span>
         <span className="count">
           {row.attempted} / {row.of}
         </span>
@@ -1228,7 +1229,7 @@ function Facts({ facts }: { facts: Fact[] }) {
 function FamilyFigure({ family }: { family: FamilyReading }) {
   return (
     <div className={family.set_aside ? 'family set-aside' : 'family'}>
-      <h3>{family.family}</h3>
+      <h3>{readFamily(family.family)}</h3>
       <div className="rate-line">
         <ul className="rates">
           {family.rates.map((rate) => (

@@ -654,9 +654,10 @@ select {
   font-size: 0.95rem;
 }
 
+/* Not in the identifier face: the heading is the family read as words, and the name
+ * the record keeps — underscores and all — is what `readFamily` was called on. */
 .family h3 {
   margin-top: 0;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
 .family .calls {
@@ -1173,7 +1174,9 @@ code {
 }
 
 .family-name .name {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  /* The words and not the identifier, for the reason `.family h3` gives: mono with a
+   * space in it is an identifier misspelled. The count beside it stays tabular. */
+  font-family: inherit;
 }
 
 .family-name .count {

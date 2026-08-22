@@ -678,7 +678,9 @@ describe('while the gate run is in flight', () => {
 
     expect(scored.units).toEqual(['family', 'case', 'attempt'])
     expect(adaptive.units).toEqual(['family', 'episode', 'turn'])
-    expect(scored.at).toEqual(['data_leakage', 'data-leakage-002', '7'])
+    // The family read as words and the case id as the record writes it: the position
+    // is what a person reads, and only the family is a name rather than an id.
+    expect(scored.at).toEqual(['data leakage', 'data-leakage-002', '7'])
     // The layer that has not started says so rather than reporting a zero position:
     // a zero there would read as a layer that ran and found nothing.
     expect(adaptive.reached).toBe(false)

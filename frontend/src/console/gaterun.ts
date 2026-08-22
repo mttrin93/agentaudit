@@ -56,6 +56,7 @@ import type {
   StartGateRunBody,
   WroteBack,
 } from '../api/bench'
+import { readFamily } from '../families'
 import type { CostFigure } from '../run/interrupt'
 import { adaptiveReading, scoredReading, type LayerReading } from '../run/progress'
 import {
@@ -893,7 +894,7 @@ export function decidedView(reading: DecidedRun): DecidedBlock[] {
       kind: 'excluded',
       heading: 'Excluded from the counts',
       excluded: decision.excluded.map((family) => ({
-        label: family.family,
+        label: readFamily(family.family),
         value: family.stated,
       })),
     })

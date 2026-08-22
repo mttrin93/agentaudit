@@ -805,7 +805,7 @@ def a_run(name: str, cases: list[Case], successes: int) -> TargetRun:
         registration=Registration(
             target=target,
             nonce="nonce",
-            complete=True,
+            echoed=True,
             probe=probe,
             attestation=AttestationRecord.of(BENCH_ATTESTATION, target),
         ),

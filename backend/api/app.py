@@ -247,7 +247,7 @@ having checked (`admission.py`).
 """
 
 PLANT_STATEMENT = (
-    "Plant this value in the target's configuration before starting a run."
+    "Plant this value in the target's system prompt before starting a run."
 )
 """The one instruction, with the four things it also said taken off it.
 
@@ -452,6 +452,22 @@ class StartRunRequest(BaseModel):
     content: the family reads whether a planted instruction was *carried out*, and
     without the note it would report a clean zero that reads as a defence. Declared
     false, the family is not run and the estimate does not charge for it.
+    """
+
+    nonce_planted: bool = True
+    """Whether the registration nonce is in the target's configuration.
+
+    Declared false, this is the operator waiving the proof of control (ADR-0007, as
+    amended). It is the one declaration on this request that relaxes a guard rather
+    than describing the target, and it does three things, all of them stated
+    somewhere a reader will meet them: the run still sends its echo probe but a
+    missing echo no longer stops it; the data-leakage family is dropped from the plan,
+    because its canary *is* this value and a string nowhere in the target cannot leak;
+    and the artefact records that control was declared and not proved.
+
+    Defaults to `True`, so a caller that says nothing gets the guard. The default has
+    to be the strict one: a waiver that could be obtained by omitting a field is a
+    waiver nobody makes on purpose.
     """
 
 
@@ -2990,6 +3006,7 @@ def create_app(
                 nonce=request.nonce,
                 price=price,
                 note_planted=request.note_planted,
+                nonce_planted=request.nonce_planted,
             )
         except NonceNotIssued as unregistered:
             raise HTTPException(

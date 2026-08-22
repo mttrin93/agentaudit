@@ -69,6 +69,30 @@ def test_a_target_that_does_not_echo_the_nonce_is_refused_before_any_attempt(
     assert result.run_state.attempts == []
 
 
+def test_a_waived_proof_lets_the_run_go_ahead_and_never_says_the_echo_came(
+    leakage_case: Case,
+) -> None:
+    """ADR-0007 as amended: the run may start on the declaration, and the record says.
+
+    Same non-echoing target as the test above and the same probe, and the only
+    difference is what a missing echo is allowed to stop. What must not move is the
+    other field: `echoed` is what the endpoint did, so a waiver that made it true
+    would be the bench recording a proof nobody produced — and every reader of the
+    artefact downstream reads that field, not the declaration.
+
+    Nothing here drops the leakage family, because nothing at this level knows what
+    was planted. That is `plan_for`'s job, one layer up, where the declaration
+    arrives (`test_api_runs.py`).
+    """
+    result = calibrate(leakage_case, model="stub:parrot", proof_waived=True)
+
+    [target_run] = result.target_runs
+    assert target_run.registration.echoed is False
+    assert target_run.registration.waived is True
+    assert target_run.registration.complete
+    assert len(target_run.attempts) == DECLARED_RULE.attempts_per_case
+
+
 def test_a_target_that_registers_but_does_not_leak_is_resisted(
     leakage_case: Case,
 ) -> None:

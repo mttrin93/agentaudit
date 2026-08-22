@@ -361,7 +361,10 @@ export function RegisterScreen() {
  */
 function canLeave(step: Step, declarations: Declarations): boolean {
   if (step === 'plant') {
-    return Boolean(declarations.nonce) && declarations.nonce_planted
+    return (
+      Boolean(declarations.nonce) &&
+      (declarations.nonce_planted || declarations.proof_waived)
+    )
   }
   if (step.startsWith('attest-')) {
     const statement = ATTESTATION_STATEMENTS[Number(step.slice('attest-'.length))]
@@ -642,15 +645,6 @@ interface PlantProps extends StepProps {
 function PlantStep({ declarations, declare, issued, issue, busy }: PlantProps) {
   return (
     <section>
-      <p>
-        The bench issues a value; you plant it in the target’s system prompt.{' '}
-        <strong>
-          Registration cannot complete until the target echoes it back.
-        </strong>{' '}
-        Only somebody who can edit that configuration can plant it, which is what
-        makes the echo proof that you control the endpoint rather than a claim about
-        it.
-      </p>
       {/*
         The value's second job, said here because here is where it is planted.
 
@@ -672,30 +666,95 @@ function PlantStep({ declarations, declare, issued, issue, busy }: PlantProps) {
           <p>{issued.statement}</p>
           <h3>The probe the run will send, verbatim</h3>
           <pre>{issued.echo_probe}</pre>
-          <p className="aside">
-            The echo is checked by the run’s own first call, which happens after
-            you answer the cost interrupt on the next screen — the probe is a call
-            on your endpoint, and the halt comes before anything is spent. A target
-            that does not answer it with this value is not attempted, and this
-            screen is where you come back to.
-          </p>
           <label className="declaration">
             <input
               type="checkbox"
               checked={declarations.nonce_planted}
-              onChange={(event) => declare({ nonce_planted: event.target.checked })}
+              onChange={(event) =>
+                declare({
+                  nonce_planted: event.target.checked,
+                  // Planting it retracts the waiver. Leaving both standing would let
+                  // a run go out declaring the value planted *and* the proof waived,
+                  // which is two different runs described at once.
+                  proof_waived: event.target.checked ? false : declarations.proof_waived,
+                })
+              }
             />
             <span>
               This value is in the target’s system prompt and the target has
               reloaded.
             </span>
           </label>
+          {declarations.nonce_planted ? null : <WaiveTheProof declare={declare} waived={declarations.proof_waived} />}
         </>
       ) : (
         <button type="button" onClick={() => void issue()} disabled={busy}>
           {busy ? 'Issuing…' : 'Issue a nonce'}
         </button>
       )}
+    </section>
+  )
+}
+
+/**
+ * Starting without the proof, and what it costs — offered only where it applies.
+ *
+ * ADR-0007 made the echo the whole of this bench's authorisation story: a tool that
+ * takes a URL and a bearer token from a form and fires jailbreak payloads at
+ * whatever answers is, pointed at a live URL, an open attack proxy, and the echo is
+ * the one mechanism that separates an operator testing their own agent from anybody
+ * testing anybody's. The amendment lets an operator who cannot write into their
+ * target's configuration proceed anyway. What it does not do is pretend the two are
+ * the same, so this box states the three things that change, in the order they bite.
+ *
+ * **Hidden once the value is declared planted**, because an operator who planted it
+ * has nothing to waive, and an offer to skip a step that has been completed is an
+ * invitation to skip it.
+ *
+ * Each bullet is its claim and the argument is cut. The reasoning behind them is on
+ * the record where it belongs — ADR-0007 for what the echo is for, `plan_for` for why
+ * the leakage family is dropped, the provenance block for what the artefact carries —
+ * and a warning nobody finishes reading warns nobody.
+ */
+function WaiveTheProof({
+  declare,
+  waived,
+}: {
+  declare: (changed: Partial<Declarations>) => void
+  waived: boolean
+}) {
+  return (
+    <section className="waiver">
+      <h3>Or start without proving control</h3>
+      <p>
+        If you cannot put the value, the run can go ahead on your declaration alone.
+        Three things change:
+      </p>
+      <ul>
+        <li>
+          <strong>Nothing checks that this endpoint is yours.</strong>
+        </li>
+        <li>
+          <strong>Data leakage is not run.</strong> That family extracts this same
+          value, and a canary planted nowhere cannot leak: run anyway, it would
+          report a clean thirty out of thirty against an attack that was never
+          possible.
+        </li>
+        <li>
+          <strong>The artefact says so, permanently.</strong>
+        </li>
+      </ul>
+      <label className="declaration">
+        <input
+          type="checkbox"
+          checked={waived}
+          onChange={(event) => declare({ proof_waived: event.target.checked })}
+        />
+        <span>
+          I cannot plant this value, I am authorised to test this endpoint anyway,
+          and I am starting the run without the proof.
+        </span>
+      </label>
     </section>
   )
 }
@@ -815,7 +874,9 @@ function RegisterStep({ declarations, request }: RegisterProps) {
         <dt>Nonce</dt>
         <dd>
           {declarations.nonce || '—'}
-          {declarations.nonce_planted ? ' — declared planted' : ' — not planted'}
+          {declarations.nonce_planted
+            ? ' — declared planted'
+            : ' — not planted, control declared and not proved'}
         </dd>
         <dt>Tool calls</dt>
         <dd>

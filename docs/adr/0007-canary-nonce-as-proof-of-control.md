@@ -42,3 +42,30 @@ status: accepted
   safe to confirm without reading further. What is priced rounds up.
 - **A mid-episode abort records the episode as censored, never as resisted.** Budget exhaustion that read as target strength would be infrastructure scored as a security result, which is the discipline this project already applies to timeouts, 401s, malformed replies and rate limits, arriving at a new surface. Censoring is also the statistically correct treatment — see [ADR-0011](./0011-the-adaptive-attacker-is-label-blind.md).
 - The "security guard" is the **authorisation guard**, not a prompt-injection filter on the bench's own model, and it is in scope rather than optional. A tool whose function is attacking network endpoints does not file its authorisation control under optional extras.
+- **Amended: an operator may waive the echo, and the artefact carries that they did.**
+  The requirement above assumed every operator can write into the configuration of
+  the agent they are testing, and that is not true of a third-party or hosted agent
+  somebody else deploys. A run may now start on the declaration alone. Three things
+  hold it honest, and all three are mechanism rather than wording:
+
+  - **The probe is still sent.** What the waiver changes is whether a missing echo
+    *stops* the run, never what the bench looks at. `Registration` carries `echoed`
+    and `waived` as two fields, and no code path writes the declaration into the
+    first — a target that echoes anyway proved control, whatever was declared.
+  - **The data-leakage family is not run.** The nonce is that family's canary, so an
+    unplanted value means thirty attempts against a string nowhere in the target and
+    a clean rate against an attack that was never possible. It is dropped by
+    `plan_for` and reported as a declared gap, the same treatment the unplanted
+    indirect-injection note gets, and the estimate does not charge for it.
+  - **The report says which it was.** `control_proved` travels in the provenance
+    block beside the attestation, inside the signed bytes and printed in the
+    rendering: *proved* against an endpoint that echoed, *declared, and not proved*
+    otherwise. An unchecked attestation and a checked one are not the same evidence,
+    and a document that presented them alike would be the relaxation costing a
+    recipient something rather than the operator.
+
+  What this gives up is real and is not recovered by any of the three: on a waived
+  run, nothing separates an operator testing their own agent from anyone testing
+  anyone's, which is the property the decision above was written to establish. The
+  waiver is per run, declared in the request, and there is no setting that turns it
+  on for the next one.

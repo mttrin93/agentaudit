@@ -308,6 +308,20 @@ class Provenance:
     gate: GateCitation | None = None
     """The bench's own gate result, or nothing — and nothing still prints a line."""
 
+    control_proved: bool = True
+    """Whether the target echoed the registration nonce (ADR-0007, as amended).
+
+    The authorisation fact, and it travels with the attestation because it is what
+    the attestation is worth: *authorised to test this endpoint* checked against an
+    endpoint that proved it, or the same words with nothing behind them. A run may
+    now start on the declaration alone, so a reader of the artefact has to be able to
+    tell the two apart — a document that omitted this would present both as the same
+    kind of evidence.
+
+    Defaults to `True` because the echo is still the ordinary path and every caller
+    that does not pass it is one where the run stopped unless the nonce came back.
+    """
+
     def __post_init__(self) -> None:
         missing = sorted(
             layer.value for layer in Layer if layer not in self.calls_spent
@@ -660,6 +674,11 @@ def _provenance(payload: TargetPayload) -> dict[str, Any]:
             "endpoint_sha256": record.endpoint_hash,
             "recorded_at": record.recorded_at.isoformat(),
             "statements": [wording for _, wording in record.attestation.STATEMENTS],
+            # Beside the statements rather than under a heading of its own: this is
+            # what the first of them is worth. Proved means the endpoint echoed a
+            # value only somebody who can configure it could have planted; declared
+            # means nobody checked.
+            "control_proved": provenance.control_proved,
         },
         "models": {
             "calibration": provenance.models.calibration,

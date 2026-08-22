@@ -174,6 +174,11 @@ def payload_for(
             # Read off the record that authorised the run rather than off the
             # request, so a report cannot name somebody who never attested.
             attestation=target_run.registration.attestation,
+            # What the endpoint did, never what the caller declared: a run started
+            # with the proof waived and answered by a target that echoed anyway
+            # proved control, and one that did not is said so in the document
+            # (ADR-0007, as amended).
+            control_proved=target_run.registration.echoed,
             models=config.models,
             library=state.library,
             # Per layer, as the record keeps them. Nothing adds these two.

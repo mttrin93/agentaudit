@@ -21,6 +21,7 @@ fired it (ADR-0015).
 """
 
 import json
+from dataclasses import replace
 from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any, get_type_hints
@@ -198,6 +199,16 @@ def test_the_provenance_block_says_how_this_was_made_and_what_it_cost_per_layer(
     assert block["attestation"]["identity"] == "Matteo Rinaldi"
     assert block["attestation"]["endpoint_sha256"] == "a" * 64
     assert "https://" not in json.dumps(block)
+
+    # What the attestation is worth, beside the statements themselves. A run may now
+    # start on the declaration alone (ADR-0007, as amended), so *authorised to test
+    # this endpoint* checked against an endpoint that echoed and the same words with
+    # nothing behind them have to be two different readings of one document.
+    assert block["attestation"]["control_proved"] is True
+    waived = document(
+        a_payload(provenance=replace(a_provenance(), control_proved=False))
+    )["provenance"]
+    assert waived["attestation"]["control_proved"] is False
 
     assert block["target"] == "customer-agent"
     assert block["models"] == {

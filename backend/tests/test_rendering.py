@@ -37,6 +37,8 @@ from backend.bench.payload import TargetPayload, canonical_bytes, document, figu
 from backend.bench.rendering import (
     ANNEX_IV_POINTS,
     BAND_IN_A_TARGET_REPORT,
+    CONTROL_DECLARED,
+    CONTROL_PROVED,
     FORMAT_UNVALIDATED,
     INTEGRITY_CLAIM,
     RE_DERIVABILITY_CLAIM,
@@ -51,6 +53,7 @@ from backend.bench.scorer import Band, GateOutcome
 from backend.tests.test_payload import (
     FORBIDDEN_IN_A_KEY,
     a_payload,
+    a_provenance,
     a_result,
     an_entry,
 )
@@ -206,6 +209,38 @@ def test_a_rendering_that_printed_its_own_digest_is_refused_rather_than_written(
         publish(a_payload(), tmp_path)
 
     assert list(tmp_path.iterdir()) == []
+
+
+# --- What the attestation is worth (ADR-0007, as amended) ---------------------
+
+
+def test_the_document_says_whether_control_of_the_endpoint_was_proved_or_declared() -> (
+    None
+):
+    """A run may now start without the echo, and the artefact carries which it was.
+
+    The echo is the only mechanism this bench has for *this endpoint is the
+    attester's*, so a document that printed the three statements and stopped would
+    present a checked attestation and an unchecked one as the same evidence. Both
+    lines say what a reader should do about it: the declared one says in as many
+    words that the ownership of the endpoint these figures describe is not
+    established here.
+
+    Inside the rendering, and so inside the digest the payload binds and the
+    signature covers — this cannot be edited out of a document that still verifies.
+    """
+    proved = render(a_payload())
+    declared = render(
+        a_payload(provenance=replace(a_provenance(), control_proved=False))
+    )
+
+    assert CONTROL_PROVED in proved
+    assert CONTROL_DECLARED not in proved
+
+    assert CONTROL_DECLARED in declared
+    assert CONTROL_PROVED not in declared
+    assert "declared, and not proved" in declared
+    assert "does not establish" in CONTROL_DECLARED
 
 
 # --- Two claims, printed together (ADR-0017) ---------------------------------

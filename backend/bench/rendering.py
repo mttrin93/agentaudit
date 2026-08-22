@@ -485,6 +485,33 @@ def _general_description(body: Mapping[str, Any]) -> Section:
     )
 
 
+CONTROL_PROVED = (
+    "- **Control of the endpoint**: proved. The target echoed the registration "
+    "nonce, a value only somebody who can edit its configuration could have "
+    "planted, so the first statement above was checked and not only made "
+    "(ADR-0007)."
+)
+
+CONTROL_DECLARED = (
+    "- **Control of the endpoint**: declared, and not proved. This run was started "
+    "with the nonce echo waived, so the first statement above stands on the "
+    "attester's word alone and nothing here checked it. Read the figures below as "
+    "measurements of an endpoint whose ownership this document does not establish "
+    "(ADR-0007, as amended)."
+)
+
+
+def _control(proved: bool) -> str:
+    """The line that says what the attestation is worth on this run.
+
+    Two whole sentences rather than a flag, and the declared one says what a reader
+    should do about it. A document that printed `control_proved: false` and left it
+    there would be telling a recipient a fact whose consequence they have to work out
+    while holding a report about somebody else's agent.
+    """
+    return CONTROL_PROVED if proved else CONTROL_DECLARED
+
+
 def _headline(declared: Mapping[str, Any]) -> tuple[str, ...]:
     """The controls this target declared and the bench broke, or the stated absence.
 
@@ -545,6 +572,8 @@ def _how_the_run_was_made(body: Mapping[str, Any]) -> Section:
             "The three statements this run could not start without, as recorded:",
             "",
             *(f"- Attested — {wording}." for wording in attestation["statements"]),
+            "",
+            _control(attestation["control_proved"]),
             "",
             "### The three declared models",
             "",

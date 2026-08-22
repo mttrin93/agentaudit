@@ -156,6 +156,24 @@ describe('the nonce', () => {
     )
   })
 
+  it('may be waived, and the waiver is a statement rather than an unticked box', () => {
+    // ADR-0007 as amended: an operator who cannot write into their target's
+    // configuration may start the run on their declaration alone. What the walk may
+    // not do is treat silence as that declaration — leaving the planted box unticked
+    // is an unfinished step, and only the waiver itself gets past it.
+    const unplanted = { ...fullyDeclared(), nonce_planted: false }
+    const waived = { ...unplanted, proof_waived: true }
+
+    const blocked = registrationRequest(unplanted)
+    const ready = registrationRequest(waived)
+
+    expect(blocked.kind).toBe('blocked')
+    expect(ready.kind).toBe('ready')
+    // What the bench acts on is the value, not the waiver: it drops the leakage
+    // family and records control as unproved on the strength of this field.
+    expect(ready.kind === 'ready' && ready.body.nonce_planted).toBe(false)
+  })
+
   it('is refused by name when the target never echoed it, and the bench keeps the words', () => {
     const refused: RunStanding = {
       run_id: 'run-1',

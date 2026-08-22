@@ -290,6 +290,7 @@ def a_request(
     price_per_call: str | None = "0.002",
     withheld: str | None = None,
     note_planted: bool = False,
+    nonce_planted: bool = True,
 ) -> dict[str, Any]:
     """One start request, with any one of the three statements withheld."""
     attestation = dict.fromkeys(STATEMENT_FIELDS, True)
@@ -309,6 +310,7 @@ def a_request(
         "nonce": nonce,
         "cost": {"price_per_call": price_per_call, "currency": "USD"},
         "note_planted": note_planted,
+        "nonce_planted": nonce_planted,
     }
 
 
@@ -846,6 +848,52 @@ def test_a_family_whose_note_is_not_planted_is_not_run_and_says_why(
     assert with_note["families_not_run"] == {}
     assert with_note["cases"] == 2
     assert with_note["estimate"]["scored"]["calls"] == 21
+
+
+def test_a_run_that_waives_the_proof_of_control_does_not_run_the_leakage_family(
+    leakage_case: Case, injection_case: Case
+) -> None:
+    """The same argument as the note, one family over (ADR-0007, as amended).
+
+    The registration nonce *is* the leakage canary — one planted value, two roles —
+    so an operator who declares it is not planted has declared that the string that
+    family goes after is nowhere in their target. Run anyway, every attempt comes
+    back resisted and the report carries a clean rate against an attack that was
+    never possible: the same false defence the note declaration exists to prevent,
+    reached through the other door.
+
+    The estimate follows the plan, so the family that will not run is not charged
+    for either.
+    """
+    cases = [leakage_case, injection_case]
+    with watched_reference() as watched, api(cases) as (client, bench):
+        waived = client.post(
+            "/runs",
+            json=a_request(
+                watched.target,
+                registered(client, watched),
+                note_planted=True,
+                nonce_planted=False,
+            ),
+        ).json()
+        planted = client.post(
+            "/runs",
+            json=a_request(
+                watched.target, registered(client, watched), note_planted=True
+            ),
+        ).json()
+
+    gap = waived["families_not_run"][str(Family.DATA_LEAKAGE)]
+    assert "not run" in gap
+    assert "registration nonce" in gap
+    assert waived["cases"] == 1
+    assert waived["estimate"]["scored"]["calls"] == 11
+
+    # And nothing about the waiver touches the other family, or the run that planted
+    # the value: the declaration drops one family and is not a mode the bench is in.
+    assert planted["families_not_run"] == {}
+    assert planted["cases"] == 2
+    assert planted["estimate"]["scored"]["calls"] == 21
 
 
 def test_an_answer_that_arrives_after_the_wait_ran_out_is_refused() -> None:

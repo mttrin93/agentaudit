@@ -382,6 +382,33 @@ legend {
  * what to paste — so the bodies are `pre`, at the size the echo probe is shown at,
  * and nothing between them competes with them for attention.
  */
+/*
+ * Starting a run without the proof of control, and what it costs.
+ *
+ * Set apart from the step it sits in — its own rule above it, its own heading —
+ * because it is not another field on the form: it is the one control on this walk
+ * that gives something up. Not painted as a refusal, which is a state the bench is
+ * in; this is a choice, and the colour it is offered in should not decide it.
+ */
+.waiver {
+  margin-top: 1.5rem;
+  padding-top: 1.2rem;
+  border-top: 1px solid var(--line);
+}
+
+.waiver h3 {
+  margin-bottom: 0.4rem;
+}
+
+.waiver ul {
+  margin: 0.8rem 0;
+  padding-left: 1.2rem;
+}
+
+.waiver li {
+  margin-bottom: 0.6rem;
+}
+
 details.plant {
   margin-top: 1rem;
 }

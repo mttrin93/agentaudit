@@ -168,6 +168,7 @@ class DeclaredGap(StrEnum):
 
     NO_ADJUDICATOR = "no_adjudicator"
     NOTE_NOT_PLANTED = "note_not_planted"
+    NONCE_NOT_PLANTED = "nonce_not_planted"
 
     def stated(self) -> str:
         match self:
@@ -184,6 +185,13 @@ class DeclaredGap(StrEnum):
                     "content the target retrieves, and the caller declared it is "
                     "not in place. Run without it, the family would report a clean "
                     "zero that reads as a defence and is not one"
+                )
+            case DeclaredGap.NONCE_NOT_PLANTED:
+                return (
+                    "not run: this family extracts the registration nonce, and the "
+                    "caller started this run without planting it. A canary that is "
+                    "nowhere in the target cannot leak, so every attempt would "
+                    "report resisted against an attack that was never possible"
                 )
 
 
@@ -250,7 +258,9 @@ class RunPlan:
     gaps: Mapping[Family, DeclaredGap]
 
 
-def plan_for(config: BenchConfig, note_planted: bool) -> RunPlan:
+def plan_for(
+    config: BenchConfig, note_planted: bool, nonce_planted: bool = True
+) -> RunPlan:
     """Which of the library's cases this run may attempt, and why the rest are out.
 
     Selected on `Case.verdict_class` and on the family, never on the family name
@@ -275,6 +285,17 @@ def plan_for(config: BenchConfig, note_planted: bool) -> RunPlan:
         if any(case.family is injection for case in cases):
             gaps[injection] = DeclaredGap.NOTE_NOT_PLANTED
         cases = [case for case in cases if case.family is not injection]
+
+    # The same argument one family over. The registration nonce is the leakage
+    # canary — one planted value, two roles (ADR-0007) — so a run whose operator
+    # never planted it is a run whose leakage cases go after a string that is
+    # nowhere in the target. Thirty attempts would come back resisted and the
+    # report would read as a defence that was never tested.
+    if not nonce_planted:
+        leakage = Family.DATA_LEAKAGE
+        if any(case.family is leakage for case in cases):
+            gaps[leakage] = DeclaredGap.NONCE_NOT_PLANTED
+        cases = [case for case in cases if case.family is not leakage]
 
     return RunPlan(cases=tuple(cases), gaps=gaps)
 
@@ -323,6 +344,17 @@ class RunRecord:
     budget: RunBudget
     run_state: RunState
     presented: BudgetPayload
+    proof_waived: bool = False
+    """The operator started this run without planting the nonce (ADR-0007, amended).
+
+    Held on the record because it decides two things and outlives both: the run still
+    sends its echo probe but is not stopped by a missing echo, and the leakage family
+    is dropped from the plan rather than measured against a value nobody planted. The
+    artefact says which of the two ways the run was authorised, and it says it from
+    what the registration recorded rather than from this field — this is the
+    declaration, and that is what the endpoint did.
+    """
+
     recorded_at: datetime = field(default_factory=lambda: datetime.now(tz=UTC))
     """When this run went on the record: the moment the attestation was taken and
     the estimate declared.
@@ -347,7 +379,8 @@ class RunRecord:
         "and nothing has been spent, and nothing will be until this estimate is "
         "answered. The nonce is checked by the run's own registration probe, "
         "which is the first call it makes — a target that does not echo it is "
-        "not attempted"
+        "not attempted, unless the operator declared the proof waived when they "
+        "started this run"
     )
     confirmed_by: str = ""
     result: CalibrationResult | None = None
@@ -568,6 +601,7 @@ class BenchRuns:
         nonce: str,
         price: CallPrice | None,
         note_planted: bool,
+        nonce_planted: bool = True,
     ) -> RunRecord:
         """Declare the estimate, start the run, and return once it has halted.
 
@@ -581,7 +615,7 @@ class BenchRuns:
         if not issued:
             raise NonceNotIssued(nonce)
 
-        plan = plan_for(self._config, note_planted)
+        plan = plan_for(self._config, note_planted, nonce_planted)
         budget = RunBudget.declare(
             cases=plan.cases,
             targets=[target],
@@ -596,6 +630,7 @@ class BenchRuns:
             target=target,
             attestation=attestation,
             nonce=nonce,
+            proof_waived=not nonce_planted,
             plan=plan,
             budget=budget,
             run_state=RunState(budget=budget, library=LibraryVersion.of(plan.cases)),
@@ -698,6 +733,7 @@ def _execute(record: RunRecord, config: BenchConfig, pending: PendingApproval) -
             budget=record.budget,
             run_state=record.run_state,
             planted_nonces={record.target.name: record.nonce},
+            proof_waived=record.proof_waived,
         )
     except BudgetExceeded as abort:
         record.settle(
@@ -746,6 +782,15 @@ def _execute(record: RunRecord, config: BenchConfig, pending: PendingApproval) -
         f"the run finished inside the ceiling that was confirmed by "
         f"{record.confirmed_by}"
     )
+    if not target_run.registration.echoed:
+        # Reached only by a run started with the proof waived, since a run without
+        # the waiver stopped above. Said on the record and not left to the artefact:
+        # this is the sentence a poller reads, and a run that measured an endpoint
+        # nobody proved control of should not read as an ordinary finish.
+        finished = (
+            f"{finished}, against an endpoint whose control was declared and not "
+            "proved — the nonce was never echoed and this run waived that proof"
+        )
     if isinstance(record.report, Unsigned):
         # Said here rather than left to the report route, because this is the
         # sentence a poller reads: a run whose status says completed and whose

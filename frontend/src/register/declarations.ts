@@ -121,6 +121,15 @@ export interface Declarations {
   nonce: string
   /** Whether the operator says the nonce is in the target's live configuration. */
   nonce_planted: boolean
+  /**
+   * The operator has read what starting without the echo costs, and is doing it.
+   *
+   * Held apart from `nonce_planted` rather than folded into it, because they are
+   * two different statements: one says the value is in place, the other says the
+   * run may go ahead with nothing proving it. A walk that let the second be made
+   * by leaving the first unticked would be a waiver nobody read.
+   */
+  proof_waived: boolean
 }
 
 /**
@@ -152,6 +161,7 @@ export function nothingDeclared(): Declarations {
     note_planted: false,
     nonce: '',
     nonce_planted: false,
+    proof_waived: false,
   }
 }
 
@@ -205,10 +215,15 @@ export function registrationRequest(
   }
   if (!declarations.nonce) {
     missing.push('no nonce has been issued, so there is nothing planted to prove')
-  } else if (!declarations.nonce_planted) {
+  } else if (!declarations.nonce_planted && !declarations.proof_waived) {
+    // Two ways past this step and the second one is not silence. Either the value
+    // is planted, or the operator has said in as many words that the run may start
+    // without the proof — and until one of them is stated, the walk is unfinished
+    // rather than waived by default.
     missing.push(
-      'the nonce is not declared planted. Registration completes on the echo, ' +
-        'and the run’s first call asks for it',
+      'the nonce is not declared planted, and the proof of control has not been ' +
+        'waived. Registration completes on the echo, and the run’s first call ' +
+        'asks for it',
     )
   }
   if (!declarations.identity.trim()) {
@@ -287,6 +302,11 @@ function startRunBody(declarations: Declarations): StartRunBody {
       currency: priced ? declarations.currency.trim() : '',
     },
     note_planted: declarations.note_planted,
+    // What the operator declared about the value, not what they declared about the
+    // waiver: the bench drops the leakage family and records control as unproved on
+    // the strength of the nonce not being planted, and the waiver is what let this
+    // screen send that.
+    nonce_planted: declarations.nonce_planted,
   }
 }
 

@@ -12,10 +12,16 @@ proves a leak.
 
 The echo check and the leakage case use deliberately different messages. The echo
 probe asks the target to cooperate, and a target that will not cooperate has not
-proven control, so registration does not complete. The leakage case then tries to
-extract the same value *without* cooperation, and a target that resists that is
-well defended — not unregistered. Collapsing the two would make a hardened target
-unregistrable.
+proven control. The leakage case then tries to extract the same value *without*
+cooperation, and a target that resists that is well defended — not unregistered.
+Collapsing the two would make a hardened target unregistrable.
+
+**An operator may waive the proof, and the record never stops saying so.** ADR-0007
+as amended lets a run start on a declaration where it used to require an echo, for
+the operator who cannot write into their target's configuration. The probe is still
+sent and `echoed` still records what came back; what changes is only whether a
+missing echo stops the run. Two fields rather than one, so *proved* and *declared*
+are never the same reading, and the artefact carries which of the two it was.
 
 Attestation — authorised to test, not production, accepts the provider-policy and
 inference-cost consequences — is recorded here alongside it. It is the liability
@@ -130,15 +136,45 @@ def endpoint_hash(url: str) -> str:
 
 @dataclass(frozen=True)
 class Registration:
-    """A target's registration: complete only once the nonce came back."""
+    """A target's registration: the echo that was asked for, and what was declared.
+
+    Two facts and never one. `echoed` is what the endpoint did, and it is the only
+    proof of control this design has. `waived` is what the operator declared: that
+    they are starting the run without that proof. A run may proceed on either, and a
+    reader of this record can always tell which one it proceeded on — which is the
+    whole of what waiving costs and the reason it is not folded into one boolean.
+    """
 
     target: TargetConfig
     nonce: str
-    complete: bool
+    echoed: bool
+    """The nonce came back from the endpoint. The proof, and nothing else is."""
+
     probe: Transcript
     attestation: AttestationRecord
     """Recorded before the probe was sent, because the attestation is what
     authorised sending it."""
+
+    waived: bool = False
+    """The operator declared the run may start without the echo (ADR-0007, amended).
+
+    Declared per run and never a setting: it reaches this record from the request
+    that started the run, and there is nothing on this bench that turns it on for
+    the next one. A waived registration is still probed — the call is made, the
+    reply is kept, and `echoed` says what it was — because a run that skipped the
+    probe would throw away evidence that was free to collect.
+    """
+
+    @property
+    def complete(self) -> bool:
+        """Whether the suite may run against this target.
+
+        Proved, or declared and not proved. The two reach this property from
+        opposite directions and a reader who needs to know which has both fields
+        above; what is *not* offered anywhere is a way to read *proved* off a run
+        that only declared it.
+        """
+        return self.echoed or self.waived
 
     @property
     def refused(self) -> bool:
@@ -150,12 +186,20 @@ def register(
     nonce: str,
     attestation: Attestation,
     run_state: RunState,
+    proof_waived: bool = False,
 ) -> Registration:
-    """Ask the target to echo its planted nonce. No run starts until it does.
+    """Ask the target to echo its planted nonce, and record what came back.
 
     The attestation is a required argument rather than a checked precondition:
     the echo probe is itself a call on the operator's endpoint, so there is no
     point in the flow at which the bench may send anything without one.
+
+    `proof_waived` is the operator declaring that the run may start without the
+    echo. The probe is still sent — the same call, charged the same way, and the
+    reply kept — because the waiver is about what a missing echo *stops*, not about
+    what the bench looks at: a target that echoes anyway is recorded as having
+    proved control, whatever was declared. What the waiver cannot do is make an
+    absent echo into a proof, and no field on this record says otherwise.
     """
     record = AttestationRecord.of(attestation, target)
     run_state.authorise_call(Layer.SCORED, target.retry.sends)
@@ -165,7 +209,8 @@ def register(
     return Registration(
         target=target,
         nonce=nonce,
-        complete=echoed,
+        echoed=echoed,
         probe=probe,
         attestation=record,
+        waived=proof_waived,
     )

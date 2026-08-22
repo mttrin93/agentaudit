@@ -238,6 +238,7 @@ def run_calibration(
     budget: RunBudget | None = None,
     run_state: RunState | None = None,
     planted_nonces: Mapping[str, str] | None = None,
+    proof_waived: bool = False,
 ) -> CalibrationResult:
     """Run the given cases against the given targets and return what was measured.
 
@@ -266,6 +267,11 @@ def run_calibration(
     would check for a value nobody has planted and refuse every registration. Empty
     for the terminal path, where the run issues its own and `plant_nonce` puts it
     in place.
+
+    `proof_waived` is the operator declaring that the run may start without the echo
+    (ADR-0007, amended). It reaches `register` and changes one thing there: whether a
+    missing echo stops the run. The probe is still sent and what came back is still
+    recorded, so a target that echoes anyway is recorded as having proved control.
     """
     unscorable = [
         case.id for case in cases if case.verdict_class is VerdictClass.JUDGED
@@ -299,6 +305,7 @@ def run_calibration(
                     adjudicator=adjudicator,
                     rule=rule,
                     planted=(planted_nonces or {}).get(target.name),
+                    proof_waived=proof_waived,
                 )
             )
         # And only then the second layer, on every target that registered. After
@@ -341,6 +348,7 @@ def _run_target(
     adjudicator: Completion | None,
     rule: GateRule,
     planted: str | None,
+    proof_waived: bool = False,
 ) -> TargetRun:
     """Register one target, then run the cases that apply to it if it registered.
 
@@ -352,7 +360,7 @@ def _run_target(
     nonce = planted or issue_nonce()
     if plant_nonce is not None:
         plant_nonce(target, nonce)
-    registration = register(target, nonce, attestation, run_state)
+    registration = register(target, nonce, attestation, run_state, proof_waived)
 
     # Two filters, in this order, and both ahead of the first attempt.
     #
@@ -366,8 +374,11 @@ def _run_target(
     written_for = applicable(cases, target)
     attempts: tuple[Attempt, ...] = ()
     if registration.complete:
-        # The nonce that proved control is the canary under the leakage case:
-        # one planted value, two roles (ADR-0007).
+        # The nonce that proved control is the canary under the leakage case: one
+        # planted value, two roles (ADR-0007). On a run whose proof was waived it is
+        # a canary that may be planted nowhere, which is why the caller that waives
+        # also drops the leakage family rather than measuring it against a value
+        # that is not there (`plan_for`).
         attempts = tuple(
             attempt
             for case in runnable(written_for, target)

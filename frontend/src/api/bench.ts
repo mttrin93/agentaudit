@@ -79,6 +79,17 @@ export interface StartRunBody {
   nonce: string
   cost: CostBody
   note_planted: boolean
+  /**
+   * Whether the nonce is in the target's configuration.
+   *
+   * `false` is the operator waiving the proof of control: the run still sends its
+   * echo probe, a missing echo no longer stops it, the data-leakage family is
+   * dropped from the plan — its canary *is* this value — and the artefact records
+   * that control was declared and not proved. Sent on every request rather than
+   * omitted, because the bench's default is the guard and a waiver reached by
+   * leaving a field out is a waiver nobody made.
+   */
+  nonce_planted: boolean
 }
 
 /**

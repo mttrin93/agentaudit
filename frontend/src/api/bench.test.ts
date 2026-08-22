@@ -89,6 +89,9 @@ describe('the registration this screen posts', () => {
       nonce: NONCE,
       cost: { price_per_call: '0.002', currency: 'USD' },
       note_planted: true,
+      // Sent on every body and never omitted. The bench's default is the guard, so
+      // a waiver that could be had by leaving a field out is one nobody made.
+      nonce_planted: true,
     })
   })
 

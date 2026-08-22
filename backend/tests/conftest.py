@@ -427,6 +427,7 @@ def calibrate(
     model: str = "stub:obedient",
     agents: tuple[ReferenceAgent, ...] = REFERENCE_AGENTS,
     adjudicator: Completion | None = ADJUDICATING,
+    proof_waived: bool = False,
 ) -> CalibrationResult:
     """Run one case against one served reference agent, through the entry point."""
     with reference_target(model=model, name=name, agents=agents) as reference:
@@ -437,6 +438,7 @@ def calibrate(
             plant_nonce=reference.plant_nonce,
             approve=CONFIRMING,
             adjudicator=adjudicator,
+            proof_waived=proof_waived,
         )
 
 

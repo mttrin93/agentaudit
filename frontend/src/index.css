@@ -573,7 +573,17 @@ select {
   color: var(--ink);
 }
 
+/*
+ * A column, so the spend sits on the floor of the card.
+ *
+ * The two layers are read against each other, and a figure one card lower than the
+ * other reads as the later of two things rather than as the other half of one
+ * reading. It stays two figures on two counters — nothing here adds them, and there
+ * is no field either card could take a total from (ADR-0007, ADR-0010).
+ */
 .layer {
+  display: flex;
+  flex-direction: column;
   padding: 1rem;
   border: 1px solid var(--line);
   border-radius: var(--radius);
@@ -582,6 +592,11 @@ select {
 
 .layer h3 {
   margin-top: 0;
+}
+
+.layer > p:last-child {
+  margin-top: auto;
+  margin-bottom: 0;
 }
 
 .at {
@@ -599,6 +614,34 @@ select {
 .at dd {
   margin: 0;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+/*
+ * One column per unit, spread so the card has the same margin either side of them.
+ *
+ * The pairs fell into the shared two-column `.at` grid two to a row, which set a
+ * three-unit position on two lines with a ragged gap beside it and left the two cards'
+ * spends at two different heights. Laid along one line instead: *family · case ·
+ * attempt* and *family · episode · turn*, read across the card rather than down its
+ * left edge, and however many units the layer has rather than three by construction.
+ *
+ * `space-between` and not equal columns, because the empty space is the thing being
+ * arranged: the first unit is flush with the card's left padding and the last with its
+ * right, so what is left over falls between them and the card is as wide-margined on
+ * one side as the other. Each pair keeps its own width, so a case id takes the room
+ * it needs and breaks at its own hyphens — where a reader would break it — rather
+ * than being squared off to a column.
+ */
+.layer .at {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: start;
+  gap: 0.6rem 1.2rem;
+}
+
+.layer .at > div {
+  min-width: 0;
 }
 
 /*

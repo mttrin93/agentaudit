@@ -718,18 +718,20 @@ export interface FamilyReading {
   /** How long the span bar is, as a CSS percentage. `D` at the plot's scale. */
   width: string
   /**
-   * What the line under the card reads: the verdict in one word.
+   * What the line under the card reads: one word. *passed*, *not passed*, *excluded*.
    *
-   * *passed* or *not passed*, and not what the verdict turned on. It read
-   * `intervals disjoint · monotonic` — the two conditions the per-family rule tests —
-   * which is the rule's own working shown on every card whether or not anybody was
-   * reading for it. The rule is printed whole on the report the run signs, beside the
-   * figures it was applied to, and `D` is above this line either way.
+   * Not what the verdict turned on. It read `intervals disjoint · monotonic` — the two
+   * conditions the per-family rule tests — which is the rule's own working shown on
+   * every card whether or not anybody was reading for it, and the rule is printed whole
+   * on the report the run signs.
    *
-   * Or, for a family the decision set aside, the exclusion and its reading —
-   * ADR-0015 asks the exclusion to name the family, the reason *and* the figure
-   * that caused it, and this is that line on the family's own card rather than only
-   * in a sibling list.
+   * **And *excluded* alone, which is a decision this console makes and ADR-0015 does
+   * not.** That ADR asks an exclusion to name the family, the reason *and* the figure
+   * that caused it, and this line carried all three: `excluded — κ = 0.59 is below the
+   * 0.60 floor · the bench cannot vouch for this family…`. The operator asked for the
+   * word by itself, so the reason and the κ are on this screen nowhere — they are on
+   * the wire in `GateDecided.excluded`, in the record the run writes, and on the report
+   * it signs, which is where an exclusion is read when it has to be defended.
    */
   reads: string
   /** Whether this family decided nothing. Drawn, so a reader cannot miss it. */
@@ -815,38 +817,17 @@ function rateOf(figures: FamilyFigures, agent: string): number | null {
 }
 
 /**
- * Why a family decided nothing, as its own card says it.
- *
- * Built from the exclusion the decision recorded and the floor it was read against,
- * so the reading that barred the family is on the line that says it was barred. The
- * bench's own whole sentence is still on the card as `stated`; this is the short
- * form, and it is short by dropping words rather than by dropping the figure.
- */
-function setAsideReads(barred: ExcludedFamily, floor: number): string {
-  const because =
-    barred.reason === 'not_measurable'
-      ? 'this family could not be measured'
-      : barred.kappa === null
-        ? 'no κ was measured'
-        : `κ = ${barred.kappa.toFixed(2)} is below the ${floor.toFixed(2)} floor`
-  return (
-    `excluded — ${because} · the bench cannot vouch for this family, so no D of ` +
-    'its own decides anything here'
-  )
-}
-
-/**
  * One family's card, off its figures and the exclusion the decision recorded for it.
  *
  * `barred` is required rather than defaulted, on the same terms as the record's own
  * `excluded` field: a family whose exclusion this view forgot would be drawn as a
  * family that decided something, which is the one mistake this card can make and it
- * would be silent.
+ * would be silent. It decides one word now — the card no longer reads the κ floor out
+ * of the declared rule, because the line that quoted it is one word long.
  */
 function familyReading(
   figures: FamilyFigures,
   barred: ExcludedFamily | null,
-  rule: DeclaredRule,
 ): FamilyReading {
   const hardened = rateOf(figures, 'hardened')
   const trivial = rateOf(figures, 'trivial')
@@ -868,14 +849,16 @@ function familyReading(
       interval: `[${rate.lower.toFixed(3)}, ${rate.upper.toFixed(3)}]`,
       at: at(rate.value),
     })),
-    score: aside ? '—' : figures.discrimination.toFixed(2),
+    // The figure, for an excluded family too. It was an em dash: ADR-0015 withholds a
+    // set-aside family's `D` from the decision, and the card said so by not printing
+    // one. Withheld from the *decision* is what that means, and the arithmetic was
+    // always on the wire — the bar under this number has been drawing it the whole
+    // time — so the card prints what the run measured and the word under it says the
+    // decision did not use it.
+    score: figures.discrimination.toFixed(2),
     from: span.from,
     width: span.width,
-    reads: aside
-      ? setAsideReads(barred, rule.kappa_floor)
-      : figures.passes
-        ? 'passed'
-        : 'not passed',
+    reads: aside ? 'excluded' : figures.passes ? 'passed' : 'not passed',
     set_aside: aside,
     verdict: figures.passes ? 'passes' : 'does not pass',
     stated: figures.stated,
@@ -954,7 +937,7 @@ export function decidedView(reading: DecidedRun): DecidedBlock[] {
       heading: 'Each family',
       statement: NOTHING_COMBINES_THEM,
       families: decision.families.map((figures) =>
-        familyReading(figures, barredIn(decision, figures.family), reading.rule),
+        familyReading(figures, barredIn(decision, figures.family)),
       ),
     },
   ]

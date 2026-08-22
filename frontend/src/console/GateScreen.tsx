@@ -948,12 +948,8 @@ function TheEstimate({
  * block this screen no longer prints.
  */
 function TheGateRun({ reading }: { reading: GateRunReading }) {
-  // Without the rule block, for the reason `TheLastDecided` gives, and without what
-  // the run wrote back: both are on the record and on the report, and neither is what
-  // an operator has this screen open for.
-  const decided = decidedView(reading).filter(
-    (block) => block.kind !== 'rule' && block.kind !== 'written',
-  )
+  // The same three blocks `TheLastDecided` drops, for the reasons it gives.
+  const decided = decidedView(reading).filter((block) => SHOWN.has(block.kind))
   return (
     <>
       <section>
@@ -1052,11 +1048,15 @@ function TheGateRun({ reading }: { reading: GateRunReading }) {
  * which cases were retired and which got none is a record of a write, not a reading of
  * a gate: the run's own document holds it, `gaterun.test.ts` still reads the block, and
  * the case library is where somebody checks that the write happened.
+ *
+ * **And without the list of exclusions.** Not because an exclusion may go unsaid —
+ * ADR-0015 asks it to name the family, the reason *and* the figure that caused it, and
+ * that is exactly what an excluded family's own card says, dashed, in the row with the
+ * other five. The list below repeated it a second time, away from the figures it is
+ * about, which is the reading ADR-0015 wanted moved onto the card in the first place.
  */
 function TheLastDecided({ decided }: { decided: DecidedRun }) {
-  const blocks = decidedView(decided).filter(
-    (block) => block.kind !== 'rule' && block.kind !== 'written',
-  )
+  const blocks = decidedView(decided).filter((block) => SHOWN.has(block.kind))
   return (
     <>
       {blocks.map((block) => (
@@ -1243,6 +1243,17 @@ function Layer({ layer }: { layer: LayerReading }) {
     </div>
   )
 }
+
+/**
+ * Which of a decision's blocks this screen draws, and it is not all of them.
+ *
+ * One set for both readings of a decision — the run being watched and the last one on
+ * the record — because they are the same decision drawn twice and a block dropped from
+ * one and kept in the other would be a difference nobody meant. Every block is still
+ * built and still tested; three of them are read somewhere else, and each one's reason
+ * is on `TheLastDecided`.
+ */
+const SHOWN: ReadonlySet<DecidedBlock['kind']> = new Set(['decision', 'families'])
 
 /** One block of the decision, in the order `decidedView` gave it. */
 function Decided({ block }: { block: DecidedBlock }) {

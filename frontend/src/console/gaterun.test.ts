@@ -810,6 +810,34 @@ describe('what the gate run decided', () => {
     expect(said).toMatch(/nothing that adds two of them/)
   })
 
+  it('says only excluded on a family set aside, and still prints its D', () => {
+    const barred = {
+      family: 'disclosure_denial',
+      reason: 'below_kappa_floor',
+      kappa: 0.59,
+      stated: 'κ = 0.59 over 15 transcripts — below the 0.60 floor, excluded',
+    }
+    const view = decidedView({
+      ...FINISHED,
+      decision: { ...DECIDED, excluded: [barred] },
+    })
+    const aside = block(view, 'families').families.find(
+      (one) => one.family === 'disclosure_denial',
+    )
+
+    expect(aside?.set_aside).toBe(true)
+    // One word. The reason and the κ that caused it were on this line and are not on
+    // this screen any more — they are on the wire, in the record and on the report,
+    // which is where an exclusion is read when it has to be defended.
+    expect(aside?.reads).toBe('excluded')
+    expect(aside?.reads).not.toContain('κ')
+    // And `D` is the figure the run measured rather than an em dash. Withheld from the
+    // decision is what the exclusion means, and the word under the number says it.
+    expect(aside?.score).toBe('0.49')
+    // The bench's own whole sentence is still carried, unedited, for whoever wants it.
+    expect(aside?.stated).toContain('D = 0.49')
+  })
+
   it('names the outcome as a word, carries no colour on it, and no severity', () => {
     const decision = block(decidedView(FINISHED), 'decision')
 

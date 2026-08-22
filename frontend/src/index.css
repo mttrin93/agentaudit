@@ -147,8 +147,14 @@
    * in `rem`, so this moves all of them together and every proportion already chosen
    * survives. Set explicitly rather than left to the browser's default, so that the
    * scale is a decision in this file and turning it is one edit.
+   *
+   * 15px rather than the browser's 16: a bench is read at a desk on a wide screen, and
+   * a screen of figures at 16 was set for a page of prose. Turning this and nothing
+   * else is the point of the lever — the measures, the gutters and the card padding
+   * are `rem` too, so the page comes in by the same proportion as its type and no
+   * relationship chosen anywhere in this file is disturbed.
    */
-  font-size: 16px;
+  font-size: 15px;
   /*
    * Inter, with the old stack behind it.
    *

@@ -5,25 +5,27 @@
  * uncoloured facts. Nothing new was invented for this screen; what it adds is one more
  * thing the existing idiom says.
  *
- * **A box names its facts and does not explain them.** Three results, two claims and
- * three files, each as a row of items — the verifier's sentence under each result, the
- * claims' statements and what each file holds are on the report, which the name at the
- * top of every box links to. One box carrying all of it was taller than the window,
- * and a page of four was a document rather than a list of things to send.
+ * **A box says which artefact it is and what to save.** The name, the id and the
+ * instant, and the three files as the filenames they will be saved under. Everything
+ * else about an artefact — the three results, the two claims, the sentence under each
+ * of them — is on the report, which the name at the top of every box links to. One box
+ * carrying all of it was taller than the window, and a page of four was a document
+ * rather than a list of things to send.
  *
  * The command a recipient runs is not on this screen. `reading.command` is still built
  * and still tested, and a recipient is handed a directory rather than this page.
  *
- * **The three results are not on this screen; they are on the report.** Every one of
- * them is in the reading, named individually and in the verifier's order, and the
- * report prints all three with the outcome inside the element that draws it — no tick,
- * no badge, nothing that reduces three results to one mark (ADR-0005, ADR-0017, spec
- * §75). What this list carries is the two claims' labels, which are the *scope* of
- * what a signature covers, and that is the part a reader must not infer.
+ * **Neither the three results nor the two claims are on this screen; both are on the
+ * report.** Every one of them is in the reading, named individually and in the
+ * verifier's order, and the report prints all three results with the outcome inside the
+ * element that draws it, and both claims in full beside the figures they bound — no
+ * tick, no badge, nothing that reduces three results to one mark (ADR-0005, ADR-0017,
+ * spec §75).
  *
- * A box that showed one result and not the other two would be the inference ADR-0017
- * exists to prevent. Showing none of the three is not that: it is a list, and the
- * outcomes are one click along the name at the head of every box.
+ * A box that showed one result and not the other two, or one claim and not the other,
+ * would be the inference those decisions exist to prevent. Showing none of them is not
+ * that: this is the list you reach a report from, and the name at the head of every box
+ * is the link.
  *
  * **Whose check this is, is said where it is acted on.** The bench computed these
  * readings over the bytes it holds, and that is not the check a recipient makes —
@@ -145,7 +147,8 @@ function TheArtefacts({ reading }: { reading: ArtefactsReading }) {
               and a run that was never signed absent because it has no artefact. A
               paragraph asserting all six sat between the heading and the first
               artefact. `reading.statement` is still built and still tested, and the
-              claims the last two clauses are about are on every row below.
+              results and claims its clauses are about are on the report each row
+              links to.
             */}
             <ul className="artefacts">
               {reading.artefacts.map((artefact) => (
@@ -167,18 +170,19 @@ function TheArtefacts({ reading }: { reading: ArtefactsReading }) {
 }
 
 /**
- * One artefact: what it is of, the scope of its two claims, and its three files.
+ * One artefact: what it is of, where to find it, and the three files it is made of.
  *
- * A name, where the id and the instant are, and what to save. The three results and
- * every sentence under them are on the report: a box that printed the verifier's
+ * A name, the id and the instant, and what to save. The three results, the two claims
+ * and every sentence under them are on the report: a box that printed the verifier's
  * paragraph under each result, both claims' statements and what each file holds ran
  * past the height of the window on one artefact, and a list of four was a document —
  * the wrong shape for the thing an engineer opens to find the artefact to send.
  *
- * The claims keep their labels and lose their statements, because the labels are the
- * scope — *the whole document*, *the scored layer only* — and the scope is the part
- * that must not be inferred (ADR-0010, ADR-0017). Both are on the report the name at
- * the top of the box links to, in the words the report uses.
+ * The two claims are not here either. Their labels are their scope — *the whole
+ * document*, *the scored layer only* — and scope is the part that must not be inferred
+ * (ADR-0010, ADR-0017), which is an argument about the screen a reader takes a figure
+ * off: the report, where both are printed in full beside the figures they bound. On a
+ * list they were the same two lines under every box.
  *
  * `checkedBy` and `notAQualityClaim` are not printed. Both are still built and still
  * tested on every artefact, and both are on the report the title links to — where a
@@ -197,17 +201,6 @@ function TheArtefact({ artefact }: { artefact: ArtefactReading }) {
         <code>{artefact.id}</code> — recorded {artefact.recordedAt} —{' '}
         <Link to={artefact.runPath}>the run</Link>
       </p>
-
-      {/*
-        Two items and never one line with a separator in it: integrity over the whole
-        document and re-derivability over the scored layer alone are two claims, and a
-        string holding both is a reader's invitation to read one.
-      */}
-      <ul className="claims-line">
-        {artefact.verification.claims.map((claim) => (
-          <li key={claim.label}>{claim.label}</li>
-        ))}
-      </ul>
 
       <ul className="files-line">
         {artefact.files.map((file) => (

@@ -263,11 +263,11 @@ h3 {
 }
 
 /*
- * A heading inside a block, for the parts of one artefact.
+ * A heading inside a block, for a group of fields that has a name.
  *
- * One artefact carries three results, two claims and three files, and each of those
- * is a group with a name. Quieter than an `h3` and set apart by letterspacing rather
- * than by size, so a block stays one block rather than reading as three sections.
+ * The stated identity on the settings screen, one instrument among three, one note to
+ * plant among three. Quieter than an `h3` and set apart by letterspacing rather than by
+ * size, so a block stays one block rather than reading as three sections.
  */
 h4 {
   margin: 1.4rem 0 0.4rem;
@@ -1490,18 +1490,17 @@ code {
  * makes the directory verifiable is that all three arrive under exactly these names.
  */
 /*
- * What an artefact's box carries besides its name: the scope of its two claims, and the
- * three filenames to save. Two rows of items rather than a stack of paragraphs.
+ * What an artefact's box carries besides its name: the three filenames to save, as a
+ * row of links rather than a list with a sentence against each one.
  *
  * The box used to print the verifier's sentence under every result, both claims'
  * statements, and what each of the three files holds — one artefact ran past the height
- * of the window, and a list of four was a document. The results and their sentences are
- * on the report, which the name at the top of the box links to.
+ * of the window, and a list of four was a document. All of it is on the report, which
+ * the name at the top of the box links to.
  *
- * They wrap on a narrow window rather than scrolling: each item is an independent fact,
- * and a row that scrolls hides the last one.
+ * The three wrap on a narrow window rather than scrolling: a row that scrolls hides the
+ * third file, which is the signature.
  */
-.claims-line,
 .files-line {
   display: flex;
   flex-wrap: wrap;
@@ -1512,7 +1511,6 @@ code {
   font-size: 0.9rem;
 }
 
-.claims-line,
 .files-line {
   color: var(--quiet);
 }

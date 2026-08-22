@@ -992,8 +992,19 @@ select option {
  * by `D` would be the ranking across six families this bench does not stand behind
  * (ADR-0005).
  */
+/*
+ * The six families, two abreast: one card on the left and its neighbour on the right.
+ *
+ * `minmax(0, 1fr)` twice rather than `auto-fit` with a floor, which is the idiom the
+ * run screen's two columns use. Under `auto-fit` the number of columns was a
+ * consequence of the page's width: the reading column is 48rem inside 12rem gutters,
+ * two 24rem tracks and a gap do not fit in it, and the six cards silently became one
+ * per row — a card whose figures occupy the left third and a page twice as long as it
+ * needs to be. Two columns are asked for here, and the breakpoint below is where they
+ * stop being two.
+ */
 .families.per-family {
-  grid-template-columns: repeat(auto-fit, minmax(24rem, 1fr));
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 1rem;
 }
 
@@ -2018,7 +2029,8 @@ code {
 /* One column where the window cannot hold two: the progress first, a run's shape
  * before how it is going. */
 @media (max-width: 60rem) {
-  .watching {
+  .watching,
+  .families.per-family {
     grid-template-columns: minmax(0, 1fr);
   }
 }

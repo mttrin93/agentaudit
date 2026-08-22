@@ -2,22 +2,22 @@
  * The operator's screen for what this bench is set to. It states; it changes nothing.
  *
  * The blocks are `settings.ts`'s sequence and this file maps over it in order, so
- * *the keys above the ceilings* is a property of a value a test reads rather than of
+ * *the library above the ceilings* is a property of a value a test reads rather than of
  * markup nobody checks.
  *
  * **There is no control here.** Not one element on this screen writes a setting, and
  * there is no route on this bench that would take one: the signing key is rotated in
  * the environment and the models, the library and the thresholds are chosen on the
  * command line, because the factory reads its key from one place and refuses to boot
- * without it (ADR-0020). So the console prints the command that makes a key pair and
- * offers no affordance, and `settings.test.ts` reads this file to assert the absence.
+ * without it (ADR-0020). So the console offers no affordance at all, and
+ * `settings.test.ts` reads this file to assert the absence.
  *
- * **Two key identifiers, side by side and never merged.** The key an artefact will be
- * signed by and the key a verification is run against are two blocks, each with its
- * own fingerprint and its own sentence. A bench that will sign nothing is drawn
- * dashed and without the row a fingerprint would have filled — `.citation.uncited`'s
- * idiom, for the reason it exists: an empty value in a solid box is read as a value
- * that failed to load.
+ * **The two key identifiers are not drawn here.** They are still the reading's first
+ * block, still two and still never merged — `settings.ts` builds both fingerprints,
+ * both sentences and the keygen command, and its test holds them apart. What a
+ * recipient pins is published in this repository's README, and what an artefact was
+ * signed by is a result on the artefact; a fingerprint on a settings page is a string
+ * nobody checks anything against.
  *
  * **The two ceilings are two blocks with a gap between them and no rule underneath.**
  * `.layers` is the interrupt's own layout, chosen there because a stacked pair with a
@@ -25,8 +25,8 @@
  * same reason.
  *
  * **The idiom is the console's own.** One reading column, labelled uncoloured facts,
- * `.family` and `.family.absent` for a block that may have no figure, the reference
- * agents in one hue's three ordered steps, `.command` for a command. Colour carries
+ * `.family` and `.family.absent` for a block that may have no figure, and the reference
+ * agents in one hue's three ordered steps. Colour carries
  * identity and order and never a judgement: no key, no model and no ceiling is
  * coloured by how good it is.
  */
@@ -38,7 +38,6 @@ import {
   settingsScreen,
   type AgentsBlock,
   type CeilingsBlock,
-  type KeysBlock,
   type LibraryBlock,
   type ModelsBlock,
   type SettingsBlock,
@@ -107,9 +106,15 @@ export function SettingsScreen() {
           <p className="aside">Reading this bench’s own configuration…</p>
         </section>
       ) : (
-        settingsScreen(held.bench).map((block) => (
-          <Block block={block} key={block.kind} />
-        ))
+        settingsScreen(held.bench)
+          // The keys are not drawn. They are the first block of the reading and stay
+          // there — `settings.test.ts` reads the order off the value — but a fingerprint
+          // is not a setting somebody comes to this screen to read: what a recipient
+          // pins is published in the README, and what an artefact was signed by is on
+          // the artefact. The block, its two sentences and the keygen command were the
+          // longest thing on the page and the least often read.
+          .filter((block) => block.kind !== 'keys')
+          .map((block) => <Block block={block} key={block.kind} />)
       )}
     </main>
   )
@@ -118,8 +123,6 @@ export function SettingsScreen() {
 /** One block, in the order the reading gave it. Five kinds, five shapes. */
 function Block({ block }: { block: SettingsBlock }) {
   switch (block.kind) {
-    case 'keys':
-      return <TheKeys block={block} />
     case 'library':
       return <TheLibrary block={block} />
     case 'agents':
@@ -129,42 +132,6 @@ function Block({ block }: { block: SettingsBlock }) {
     case 'ceilings':
       return <TheCeilings block={block} />
   }
-}
-
-/**
- * The two key identifiers, each in its own block with its own fingerprint.
- *
- * Two and never one. A bench that will sign nothing is drawn dashed and without the
- * row a fingerprint would have filled, so there is nothing on the screen for a reader
- * to mistake for a key that failed to load.
- */
-function TheKeys({ block }: { block: KeysBlock }) {
-  return (
-    <section>
-      <h2>{block.heading}</h2>
-      <div className="families">
-        {block.identities.map((identity) => (
-          <div
-            className={identity.held ? 'family' : 'family absent'}
-            key={identity.label}
-          >
-            <h4>{identity.label}</h4>
-            {identity.held ? (
-              <p>
-                <code>{identity.fingerprint}</code>
-              </p>
-            ) : null}
-            <p className="kind">{identity.stated}</p>
-          </div>
-        ))}
-      </div>
-      <p className="aside">{block.statement}</p>
-
-      <h3>Making a pair, and why nothing here does it for you</h3>
-      <pre className="command">{block.command}</pre>
-      <p>{block.commandStatement}</p>
-    </section>
-  )
 }
 
 /** The library as loaded: its live version, and the retired cases kept beside it. */

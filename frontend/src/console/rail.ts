@@ -57,7 +57,7 @@ export const CONSOLE_PATH = '/'
 export const REGISTER_PATH = '/register'
 
 /**
- * The operator's gate screen: the declared rule, the last outcome, the command.
+ * The operator's gate screen: the way to run a gate, and what the last one measured.
  *
  * `/gate` and not `/bench/gate`, for two reasons. `/bench` is the API's own prefix
  * for the routes whose subject is the instrument, and a screen path that shadowed it

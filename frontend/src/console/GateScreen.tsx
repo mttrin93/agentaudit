@@ -1,13 +1,12 @@
 /**
- * The operator's screen: the declared rule, the last outcome, and the two ways to
- * run another.
+ * The operator's screen: the way to run a gate, and what the last one measured.
  *
  * It answers one question — when was this instrument last validated, and how do I do
- * it again — and it answers the first half before the second, because the rule is
- * what makes the answer re-derivable. The blocks are `gate.ts`'s sequence and this
- * file maps over it in order, so *the rule above the outcome* and *the write-back
- * before the way to start one* are properties of a value a test reads rather than of
- * markup nobody checks.
+ * it again — and the control comes first, because starting one is the errand. The
+ * blocks are `gate.ts`'s sequence and this file maps over it in order, so *the control
+ * above the outcome* is a property of a value a test reads rather than of markup
+ * nobody checks. The outcome block itself draws nothing: the citation's four facts are
+ * about the same run whose figures are on this page already.
  *
  * **There is one control here and it is the one ADR-0021 authorised.** `PLAN.md` §8
  * put a gate run on the command line, this screen printed the command, and a
@@ -78,7 +77,6 @@ import {
   gateScreen,
   type StartBlock,
   type GateBlock,
-  type OutcomeBlock,
 } from './gate'
 import {
   ALREADY_IN_FLIGHT,
@@ -109,7 +107,6 @@ import {
   type GateInterruptView,
   type StartControl,
 } from './gaterun'
-import type { GateReading } from './landing'
 
 /** How often a gate run in flight is asked where it has got to. */
 const POLL_SECONDS = 2
@@ -527,15 +524,18 @@ export function GateScreen() {
       ) : null}
 
       {/*
-        The control first, then a run's own figures, then the last outcome at the
-        foot — which is `gateScreen`'s sequence with the run's blocks landing between
-        its two.
+        The control, and then a run's own figures under it.
 
         The control is the errand and it stays at the top: it was under the whole
         decision once, six family cards and the exclusions deep, so a finished gate
-        run looked like a screen that had lost its control. The outcome went the
-        other way for the same reason — it is what the run below it decided, so it
-        reads under the arithmetic rather than above it.
+        run looked like a screen that had lost its control.
+
+        The last outcome is not drawn. `gateScreen` still builds it second — the
+        control above the outcome is a property of that value and `gate.test.ts` reads
+        the order off it — and what it says is a heading and four facts about a run
+        whose figures are on this page already, under `TheLastDecided`: the same run,
+        read off the record rather than off the citation. The citation is the thing a
+        report cites, not the thing an operator opens this screen to do.
       */}
       {blocks
         .filter((block) => block.kind === 'start')
@@ -561,8 +561,8 @@ export function GateScreen() {
             <p>{lastly.unavailable}</p>
             <p className="aside">
               Not the same fact as a bench that holds no record of one: what is
-              unknown here is what the figures were, and the citation above is
-              unaffected — it says what the last gate run answered.
+              unknown here is what the figures were, and not whether there was a gate
+              run to have them.
             </p>
           </div>
         </section>
@@ -574,26 +574,14 @@ export function GateScreen() {
             <p>{lastly.none}</p>
             <p className="aside">
               Nothing on this page should be read as a gate that failed or a figure
-              of zero. The outcome above is what the last gate run answered; what is
-              absent is the arithmetic behind it.
+              of zero. What is absent is a record of a gate run's arithmetic, which is
+              not the same thing as a gate run that answered badly.
             </p>
           </div>
         </section>
       ) : lastly.decided === null ? null : (
         <TheLastDecided decided={lastly.decided} />
       )}
-
-      {blocks
-        .filter((block) => block.kind === 'outcome')
-        .map((block) => (
-          <Block
-            block={block}
-            begin={begin}
-            going={ourRunIsGoing}
-            ask={askTheBench}
-            key={block.kind}
-          />
-        ))}
     </main>
   )
 }
@@ -612,20 +600,14 @@ function Block({
 }) {
   switch (block.kind) {
     case 'outcome':
-      return <TheOutcome block={block} />
+      // Built by the reading, drawn by nothing: see the note in `GateScreen` on why
+      // the last outcome is not on the page. A block with no markup rather than a
+      // block filtered out of the list, so `GateBlock` stays exhaustive here and a
+      // seventh kind cannot arrive unhandled.
+      return null
     case 'start':
       return <TheStart block={block} begin={begin} going={going} ask={ask} />
   }
-}
-
-/** What the last gate run answered, or the stated absence of one, in one region. */
-function TheOutcome({ block }: { block: OutcomeBlock }) {
-  return (
-    <section>
-      <h2>{block.heading}</h2>
-      <Citation reading={block.reading} />
-    </section>
-  )
 }
 
 /**
@@ -707,41 +689,6 @@ function TheStart({
       )}
 
     </section>
-  )
-}
-
-/**
- * The citation, or the stated absence of one, in the same region either way.
- *
- * The front door's idiom, deliberately: dashed and drawn without the rows a citation
- * would have filled when there is nothing cited, because an empty outcome in a solid
- * box is read as a gate the bench failed. Nothing here is coloured by outcome.
- *
- * The outcome and its facts, and nothing beside them. The reading still carries the
- * document's path and the sentence naming whose fact this is — `gateReading` composes
- * them for whoever wants them — and this screen prints neither: three paragraphs of
- * standing explanation under one outcome is the shape that made an operator scroll
- * past the outcome to reach the errand.
- */
-function Citation({ reading }: { reading: GateReading }) {
-  return (
-    <div className={reading.cited ? 'citation' : 'citation uncited'}>
-      <h3>{reading.heading}</h3>
-      {reading.cited ? (
-        <>
-          <dl className="at">
-            {reading.facts.map((fact) => (
-              <div key={fact.label}>
-                <dt>{fact.label}</dt>
-                <dd>{fact.value}</dd>
-              </div>
-            ))}
-          </dl>
-        </>
-      ) : (
-        <p>{reading.statement}</p>
-      )}
-    </div>
   )
 }
 

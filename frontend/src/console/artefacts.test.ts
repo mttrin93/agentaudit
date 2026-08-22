@@ -27,8 +27,10 @@
  *
  * **That no result is carried by colour alone.** There is no accent, hue, tick or
  * badge field anywhere in this view; what a component is given is the outcome's name
- * and a boolean redundant with it, and the component is read to confirm that the
- * name is printed in the element the class draws.
+ * and a boolean redundant with it, and the screen that draws the three — the report —
+ * is read to confirm that the name is printed in the element the class draws. The list
+ * is read for the other half of it: that it draws no result at all, so it cannot show
+ * one of the three without the other two.
  *
  * **That the three files are offered under the names a verifier already knows.** The
  * filenames come off the wire in the order a verifier reads them, and nothing here
@@ -45,6 +47,7 @@ import { describe, expect, it } from 'vitest'
 import type { ArtefactList, ArtefactRow, Verification } from '../api/bench'
 
 import component from './ArtefactsScreen.tsx?raw'
+import theReport from '../report/ReportScreen.tsx?raw'
 import { artefactsReading, NO_ARTEFACTS_YET } from './artefacts'
 
 const INTEGRITY =
@@ -301,11 +304,19 @@ describe('the three verification results', () => {
       expect(field).not.toMatch(/accent|colou?r|hue|tick|badge|icon|severity|grade/i)
     }
 
-    // And the component prints the outcome's name inside the element the class draws,
-    // so the border only repeats what the words already said.
-    expect(component).toContain("check.held ? 'check' : 'check did-not-hold'")
-    expect(component).toContain('{check.outcome}')
+    // And the screen that draws the three results prints each outcome's name inside
+    // the element the class draws, so the border only repeats what the words already
+    // said. That screen is the report: this list carries the two claims' scope and
+    // links to the results rather than drawing them, so the assertion follows the
+    // markup it is about.
+    expect(theReport).toContain("check.held ? 'check' : 'check did-not-hold'")
+    expect(theReport).toContain('{check.outcome}')
+    expect(theReport).not.toMatch(/verified \? '[a-z-]*(green|good|pass)/i)
     expect(component).not.toMatch(/verified \? '[a-z-]*(green|good|pass)/i)
+    // And this list draws no result at all: nothing here can show one of the three
+    // without the other two, because nothing here shows any of them.
+    expect(component).not.toContain('did-not-hold')
+    expect(component).not.toContain('check.outcome')
     // And it never branches on `settled`, the one word that collapses the three
     // results: the screen draws them one at a time, so there is nothing for a class
     // to be chosen by.

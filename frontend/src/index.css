@@ -1490,19 +1490,17 @@ code {
  * makes the directory verifiable is that all three arrive under exactly these names.
  */
 /*
- * An artefact's three results, three names and three files, each set as a row of items
- * rather than a stack of paragraphs.
+ * What an artefact's box carries besides its name: the scope of its two claims, and the
+ * three filenames to save. Two rows of items rather than a stack of paragraphs.
  *
  * The box used to print the verifier's sentence under every result, both claims'
  * statements, and what each of the three files holds — one artefact ran past the height
- * of the window, and a list of four was a document. Every fact is still named; what
- * went is the prose under the names, which the report the title links to carries in
- * full.
+ * of the window, and a list of four was a document. The results and their sentences are
+ * on the report, which the name at the top of the box links to.
  *
- * They wrap on a narrow window rather than scrolling: these are three independent
- * facts, and a row that scrolls hides the third.
+ * They wrap on a narrow window rather than scrolling: each item is an independent fact,
+ * and a row that scrolls hides the last one.
  */
-.checks-line,
 .claims-line,
 .files-line {
   display: flex;
@@ -1512,18 +1510,6 @@ code {
   padding: 0;
   list-style: none;
   font-size: 0.9rem;
-}
-
-/* A result that did not hold keeps its rule and its colour, on the side of the item
- * rather than the side of a block: it is still the only mark on this screen, and it is
- * still redundant with the outcome printed beside it (ADR-0005). */
-.checks-line .check {
-  padding: 0;
-  font-size: 0.9rem;
-}
-
-.checks-line .check.did-not-hold {
-  padding-left: 0.6rem;
 }
 
 .claims-line,

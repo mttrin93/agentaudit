@@ -1,10 +1,9 @@
 /**
- * The artefacts an engineer can send, with the three results over each one.
+ * The artefacts an engineer can send, and the three files each one is made of.
  *
- * One block per artefact, in the console's own idiom: the reading column, labelled
- * uncoloured facts, and `.check.did-not-hold` for a result that did not hold. Nothing
- * new was invented for this screen; what it adds is one more thing the existing idiom
- * says.
+ * One block per artefact, in the console's own idiom: the reading column and labelled
+ * uncoloured facts. Nothing new was invented for this screen; what it adds is one more
+ * thing the existing idiom says.
  *
  * **A box names its facts and does not explain them.** Three results, two claims and
  * three files, each as a row of items — the verifier's sentence under each result, the
@@ -15,17 +14,16 @@
  * The command a recipient runs is not on this screen. `reading.command` is still built
  * and still tested, and a recipient is handed a directory rather than this page.
  *
- * **A result is marked by its name and a border, never by a colour alone.** Every
- * check prints the verifier's own outcome — `signature_valid`, `unsigned`,
- * `signed_by_another_key` — in the same element as the class that draws it, so a
- * reader who cannot tell the two surfaces apart reads the same fact. A coloured tick
- * is exactly the badge the report refuses (ADR-0005, spec §75), and there is no
- * element here that reduces the three results to one mark.
+ * **The three results are not on this screen; they are on the report.** Every one of
+ * them is in the reading, named individually and in the verifier's order, and the
+ * report prints all three with the outcome inside the element that draws it — no tick,
+ * no badge, nothing that reduces three results to one mark (ADR-0005, ADR-0017, spec
+ * §75). What this list carries is the two claims' labels, which are the *scope* of
+ * what a signature covers, and that is the part a reader must not infer.
  *
- * **All three, always, and the two claims under them.** The order is the verifier's:
- * signature, binding, arithmetic — then integrity over the whole document and
- * re-derivability over the scored layer alone, as two statements. A row that showed
- * one result would let its reader infer the strongest claim from the weakest.
+ * A box that showed one result and not the other two would be the inference ADR-0017
+ * exists to prevent. Showing none of the three is not that: it is a list, and the
+ * outcomes are one click along the name at the head of every box.
  *
  * **Whose check this is, is said where it is acted on.** The bench computed these
  * readings over the bytes it holds, and that is not the check a recipient makes —
@@ -44,7 +42,6 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 
 import { benchArtefacts, type ArtefactList } from '../api/bench'
-import type { CheckReading } from '../report/report'
 
 import {
   artefactsReading,
@@ -170,15 +167,13 @@ function TheArtefacts({ reading }: { reading: ArtefactsReading }) {
 }
 
 /**
- * One artefact: what it is of, its three results, its two claims, its three files.
+ * One artefact: what it is of, the scope of its two claims, and its three files.
  *
- * Every one of those is still here and every one of them is short. What went are the
- * sentences under them: the verifier's paragraph under each of the three results, the
- * two claims' statements, the line saying what each file holds, and the heading that
- * said in a sentence what the three outcomes say in three words. A box that printed
- * all of it ran past the height of the window on one artefact, and a list of four was
- * a document — which is the wrong shape for the thing an engineer opens to see whether
- * this is the one to send.
+ * A name, where the id and the instant are, and what to save. The three results and
+ * every sentence under them are on the report: a box that printed the verifier's
+ * paragraph under each result, both claims' statements and what each file holds ran
+ * past the height of the window on one artefact, and a list of four was a document —
+ * the wrong shape for the thing an engineer opens to find the artefact to send.
  *
  * The claims keep their labels and lose their statements, because the labels are the
  * scope — *the whole document*, *the scored layer only* — and the scope is the part
@@ -203,12 +198,6 @@ function TheArtefact({ artefact }: { artefact: ArtefactReading }) {
         <Link to={artefact.runPath}>the run</Link>
       </p>
 
-      <ul className="checks-line">
-        {artefact.verification.checks.map((check) => (
-          <TheCheck check={check} key={check.name} />
-        ))}
-      </ul>
-
       {/*
         Two items and never one line with a separator in it: integrity over the whole
         document and re-derivability over the scored layer alone are two claims, and a
@@ -230,22 +219,5 @@ function TheArtefact({ artefact }: { artefact: ArtefactReading }) {
         ))}
       </ul>
     </>
-  )
-}
-
-/**
- * One of the three results: its name and its outcome.
- *
- * The outcome is printed in the same element the class draws, so the fact is carried
- * by words and the border only repeats it. *Unsigned* and *signed by a key you did
- * not pin* are different facts about the sender, and one cross would show them
- * identically — which is why there is no cross. The verifier's sentence about each
- * result is on the report; the outcome is its own name and reads without one.
- */
-function TheCheck({ check }: { check: CheckReading }) {
-  return (
-    <li className={check.held ? 'check' : 'check did-not-hold'}>
-      {check.name}: <strong>{check.outcome}</strong>
-    </li>
   )
 }

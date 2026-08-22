@@ -123,8 +123,18 @@ export function RegisterScreen() {
     const read = async () => {
       try {
         const settings = await benchSettings()
+        const [first] = settings.library.agent_types
         if (current) {
           setKinds(settings.library.agent_types)
+          // A list with no empty option shows its first row, so the declaration takes
+          // it: a screen showing `assistant` over a record holding nothing is the one
+          // way this field can lie. Only when nothing has been chosen — a resumed
+          // declaration keeps the word it was resumed with.
+          if (first !== undefined) {
+            setDeclarations((held) =>
+              held.agent_type === '' ? { ...held, agent_type: first } : held,
+            )
+          }
         }
       } catch {
         // Nothing to say and nothing to do: the field takes any word, and a suggestion
@@ -337,9 +347,6 @@ interface StepProps {
   declare: (changed: Partial<Declarations>) => void
 }
 
-/** Nothing chosen yet: the placeholder option, and not a kind of agent. */
-const NOTHING_CHOSEN = ''
-
 /**
  * The agent type: the kinds this library has cases for, as a list to pick from.
  *
@@ -358,6 +365,12 @@ const NOTHING_CHOSEN = ''
  *
  * Where the bench did not answer there is no list to draw, and the field is text: a
  * registration is not blocked on a suggestion arriving.
+ *
+ * **There is no empty row over the list**, so the first kind is chosen from the moment
+ * the list arrives and an operator who never touches this field registers as that kind.
+ * The alternative was a row reading *what kind of agent this is* — a non-answer that is
+ * selected by default and has to be got past, on a field where every answer is one of
+ * two words.
  */
 function AgentType({
   declarations,
@@ -379,11 +392,13 @@ function AgentType({
   return (
     <label>
       Agent type
+      {/* No empty row over the kinds. The list is the kinds, one of them is chosen
+          from the moment it arrives, and there is no state in which this field is
+          showing a word the declaration does not hold. */}
       <select
         value={declarations.agent_type}
         onChange={(event) => declare({ agent_type: event.target.value })}
       >
-        <option value={NOTHING_CHOSEN}>what kind of agent this is</option>
         {kinds.map((kind) => (
           <option value={kind} key={kind}>
             {kind}

@@ -180,6 +180,12 @@ body {
   background: var(--page);
 }
 
+/* One step tighter than the browser's `1em`, which is a page-of-prose measure. Every
+ * rule in this file that sets its own paragraph margins still wins. */
+p {
+  margin: 0.75rem 0;
+}
+
 /*
  * One width for everything on the page.
  *
@@ -207,11 +213,14 @@ body {
   box-sizing: border-box;
   max-width: 72rem;
   margin: 0 auto;
-  /* 12rem a side. The rail is a hard edge on one side and the window is on the other,
+  /* 12rem a side, and less above and below than the 3rem and 6rem it was: the tail of
+   * a page of rows is the last row, and six rems under it is a screen of nothing to
+   * scroll through before the page ends.
+   * The rail is a hard edge on one side and the window is on the other,
    * and a block of figures needs air between it and both — more of it than the 10rem
    * this was, because the screens now hold rows and lines rather than paragraphs and a
    * row set close to the frame reads as a page that ran out of room. */
-  padding: 3rem 12rem 6rem;
+  padding: 2.2rem 12rem 4rem;
 }
 
 /*
@@ -254,17 +263,21 @@ h1 {
   margin: 0.3rem 0 0.4rem;
 }
 
+/* The margins are set rather than left to the browser, which gives a heading room in
+ * proportion to its own size: on this page a heading belongs to what is under it, so it
+ * sits closer to that than to the block above. */
 h2 {
   font-size: 1.15rem;
   font-weight: 700;
   letter-spacing: -0.012em;
+  margin: 0.9rem 0 0.4rem;
 }
 
 h3 {
   font-size: 0.95rem;
   font-weight: 600;
   letter-spacing: -0.008em;
-  margin-bottom: 0.3rem;
+  margin: 0.8rem 0 0.3rem;
 }
 
 /*
@@ -297,12 +310,14 @@ h4 {
  * citation, a figure — and there an edge says *this is one object* rather than
  * *these two things are different*.
  *
- * 1.9rem, down from 2.6. The gap was set when a section opened on a heading and a
- * paragraph explaining it; a screen of rows and short lines needs less of it before
- * the space reads as a section that lost its content rather than one that ended.
+ * 1.5rem, down from 2.6 in two steps. The gap was set when a section opened on a
+ * heading and a paragraph explaining it; a screen of rows and short lines needs less of
+ * it before the space reads as a section that lost its content rather than one that
+ * ended. Below this the heading of the next section starts to belong to the block above
+ * it, which is where the floor is.
  */
 section {
-  padding-top: 1.9rem;
+  padding-top: 1.5rem;
 }
 
 label {

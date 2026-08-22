@@ -549,6 +549,14 @@ function TargetStep({
             and the field exists. */}
         <span className="aside">Required when a price is declared.</span>
       </label>
+      {/*
+        The family, named over the box.
+        Every other field on this form says what it is in two or three words and then
+        explains itself; this one opened on a sentence with the family's name in the
+        middle of its second clause. An operator scanning the form for what the run
+        will do to their agent met a paragraph before they met a subject.
+      */}
+      <h3 className="field-name">Indirect prompt injection</h3>
       <label className="declaration">
         <input
           type="checkbox"

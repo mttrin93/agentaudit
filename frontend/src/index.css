@@ -340,6 +340,26 @@ label.declaration {
   color: var(--ink);
 }
 
+/*
+ * A heading that names the family it declares, set as the form's other field names are.
+ *
+ * The same size and the same quiet ink as `Price per call` and `Currency` above it,
+ * because that is what it is — the name of the control under it, and not the start of a
+ * new region. In heading ink it read as a section beginning, which put the last field on
+ * the form outside the form.
+ *
+ * It sits on its sentence rather than a line and a half above it: the two are one
+ * statement, and the form's own spacing goes above the pair.
+ */
+h3.field-name {
+  font-size: 0.9rem;
+  color: var(--quiet);
+}
+
+h3.field-name + label.declaration {
+  margin-top: 0.3rem;
+}
+
 label.declaration input {
   width: 1.1rem;
   height: 1.1rem;

@@ -398,6 +398,43 @@ label.declaration input {
   font-size: 1.05rem;
 }
 
+/*
+ * The three attestations, one under the next, ruled apart and counted.
+ *
+ * They were three screens, and what three screens gave was that each statement was
+ * the only thing on the page. Here the rule and the count do that work: the hairline
+ * says where one statement ends, and *1 of 3* over the paragraph says how many are
+ * still to come — so the page reads as three statements made in turn rather than as
+ * a block of terms with a tick under it. The number is a counter and not a list
+ * marker, because the list is prose and a browser's own numerals hang outside the
+ * reading column.
+ */
+ol.attestations {
+  margin: 2rem 0 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: attestation;
+}
+
+ol.attestations > li {
+  counter-increment: attestation;
+  padding: 1.5rem 0;
+  border-top: 1px solid var(--line);
+}
+
+ol.attestations > li::before {
+  content: counter(attestation) ' of 3';
+  display: block;
+  margin-bottom: 0.6rem;
+  font-size: 0.85rem;
+  color: var(--quiet);
+}
+
+/* The consequence opens its statement, so the paragraph's own top margin goes. */
+ol.attestations > li > .consequence {
+  margin-top: 0;
+}
+
 .aside {
   display: block;
   margin-top: 0.4rem;

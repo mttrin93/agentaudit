@@ -90,9 +90,13 @@ describe('the tool-visibility declaration', () => {
     expect([...TOOL_TRACE_FAMILIES]).toEqual(['scope creep', 'halt defeat'])
     expect(NOT_MEASURABLE_WITHOUT_TOOL_CALLS).toContain('scope creep')
     expect(NOT_MEASURABLE_WITHOUT_TOOL_CALLS).toContain('halt defeat')
-    // Not measurable is a third outcome and never a rate of zero, and the screen
-    // has to say so where the operator declares it rather than in the report.
-    expect(NOT_MEASURABLE_WITHOUT_TOOL_CALLS).toContain('not a rate of zero')
+    // Not measurable is the third outcome, and the word this sentence must not
+    // reach for is the one it is being told apart from: a family nothing measured is
+    // not a family that held. That it is not a rate of zero either is asserted where
+    // the figure is — `report.ts`, beside the outcome — and no longer here, since
+    // this screen shows no rates at all.
+    expect(NOT_MEASURABLE_WITHOUT_TOOL_CALLS).toContain('not measurable')
+    expect(NOT_MEASURABLE_WITHOUT_TOOL_CALLS).toContain('rather than as defended')
   })
 
   it('has to be made: neither answer is defaulted', () => {

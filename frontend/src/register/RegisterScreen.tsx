@@ -6,13 +6,18 @@
  * configuration can plant it — and the spec asks for that guard to be "a step I
  * complete rather than an error I hit". So the steps are one at a time and in the
  * order the consequences arrive: describe the endpoint, plant the value, make the
- * three statements one by one, declare what the bench will be able to see, and
- * only then register.
+ * three statements, declare what the bench will be able to see, and only then
+ * register.
  *
- * **The three statements are three screens, not three checkboxes in a row.** Two
- * of the three are consequences a user would never infer, and ADR-0007 requires
- * them spelled out; a stack of three ticks with one Continue button underneath is
- * the arrangement that gets confirmed without being read.
+ * **The three statements are one screen, and each of them keeps its own
+ * consequence.** They were three screens, on the argument that a stack of three
+ * ticks under one Continue button is the arrangement that gets confirmed without
+ * being read. What ADR-0007 requires is the consequences spelled out, and three
+ * screens were one way to buy that rather than the only one: here the three are
+ * numbered, ruled apart, and each tick sits under the paragraph that says what
+ * ticking it costs. Nothing is folded into a summary and no statement borrows
+ * another's prose — what went is the two Continue presses between them, which
+ * proved nothing about whether the prose above them had been read.
  *
  * **The nonce echo is checked after this screen, and the screen says so.** The
  * echo probe is a call on the operator's endpoint, and the halt in front of the
@@ -46,6 +51,7 @@ import {
   ATTESTATION_STATEMENTS,
   A_DECLARATION_THE_BENCH_CANNOT_VERIFY,
   NOT_MEASURABLE_WITHOUT_TOOL_CALLS,
+  TOOL_TRACE_FAMILIES,
   declaredTools,
   echoRefusal,
   nothingDeclared,
@@ -57,19 +63,12 @@ import { rememberTheFigures } from '../run/interrupt'
 /**
  * The steps, in order, one per screen.
  *
- * The three attestation steps are listed individually rather than generated from
- * a count, so that the flow's shape is readable here and an attestation cannot be
- * added to the record without a step appearing for it.
+ * Listed rather than generated, so that the flow's shape is readable here. The
+ * three attestations share the one `attest` step and are generated from
+ * `ATTESTATION_STATEMENTS` inside it, so a statement added to the record appears on
+ * this walk without anything here being touched.
  */
-const STEPS = [
-  'target',
-  'plant',
-  'attest-0',
-  'attest-1',
-  'attest-2',
-  'tools',
-  'register',
-] as const
+const STEPS = ['target', 'plant', 'attest', 'tools', 'register'] as const
 
 type Step = (typeof STEPS)[number]
 
@@ -85,18 +84,26 @@ type Step = (typeof STEPS)[number]
 const STEP_TITLES: Record<Step, string> = {
   target: 'The endpoint',
   plant: 'Plant the nonce',
-  'attest-0': 'Attestation 1 of 3',
-  'attest-1': 'Attestation 2 of 3',
-  'attest-2': 'Attestation 3 of 3',
+  attest: 'The three attestations',
   tools: 'What the bench will see',
   register: 'Register',
 }
 
 const PLANT_STEP = STEPS.indexOf('plant')
 
+/*
+ * What a target that answers in text only costs, on the summary and not on the answer.
+ *
+ * It was on both: under the *No* radio, where the paragraph over the question had
+ * just named the two families and said they report not measurable, and again in the
+ * summary. On the answer it was the sentence above it, repeated inside the option.
+ * The summary keeps it because a row reading *not visible* and nothing else states a
+ * declaration without its consequence, and names the families rather than pointing at
+ * them — there is nothing above that row for *those families* to refer to.
+ */
 const TOOL_TRACE_NOT_MEASURABLE =
-  'Both of those families will report not measurable, and the adaptive attacker ' +
-  'loses the tool that reads a trace.'
+  `${TOOL_TRACE_FAMILIES.join(' and ')} will report not measurable, and the ` +
+  'adaptive attacker loses the tool that reads a trace.'
 
 export function RegisterScreen() {
   const navigate = useNavigate()
@@ -271,8 +278,8 @@ export function RegisterScreen() {
         The eyebrow said *AgentAudit — registration*: the app's name is in the rail on
         every screen and the rail's current row says which screen this is. The line
         under it counted the steps and said that nothing is sent by this screen — the
-        count goes with it, and so does the claim, which was standing on all seven
-        steps including the one whose button sends. What is *actually* sent, and when,
+        count goes with it, and so does the claim, which was standing on every step
+        including the one whose button sends. What is *actually* sent, and when,
         is the halt this walk ends at: three attestations and two figures, and no call
         to anybody's endpoint until an operator answers it.
       */}
@@ -309,12 +316,8 @@ export function RegisterScreen() {
           busy={busy}
         />
       ) : null}
-      {current.startsWith('attest-') ? (
-        <AttestationStep
-          index={Number(current.slice('attest-'.length))}
-          declarations={declarations}
-          declare={declare}
-        />
+      {current === 'attest' ? (
+        <AttestationStep declarations={declarations} declare={declare} />
       ) : null}
       {current === 'tools' ? (
         <ToolVisibilityStep declarations={declarations} declare={declare} />
@@ -368,10 +371,14 @@ function canLeave(step: Step, declarations: Declarations): boolean {
       declarations.proof_waived
     )
   }
-  if (step.startsWith('attest-')) {
-    const statement = ATTESTATION_STATEMENTS[Number(step.slice('attest-'.length))]
+  if (step === 'attest') {
+    // All three, and the name they are recorded against. One page rather than three
+    // does not make any of them optional: what held the walk per statement now holds
+    // it for the set, and `registrationRequest` still names the ones left unmade.
     return (
-      declarations.attested[statement.field] && Boolean(declarations.identity.trim())
+      ATTESTATION_STATEMENTS.every(
+        (statement) => declarations.attested[statement.field],
+      ) && Boolean(declarations.identity.trim())
     )
   }
   if (step === 'tools') {
@@ -778,40 +785,48 @@ function WaiveTheProof({
   )
 }
 
-interface AttestationProps extends StepProps {
-  index: number
-}
-
-function AttestationStep({ index, declarations, declare }: AttestationProps) {
-  const statement = ATTESTATION_STATEMENTS[index]
+/**
+ * The three statements, on one page, each under the consequence of making it.
+ *
+ * An ordered list rather than three sections, because that is what it is: three
+ * statements in the order the record lists them, numbered so that somebody who has
+ * ticked the first can see how many are left. The name is asked for above them
+ * rather than beside one of them, since it is recorded against all three and a field
+ * sitting under the first would read as belonging to the first.
+ */
+function AttestationStep({ declarations, declare }: StepProps) {
   return (
     <section>
-      <p className="consequence">{statement.consequence}</p>
-      <label className="declaration">
+      <label>
+        Who is attesting
         <input
-          type="checkbox"
-          checked={declarations.attested[statement.field]}
-          onChange={(event) =>
-            declare({
-              attested: {
-                ...declarations.attested,
-                [statement.field]: event.target.checked,
-              },
-            })
-          }
+          value={declarations.identity}
+          onChange={(event) => declare({ identity: event.target.value })}
+          placeholder="recorded against every one of the three statements"
         />
-        <span className="wording">{statement.wording}</span>
       </label>
-      {index === 0 ? (
-        <label>
-          Who is attesting
-          <input
-            value={declarations.identity}
-            onChange={(event) => declare({ identity: event.target.value })}
-            placeholder="recorded against every one of the three statements"
-          />
-        </label>
-      ) : null}
+      <ol className="attestations">
+        {ATTESTATION_STATEMENTS.map((statement) => (
+          <li key={statement.field}>
+            <p className="consequence">{statement.consequence}</p>
+            <label className="declaration">
+              <input
+                type="checkbox"
+                checked={declarations.attested[statement.field]}
+                onChange={(event) =>
+                  declare({
+                    attested: {
+                      ...declarations.attested,
+                      [statement.field]: event.target.checked,
+                    },
+                  })
+                }
+              />
+              <span className="wording">{statement.wording}</span>
+            </label>
+          </li>
+        ))}
+      </ol>
       <p className="aside">
         All three statements are required and each is recorded separately.
       </p>
@@ -832,10 +847,14 @@ function ToolVisibilityStep({ declarations, declare }: StepProps) {
             checked={declarations.exposes_tool_calls === true}
             onChange={() => declare({ exposes_tool_calls: true })}
           />
-          <span>
-            Yes — a reply carries the calls the agent made, in the order it made
-            them, and where a stop signal landed among them.
-          </span>
+          {/*
+            One fact: the reply carries the calls. *In the order it made them* and
+            *where a stop signal landed among them* both went — what the two families
+            do with the trace is the paragraph over the question, and the answer to
+            *does this target expose its tool calls* is yes or no and not a
+            specification of the trace.
+          */}
+          <span>Yes — a reply carries the calls the agent made.</span>
         </label>
         <label className="declaration">
           <input
@@ -844,9 +863,7 @@ function ToolVisibilityStep({ declarations, declare }: StepProps) {
             checked={declarations.exposes_tool_calls === false}
             onChange={() => declare({ exposes_tool_calls: false, declared_tools: [] })}
           />
-          <span>
-            No — it answers in text only. {TOOL_TRACE_NOT_MEASURABLE}
-          </span>
+          <span>No — it answers in text only.</span>
         </label>
       </fieldset>
       {declarations.exposes_tool_calls === true ? (

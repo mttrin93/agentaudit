@@ -201,7 +201,6 @@ export function RunScreen() {
       {at?.kind === 'holding' ? (
         <TheInterrupt
           figures={figures}
-          held={at.statement}
           request={request}
           confirmed={confirmed}
           setConfirmed={setConfirmed}

@@ -115,13 +115,17 @@ export function ReportScreen() {
       : null
   return (
     <main className="screen">
+      {/*
+        The target, and nothing over or under it.
+
+        The eyebrow named the app the rail names on every screen, and the line under it
+        carried the run's id — which is in the address bar of the page it addresses —
+        and the artefact's name and version. That last is the only fact of the three
+        this page was the sole home of, so it moved to *How this report was made*,
+        which is where a reader looking for what this document is goes.
+      */}
       <header>
-        <p className="eyebrow">AgentAudit — report</p>
         <h1>{view ? view.target : 'Reading the report'}</h1>
-        <p className="steps">
-          Run {runId}
-          {view ? ` — ${view.artefact}` : null}
-        </p>
       </header>
 
       {held.unavailable ? (
@@ -193,13 +197,14 @@ function TheReport({ view, where }: { view: ReportView; where: ReportLocation })
             <a href={where.signature}>report.sig</a> — the detached signature
           </li>
         </ul>
+        {/* The instruction, and not the argument for it: what made the paragraph
+            long was the case for portable evidence, and the three links above are
+            that case. */}
         <p className="aside">
-          Save all three into one directory under the names they arrive with, then
-          run <code>uv run python -m scripts.verify</code> over it. That check
-          reaches no network and needs no credential, and it pins the key whose
-          fingerprint this repository’s README publishes — which is what makes this
-          evidence portable rather than a screenshot. A payload without the
-          signature beside it is the part that cannot be checked on its own.
+          Save all three into one directory under the names they arrive with, then run{' '}
+          <code>uv run python -m scripts.verify</code> over it. That check reaches no
+          network, needs no credential, and pins the key whose fingerprint this
+          repository’s README publishes.
         </p>
       </section>
 
@@ -280,9 +285,23 @@ function TheHeadline({ headline }: { headline: Headline }) {
       {headline.absent.length ? (
         <>
           <h3>On the checklist, and not declared</h3>
-          <ul>
+          {/*
+            The names, and the sentence once.
+
+            `stated` is the payload's own line and it is the same twenty words for
+            every control — *the checklist asks about this control and this target did
+            not claim it. An absence is not a finding and nothing was attempted against
+            it* — which read four times over is a paragraph that hides the four names
+            inside it. The signed field is unchanged; what this screen prints is the
+            list it is a list of, under the sentence that is true of all of them.
+          */}
+          <p className="aside">
+            The checklist asks about these and this target claimed none of them. An
+            absence is not a finding: nothing was attempted against any of them.
+          </p>
+          <ul className="names">
             {headline.absent.map((control) => (
-              <li key={control.control}>{control.stated}</li>
+              <li key={control.control}>{control.control}</li>
             ))}
           </ul>
         </>
@@ -369,6 +388,10 @@ function TheProvenance({ view }: { view: ReportView }) {
     <section>
       <h2>How this report was made</h2>
       <dl className="review">
+        <div>
+          <dt>artefact</dt>
+          <dd>{view.artefact}</dd>
+        </div>
         <div>
           <dt>attested by</dt>
           <dd>

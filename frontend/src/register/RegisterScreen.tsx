@@ -58,7 +58,7 @@ import {
   registrationRequest,
   type Declarations,
 } from './declarations'
-import { rememberTheFigures } from '../run/interrupt'
+import { rememberTheFigures, rememberWhoAttested } from '../run/interrupt'
 
 /**
  * The steps, in order, one per screen.
@@ -254,6 +254,9 @@ export function RegisterScreen() {
       // arrives with this response and nowhere else. Held under the run's own id,
       // for the screen that has to show it before anybody may confirm it.
       rememberTheFigures(sessionStorage, outcome.run.run_id, outcome.run.estimate)
+      // And who attested it. The interrupt has no field asking again, and the bench
+      // writes `confirmed by <name>` when the answer arrives.
+      rememberWhoAttested(sessionStorage, outcome.run.run_id, declarations.identity)
       // A real navigation, and the run id is the whole of what the URL carries:
       // the run exists on the bench, holding its interrupt, and the run screen
       // reads its standing from there rather than from anything this screen chose
@@ -892,10 +895,16 @@ interface RegisterProps {
 function RegisterStep({ declarations, request }: RegisterProps) {
   return (
     <section>
+      {/*
+        Three verbs and the promise. *Against a hash of the endpoint* went: how the
+        attestation is bound to the URL is a fact about the record, and this paragraph
+        is here to say what pressing the button does. The second sentence stays as it
+        is — it is the one thing an operator needs before pressing it.
+      */}
       <p>
-        Registering records the attestation against a hash of the endpoint, plans
-        the run and halts it in front of its cost. Nothing reaches your endpoint
-        until you answer that halt on the next screen.
+        Registering records the attestation, plans the run and halts it in front of
+        its cost. Nothing reaches your endpoint until you answer that halt on the
+        next screen.
       </p>
       <dl className="review">
         <dt>Target</dt>

@@ -160,13 +160,18 @@ export function RunScreen() {
   const at = progress === null ? null : standing(progress)
   return (
     <main className="screen">
+      {/*
+        The heading, and nothing over or under it.
+
+        The eyebrow said *AgentAudit — run*: the app's name is in the rail and the
+        rail's current row says which screen this is. The line under it carried the
+        run's id and the poll interval — the id is in the address bar of the page it
+        addresses, and the interval is a fact about this client, not about the run.
+        What the run is doing is the heading, and the section under it says it again
+        in the bench's own words.
+      */}
       <header>
-        <p className="eyebrow">AgentAudit — run</p>
         <h1>{at === null ? 'Reading the run' : at.heading}</h1>
-        <p className="steps">
-          Run {runId}
-          {at?.inFlight ? ` — asked again every ${POLL_SECONDS} seconds` : null}
-        </p>
       </header>
 
       {unavailable ? (
@@ -399,11 +404,6 @@ function Progress({
           <LayerPanel reading={scoredReading(progress.scored)} />
           <LayerPanel reading={adaptiveReading(progress.adaptive)} />
         </div>
-        <p className="aside">
-          Two positions in two sets of units, and two figures for what has been
-          spent. There is no third figure here: an attempt and a turn are not the
-          same thing, so nothing on this screen adds them.
-        </p>
 
         {/*
           The same two readings the gate screen draws while a gate run goes, over one
@@ -462,8 +462,15 @@ function Progress({
 
       {progress.report ? (
         <section>
+          {/*
+            The three artefacts, as three links and their names.
+
+            `report.statement` is not drawn: it named the three files and said what
+            `scripts/verify.py` does with a directory containing them, which is a
+            paragraph above a list of exactly those three links. The sentence is still
+            on the wire and the report screen is where it is read.
+          */}
           <h2>The report</h2>
-          <p>{progress.report.statement}</p>
           <p className="consequence">
             <Link to={`/runs/${runId}/report`}>Read the report</Link> — the finding,
             the per-family figures and whether the artefact verifies.
@@ -479,10 +486,6 @@ function Progress({
               <a href={progress.report.signature}>the detached signature</a>
             </li>
           </ul>
-          <p className="aside">
-            All three, saved under the names they arrive with: a payload without the
-            signature beside it is the part that cannot be checked on its own.
-          </p>
         </section>
       ) : null}
     </>
@@ -622,7 +625,15 @@ function LayerPanel({ reading }: { reading: LayerReading }) {
           ))}
         </dl>
       )}
-      <p>{reading.statement}</p>
+      {/*
+        The bench's sentence about the position is not drawn here, and the `dl` above
+        is the reason: *family wrongful_commitment, case wrongful-commitment-003,
+        attempt 10: the position the scored layer has reached* is the three values
+        beside it, read out in prose. The field stays on the reading because the gate
+        screen draws it where there is no position to draw — a layer the run has not
+        reached says so in a sentence, and there the sentence is the only thing there
+        is.
+      */}
       <p>
         <strong>{reading.callsSpent} calls</strong> spent in this layer.
       </p>

@@ -85,7 +85,14 @@ export interface LayerReading {
   units: readonly [string, string, string]
   /** One value per unit, or `null` while the layer has attempted nothing. */
   at: readonly [string, string, string] | null
-  /** The bench's own sentence about the position, carried unedited. */
+  /**
+   * The bench's own sentence about the position, carried unedited.
+   *
+   * Drawn where there is no position to draw. The run screen shows the units and
+   * their values and not this, because against a position the sentence is those
+   * values read out in prose; the gate screen shows it for a layer a run has not
+   * reached, where it is the only thing to show.
+   */
   statement: string
   /** Calls this layer has put on the wire. Its own figure, added to nothing. */
   callsSpent: number
@@ -159,6 +166,17 @@ export type StandingKind =
 export interface Standing {
   kind: StandingKind
   name: string
+  /**
+   * The state, in as few words as will name it.
+   *
+   * It is the screen's `h1` and the whole of its header, so it says what the run is
+   * doing and stops. These were sentences — *Running, under the ceiling that was
+   * confirmed*, *Aborted: the run stopped rather than spend past its ceiling* — each
+   * of them a clause of explanation welded to the one word the heading is for, and
+   * each of them said again underneath in `statement`, which is the bench's own
+   * wording and the one that should carry it. A transport failure keeps its name in
+   * the heading, because there the name *is* the state.
+   */
   heading: string
   statement: string
   /** How an episode this run was inside is recorded. Never anything but censored. */
@@ -191,7 +209,7 @@ export function standing(progress: RunProgress): Standing {
       return {
         kind: 'holding',
         name: progress.status,
-        heading: 'Holding at the approval interrupt',
+        heading: 'Holding at the interrupt',
         statement: progress.statement,
         episode: null,
         notASecurityResult: '',
@@ -201,7 +219,7 @@ export function standing(progress: RunProgress): Standing {
       return {
         kind: 'running',
         name: progress.status,
-        heading: 'Running, under the ceiling that was confirmed',
+        heading: 'Running',
         statement: progress.statement,
         episode: null,
         notASecurityResult: '',
@@ -211,7 +229,7 @@ export function standing(progress: RunProgress): Standing {
       return {
         kind: 'aborted',
         name: progress.status,
-        heading: 'Aborted: the run stopped rather than spend past its ceiling',
+        heading: 'Aborted at the ceiling',
         statement: progress.statement,
         // The one place this screen names an episode's outcome, and the only name
         // it has for one.
@@ -227,7 +245,7 @@ export function standing(progress: RunProgress): Standing {
       return {
         kind: 'completed',
         name: progress.status,
-        heading: 'Finished, inside the ceiling that was confirmed',
+        heading: 'Finished',
         statement: progress.statement,
         episode: null,
         notASecurityResult: '',
@@ -237,7 +255,7 @@ export function standing(progress: RunProgress): Standing {
       return {
         kind: 'declined',
         name: progress.status,
-        heading: 'Declined: nothing was sent and nothing was spent',
+        heading: 'Declined',
         statement: progress.statement,
         episode: null,
         notASecurityResult: '',
@@ -247,7 +265,7 @@ export function standing(progress: RunProgress): Standing {
       return {
         kind: 'unanswered',
         name: progress.status,
-        heading: 'Unanswered: the interrupt was never answered',
+        heading: 'Unanswered',
         statement: progress.statement,
         episode: null,
         notASecurityResult:
@@ -260,7 +278,7 @@ export function standing(progress: RunProgress): Standing {
       return {
         kind: 'registration_refused',
         name: progress.status,
-        heading: 'The target did not echo the nonce, so no attempt was made',
+        heading: 'The nonce was not echoed',
         statement: progress.statement,
         episode: null,
         notASecurityResult:
@@ -272,7 +290,7 @@ export function standing(progress: RunProgress): Standing {
       return {
         kind: 'stopped',
         name: progress.status,
-        heading: `The run stopped as ${progress.status}`,
+        heading: `Stopped as ${progress.status}`,
         statement: progress.statement,
         episode: null,
         notASecurityResult:

@@ -216,8 +216,15 @@ class BenchConfig:
 
     Same default as `run_calibration`, and for the same reason: the layer always
     runs, and a bench with no model credential configured still spends the
-    operator's endpoint the way a real one would. Naming a configured model here
-    is the deployment's business.
+    operator's endpoint the way a real one would.
+
+    **A deployment that declared a model is handed one here.** The factory reads
+    `AGENTAUDIT_ATTACKER_MODEL` and builds the client beside the identifier that
+    goes into `report.models.attacking`, in one call, so the attacker a run is
+    made with and the model its provenance names cannot come apart
+    (`app.declared_instrument`). A caller that builds its own `BenchConfig` is
+    making both of those statements itself, and the stand-in is what it says when
+    it makes neither.
     """
 
     adjudicator: Completion | None = None

@@ -93,6 +93,16 @@ REFERENCE_MODEL_ENV = "AGENTAUDIT_REFERENCE_MODEL"
 ADJUDICATOR_MODEL_ENV = "AGENTAUDIT_ADJUDICATOR_MODEL"
 """Where a deployment declares the instrument that decides the judged families."""
 
+ATTACKER_MODEL_ENV = "AGENTAUDIT_ATTACKER_MODEL"
+"""Where a deployment declares the model the adaptive layer's attacker runs on.
+
+A third variable rather than a reading of either of the other two, for the reason
+`DEFAULT_ATTACKER_MODEL` is a third constant: an attacker that moved with the model
+under the agents, or with the one deciding a judged family, would make `A_break`
+a reading about two things at once (ADR-0011). Unset is the deterministic stand-in
+of `backend/bench/adaptive/scripted.py`, declared as such and never named as a model.
+"""
+
 
 def declared_model(variable: str) -> str | None:
     """What the environment declares under that name, or `None` for nothing.
@@ -102,7 +112,7 @@ def declared_model(variable: str) -> str | None:
     target URL or a bearer token cannot arrive that way behind a default
     (`test_api_runs.py`). A model identifier can, and only through this function —
     it is declared configuration that every signed report already prints, and the
-    scripts read these same two variables.
+    scripts read these same variables.
 
     **Blank is nothing.** An environment variable set to the empty string is how half
     the tooling that sets one says *unset*, and a bench that treated it as a model

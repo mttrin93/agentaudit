@@ -186,12 +186,15 @@ from backend.api.runs import (
     RunRecord,
     RunStatus,
 )
+from backend.bench.adaptive.attacker import AttackerCompletion
 from backend.bench.adaptive.budget import DECLARED_ADAPTIVE_BUDGET, AdaptiveBudget
+from backend.bench.adaptive.scripted import SCRIPTED_ATTACKER
 from backend.bench.adjudication import Completion
 from backend.bench.admission import admitted_library
 from backend.bench.cited import the_citation, the_reliability
 from backend.bench.completion import (
     ADJUDICATOR_MODEL_ENV,
+    ATTACKER_MODEL_ENV,
     REFERENCE_MODEL_ENV,
     completion_for,
     declared_model,
@@ -2982,10 +2985,11 @@ def deployed_bench() -> BenchConfig:
     except NoSigningKey as missing:
         raise NoSigningKey(f"{missing}. {NO_KEY_NO_BOOT}") from missing
     library = deployed_library() or CASES_DIR
-    models, adjudicator = deployed_models()
+    models, adjudicator, attacker = deployed_models()
     return BenchConfig(
         cases=admitted_library(library),
         adjudicator=adjudicator,
+        attacker=attacker,
         report=ReportConfig(
             signing_key=key,
             gate=the_citation(library),
@@ -3021,8 +3025,40 @@ NAMED_BUT_UNUSABLE = (
 )
 
 
-def deployed_models() -> tuple[DeclaredModels, Completion | None]:
-    """The models a deployment declared, and the adjudicator built from one of them.
+def declared_instrument(variable: str) -> tuple[str, Completion | None]:
+    """What a report will print for that instrument, and the client that will run it.
+
+    One function returning both halves, because they are one fact stated twice and a
+    deployment where they disagree is the failure this shape exists to make
+    unavailable: a provenance block naming a model nothing called, or a model calling
+    a target under a report that does not name it. Both come out of the same string
+    here, so the pairing is a property of the code rather than of whoever edits the
+    caller next.
+
+    The identifier is `UNDECLARED_MODEL` when the environment declares nothing, and
+    the client is `None` beside it — a stated absence and no instrument, which is the
+    only other pair this can return.
+
+    **A model named and unbuildable stops the boot.** `completion_for` builds its
+    client at configuration time precisely so a missing credential is not discovered
+    at the first call, and this keeps that promise one level up: the alternative is a
+    console that offers a start control for 830 calls against an instrument that was
+    never there. The refusal names the variable, because the person who can set one
+    is the person reading the traceback.
+    """
+    declared = declared_model(variable)
+    if declared is None:
+        return UNDECLARED_MODEL, None
+    try:
+        return declared, completion_for(declared)
+    except (KeyError, ValueError) as unusable:
+        raise RuntimeError(
+            f"{variable}={declared!r}: {unusable}. {NAMED_BUT_UNUSABLE}"
+        ) from unusable
+
+
+def deployed_models() -> tuple[DeclaredModels, Completion | None, AttackerCompletion]:
+    """The models a deployment declared, and the two instruments built from them.
 
     **The environment is read through `completion.declared_model` and nowhere else.**
     No module of `backend/api/` imports `os`, which is what keeps a price, a target
@@ -3034,38 +3070,32 @@ def deployed_models() -> tuple[DeclaredModels, Completion | None]:
     describe a run that did not happen (`UNDECLARED_MODEL`, ADR-0004). What the
     environment declares, this builds; what it does not, stays a stated absence.
 
-    **Two are read and the third is not.** The reference agents' model and the
-    adjudicating model are both used by a gate run started from the console — one
-    serves the three agents, the other decides the two judged families. The attacking
-    model is left undeclared because this bench runs the deterministic stand-in for
-    it: naming a model it does not call would be the lie the stated absence exists to
-    avoid.
+    **Three are read, and two of them are built.** The reference agents' model is
+    served to equipment rather than called from here, so it is declared and not
+    built. The adjudicator and the adaptive attacker are both instruments this
+    process calls, they are two settings on purpose (ADR-0011), and each arrives
+    through `declared_instrument` — which returns the identifier and the client
+    together, so a run cannot be attacked by a model the provenance block does not
+    name, and the block cannot name one that did not attack.
 
-    **A model named and unbuildable stops the boot.** `completion_for` builds its
-    client at configuration time precisely so a missing credential is not discovered
-    at the first call, and this keeps that promise one level up: the alternative is a
-    console that offers a start control for 830 calls against an instrument that was
-    never there. A deployment that declares nothing still boots and still serves
-    reports — it simply runs no gate (ADR-0020's shape, for a different instrument).
+    **An undeclared attacker is the deterministic stand-in, and says so.** The
+    adaptive layer always runs, so the fallback is an attacker rather than nothing:
+    `SCRIPTED_ATTACKER` spends the operator's endpoint the way a real one would while
+    the identifier beside it stays a stated absence, because the stand-in is test
+    equipment and not a model (`adaptive/scripted.py`). A deployment that declares
+    nothing still boots, still runs, and still serves reports.
     """
     calibration = declared_model(REFERENCE_MODEL_ENV)
-    adjudicating = declared_model(ADJUDICATOR_MODEL_ENV)
-    adjudicator: Completion | None = None
-    if adjudicating is not None:
-        try:
-            adjudicator = completion_for(adjudicating)
-        except (KeyError, ValueError) as unusable:
-            raise RuntimeError(
-                f"{ADJUDICATOR_MODEL_ENV}={adjudicating!r}: {unusable}. "
-                f"{NAMED_BUT_UNUSABLE}"
-            ) from unusable
+    adjudicating, adjudicator = declared_instrument(ADJUDICATOR_MODEL_ENV)
+    attacking, attacker = declared_instrument(ATTACKER_MODEL_ENV)
     return (
         DeclaredModels(
             calibration=calibration or UNDECLARED_MODEL,
-            adjudicating=adjudicating or UNDECLARED_MODEL,
-            attacking=UNDECLARED_MODEL,
+            adjudicating=adjudicating,
+            attacking=attacking,
         ),
         adjudicator,
+        attacker or SCRIPTED_ATTACKER,
     )
 
 

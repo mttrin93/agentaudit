@@ -7,11 +7,12 @@ network and no spend. What a real attacker would think of to send is not under t
 here, and it has its own evaluation, which is `A_break` (#17, ADR-0011).
 
 It is the default `attacker` of `run_calibration` so that a run always exercises the
-layer, and `scripts/calibrate.py` passes a configured model instead — the same
-arrangement as `--model`, where the stub is the thing tests run on and the entry
-point names a real one. A run's attacker is a declared input either way, on the same
-terms as the adjudicator: a result is not readable without knowing which instrument
-produced it.
+layer, and every entry point that declares a model passes one instead — the scripts
+from `--attacker-model`, the app factory from `AGENTAUDIT_ATTACKER_MODEL`
+(`api/app.declared_instrument`). The same arrangement as `--model`, where the stub is
+the thing tests run on and the entry point names a real one. A run's attacker is a
+declared input either way, on the same terms as the adjudicator: a result is not
+readable without knowing which instrument produced it.
 
 It is not clever and is not meant to be. It reads precedent once, probes, looks
 whenever it has just probed, spends one turn on the trace, and proposes the route

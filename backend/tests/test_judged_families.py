@@ -27,6 +27,9 @@ gold set (#11).
 """
 
 import ast
+import itertools
+import threading
+import time
 from collections.abc import Iterator
 from dataclasses import replace
 from pathlib import Path
@@ -55,7 +58,8 @@ from backend.bench.library import (
 )
 from backend.bench.rule import DECLARED_RULE
 from backend.graph.approval import Approval
-from backend.graph.budget import BudgetPayload
+from backend.graph.budget import BudgetPayload, Layer, RunBudget
+from backend.graph.runstate import RunState
 from backend.targets.reference.hardened import HARDENED
 from backend.targets.reference.prompt import DOCUMENT_ASSISTANT_PROMPT
 from backend.targets.reference.trivial import HUMAN_PERSONA, TRIVIAL
@@ -69,6 +73,7 @@ from backend.tests.conftest import (
     target_run_for,
     unlisted_case,
 )
+from backend.tests.flaky_target import flaky_target
 
 JUDGED_FAMILIES = (Family.WRONGFUL_COMMITMENT, Family.DISCLOSURE_DENIAL)
 
@@ -498,6 +503,107 @@ def _imports_of(source: Path) -> Iterator[str]:
             module = node.module or ""
             yield module
             yield from (f"{module}.{alias.name}" for alias in node.names)
+
+
+# --- A judged verdict does not hold up the next attempt ---------------------
+
+
+def test_adjudications_run_beside_the_sends_rather_than_between_them(
+    wrongful_commitment_case: Case,
+) -> None:
+    """Two adjudications have to be in flight at once, or this cannot finish.
+
+    A barrier and not a stopwatch: an adjudicator that will not answer until a second
+    one is also waiting cannot be satisfied by a suite that decides one attempt
+    before sending the next. The timeout is what a sequential run fails on, and it is
+    generous — this is a test of *whether* the two overlap, not of how fast they do.
+    """
+    paired = threading.Barrier(2, timeout=20.0)
+
+    def adjudicating_in_pairs(system_prompt: str, message: str) -> str:
+        paired.wait()
+        return f"verdict: {Verdict.RESISTED}"
+
+    target_run = target_run_for(
+        wrongful_commitment_case, adjudicator=adjudicating_in_pairs
+    )
+
+    assert len(target_run.attempts) == DECLARED_RULE.attempts_per_case
+    assert {a.verdict for a in target_run.attempts} == {Verdict.RESISTED}
+
+
+def test_attempts_are_recorded_in_send_order_whatever_order_verdicts_arrive_in(
+    wrongful_commitment_case: Case,
+) -> None:
+    """The instrument answers the first attempt last; the record still reads forwards.
+
+    The rate does not care about the order, but the run does: the position, the last
+    exchange a watcher sees and the evidence a reader walks are all in the order the
+    messages went out. So this drives the arrangement that would expose a queue
+    drained from anywhere but the front — an endpoint slow enough that verdicts land
+    between sends, and a first verdict that lands after the second, third and fourth.
+    """
+    asked = itertools.count()
+
+    def slowest_for_the_first(system_prompt: str, message: str) -> str:
+        time.sleep(0.30 if next(asked) == 0 else 0.02)
+        return f"verdict: {Verdict.SUCCEEDED}"
+
+    with flaky_target(failures_before_reply=0, sleep_seconds=0.06) as flaky:
+        result = run_calibration(
+            cases=[wrongful_commitment_case],
+            targets=[flaky.target],
+            attestation=BENCH_ATTESTATION,
+            plant_nonce=flaky.plant_nonce,
+            approve=CONFIRMING,
+            adjudicator=slowest_for_the_first,
+        )
+
+    [target_run] = result.target_runs
+    assert [a.index for a in target_run.attempts] == list(
+        range(DECLARED_RULE.attempts_per_case)
+    )
+    assert [a.started_at for a in target_run.attempts] == sorted(
+        a.started_at for a in target_run.attempts
+    )
+
+
+def test_a_failed_adjudication_still_stops_the_run_before_the_case_finishes(
+    wrongful_commitment_case: Case,
+) -> None:
+    """Deferred is not forgiven.
+
+    The failure is raised on the thread that is spending the budget, at the point in
+    the order where the attempt sits — so what it costs the operator is the sends that
+    were already in flight when it failed, and not the rest of the case.
+    """
+    asked = itertools.count(1)
+
+    def failing_on_the_third(system_prompt: str, message: str) -> str:
+        if next(asked) == 3:
+            return "verdict: something the instrument invented"
+        return f"verdict: {Verdict.RESISTED}"
+
+    with reference_target() as reference:
+        run_state = RunState(
+            budget=RunBudget.declare(
+                cases=[wrongful_commitment_case], targets=[reference.target]
+            )
+        )
+        with pytest.raises(AdjudicationFailed):
+            run_calibration(
+                cases=[wrongful_commitment_case],
+                targets=[reference.target],
+                attestation=BENCH_ATTESTATION,
+                plant_nonce=reference.plant_nonce,
+                approve=CONFIRMING,
+                adjudicator=failing_on_the_third,
+                run_state=run_state,
+            )
+
+    # The registration probe and some of the case, and not all of it: the run stops
+    # inside the window of sends the failure was already behind.
+    assert run_state.spent_in(Layer.SCORED) < DECLARED_RULE.attempts_per_case
 
 
 def _run_against_trivial(cases: list[Case]) -> TargetRun:

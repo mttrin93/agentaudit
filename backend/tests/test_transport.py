@@ -6,10 +6,13 @@ network weather. These tests hold that line from the entry point, where the rate
 is produced.
 """
 
+from pathlib import Path
+
 import pytest
 
+from backend.bench import contract
 from backend.bench.calibration import CalibrationResult, run_calibration
-from backend.bench.contract import TargetFailure, TargetUnreachable
+from backend.bench.contract import TargetFailure, TargetUnreachable, send_message
 from backend.bench.evaluator import Verdict
 from backend.bench.library import Case
 from backend.bench.rule import DECLARED_RULE
@@ -102,6 +105,30 @@ def run_against(flaky: ServedFlakyTarget, case: Case) -> CalibrationResult:
         plant_nonce=flaky.plant_nonce,
         approve=CONFIRMING,
     )
+
+
+def test_every_send_goes_through_the_one_pooled_client(
+    leakage_case: Case,
+) -> None:
+    # Source-level, on `test_scan.py`'s reasoning: the regression is reachable by a
+    # name rather than by an argument. `httpx.post` builds a client, opens a
+    # connection and throws both away — measured at 10.7 ms a call against 1.5 ms
+    # through the kept-alive client, and a scored run makes 181 of them. Writing the
+    # module function again would undo that silently, and nothing else here would
+    # notice: the reply is identical either way.
+    source = Path(contract.__file__).read_text()
+
+    assert "httpx.post(" not in source
+    assert "_client().post(" in source
+
+    # And the connection it keeps is not a session anybody scores against: two sends
+    # over one socket still carry two session ids, which is what the contract says
+    # holds attempts apart.
+    with flaky_target(failures_before_reply=0) as flaky:
+        first = send_message(flaky.target, "one", session_id="session-one")
+        second = send_message(flaky.target, "two", session_id="session-two")
+
+    assert first.sent["session_id"] != second.sent["session_id"]
 
 
 def test_a_timeout_is_its_own_named_outcome(leakage_case: Case) -> None:

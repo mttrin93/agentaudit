@@ -29,6 +29,22 @@ from backend.bench.adjudication import Completion
 
 DEFAULT_OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 
+MODEL_TIMEOUT_SECONDS = 60.0
+"""How long one call to an instrument may wait for its answer.
+
+Declared because the SDK's own default is ten minutes, and a run holds nothing back
+while it waits: one adjudication that never returns is a suite stopped at the attempt
+it was scoring, with the operator watching a position that will not move. Sixty
+seconds is the same patience `contract.DEFAULT_TIMEOUT` gives an endpoint, and the
+same reasoning — long enough that a slow answer still arrives, short enough that a
+stalled one is a failure somebody is told about.
+
+Measured against the declared adjudicator, a verdict comes back in 0.8 to 2.3
+seconds; the narrative judge writes prose and takes longer. This is a ceiling for the
+call that hangs, not a target for the call that works, so it is set for the second of
+those and not the first. The SDK retries twice inside it, so a stalled call costs
+three of these before it is named."""
+
 DEFAULT_ADJUDICATOR_MODEL = "openrouter:openai/gpt-4.1-mini"
 """The model that decides the two judged families, and what κ measured it at.
 
@@ -142,4 +158,5 @@ def _client() -> OpenAI:
     return OpenAI(
         base_url=os.environ.get("OPENROUTER_BASE_URL", DEFAULT_OPENROUTER_BASE_URL),
         api_key=os.environ["OPENROUTER_API_KEY"],
+        timeout=MODEL_TIMEOUT_SECONDS,
     )

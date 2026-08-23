@@ -42,6 +42,7 @@ defended itself, and a body the bench cannot read is not an empty reply.
 
 from __future__ import annotations
 
+import functools
 import time
 from collections.abc import Sequence
 from dataclasses import dataclass, field
@@ -434,6 +435,31 @@ class Transcript:
         return ToolTrace.from_payload(self.received.get("tool_trace"))
 
 
+@functools.lru_cache(maxsize=1)
+def _client() -> httpx.Client:
+    """The one client every send goes through, so the connection is not rebuilt.
+
+    `httpx.post` builds a client, opens a connection and throws both away, once per
+    call. A scored run is 181 calls at one endpoint: measured against a local
+    reference agent that is 10.7 ms a call against 1.5 ms through a kept-alive
+    client, and the gap is the whole of the handshake — which is TCP alone there and
+    TCP plus TLS against anything remote.
+
+    **A reused connection is not a reused session.** Attempts are independent
+    because each carries its own `session_id` and the contract says that is what
+    carries a conversation; the socket underneath them is transport. A target that
+    kept state per connection would be answering a protocol this one does not
+    describe.
+
+    The timeout stays on the request rather than moving to the client, because it is
+    the *target's* declared patience (`RetryPolicy.timeout_seconds`) and one client
+    serves every target in a run. The pool is closed by the process exiting, on the
+    reasoning `completion.py` builds its own client on: a bench that is running has
+    one of these, and a bench that is not is gone.
+    """
+    return httpx.Client()
+
+
 def send_message(target: TargetConfig, message: str, session_id: str) -> Transcript:
     """Send one message to a target, retrying transient failures, and record
     the exchange.
@@ -445,7 +471,7 @@ def send_message(target: TargetConfig, message: str, session_id: str) -> Transcr
     for send in range(1, target.retry.sends + 1):
         last_send = send == target.retry.sends
         try:
-            response = httpx.post(
+            response = _client().post(
                 target.url,
                 json=sent,
                 headers={"Authorization": f"Bearer {target.auth_token}"},
@@ -461,6 +487,11 @@ def send_message(target: TargetConfig, message: str, session_id: str) -> Transcr
         except httpx.TransportError:
             # No connection at all — refused, reset, or a name that did not
             # resolve. A different fact about the endpoint from a timeout.
+            #
+            # A pooled connection the endpoint closed while it was idle arrives here
+            # too, as `RemoteProtocolError`, and is retried like any other bad
+            # minute. That race is the price of keeping connections, and the retry
+            # policy is what already pays it.
             if last_send:
                 raise TargetUnreachable(
                     TargetFailure.UNREACHABLE, target.url, send

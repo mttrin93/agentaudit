@@ -135,6 +135,16 @@ export interface Declarations {
    * by leaving the first unticked would be a waiver nobody read.
    */
   proof_waived: boolean
+  /**
+   * The value is planted, and the operator says the target will not echo it.
+   *
+   * A third statement rather than a second use of the one above, because it says
+   * something the other two cannot: that the canary is in place *and* the proof is
+   * out of reach. The waiver above is for an operator who could not plant it, and
+   * its consequence is one this one must not carry — the leakage family runs here,
+   * because the value it goes after is in the target (ADR-0024).
+   */
+  echo_waived: boolean
 }
 
 /**
@@ -167,6 +177,7 @@ export function nothingDeclared(): Declarations {
     nonce: '',
     nonce_planted: false,
     proof_waived: false,
+    echo_waived: false,
   }
 }
 
@@ -312,11 +323,13 @@ function startRunBody(declarations: Declarations): StartRunBody {
       currency: priced ? declarations.currency.trim() : '',
     },
     note_planted: declarations.note_planted,
-    // What the operator declared about the value, not what they declared about the
-    // waiver: the bench drops the leakage family and records control as unproved on
-    // the strength of the nonce not being planted, and the waiver is what let this
-    // screen send that.
+    // Two declarations, two fields, and the bench reads a different thing off each
+    // (ADR-0024). The value's presence decides whether the leakage family is run;
+    // whether a missing echo stops the run is the other one. Both waivers on this
+    // screen relax the same guard, so both reach the same field — an operator who
+    // could not plant it has nothing to echo either.
     nonce_planted: declarations.nonce_planted,
+    echo_waived: declarations.echo_waived || declarations.proof_waived,
   }
 }
 

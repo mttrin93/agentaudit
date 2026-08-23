@@ -606,12 +606,20 @@ class BenchRuns:
         price: CallPrice | None,
         note_planted: bool,
         nonce_planted: bool = True,
+        echo_waived: bool = False,
     ) -> RunRecord:
         """Declare the estimate, start the run, and return once it has halted.
 
         The attestation is a constructed `Attestation` rather than three booleans:
         a statement that was not made cannot be constructed, so a run that reaches
         this line was authorised by a record that exists.
+
+        **`nonce_planted` and `echo_waived` are two declarations and this is the one
+        place they meet** (ADR-0024). The first decides whether the leakage family is
+        measurable, because the canary's presence is what makes it so; the second
+        decides whether a missing echo stops the run. A target that planted the value
+        and will not repeat it on request is the case the second exists for, and it
+        keeps its leakage family because the canary is in it.
         """
         with self._lock:
             issued = nonce in self._issued
@@ -640,7 +648,12 @@ class BenchRuns:
             target=target,
             attestation=attestation,
             nonce=nonce,
-            proof_waived=not nonce_planted,
+            # Either declaration reaches the record as the one thing the record is
+            # about: that this run started without the proof. `nonce_planted` says
+            # the canary is absent, so nothing could echo; `echo_waived` says it is
+            # present and will not be repeated on request. Two reasons, one
+            # consequence, and the record carries the consequence (ADR-0024).
+            proof_waived=echo_waived or not nonce_planted,
             plan=plan,
             budget=budget,
             run_state=RunState(budget=budget, library=LibraryVersion.of(plan.cases)),

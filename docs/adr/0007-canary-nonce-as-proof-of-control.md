@@ -57,6 +57,14 @@ status: accepted
     a clean rate against an attack that was never possible. It is dropped by
     `plan_for` and reported as a declared gap, the same treatment the unplanted
     indirect-injection note gets, and the estimate does not charge for it.
+
+    **Amended by [ADR-0024](./0024-a-planted-canary-that-will-not-be-echoed-is-still-measurable.md):
+    this bullet holds for an unplanted value, which is the case the amendment above
+    was written for, and not for the waiver as such.** A target that planted the
+    canary and refuses to repeat it on request has the value in place, so the family
+    is measurable and is run. The two statements are two declarations there —
+    `nonce_planted` decides the family, `echo_waived` decides whether a missing echo
+    stops the run — and `plan_for` still reads only the first.
   - **The report says which it was.** `control_proved` travels in the provenance
     block beside the attestation, inside the signed bytes and printed in the
     rendering: *proved* against an endpoint that echoed, *declared, and not proved*

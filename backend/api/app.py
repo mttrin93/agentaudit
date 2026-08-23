@@ -457,17 +457,37 @@ class StartRunRequest(BaseModel):
     nonce_planted: bool = True
     """Whether the registration nonce is in the target's configuration.
 
-    Declared false, this is the operator waiving the proof of control (ADR-0007, as
-    amended). It is the one declaration on this request that relaxes a guard rather
-    than describing the target, and it does three things, all of them stated
-    somewhere a reader will meet them: the run still sends its echo probe but a
-    missing echo no longer stops it; the data-leakage family is dropped from the plan,
-    because its canary *is* this value and a string nowhere in the target cannot leak;
-    and the artefact records that control was declared and not proved.
+    Declared false, the data-leakage family is dropped from the plan, because its
+    canary *is* this value and a string nowhere in the target cannot leak — and a run
+    with nothing planted has nothing an echo could prove, so it also starts without
+    the proof (ADR-0007, as amended).
+
+    **It no longer carries the waiver by itself** (ADR-0024). Whether a missing echo
+    stops the run is `echo_waived` below, because a target that planted the value and
+    will not repeat it on request is measurable on the family this field decides and
+    unprovable on the guard that one does.
 
     Defaults to `True`, so a caller that says nothing gets the guard. The default has
     to be the strict one: a waiver that could be obtained by omitting a field is a
     waiver nobody makes on purpose.
+    """
+
+    echo_waived: bool = False
+    """Whether the run may start without the target echoing the planted nonce.
+
+    The declaration for an agent whose disclosure rule is blanket: the value is in its
+    configuration, and it refuses to repeat it because it cannot tell a registration
+    check from an attack. Declared true, the probe is still sent and `echoed` still
+    records what came back — what changes is only whether a missing echo *stops* the
+    run, and the artefact says control was declared and not proved either way
+    (ADR-0024).
+
+    It decides nothing about what is measured. The leakage family turns on
+    `nonce_planted` above, so a run that declares the canary planted keeps the family
+    it is the canary for, which is the whole reason this field is not that one.
+
+    Defaults to `False`, for the same reason that one defaults to `True`: a guard
+    relaxed by an omitted field is a guard nobody chose to relax.
     """
 
 
@@ -3132,6 +3152,7 @@ def create_app(
                 price=price,
                 note_planted=request.note_planted,
                 nonce_planted=request.nonce_planted,
+                echo_waived=request.echo_waived,
             )
         except NonceNotIssued as unregistered:
             raise HTTPException(

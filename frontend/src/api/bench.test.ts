@@ -89,9 +89,13 @@ describe('the registration this screen posts', () => {
       nonce: NONCE,
       cost: { price_per_call: '0.002', currency: 'USD' },
       note_planted: true,
-      // Sent on every body and never omitted. The bench's default is the guard, so
-      // a waiver that could be had by leaving a field out is one nobody made.
+      // Both sent on every body and never omitted. The bench's default is the guard
+      // on each, so a waiver that could be had by leaving a field out is one nobody
+      // made — and they are two fields because the bench reads two different things
+      // off them: the leakage family from the first, the echo guard from the second
+      // (ADR-0024).
       nonce_planted: true,
+      echo_waived: false,
     })
   })
 

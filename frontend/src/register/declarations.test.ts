@@ -189,6 +189,30 @@ describe('the nonce', () => {
     expect(ready.kind === 'ready' && ready.body.nonce_planted).toBe(false)
   })
 
+  it('sends the planted value and the unreachable echo as two fields', () => {
+    // The case ADR-0024 splits out: the value is in the target and the target will
+    // not repeat it. Both declarations go out, because the bench reads a different
+    // thing off each — the family from the first, the guard from the second — and a
+    // screen that sent one of them would have decided the other by accident.
+    const planted = registrationRequest({
+      ...fullyDeclared(),
+      nonce_planted: true,
+      echo_waived: true,
+    })
+    // And the older waiver still relaxes the same guard, from the other direction:
+    // an operator who could not plant it has nothing to echo either.
+    const unplantable = registrationRequest({
+      ...fullyDeclared(),
+      nonce_planted: false,
+      proof_waived: true,
+    })
+
+    expect(planted.kind === 'ready' && planted.body.nonce_planted).toBe(true)
+    expect(planted.kind === 'ready' && planted.body.echo_waived).toBe(true)
+    expect(unplantable.kind === 'ready' && unplantable.body.nonce_planted).toBe(false)
+    expect(unplantable.kind === 'ready' && unplantable.body.echo_waived).toBe(true)
+  })
+
   it('is refused by name when the target never echoed it, and the bench keeps the words', () => {
     const refused: RunStanding = {
       run_id: 'run-1',

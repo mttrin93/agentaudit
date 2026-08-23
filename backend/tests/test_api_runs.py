@@ -292,6 +292,7 @@ def a_request(
     withheld: str | None = None,
     note_planted: bool = False,
     nonce_planted: bool = True,
+    echo_waived: bool = False,
 ) -> dict[str, Any]:
     """One start request, with any one of the three statements withheld."""
     attestation = dict.fromkeys(STATEMENT_FIELDS, True)
@@ -312,6 +313,7 @@ def a_request(
         "cost": {"price_per_call": price_per_call, "currency": "USD"},
         "note_planted": note_planted,
         "nonce_planted": nonce_planted,
+        "echo_waived": echo_waived,
     }
 
 
@@ -400,6 +402,48 @@ def test_a_target_that_does_not_echo_the_nonce_is_never_attempted(
     assert "no attempt was made" in record.statement
     assert record.run_state.attempts == []
     assert watched.ledger.hits == 1
+
+
+def test_a_target_that_will_not_echo_keeps_the_family_its_canary_is_for(
+    leakage_case: Case,
+) -> None:
+    """The declaration ADR-0024 splits out, and the family it does not cost.
+
+    An agent whose disclosure rule is blanket refuses the registration check for the
+    same reason it refuses a leakage payload, so the echo is out of reach while the
+    canary is in place. Declared that way, the run proceeds — and the family the value
+    is the canary *for* is still planned, still charged for and still attempted,
+    because what makes it measurable is the value being planted and not the reply
+    being cooperative.
+
+    Reached through the setup of the refusal test above: the nonce is never planted in
+    the served agent, so nothing echoes. What differs is the declaration, which is the
+    whole of what this asserts.
+    """
+    with watched_reference() as watched, api([leakage_case]) as (client, bench):
+        nonce = str(client.post("/nonces").json()["nonce"])
+        started = client.post(
+            "/runs",
+            json=a_request(watched.target, nonce, echo_waived=True),
+        ).json()
+        client.post(
+            f"/runs/{started['run_id']}/approval",
+            json={"confirmed": True, "identity": "operator"},
+        )
+        record = settled(_record(bench, started))
+
+    # Not refused, and the sentence a poller reads says which of the two it was.
+    assert record.status is RunStatus.COMPLETED
+    assert "declared and not proved" in record.statement
+    assert record.proof_waived is True
+
+    # And the family stayed: planned, charged for, and attempted.
+    assert started["families_not_run"] == {}
+    assert started["cases"] == 1
+    assert record.run_state.attempts != []
+    assert {attempt.family for attempt in record.run_state.attempts} == {
+        Family.DATA_LEAKAGE
+    }
 
 
 # --- the two figures -------------------------------------------------------------

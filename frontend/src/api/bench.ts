@@ -82,14 +82,23 @@ export interface StartRunBody {
   /**
    * Whether the nonce is in the target's configuration.
    *
-   * `false` is the operator waiving the proof of control: the run still sends its
-   * echo probe, a missing echo no longer stops it, the data-leakage family is
-   * dropped from the plan — its canary *is* this value — and the artefact records
-   * that control was declared and not proved. Sent on every request rather than
-   * omitted, because the bench's default is the guard and a waiver reached by
-   * leaving a field out is a waiver nobody made.
+   * `false` drops the data-leakage family from the plan — its canary *is* this
+   * value, and a string nowhere in the target cannot leak — and a run with nothing
+   * planted also starts without the proof, since nothing could have echoed. Sent on
+   * every request rather than omitted, because the bench's default is the guard and
+   * a waiver reached by leaving a field out is a waiver nobody made.
    */
   nonce_planted: boolean
+  /**
+   * Whether the run may start without the target echoing the planted nonce.
+   *
+   * The declaration for an agent that planted the value and refuses to repeat it,
+   * because its disclosure rule cannot tell a registration check from an attack.
+   * The probe is still sent, a missing echo no longer stops the run, and the
+   * artefact records control as declared and not proved — while the leakage family,
+   * which turns on `nonce_planted` above and not on this, still runs (ADR-0024).
+   */
+  echo_waived: boolean
 }
 
 /**

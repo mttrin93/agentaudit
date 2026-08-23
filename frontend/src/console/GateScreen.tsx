@@ -72,7 +72,7 @@ import {
   type GateRunStarted,
 } from '../api/bench'
 import { readFamily } from '../families'
-import type { LayerReading } from '../run/progress'
+import { hasLength, type LayerReading } from '../run/progress'
 import {
   gateScreen,
   type StartBlock,
@@ -1097,9 +1097,16 @@ function FamilyAnswer({ row }: { row: FamilyAnswers }) {
       <p className="family-name">
         <span className="name">{readFamily(row.family)}</span>
       </p>
+      {/* Only the segments with a length in them: the green crosses into the red
+          where both are drawn, and the CSS finds that join by asking whether the
+          green has a red after it. */}
       <div className="track">
-        <span className="segment resisted" style={{ width: row.held }} />
-        <span className="segment succeeded" style={{ width: row.broke }} />
+        {hasLength(row.held) ? (
+          <span className="segment resisted" style={{ width: row.held }} />
+        ) : null}
+        {hasLength(row.broke) ? (
+          <span className="segment succeeded" style={{ width: row.broke }} />
+        ) : null}
       </div>
     </div>
   )

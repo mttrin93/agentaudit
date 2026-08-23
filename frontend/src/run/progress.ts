@@ -176,6 +176,12 @@ export interface Standing {
    * each of them said again underneath in `statement`, which is the bench's own
    * wording and the one that should carry it. A transport failure keeps its name in
    * the heading, because there the name *is* the state.
+   *
+   * The interrupt is the exception and it is not a state at all: while a run holds,
+   * the screen is the halt, and what it has to say at the top is the question it is
+   * asking — *what this run will cost*, which used to be the heading of the section
+   * under *Holding at the interrupt*. That the run is holding is what that screen
+   * being there means.
    */
   heading: string
   statement: string
@@ -209,7 +215,7 @@ export function standing(progress: RunProgress): Standing {
       return {
         kind: 'holding',
         name: progress.status,
-        heading: 'Holding at the interrupt',
+        heading: 'What this run will cost',
         statement: progress.statement,
         episode: null,
         notASecurityResult: '',
@@ -388,6 +394,19 @@ export function familyRows(progress: RunProgress): readonly FamilyRow[] {
     held: share(family.resisted, family.of),
     broke: share(family.succeeded, family.of),
   }))
+}
+
+/**
+ * Whether a computed width draws anything at all.
+ *
+ * `0%` is the length of a family that has not started, and a zero-width segment is
+ * not rendered rather than rendered invisibly: where the two verdict colours meet
+ * they cross into each other over a few pixels, and the CSS finds that join by
+ * asking whether the green segment has a red one after it. A `0%` span sitting in
+ * the markup would answer yes and put a red-tinged tip on a bar with no red in it.
+ */
+export function hasLength(width: string): boolean {
+  return parseFloat(width) > 0
 }
 
 /** A segment's length, and `0%` for a family that has not started or has no cases. */

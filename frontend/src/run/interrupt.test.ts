@@ -27,6 +27,8 @@ import {
   costFigures,
   declineRequest,
   interruptView,
+  rememberWhoAttested,
+  whoAttested,
   rememberTheFigures,
   theFiguresPresented,
   type Confirming,
@@ -211,13 +213,28 @@ describe('the confirmation', () => {
     }
   })
 
-  it('records who gave it', () => {
+  it('is not withheld for want of a name, because no field asks for one', () => {
+    // The identity requirement came off with the field. What this function guards is
+    // the spend — the tick, the figures and the status — and a run held up over a
+    // name nobody was asked for would make declining the easier of the two answers.
     const request = confirmationRequest({ ...confirming(), identity: '   ' })
 
-    expect(request.kind).toBe('withheld')
-    expect(request.kind === 'withheld' && request.missing.join(' ')).toContain(
-      'has to record who gave it',
-    )
+    expect(request.kind).toBe('ready')
+    // Empty rather than whitespace: the bench writes `confirmed by <name>` from this
+    // value, and a record naming nobody is better than one naming three spaces.
+    expect(request.kind === 'ready' && request.body.identity).toBe('')
+  })
+
+  it('records the name the registration was attested by, when one is held', () => {
+    const store = aStore()
+    rememberWhoAttested(store, 'run-1', '  Matteo Rinaldi  ')
+
+    const request = confirmationRequest({
+      ...confirming(),
+      identity: whoAttested(store, 'run-1'),
+    })
+
+    expect(request.kind === 'ready' && request.body.identity).toBe('Matteo Rinaldi')
   })
 })
 
@@ -248,6 +265,17 @@ describe('the figures handed over by the registration that made the run', () => 
     rememberTheFigures(store, 'run-1', estimate)
 
     expect(theFiguresPresented(store, 'run-1')).toEqual(estimate)
+  })
+
+  it('carry the name that attested them, and never another run’s', () => {
+    const store = aStore()
+
+    rememberWhoAttested(store, 'run-1', 'Matteo Rinaldi')
+
+    expect(whoAttested(store, 'run-1')).toBe('Matteo Rinaldi')
+    // The interrupt asks for no name, so an empty one is the answer for a run this
+    // browser did not register — not the name of the last run it did.
+    expect(whoAttested(store, 'run-2')).toBe('')
   })
 
   it('are never another run’s figures', () => {

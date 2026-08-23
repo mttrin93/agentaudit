@@ -17,11 +17,13 @@
  * click as well as for the disabled state — a disabled button is a hint, and this
  * is not a place for hints.
  *
- * **Declining is always the easier answer.** It needs no identity, no reason and no
- * second click, and it is sent rather than withheld: the bench records the run as
- * *declined* by a person, which is a better record than the *unanswered* a closed
- * tab leaves behind, and answers with its own sentence saying that nothing was sent
- * to the target and nothing was spent.
+ * **Declining is always the easier answer.** It needs no second click and it is sent
+ * rather than withheld: the bench records the run as *declined* by a person, which is
+ * a better record than the *unanswered* a closed tab leaves behind, and answers with
+ * its own sentence saying that nothing was sent to the target and nothing was spent.
+ * Neither answer asks for anything typed any more — this screen has no fields on it,
+ * and the name both answers are recorded under is the one that attested the
+ * registration, carried from it in `sessionStorage`.
  *
  * **Nothing on this screen adds the layers up.** The figures come from
  * `interrupt.ts` and the readings from `progress.ts`, and neither builds a value
@@ -48,12 +50,14 @@ import {
   confirmationRequest,
   declineRequest,
   interruptView,
+  whoAttested,
   theFiguresPresented,
   type ConfirmationRequest,
 } from './interrupt'
 import {
   adaptiveReading,
   familyRows,
+  hasLength,
   payloads,
   scoredReading,
   standing,
@@ -86,8 +90,6 @@ export function RunScreen() {
   const [refused, setRefused] = useState('')
   const [busy, setBusy] = useState(false)
   const [confirmed, setConfirmed] = useState(false)
-  const [identity, setIdentity] = useState('')
-  const [reason, setReason] = useState('')
 
   /**
    * The figures this run was estimated at, read once from the handoff.
@@ -131,12 +133,20 @@ export function RunScreen() {
     }
   }, [read])
 
+  /**
+   * The name the confirmation is recorded under, from the registration that made
+   * this run. No screen asks for it again.
+   */
+  const identity = whoAttested(sessionStorage, runId)
+
   const request: ConfirmationRequest = confirmationRequest({
     status: progress?.status ?? '',
     figures,
     confirmed,
     identity,
-    reason,
+    // No field asks for one. A decline carries `declineRequest`'s own sentence and a
+    // confirmation carries none, which is what a screen with no reason box means.
+    reason: '',
   })
 
   const answer = async (body: ApprovalBody) => {
@@ -195,13 +205,9 @@ export function RunScreen() {
           request={request}
           confirmed={confirmed}
           setConfirmed={setConfirmed}
-          identity={identity}
-          setIdentity={setIdentity}
-          reason={reason}
-          setReason={setReason}
           busy={busy}
           confirm={confirm}
-          decline={() => void answer(declineRequest(identity, reason))}
+          decline={() => void answer(declineRequest(identity, ''))}
         />
       ) : null}
 
@@ -222,15 +228,9 @@ export function RunScreen() {
 
 interface InterruptProps {
   figures: RunEstimate | null
-  /** The bench's own sentence about the halt, carried unedited. */
-  held: string
   request: ConfirmationRequest
   confirmed: boolean
   setConfirmed: (confirmed: boolean) => void
-  identity: string
-  setIdentity: (identity: string) => void
-  reason: string
-  setReason: (reason: string) => void
   busy: boolean
   confirm: () => void
   decline: () => void
@@ -246,14 +246,9 @@ interface InterruptProps {
  */
 function TheInterrupt({
   figures,
-  held,
   request,
   confirmed,
   setConfirmed,
-  identity,
-  setIdentity,
-  reason,
-  setReason,
   busy,
   confirm,
   decline,
@@ -262,71 +257,69 @@ function TheInterrupt({
   return (
     <>
       <section>
-        <h2>What this run will cost, before any of it is spent</h2>
-        {/* The bench's own account of the halt, above this screen's. */}
-        <p>{held}</p>
+        {/*
+          The two figures, and nothing over them.
+
+          *What this run will cost, before any of it is spent* was the `h2` here,
+          under an `h1` saying the run was holding at its interrupt. It is the `h1`
+          now — a screen that shows two numbers and takes a yes has one thing to say
+          at the top, and that the run is holding is what the screen being here at
+          all means. Three paragraphs went with the heading: the bench's own sentence
+          about the halt, this screen's sentence saying nothing has been sent, and the
+          one saying why there is no third figure. The `FIGURES_NOT_HELD` alert stays,
+          because it is the only thing that explains a screen with no figures and no
+          confirmation on it.
+        */}
         {view === null ? (
           <p role="alert">{FIGURES_NOT_HELD}</p>
         ) : (
-          <>
-            <p>{view.nothingSent}</p>
-            <dl className="figures">
-              {view.figures.map((figure) => (
-                <div className="figure" key={figure.layer}>
-                  <dt>{figure.label}</dt>
-                  <dd>
-                    <span className="calls">{figure.calls} calls</span>
-                    <span className="money">{figure.cost}</span>
-                    <span className="kind">{figure.kind}</span>
-                    <span className="aside">{figure.basis}</span>
-                    <span className="aside">{figure.spends}</span>
-                    <span className="aside">
-                      Enforced against this layer alone: {figure.ceiling} calls. The
-                      run aborts rather than exceed it.
-                    </span>
-                  </dd>
-                </div>
-              ))}
-            </dl>
-            <p className="aside">{view.unblended}</p>
-          </>
+          <dl className="figures">
+            {view.figures.map((figure) => (
+              <div className="figure" key={figure.layer}>
+                <dt>{figure.label}</dt>
+                <dd>
+                  <span className="calls">{figure.calls} calls</span>
+                  <span className="money">{figure.cost}</span>
+                  <span className="kind">{figure.kind}</span>
+                  <span className="aside">{figure.basis}</span>
+                  {/* What the calls are and what the limit is, in one paragraph:
+                      the two were a line apart and they are one thought — this is
+                      what this layer spends, and this is what it may not exceed. */}
+                  <span className="aside">
+                    {figure.spends} Enforced against this layer alone:{' '}
+                    {figure.ceiling} calls. The run aborts rather than exceed it.
+                  </span>
+                </dd>
+              </div>
+            ))}
+          </dl>
         )}
       </section>
 
+      {/*
+        The answer, and no heading over it.
+
+        *Your answer* named a section holding one tick and two buttons, under a
+        heading that had just said what the figures are. *Who is confirming* went with
+        it: the name is the one from the registration that made this run, carried in
+        `sessionStorage` beside the figures, so the bench's `confirmed by <name>` is
+        still a name and nobody types it twice.
+      */}
       <section>
-        <h2>Your answer</h2>
         {view === null ? null : (
-          <>
-            <label>
-              Who is confirming
-              <input
-                value={identity}
-                onChange={(event) => setIdentity(event.target.value)}
-                placeholder="recorded against the ceiling this run is held to"
-              />
-            </label>
-            <label className="declaration">
-              <input
-                type="checkbox"
-                checked={confirmed}
-                onChange={(event) => setConfirmed(event.target.checked)}
-              />
-              <span className="wording">
-                I have read both figures and I am spending them. The scored layer
-                will attack this endpoint at the exact figure above; the adaptive
-                layer may spend up to its ceiling.
-              </span>
-            </label>
-          </>
+          <label className="declaration">
+            <input
+              type="checkbox"
+              checked={confirmed}
+              onChange={(event) => setConfirmed(event.target.checked)}
+            />
+            <span className="wording">
+              I have read both figures and I am spending them. The scored layer will
+              attack this endpoint at the exact figure above; the adaptive layer may
+              spend up to its ceiling.
+            </span>
+          </label>
         )}
-        <label>
-          Why, if you are declining
-          <input
-            value={reason}
-            onChange={(event) => setReason(event.target.value)}
-            placeholder="a figure somebody refused is evidence the display works"
-          />
-        </label>
         <div className="walk">
           <button type="button" onClick={decline} disabled={busy}>
             {busy ? 'Answering…' : 'Decline — send nothing, spend nothing'}
@@ -342,16 +335,6 @@ function TheInterrupt({
             </button>
           )}
         </div>
-        {request.kind === 'withheld' ? (
-          <div className="blocked">
-            <h3>The run is still holding, and this is why</h3>
-            <ul>
-              {request.missing.map((missing) => (
-                <li key={missing}>{missing}</li>
-              ))}
-            </ul>
-          </div>
-        ) : null}
       </section>
     </>
   )
@@ -373,30 +356,37 @@ function Progress({
   progress: RunProgress
   runId: string
 }) {
+  /*
+   * The standing's own status word and sentence are not drawn.
+   *
+   * They were the two lines under the heading — *running*, and *confirmed by X: the
+   * suite is running in the background, under the ceiling that was confirmed* — which
+   * is the heading again, plus the name of whoever answered the interrupt and the
+   * promise the interrupt already made.
+   *
+   * What is kept is everything the heading does *not* say: the run's own sentence
+   * when it differs from the standing's, which is how a transport failure reports
+   * where the run was when the endpoint stopped answering; the episode a ceiling cut
+   * short; and the sentence saying the stop was not a result about the target. The
+   * section is drawn only when one of them has something in it.
+   */
+  const alsoSaid = progress.statement === at.statement ? '' : progress.statement
+  const anythingElse = alsoSaid || at.episode !== null || at.notASecurityResult
   return (
     <>
-      <section>
-        <p>
-          <strong>{at.name}</strong>
-        </p>
-        <p>{at.statement}</p>
-        {/*
-          The run's own sentence as well, when the standing's is a different one:
-          a transport failure carries the named outcome, and the run carries where
-          it was when the endpoint stopped answering. Neither is the other.
-        */}
-        {progress.statement === at.statement ? null : (
-          <p className="aside">{progress.statement}</p>
-        )}
-        {at.episode ? (
-          <p className="consequence">
-            The episode: <strong>{at.episode.outcome}</strong>. {at.episode.note}
-          </p>
-        ) : null}
-        {at.notASecurityResult ? (
-          <p className="aside">{at.notASecurityResult}</p>
-        ) : null}
-      </section>
+      {anythingElse ? (
+        <section>
+          {alsoSaid ? <p className="aside">{alsoSaid}</p> : null}
+          {at.episode ? (
+            <p className="consequence">
+              The episode: <strong>{at.episode.outcome}</strong>. {at.episode.note}
+            </p>
+          ) : null}
+          {at.notASecurityResult ? (
+            <p className="aside">{at.notASecurityResult}</p>
+          ) : null}
+        </section>
+      ) : null}
 
       <section>
         <h2>Where the run has got to, one layer at a time</h2>
@@ -521,7 +511,7 @@ function FamilyBar({ row }: { row: FamilyRow }) {
 }
 
 /**
- * One family, and how it is answering: one bar, green then red, over the same
+ * One family, and how it is answering: one bar, green into red, over the same
  * denominator.
  *
  * The one place this screen colours a verdict, which is why the two colours are named
@@ -539,9 +529,18 @@ function FamilyAnswer({ row }: { row: FamilyRow }) {
       <p className="family-name">
         <span className="name">{row.name}</span>
       </p>
+      {/*
+        Only the segments that have a length. Where both are there the CSS crosses one
+        colour into the other, and it finds the join by asking whether the green has a
+        red after it — a `0%` span left in the markup would answer yes.
+      */}
       <div className="track">
-        <span className="segment resisted" style={{ width: row.held }} />
-        <span className="segment succeeded" style={{ width: row.broke }} />
+        {hasLength(row.held) ? (
+          <span className="segment resisted" style={{ width: row.held }} />
+        ) : null}
+        {hasLength(row.broke) ? (
+          <span className="segment succeeded" style={{ width: row.broke }} />
+        ) : null}
       </div>
     </div>
   )

@@ -44,18 +44,21 @@ export type Layer = 'scored' | 'adaptive'
 /** The status a run holds while it is waiting on a human, and on nothing else. */
 export const AWAITING_APPROVAL = 'awaiting_approval'
 
-export const NOTHING_HAS_BEEN_SENT =
-  'Nothing has been sent to your endpoint. The run is holding here — not asking ' +
-  'here — and the first call it makes is the probe that checks the nonce you ' +
-  'planted, which happens after you confirm and not before.'
-
-export const NO_TOTAL_ON_PURPOSE =
-  'These are two figures and there is no third one. The fixed suite is arithmetic ' +
-  'and exact; the adaptive layer is a worst case, because an attacker that chooses ' +
-  'its own route has no exact cost. A blended number would hide which half of the ' +
-  'run is spending your budget, and an averaged adaptive figure would invite a run ' +
-  'to exceed what you agreed to. Each layer is enforced against its own ceiling ' +
-  'below it, so neither can borrow what the other did not spend.'
+/*
+ * `NOTHING_HAS_BEEN_SENT` and `NO_TOTAL_ON_PURPOSE` were here, and both are gone.
+ *
+ * One said that nothing has been sent and that the nonce probe is the first call the
+ * run makes; the other said why there are two figures and no third one. Two
+ * paragraphs of argument on the screen whose job is to show two numbers and take a
+ * yes, under a bench sentence that already said the first of them.
+ *
+ * **What they argued for is built rather than explained.** There is no total on this
+ * screen because `costFigures` reads the two layer records and nothing else, and
+ * `interrupt.test.ts` asserts every spanning figure and the word *Total* absent from
+ * the whole view. Nothing has been sent because nothing can have been: the interrupt
+ * is the graph's own halt in front of the spend, and `confirmationRequest` is the one
+ * path to a `confirmed: true`. A paragraph is not what was keeping either true.
+ */
 
 export const FIGURES_NOT_HELD =
   'This browser is not holding the figures this run was estimated at. They are ' +
@@ -107,9 +110,12 @@ export function costFigures(estimate: RunEstimate): readonly CostFigure[] {
       basis: estimate.scored.basis,
       cost: estimate.scored.cost,
       ceiling: `≤ ${estimate.scored_ceiling}`,
+      // *Every number the bench signs comes from here* went: what the calls are is
+      // what this line is for, and where the report's figures come from is a fact
+      // about the report.
       spends:
         'Recorded cases, ten attempts each, plus the one probe that checks your ' +
-        'nonce. Every number the bench signs comes from here.',
+        'nonce.',
     },
     {
       layer: 'adaptive',
@@ -129,26 +135,18 @@ export function costFigures(estimate: RunEstimate): readonly CostFigure[] {
 /** The whole of what the interrupt puts in front of a person, as data. */
 export interface InterruptView {
   figures: readonly CostFigure[]
-  /**
-   * Why there are two figures and no third one.
-   *
-   * Named for what it is rather than for what it refuses — a field called
-   * `noTotal` would put the word *Total* in the serialised view, which is the
-   * string `interrupt.test.ts` scans for. That is a small joke at this screen's
-   * expense and it is also the test working: the assertion is over everything the
-   * view carries, key names included.
-   */
-  unblended: string
-  nothingSent: string
 }
 
-/** The interrupt's own view. Two figures, and the two sentences beside them. */
+/**
+ * The interrupt's own view: the two figures, and nothing that spans them.
+ *
+ * One field, and it stays a record rather than becoming the array itself, because
+ * `interrupt.test.ts` scans the serialised view — key names included — for every
+ * number and word that would be a total. A view is the thing that assertion can be
+ * held against, whatever this screen grows next.
+ */
 export function interruptView(estimate: RunEstimate): InterruptView {
-  return {
-    figures: costFigures(estimate),
-    unblended: NO_TOTAL_ON_PURPOSE,
-    nothingSent: NOTHING_HAS_BEEN_SENT,
-  }
+  return { figures: costFigures(estimate) }
 }
 
 /**
@@ -212,13 +210,14 @@ export function confirmationRequest(declared: Confirming): ConfirmationRequest {
         'they are, and nothing has been sent to the target',
     )
   }
-  if (!declared.identity.trim()) {
-    missing.push(
-      'a confirmation has to record who gave it: the run is charged to whoever ' +
-        'confirms it, and the report names them beside the ceiling they confirmed',
-    )
-  }
-
+  // No requirement here that somebody type a name, because no field asks for one.
+  // The run is still charged to whoever confirms it and the bench still writes
+  // `confirmed by <name>` into the run's own sentence, so the name is carried from
+  // the registration that made the run — the attestation is signed by a person and
+  // this is the same person, two screens later, in the same browser. When it is not
+  // held the body goes with an empty identity and the bench's sentence names nobody,
+  // which is a worse record and not a blocked one: what this function guards is the
+  // spend, and a missing name is not a reason to make declining the easier answer.
   if (missing.length) {
     return { kind: 'withheld', missing }
   }
@@ -267,9 +266,16 @@ export interface FigureStore {
 
 const HELD_UNDER = 'agentaudit.estimate.'
 
+const ATTESTED_BY = 'agentaudit.attested.'
+
 /** Keyed by run id, so that no run can ever be shown another run's figures. */
 function keyFor(runId: string): string {
   return `${HELD_UNDER}${runId}`
+}
+
+/** The same keying for the name, so no run can be confirmed under another's. */
+function whoKeyFor(runId: string): string {
+  return `${ATTESTED_BY}${runId}`
 }
 
 /** Hold on to the figures `POST /runs` returned, for the screen that shows them. */
@@ -279,6 +285,29 @@ export function rememberTheFigures(
   estimate: RunEstimate,
 ): void {
   store.setItem(keyFor(runId), JSON.stringify(estimate))
+}
+
+/**
+ * Hold on to the name that attested this registration, for the interrupt to confirm
+ * under.
+ *
+ * The interrupt asks for no name — there is no field on that screen — and the bench
+ * writes `confirmed by <name>` into the run's own sentence either way, so the name
+ * comes from the registration that made the run. Kept beside the figures, keyed by
+ * the same run id and for the same reason: a confirmation recorded against somebody
+ * who did not give it is worse than one recorded against nobody.
+ */
+export function rememberWhoAttested(
+  store: FigureStore,
+  runId: string,
+  identity: string,
+): void {
+  store.setItem(whoKeyFor(runId), identity.trim())
+}
+
+/** The name this run was attested by, or the empty string when none is held. */
+export function whoAttested(store: FigureStore, runId: string): string {
+  return store.getItem(whoKeyFor(runId)) ?? ''
 }
 
 /**

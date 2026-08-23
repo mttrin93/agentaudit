@@ -130,6 +130,20 @@
   --resisted: oklch(0.80 0.14 162);
   --succeeded: oklch(0.68 0.19 20);
   /*
+   * The colour the two meet in, and the distance they take to get there.
+   *
+   * Two verdicts butted end to end read as two bars sharing a track. They are one
+   * reading of one family — every attempt is either held or not — so the join is a
+   * crossfade through the mix of the two rather than a seam between them. `oklch`
+   * because a mix through it stays the same lightness the whole way across; in sRGB
+   * green into red goes through a muddy dark that reads as a third state.
+   *
+   * The distance is capped as a share of the bar so that a short segment fades over
+   * its own length instead of being swallowed by the fade.
+   */
+  --verdict-blend: color-mix(in oklch, var(--resisted), var(--succeeded));
+  --verdict-join: min(0.85rem, 45%);
+  /*
    * One corner radius, and one step down for the small things inside a card.
    *
    * Named rather than repeated: `3px` was written at eleven places in this file,
@@ -433,6 +447,25 @@ ol.attestations > li::before {
 /* The consequence opens its statement, so the paragraph's own top margin goes. */
 ol.attestations > li > .consequence {
   margin-top: 0;
+}
+
+/*
+ * A list of names, set as names: one per line, no prose in it.
+ *
+ * The bullets go because the line is one word — a control's identifier — and a marker
+ * beside a single word is a mark on nothing. The monospace is the same as every other
+ * identifier this app prints.
+ */
+ul.names {
+  margin: 0.6rem 0 0;
+  padding: 0;
+  list-style: none;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.9rem;
+}
+
+ul.names li {
+  padding: 0.15rem 0;
 }
 
 .aside {
@@ -1736,6 +1769,31 @@ code {
 
 .track .segment.succeeded {
   background: var(--succeeded);
+}
+
+/*
+ * Where the two verdicts meet, they cross rather than abut.
+ *
+ * Selected on the sibling and not on a class the component sets: a green segment with
+ * a red one after it is exactly the case that has a join in it, and a family that
+ * resisted everything — or one bar's worth of nothing but red — keeps its flat colour
+ * to the end. Both halves ramp to the same mixed colour, so the two gradients meet at
+ * one value and the bar reads as one length that changes hue partway along.
+ */
+.track .segment.resisted:not(:last-child) {
+  background: linear-gradient(
+    to right,
+    var(--resisted) calc(100% - var(--verdict-join)),
+    var(--verdict-blend)
+  );
+}
+
+.track .segment.succeeded:not(:first-child) {
+  background: linear-gradient(
+    to right,
+    var(--verdict-blend),
+    var(--succeeded) var(--verdict-join)
+  );
 }
 
 .answering .legend {

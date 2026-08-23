@@ -24,6 +24,7 @@ import {
   SCORED_UNITS,
   adaptiveReading,
   familyRows,
+  hasLength,
   payloads,
   progressView,
   scoredReading,
@@ -361,6 +362,17 @@ describe('the six families, while the run is going', () => {
     expect(injection.of).toBe(0)
     expect(injection.done).toBe('0%')
     expect(injection.notRun).toContain('third-party note')
+  })
+
+  it('says which of those lengths draws anything, so the join can be found', () => {
+    // The screens render a segment only when it has a length in it, and the CSS finds
+    // the green-into-red crossfade by asking whether the green has a red after it. A
+    // `0%` segment left in the markup answers yes and puts a red-tinged tip on a bar
+    // with no red in it — so *is there anything to draw* is a question with an answer
+    // here rather than a comparison against a magic string in two components.
+    expect(hasLength('66.6667%')).toBe(true)
+    expect(hasLength('0.0001%')).toBe(true)
+    expect(hasLength('0%')).toBe(false)
   })
 })
 

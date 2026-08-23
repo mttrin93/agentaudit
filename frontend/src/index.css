@@ -1965,6 +1965,61 @@ code {
 }
 
 /*
+ * The probes one live run sent, as a reading column rather than a grid.
+ *
+ * A route is a sequence, so it is drawn as one: the probes go down the page in the
+ * order they went on the wire, numbered, each at the column's full width. The
+ * per-family grid above this block is right for figures — six cards a reader
+ * compares — and wrong here, because two columns of somebody's traffic invite it to
+ * be read across, and there is nothing across an episode to read.
+ *
+ * The words stay in the mono face for `.payload`'s reason: they are what was on the
+ * wire, not this application's prose.
+ */
+.route {
+  display: grid;
+  gap: 1.5rem;
+  margin: 1.5rem 0;
+}
+
+.route .probes {
+  display: grid;
+  gap: 0.9rem;
+  margin: 0.8rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* The ordinal over the box, at the size of the card's quiet text: it says which
+ * probe this was and it is not a figure anybody adds. */
+.route .ordinal {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--quiet);
+}
+
+.route .bubble {
+  margin: 0.25rem 0 0;
+  padding: 0.5rem 0.65rem;
+  background: var(--page);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.85rem;
+  overflow-wrap: anywhere;
+}
+
+/* The one line on this page that says a probe worked. Weight and never a tint: it
+ * is the fact the block was asked for, so it has to survive a greyscale
+ * screenshot — and a probe drawn in a warning colour would be a severity this bench
+ * does not measure (ADR-0005). */
+.route .broke {
+  margin: 0.35rem 0 0;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+/*
  * The console shell: a rail that persists, and a screen that does not move.
  *
  * The frame is a two-column grid rather than a fixed sidebar and a margin, because

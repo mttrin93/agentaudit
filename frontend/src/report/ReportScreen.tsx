@@ -26,6 +26,15 @@
  * turns, and whether it broke it. Grouped and never joined: a turn is not an
  * attempt and no count here meets a count above it (ADR-0010).
  *
+ * **The probes are on this page, and they are the one thing on it that is not in
+ * the artefact.** Under the adaptive section, fed by `GET /runs/{id}/episodes` and
+ * never by the payload: the report says an episode broke the objective in ten turns
+ * and the operator asked what was sent. It is read out of the bench's memory, is
+ * covered by no signature, is committed nowhere and is gone when the process stops,
+ * and the block says all four in the sentence above the probes rather than in a note
+ * under them (ADR-0008, amended). A screenshot of it is a copy of a working exploit,
+ * which is the trade that amendment makes and states.
+ *
  * **The three results are not on this page.** They were: a signature, a rendering
  * binding and a re-derivation, printed near the top so an engineer learned the
  * artefact was checkable before sending it on. They are still read into every row of
@@ -58,21 +67,40 @@ import { Link, useParams } from 'react-router-dom'
 import { readFamily } from '../families'
 import {
   reportPayload,
+  runEpisodes,
   runProgress,
   type ReportLocation,
+  type RunEpisodes,
   type TargetReport,
 } from '../api/bench'
 import {
   reportView,
+  routeReading,
   type AdaptiveFamilyReading,
+  type EpisodeRouteReading,
   type FamilyAnswer,
   type ReportView,
+  type RouteReading,
 } from './report'
 
-/** What this screen is holding: the two things it needs, or why it has neither. */
+/** What this screen is holding: the things it needs, or why it has none of them. */
 interface Held {
   where: ReportLocation | null
   report: TargetReport | null
+  /**
+   * The probes this run's own episodes sent, or `null`.
+   *
+   * Held apart from `report` because it comes from somewhere else and means
+   * something else: the report is the signed artefact, fetched from the path the run
+   * advertises, and this is a read of the bench's own memory that no document
+   * carries. A screen that kept them in one field would be a screen one refactor
+   * away from drawing a probe out of the artefact (ADR-0008, amended).
+   *
+   * `null` is *this app did not get an answer*, which is not the same as the bench
+   * saying it holds no episode — that answer is a `NoProbes`, and the block prints
+   * the bench's own sentence for it.
+   */
+  episodes: RunEpisodes | null
   /** The run's own sentence about why there is no report, carried unedited. */
   noReport: string
   unavailable: string
@@ -81,6 +109,7 @@ interface Held {
 const NOTHING_YET: Held = {
   where: null,
   report: null,
+  episodes: null,
   noReport: '',
   unavailable: '',
 }
@@ -105,8 +134,13 @@ export function ReportScreen() {
         }
         const where = progress.report
         const report = await reportPayload(where.path)
+        // Fetched after the artefact and allowed to fail on its own: the figures are
+        // the page, and a bench that has forgotten this run's episodes — a restart,
+        // which is the state the probes are meant to be in — is not a reason to
+        // refuse a reader the report.
+        const episodes = await theProbes(runId)
         if (current) {
-          setHeld({ ...NOTHING_YET, where, report })
+          setHeld({ ...NOTHING_YET, where, report, episodes })
         }
       } catch (unknown: unknown) {
         if (current) {
@@ -158,13 +192,39 @@ export function ReportScreen() {
         </section>
       ) : null}
 
-      {view && held.where ? <TheReport view={view} where={held.where} /> : null}
+      {view && held.where ? (
+        <TheReport view={view} where={held.where} episodes={held.episodes} />
+      ) : null}
     </main>
   )
 }
 
+/**
+ * The probes, or nothing, and never an exception this screen falls over on.
+ *
+ * The one read on this page whose absence is ordinary. The episodes live in the
+ * process that ran the run, so a bench that has restarted answers `404` for every
+ * earlier run — which is the disclosure posture working rather than a fault — and
+ * the report itself is unaffected either way.
+ */
+async function theProbes(runId: string): Promise<RunEpisodes | null> {
+  try {
+    return await runEpisodes(runId)
+  } catch {
+    return null
+  }
+}
+
 /** The whole report, in the order a reader meets it. */
-function TheReport({ view, where }: { view: ReportView; where: ReportLocation }) {
+function TheReport({
+  view,
+  where,
+  episodes,
+}: {
+  view: ReportView
+  where: ReportLocation
+  episodes: RunEpisodes | null
+}) {
   return (
     <>
       <section>
@@ -192,6 +252,8 @@ function TheReport({ view, where }: { view: ReportView; where: ReportLocation })
           </p>
         )}
       </section>
+
+      {episodes ? <TheRoute route={routeReading(episodes)} /> : null}
 
       {/* The three files under the names a verifier already knows, and nothing
           beside them: what a recipient does with them is `scripts/verify` over the
@@ -284,6 +346,68 @@ function TheFamily({ answer }: { answer: FamilyAnswer }) {
  * The turn count is the card's figure and it is the only number on it — a turn is
  * not an attempt, so there is nothing here to read against the cards above.
  */
+function TheRoute({ route }: { route: RouteReading }) {
+  return (
+    <section>
+      <h2>The probes this run sent</h2>
+      {/* The sentence is the block, not a footnote on it: everything else on this
+          page is in the artefact and this is not, so a reader who screenshots the
+          probes has the disclaimer in the same picture. */}
+      <p className="consequence">{route.note}</p>
+      {route.kind === 'absent' ? (
+        <p className="aside">{route.stated}</p>
+      ) : (
+        <div className="route">
+          {route.episodes.map((episode, at) => (
+            <TheEpisode episode={episode} key={`${at}-${episode.family}`} />
+          ))}
+        </div>
+      )}
+    </section>
+  )
+}
+
+/**
+ * One episode's probes, numbered, in the order they went on the wire.
+ *
+ * The turn count is the card's one figure and it is the episode's own — a turn is not
+ * an attempt, so there is nothing here to read against the cards above (ADR-0010).
+ * The break is marked in a sentence rather than by a colour or a badge: which probe
+ * worked is the fact this block was asked for, and a fact carried by a tint is one a
+ * greyscale screenshot loses.
+ */
+function TheEpisode({ episode }: { episode: EpisodeRouteReading }) {
+  return (
+    <div className="family">
+      <h3>{readFamily(episode.family)}</h3>
+      <div className="rate-line">
+        <p className="score">
+          <span className="calls">{episode.turns}</span>
+        </p>
+        <p className="score">
+          <span className="kind">episode</span> <strong>{episode.outcome}</strong>
+        </p>
+      </div>
+      {episode.probes.length ? (
+        <ol className="probes">
+          {episode.probes.map((probe) => (
+            <li key={probe.at}>
+              <p className="ordinal">{probe.at}</p>
+              <p className="bubble">{probe.probe}</p>
+              {probe.confirmedTheBreak ? (
+                <p className="broke">{probe.marked}</p>
+              ) : null}
+            </li>
+          ))}
+        </ol>
+      ) : (
+        <p className="aside">{episode.sentNothing}</p>
+      )}
+      <p className="kind">{episode.stated}</p>
+    </div>
+  )
+}
+
 function TheSearch({ family }: { family: AdaptiveFamilyReading }) {
   return (
     <div className="family">

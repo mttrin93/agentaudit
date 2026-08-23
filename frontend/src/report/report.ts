@@ -31,6 +31,14 @@
  * bench does not test are in `report.json` and in the `report.md` a recipient
  * reads, which is where they travel. This module reads the figures.
  *
+ * **The route block is not read from the payload, because the payload does not
+ * carry it.** `routeReading` takes what `GET /runs/{id}/episodes` serves — the
+ * probes one live run's episodes sent, out of the bench's memory — and it is a
+ * separate function over a separate input for exactly that reason: there is no path
+ * in this module from a `TargetReport` to a probe, because the artefact has no field
+ * one could be in (ADR-0008, amended). What it produces says on itself that it is
+ * not part of the signed document.
+ *
  * **`reportView` reads the payload and nothing else.** The three results over a
  * run's three files are not in it — `verificationReading` below is read by the
  * signed-artefacts console, which is the screen that asks whether a document
@@ -50,6 +58,7 @@ import type {
   AdaptiveSection,
   FamilyEntry,
   MeasuredSection,
+  RunEpisodes,
   TargetReport,
   Verification,
 } from '../api/bench'
@@ -285,6 +294,116 @@ export function adaptiveReading(adaptive: AdaptiveSection): AdaptiveReading {
   return {
     label: 'not reproducible — recorded, and no figure here is scored',
     families,
+  }
+}
+
+/**
+ * What the route block says about itself, printed with it wherever it is read.
+ *
+ * The point of the block rather than decoration. Everything above it on this screen
+ * is read out of the signed payload and travels with the artefact; this is read out
+ * of the bench's memory and travels nowhere — so a reader who screenshots it has to
+ * be told, on the same page, that what they are holding is not part of the document
+ * a recipient verifies (ADR-0008, amended).
+ */
+export const NOT_PART_OF_THE_ARTEFACT =
+  'Read from the live run in this bench’s memory. Not part of the signed ' +
+  'artefact and not covered by its signature, committed to no file, and gone once ' +
+  'the process stops. A copy of a probe that worked is a copy of a working exploit.'
+
+/** One probe, numbered as it was sent, and whether the break followed it. */
+export interface ProbeReading {
+  /** `probe 3` — the ordinal the bench counted, and nothing that is a total. */
+  at: string
+  probe: string
+  /**
+   * Whether the break was confirmed after this probe.
+   *
+   * The bench's own derivation, carried and never recomputed: the canary check
+   * reads an episode's last transcript, so this is the last probe of a broken
+   * episode and there is nothing else it could honestly be. A censored episode
+   * marks nothing.
+   */
+  confirmedTheBreak: boolean
+  /** What the mark means, in words, so no colour has to carry it alone. */
+  marked: string
+}
+
+/** One episode, in the order it ran, with its probes under it. */
+export interface EpisodeRouteReading {
+  family: string
+  outcome: string
+  turns: string
+  probes: ProbeReading[]
+  /** The episode's own line about its outcome, carried from the bench unedited. */
+  stated: string
+  /**
+   * Why this episode shows no probe, or empty where it shows some.
+   *
+   * An episode with no probe is one that spent its decisions without composing a
+   * message — a reading about the attacker — and an empty list under a heading
+   * would read as one the bench declined to show.
+   */
+  sentNothing: string
+}
+
+/**
+ * The route this run's own attacker took, or the stated reason there is none.
+ *
+ * A union rather than a record with an empty list on it, for the reason
+ * `FamilyAnswer` is one: *no episode was recorded* and *an episode sent no probe*
+ * are two different facts, and only the second is about the search. The bench
+ * answers in the same two shapes, and neither of them is an empty 200.
+ *
+ * **Episodes are not grouped by family here, and that is deliberate.** The adaptive
+ * section above groups, because the question it answers is what the search proposed
+ * per family. The question this one answers is what was sent, and a route is a
+ * sequence: episodes stay in the order they ran and probes in the order they went.
+ */
+export type RouteReading =
+  | {
+      kind: 'held'
+      note: string
+      episodes: EpisodeRouteReading[]
+    }
+  | { kind: 'absent'; note: string; stated: string }
+
+const THE_BREAK_WAS_CONFIRMED_AFTER_THIS_PROBE = 'the break was confirmed after this'
+
+const NOTHING_WAS_SENT =
+  'this episode sent no probe: the attacker spent its decisions without composing ' +
+  'one, which is a reading about the attacker and not about the agent'
+
+/**
+ * The probes one run's episodes sent, read into what the block draws.
+ *
+ * Nothing is counted, added or sorted: the turn count is the episode's own figure
+ * formatted, the probes keep the numbering the bench gave them, and there is no
+ * field on this reading for a figure over two episodes or two families to live in
+ * (ADR-0005, ADR-0010).
+ */
+export function routeReading(served: RunEpisodes): RouteReading {
+  if (!served.held) {
+    return { kind: 'absent', note: NOT_PART_OF_THE_ARTEFACT, stated: served.stated }
+  }
+  return {
+    kind: 'held',
+    note: NOT_PART_OF_THE_ARTEFACT,
+    episodes: served.episodes.map((episode) => ({
+      family: episode.family,
+      outcome: episode.outcome,
+      turns: `${episode.turns} ${episode.turns === 1 ? 'turn' : 'turns'}`,
+      stated: episode.stated,
+      sentNothing: episode.probes.length ? '' : NOTHING_WAS_SENT,
+      probes: episode.probes.map((probe) => ({
+        at: `probe ${probe.turn}`,
+        probe: probe.probe,
+        confirmedTheBreak: probe.confirmed_the_break,
+        marked: probe.confirmed_the_break
+          ? THE_BREAK_WAS_CONFIRMED_AFTER_THIS_PROBE
+          : '',
+      })),
+    })),
   }
 }
 

@@ -1,18 +1,19 @@
 """The HTTP surface: a nonce, a run, the answer to the run's interrupt, and the
 artefact it produced.
 
-Eighteen routes, in three families. `POST /nonces` issues the value an operator
+Nineteen routes, in three families. `POST /nonces` issues the value an operator
 plants to prove they control the endpoint; `POST /runs` records the attestation,
 declares the estimate and halts; `POST /runs/{id}/approval` answers the halt; `GET
 /runs` lists the runs on the record; `GET /runs/{id}` says where the run has got to;
-four under `/report/{id}` — three that serve the files one signed run leaves, the
-payload, the rendering and the detached signature, and a fourth that says what a
-verifier makes of them; `GET /artefacts` lists every signed artefact with that same
-reading beside it; four under `/bench`, whose subject is the bench rather than any run
-— `GET /bench/gate`, `GET /bench/gate/record`, `GET /bench/settings` and
-`GET /bench/notes`; and four under `/gate-runs`, which are
-the newest and the only ones on this surface that spend money on the bench's own
-behalf.
+`GET /runs/{id}/episodes` serves the probes that run's own episodes sent, out of this
+process's memory and out of no document; four under `/report/{id}` — three that serve
+the files one signed run leaves, the payload, the rendering and the detached
+signature, and a fourth that says what a verifier makes of them; `GET /artefacts`
+lists every signed artefact with that same reading beside it; four under `/bench`,
+whose subject is the bench rather than any run — `GET /bench/gate`, `GET
+/bench/gate/record`, `GET /bench/settings` and `GET /bench/notes`; and four under
+`/gate-runs`, which are the newest and the only ones on this surface that spend money
+on the bench's own behalf.
 
 **Neither route under `/runs` returns a figure spanning the two layers.** Calls
 spent are reported per layer by both — `GET /runs/{id}` for one run in flight,
@@ -98,6 +99,15 @@ whole of what *portable* means here. The rendering is served beside the payload
 rather than inside it because the digest that binds them is taken over the
 document's own bytes: an envelope carrying both would have to re-encode one of
 them.
+
+**One route serves probe text and the artefact is the line it does not cross.**
+`GET /runs/{id}/episodes` reads `AdaptiveEpisode.transcripts` off the run state this
+process is holding, so an operator can see the route their own attacker took against
+their own endpoint. It reaches no document: what a run signs is assembled from
+`ReportedEpisode`, which has no field a probe could be written into, and the response
+says on itself that it is not part of the artefact, is committed nowhere and is gone
+when the process stops (ADR-0008, amended). There is no such route for a gate run,
+whose episodes attack this bench's own reference agents (ADR-0018).
 
 **Progress is reported per layer, and there is no figure that spans them.**
 Position in the scored layer is family, case and attempt; in the adaptive layer it
@@ -189,6 +199,7 @@ from backend.api.runs import (
 )
 from backend.bench.adaptive.attacker import AttackerCompletion
 from backend.bench.adaptive.budget import DECLARED_ADAPTIVE_BUDGET, AdaptiveBudget
+from backend.bench.adaptive.episode import AdaptiveEpisode, EpisodeOutcome
 from backend.bench.adaptive.scripted import SCRIPTED_ATTACKER
 from backend.bench.adjudication import Completion
 from backend.bench.admission import admitted_library
@@ -989,6 +1000,189 @@ def _no_report_for(record: RunRecord) -> tuple[ReportRefusal, str]:
         f"{record.statement}. Nothing is served in its place, and nothing here is a "
         "finding about the target",
     )
+
+
+RUN_EPISODES_ROUTE = "/runs/{run_id}/episodes"
+"""Where the probes one run's own episodes sent are read. Memory, and never bytes
+anybody signed.
+
+Under `/runs` because the subject is one run, and one run only: an operator reading
+the route their own attacker took against their own endpoint, out of the process that
+is holding it. There is no counterpart under `/gate-runs` and there is not going to
+be one — a gate run's episodes attack this bench's own three reference agents, so
+what they would serve is the bench talking to itself (ADR-0018).
+
+**This is the one route on this surface that serves probe text, and the artefact is
+still the line it does not cross.** The signed payload carries every episode's
+family, its outcome and its turn count, and no probe: a route that beat a defended
+target is a working, previously unpublished exploit, and the artefact is the thing
+that circulates to a customer (ADR-0008, spec story 105). So the split is a split of
+carriers rather than of wording — `ReportedEpisode` has no field a probe could be put
+in and this response is built from `AdaptiveEpisode.transcripts`, which nothing
+commits, nothing signs and no file holds. What that gives up is stated on the response
+and on the screen: a screenshot of this is a copy of a working exploit, and the
+operator who took it is carrying it.
+"""
+
+THE_PROBES_THIS_PROCESS_IS_HOLDING = (
+    "the probes this run's adaptive layer composed, in the order they were sent, "
+    "read out of this process's memory. Not part of the signed artefact: the report "
+    "this run signs carries every episode's family, outcome and turn count and no "
+    "probe text, because a route that beat a target is a working, previously "
+    "unpublished exploit and the artefact is the document that circulates (ADR-0008, "
+    "spec story 105). Nothing here is committed and nothing here is signed, and it "
+    "is gone when this process stops — a copy taken from this response is the "
+    "operator's to hold and the operator's to account for"
+)
+"""What this response is, said on the response, because a screenshot travels alone.
+
+The disclosure is bounded by three facts and all three are mechanism rather than
+wording: the text is read off a record in this process's memory, the assembler has
+nowhere to put it, and a restart ends it. The sentence is the part a reader of a
+screenshot gets, so it says all three.
+"""
+
+NO_EPISODE_TO_READ_A_PROBE_FROM = (
+    "this run has recorded no episode, so there is no probe to read. A stated "
+    "absence and not an empty list: the adaptive layer runs strictly after the "
+    "scored one (ADR-0010), so a run halted at its interrupt, a run nobody "
+    "approved, a run refused at registration and a run stopped on the wire before "
+    "the second layer all arrive here, and the run's own standing says which. "
+    "Nothing here is a reading about the target — a layer that ran no episode found "
+    "nothing rather than finding none"
+)
+
+
+class ProbeAsSent(BaseModel):
+    """One probe, in the words the attacker composed and the target received.
+
+    A **probe** and never a case: a case is a recorded payload with a stated
+    criterion, and this is a message a model invented mid-run (CONTEXT.md). Nothing
+    on this record is counted — `turn` is an ordinal a reader follows down the list,
+    not a denominator, and there is no field here that could hold one.
+    """
+
+    turn: int
+    """Which turn of its episode sent this, counted from one.
+
+    One-based on the way out for the reason `_scored_progress` is: a reader counts
+    *the third probe* and the record holds a position in a list.
+    """
+
+    probe: str
+
+    confirmed_the_break: bool
+    """Whether the break was confirmed after this probe. Derived, and never guessed.
+
+    `check_canary` reads the episode's **last** transcript and nothing else
+    (`adaptive/attacker.py`), and it is the only line in the bench that sets an
+    episode broken. So the probe a broken episode's break was confirmed after is its
+    last probe, and that is a fact the record supports rather than a marker invented
+    for a screen. It is `False` on every probe of a censored episode, and on every
+    probe of a broken episode that somehow sent none: an ordered list of probes with
+    nothing marked is what this response gives where the record cannot say more.
+    """
+
+
+class EpisodeProbes(BaseModel):
+    """One episode as the operator's own console may read it: the outcome, and the
+    probes.
+
+    **Deliberately not `ReportedEpisode`.** That record is what the assembler builds
+    and the signature covers, and it has no field a probe could be written into
+    (`bench/assembler.py`, `bench/payload.py`). This one has, it is built here, and
+    it reaches no document — which is how a reviewer can see from the types that the
+    artefact cannot carry a probe rather than having to trust that nobody added one.
+
+    `turns` is the count the effort statistic reads and the probes are the evidence
+    behind it, so the two are beside each other and neither is divided by anything
+    (ADR-0010).
+    """
+
+    family: str
+    outcome: str
+    turns: int
+    probes: list[ProbeAsSent]
+    stated: str
+    """The episode's own line about its outcome — `AdaptiveEpisode.stated()`.
+
+    Carried rather than restated, so a censored episode against a trace-blind target
+    says here what it says in the report: the attacker ran one-eyed, and the outcome
+    is not evidence that the target held.
+    """
+
+
+class RunProbes(BaseModel):
+    """Every episode this run recorded, in the order they ran, with their probes."""
+
+    held: Literal[True] = True
+    run_id: str
+    episodes: list[EpisodeProbes]
+    stated: str
+
+
+class NoProbes(BaseModel):
+    """This run recorded no episode, and which absence that is left to its standing.
+
+    The same shape as the answer above with the episodes gone, and a sentence in
+    place of them, on `UnheldRecord`'s reasoning: an empty list would read as a
+    search that ran and sent nothing, which is a reading about an attacker and is
+    not what happened.
+    """
+
+    held: Literal[False] = False
+    run_id: str
+    stated: str
+
+
+def probes_sent(record: RunRecord) -> RunProbes | NoProbes:
+    """One run's episodes and their probes, or the stated absence of any.
+
+    Read off `RunState.episodes` in the order the layer ran them, which is the order
+    a reader needs: an episode's probes are a sequence and a sequence re-sorted is a
+    different route. Nothing here is grouped, counted or summarised — there is no
+    figure on this response that spans two episodes, and none that spans a family.
+    """
+    episodes = record.run_state.episodes
+    if not episodes:
+        return NoProbes(run_id=record.run_id, stated=NO_EPISODE_TO_READ_A_PROBE_FROM)
+    return RunProbes(
+        run_id=record.run_id,
+        episodes=[
+            EpisodeProbes(
+                family=str(episode.family),
+                outcome=str(episode.outcome),
+                turns=episode.turns,
+                probes=_probes(episode),
+                stated=episode.stated(),
+            )
+            for episode in episodes
+        ],
+        stated=THE_PROBES_THIS_PROCESS_IS_HOLDING,
+    )
+
+
+def _probes(episode: AdaptiveEpisode) -> list[ProbeAsSent]:
+    """The probes of one episode, in order, with the break marked where it is known.
+
+    The mark is the last probe of a broken episode and nothing else, because that is
+    the transcript `check_canary` read to set the outcome. An episode that broke
+    without sending anything marks nothing rather than marking the first thing to
+    hand.
+    """
+    confirmed = (
+        len(episode.transcripts) - 1
+        if episode.outcome is EpisodeOutcome.BROKEN and episode.transcripts
+        else None
+    )
+    return [
+        ProbeAsSent(
+            turn=at + 1,
+            probe=_message(transcript.sent),
+            confirmed_the_break=at == confirmed,
+        )
+        for at, transcript in enumerate(episode.transcripts)
+    ]
 
 
 def _attachment(filename: str) -> dict[str, str]:
@@ -3297,6 +3491,47 @@ def create_app(
                 detail=f"no run {run_id} was started by this bench",
             )
         return progress_for(record, bench.config.rule)
+
+    @app.get(RUN_EPISODES_ROUTE)
+    def serve_the_probes_this_runs_episodes_sent(
+        run_id: Annotated[str, PathParam()],
+    ) -> RunProbes | NoProbes:
+        """The probes this run's attacker composed, in the order it sent them.
+
+        The one route on this bench that serves probe text, and the operator's own
+        live run is the whole of its subject: the episodes are read off the
+        `RunState` this process is holding, for a run this process started, and the
+        response says on itself that it is not part of the artefact, is committed
+        nowhere and does not survive a restart (ADR-0008, amended).
+
+        **The signed report is untouched by this and cannot be reached from here.**
+        What a run signs is assembled from `ReportedEpisode`, which carries a
+        family, an outcome, a turn count and prose, and has no field a probe could
+        be written into. This response is built from `AdaptiveEpisode.transcripts`
+        instead — a record that exists already, that no run writes to disk, and that
+        the assembler never sees.
+
+        **Two absences and two answers.** A run id this process never issued is a
+        `404` by name, exactly as `GET /runs/{id}` answers one: after a restart every
+        run is that, which is the honest form of *the memory is gone*. A run on the
+        record that has recorded no episode is a `200` that says so in words, because
+        it is a fact about where the run got to rather than a route that was wrong.
+        Neither is an empty list: a search that ran and sent nothing is a reading
+        about an attacker, and it is not what either of these is.
+        """
+        record = bench.record(run_id)
+        if record is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=(
+                    f"no run {run_id} was started by this bench. The probes an "
+                    "episode sent live with the process that ran it and are held "
+                    "nowhere else, so a run this process did not start has none to "
+                    "read — and a restart leaves every earlier run in exactly that "
+                    "state"
+                ),
+            )
+        return probes_sent(record)
 
     def servable(run_id: str) -> SignedArtefact:
         """This run's signed artefact, or the named reason there is none to serve.

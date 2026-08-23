@@ -1,12 +1,12 @@
 /**
  * The bench's HTTP surface as this app is allowed to see it.
  *
- * Nine of the twelve routes are reachable from here — `POST /nonces`, `POST
+ * Ten of the bench's routes are reachable from here — `POST /nonces`, `POST
  * /runs`, `POST /runs/{id}/approval`, `GET /runs`, `GET /runs/{id}`, `GET
- * /bench/gate`, `GET /bench/settings`, `GET /artefacts` and the two under
- * `/report/{id}` the report screen reads — and the field names are the backend's own,
- * `snake_case` and all, because the request body is a contract with
- * `backend/api/app.py` rather than a shape this app is free to choose. A
+ * /runs/{id}/episodes`, `GET /bench/gate`, `GET /bench/settings`, `GET /artefacts`
+ * and the two under `/report/{id}` the report screen reads — and the field names are
+ * the backend's own, `snake_case` and all, because the request body is a contract
+ * with `backend/api/app.py` rather than a shape this app is free to choose. A
  * camel-cased mirror would be one rename away from posting a body the API
  * refuses, and the refusal would arrive as a `422` nobody could read.
  *
@@ -500,6 +500,79 @@ export interface RunProgress extends RunStanding {
   report: ReportLocation | null
   recent: AttemptExchange[]
   families: FamilyRun[]
+}
+
+/**
+ * One probe, in the words the attacker composed and the target received.
+ *
+ * A **probe** and never a case: a case is a recorded payload with a stated
+ * criterion, and this is a message a model invented mid-run (CONTEXT.md). `turn` is
+ * the ordinal the bench counted it at and nothing divides by it.
+ *
+ * `confirmed_the_break` is the bench's derivation and not this app's guess: the
+ * canary check reads an episode's last transcript, so a broken episode's break was
+ * confirmed after its last probe. It is false on every probe of a censored one.
+ */
+export interface ProbeAsSent {
+  turn: number
+  probe: string
+  confirmed_the_break: boolean
+}
+
+/** One episode's outcome, its turn count, and every probe it sent, in order. */
+export interface EpisodeProbes {
+  family: string
+  outcome: string
+  turns: number
+  probes: ProbeAsSent[]
+  stated: string
+}
+
+/**
+ * The probes one live run's episodes sent, out of the bench's own memory.
+ *
+ * **Not the signed payload, and it is a different type for that reason.** A
+ * `ReportedEpisode` is what the artefact carries — family, outcome, turns and prose
+ * — and it has no field a probe could arrive in. This one is served by
+ * `GET /runs/{id}/episodes`, held in the process that ran the run, committed
+ * nowhere and gone at a restart (ADR-0008, amended). `stated` is the bench's own
+ * sentence saying exactly that, and the screen prints it rather than paraphrasing
+ * it: a screenshot of the block travels without the paragraph around it.
+ */
+export interface RunProbes {
+  held: true
+  run_id: string
+  episodes: EpisodeProbes[]
+  stated: string
+}
+
+/**
+ * This run recorded no episode, said in words rather than as an empty list.
+ *
+ * A run halted at its interrupt, a run nobody approved and a run stopped on the
+ * wire all arrive here. An empty list would read as a search that ran and sent
+ * nothing, which is a reading about the attacker and is not what happened.
+ */
+export interface NoProbes {
+  held: false
+  run_id: string
+  stated: string
+}
+
+export type RunEpisodes = RunProbes | NoProbes
+
+/**
+ * The probes one run's episodes sent, from the process that is holding them.
+ *
+ * Thrown rather than returned as an outcome, like every other read here: an id this
+ * process never started is the answer a restart gives for every earlier run, and the
+ * bench's own sentence says so.
+ */
+export async function runEpisodes(runId: string): Promise<RunEpisodes> {
+  return (await fetched(
+    `/runs/${encodeURIComponent(runId)}/episodes`,
+    'probes this run sent',
+  )) as RunEpisodes
 }
 
 /**

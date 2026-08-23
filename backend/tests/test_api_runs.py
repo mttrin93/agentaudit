@@ -49,6 +49,7 @@ from backend.bench.completion import (
     ADJUDICATOR_MODEL_ENV,
     ATTACKER_MODEL_ENV,
     REFERENCE_MODEL_ENV,
+    TURNS_PER_EPISODE_ENV,
 )
 from backend.bench.contract import TargetConfig, TargetFailure
 from backend.bench.library import Case, Family, LibraryVersion
@@ -651,6 +652,7 @@ def test_a_bench_handed_its_own_configuration_reads_no_environment(
 # response.
 
 MODEL_VARIABLES = (REFERENCE_MODEL_ENV, ADJUDICATOR_MODEL_ENV, ATTACKER_MODEL_ENV)
+DEPLOYMENT_VARIABLES = (*MODEL_VARIABLES, TURNS_PER_EPISODE_ENV)
 """The three variables a deployment declares its models in, and the only three."""
 
 AN_ATTACKING_MODEL = "openrouter:anthropic/claude-haiku"
@@ -694,7 +696,7 @@ def _declaring_nothing(monkeypatch: pytest.MonkeyPatch) -> None:
     otherwise run these against a client built from their own credential, and the
     one that asserts a stated absence would fail for a reason that is not a defect.
     """
-    for variable in MODEL_VARIABLES:
+    for variable in DEPLOYMENT_VARIABLES:
         monkeypatch.delenv(variable, raising=False)
 
 
@@ -784,6 +786,75 @@ def test_a_model_named_and_unbuildable_stops_the_boot(
     assert variable in statement
     assert "not-a-provider-and-model" in statement
     assert "OPENROUTER_API_KEY" in statement
+
+
+def test_a_deployment_may_declare_how_long_one_episode_may_take(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`T` is the operator's to set, and the estimate is built from what they set.
+
+    The declared eight was sized for a gate run, where every extra turn is multiplied
+    by six families and three agents. A run against one target pays for one target,
+    so the deployment may say how long an attacker works on it — and the figure the
+    operator confirms has to be the figure they are then held to, which is why this
+    asserts the ceiling and not only the field.
+
+    Nothing else about the budget moves: `k` and the family count are read off the
+    closed sets they cover, and a deployment that could edit those would be editing
+    what an episode is rather than how long one may take.
+    """
+    _declaring_nothing(monkeypatch)
+    monkeypatch.setenv(SIGNING_KEY_VARIABLE, encoded_private(generate()))
+    monkeypatch.setenv(TURNS_PER_EPISODE_ENV, "20")
+
+    config = cast(BenchRuns, create_app().state.bench).config
+
+    assert config.adaptive.turns_per_episode == 20
+    assert config.adaptive.turn_ceiling == 20 * config.adaptive.episode_count
+    assert config.adaptive.episodes_per_family == (
+        DECLARED_ADAPTIVE_BUDGET.episodes_per_family
+    )
+    assert config.adaptive.family_count == DECLARED_ADAPTIVE_BUDGET.family_count
+
+
+def test_a_deployment_declaring_no_turn_budget_runs_the_declared_one(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Unset is the declared budget, which is what the gate is held to.
+
+    Stated as its own case because the fallback is the thing every cost estimate in
+    the documents was computed against: a deployment that said nothing must run the
+    number ADR-0010 costed out, not one this module chose.
+    """
+    _declaring_nothing(monkeypatch)
+    monkeypatch.setenv(SIGNING_KEY_VARIABLE, encoded_private(generate()))
+
+    config = cast(BenchRuns, create_app().state.bench).config
+
+    assert config.adaptive == DECLARED_ADAPTIVE_BUDGET
+
+
+@pytest.mark.parametrize("declared", ["twenty", "0", "-4", "8.5"])
+def test_a_turn_budget_that_is_not_one_stops_the_boot(
+    monkeypatch: pytest.MonkeyPatch, declared: str
+) -> None:
+    """A setting that cannot be read is refused, never rounded to the default.
+
+    Falling back would run a budget nobody chose and print it in the estimate as
+    though they had, which is the one figure ADR-0007 requires be the operator's own.
+    Zero and a negative are refused for a second reason on top: an episode that may
+    take no turn is an adaptive layer that cannot run.
+    """
+    _declaring_nothing(monkeypatch)
+    monkeypatch.setenv(SIGNING_KEY_VARIABLE, encoded_private(generate()))
+    monkeypatch.setenv(TURNS_PER_EPISODE_ENV, declared)
+
+    with pytest.raises(RuntimeError) as refused:
+        create_app()
+
+    statement = str(refused.value)
+    assert TURNS_PER_EPISODE_ENV in statement
+    assert declared in statement
 
 
 # --- the halt --------------------------------------------------------------------

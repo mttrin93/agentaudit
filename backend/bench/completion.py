@@ -125,6 +125,49 @@ def declared_model(variable: str) -> str | None:
     return os.environ.get(variable, "").strip() or None
 
 
+TURNS_PER_EPISODE_ENV = "AGENTAUDIT_TURNS_PER_EPISODE"
+"""Where a deployment declares `T`, the cap on one adaptive episode.
+
+A setting rather than a constant because the declared eight was sized for a **gate
+run** — six families against three reference agents, where every extra turn is
+multiplied by eighteen — and a run against one target pays for one target. The
+operator whose endpoint it is decides how long an attacker may work on it, and they
+decide it in front of the estimate, which is built from this number rather than
+from the default it replaced.
+
+Unset is `AdaptiveBudget`'s own declared value, which is what the gate is held to
+and what `ADR-0010` costs out. Nothing here reaches the scored layer: `T` bounds a
+layer that is scored on nothing, and no rate, band or `D` moves with it.
+"""
+
+
+def declared_turns_per_episode() -> int | None:
+    """`T` as the environment declares it, or `None` for nothing.
+
+    Read here for the reason every other variable is: `backend/api/` imports no `os`.
+
+    **A value that is not a turn count is refused rather than rounded.** An
+    unparseable or non-positive setting is the operator asking for something this
+    cannot give, and a bench that fell back to the default would run a budget nobody
+    chose and print it in an estimate as though they had.
+    """
+    declared = os.environ.get(TURNS_PER_EPISODE_ENV, "").strip()
+    if not declared:
+        return None
+    try:
+        turns = int(declared)
+    except ValueError as unusable:
+        raise ValueError(
+            f"{TURNS_PER_EPISODE_ENV}={declared!r} is not a number of turns"
+        ) from unusable
+    if turns < 1:
+        raise ValueError(
+            f"{TURNS_PER_EPISODE_ENV}={declared!r}: an episode that may take no turn "
+            "is an adaptive layer that cannot run"
+        )
+    return turns
+
+
 def completion_for(spec: str) -> Completion:
     """The bench's model call, from a `<provider>:<model>` configuration string.
 

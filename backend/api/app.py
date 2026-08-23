@@ -149,6 +149,7 @@ filesystem and environment question::
 from __future__ import annotations
 
 from collections.abc import Sequence
+from dataclasses import replace
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from enum import StrEnum
@@ -198,6 +199,7 @@ from backend.bench.completion import (
     REFERENCE_MODEL_ENV,
     completion_for,
     declared_model,
+    declared_turns_per_episode,
 )
 from backend.bench.contract import NOT_A_SECURITY_RESULT, RetryPolicy, TargetConfig
 from backend.bench.evaluator import Verdict
@@ -2990,6 +2992,7 @@ def deployed_bench() -> BenchConfig:
         cases=admitted_library(library),
         adjudicator=adjudicator,
         attacker=attacker,
+        adaptive=deployed_adaptive_budget(),
         report=ReportConfig(
             signing_key=key,
             gate=the_citation(library),
@@ -3023,6 +3026,30 @@ NAMED_BUT_UNUSABLE = (
     "control that spends and then fails, and OPENROUTER_API_KEY is the credential "
     "to check first"
 )
+
+
+def deployed_adaptive_budget() -> AdaptiveBudget:
+    """The adaptive layer's budget for this deployment, `T` from the environment.
+
+    One field of it is settable and the rest are not, which is the shape rather than
+    an omission. `T` is what a run against one target pays for a single attacker's
+    time, and the operator paying is the one who should choose it. `k`, the family
+    count and the steps per turn are read off the closed sets they cover or are the
+    reason the layer terminates at all — a deployment moving those would be moving
+    what an episode *is*, not how long one may take.
+
+    **A setting that cannot be read stops the boot**, on the same terms a model named
+    and unbuildable does: a bench that quietly ran the declared eight would put a
+    number in front of an operator that they did not choose, at the one moment the
+    figures are supposed to be theirs to confirm (ADR-0007).
+    """
+    try:
+        turns = declared_turns_per_episode()
+    except ValueError as unusable:
+        raise RuntimeError(f"{unusable}. {NAMED_BUT_UNUSABLE}") from unusable
+    if turns is None:
+        return DECLARED_ADAPTIVE_BUDGET
+    return replace(DECLARED_ADAPTIVE_BUDGET, turns_per_episode=turns)
 
 
 def declared_instrument(variable: str) -> tuple[str, Completion | None]:

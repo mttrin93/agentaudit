@@ -451,7 +451,13 @@ def test_the_estimate_is_two_figures_against_two_ceilings_and_no_third(
             ), f"{field} reads like a figure spanning the two layers"
         for field, value in estimate.items():
             assert value != blended, f"{field} is the two layers added together"
-        assert str(blended) not in response.text
+        # As a figure and not as a substring. The response carries a gate run id, and
+        # three digits fall inside a random uuid often enough to fail this on a run
+        # that changed nothing: `219f579ade63` is not a total, and `\b` is what tells
+        # it from one. A sum in a sentence still reads as a number either way.
+        assert not re.search(rf"\b{blended}\b", response.text), (
+            f"{blended} is the two layers added together, in a sentence"
+        )
 
         # Nothing has been spent: the gate run is holding its interrupt, and the
         # figures above are what it is holding.

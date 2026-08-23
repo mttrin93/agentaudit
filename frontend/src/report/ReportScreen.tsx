@@ -1,6 +1,6 @@
 /**
- * The report screen: a finding, and no number the project spent nineteen ADRs
- * refusing to print.
+ * The report screen: the two layers' figures, and no number the project spent
+ * nineteen ADRs refusing to print.
  *
  * It renders from the **signed payload** — the bytes a recipient verifies, fetched
  * from the path the run's own record advertises — and offers all three files for
@@ -8,29 +8,48 @@
  * figure here the payload does not carry, because the screen builds none
  * (`report.ts`).
  *
- * **Verification status is near the top on purpose.** An engineer finds out that
- * the artefact is checkable *before* they send it to a customer, and the answer
- * worth acting on is the one that says do not send this yet — a signature under a
- * key nobody has published, a rendering that no longer matches its digest, an
- * arithmetic that does not re-derive. Three results, always all three, because a
- * screen showing one would let its reader infer the strongest claim from the
- * weakest (ADR-0017). The check was computed by the bench that produced the
- * document, and the screen says so rather than letting a tick stand in for the
- * recipient's own offline run of `scripts/verify.py`.
+ * **The figures are the page.** Each family is a card that opens with its rate and
+ * its band, with the interval, `κ` and the verdict class on one monospace line under
+ * them and the counts beneath — the idiom the gate screen's per-family cards already
+ * use.
  *
- * **The declared-and-defeated join is the headline** because it is the strongest
- * finding this bench can produce and the only one that needs no figure to be read:
- * a statement the operator made, crossed with a verdict the bench measured.
+ * **`D` is not one of them.** It is the separation between two agents of known
+ * construction at the bench's own gate: a property of the instrument, and ADR-0018
+ * keeps the bench's calibration equipment out of a target's report. The API declines
+ * to hand a gate decision to the assembler for exactly that reason
+ * (`api/report.py`), so the field on the wire is `null` on every target report — a
+ * figure that was always going to read *not recorded*, next to numbers that are
+ * about the target.
+ *
+ * **The adaptive layer is read per family too**, because that is the question the
+ * section answers — what the search proposed against each family, over how many
+ * turns, and whether it broke it. Grouped and never joined: a turn is not an
+ * attempt and no count here meets a count above it (ADR-0010).
+ *
+ * **The three results are not on this page.** They were: a signature, a rendering
+ * binding and a re-derivation, printed near the top so an engineer learned the
+ * artefact was checkable before sending it on. They are still read into every row of
+ * the signed-artefacts list (`console/artefacts.ts`), and no screen draws them: what
+ * settles whether a document is one to send is a recipient's own `scripts/verify`
+ * over the three files this page links to. A sender's word for their own document is
+ * the thing a signature exists to replace (ADR-0017).
+ *
+ * **The declared-and-defeated join is not on this page either.** It is in
+ * `report.json` and in the `report.md` a recipient reads, which is where the join
+ * travels; this screen is a viewer for the figures.
  *
  * **Nothing on this page combines two families.** Not a total, not an average, not
- * a rank, not a badge — and the families are laid out as blocks rather than as rows
- * of one table, because a table wants a total row and a stack of blocks has nowhere
+ * a rank, not a badge — and the families are laid out as cards rather than as rows
+ * of one table, because a table wants a total row and a grid of cards has nowhere
  * to put one. The absence is asserted in `report.test.ts` against the payload this
  * screen renders from, structurally: drop a family and every other part of the view
  * is unchanged.
  *
  * **A target has rates, intervals and bands, and passes and fails nothing**
- * (ADR-0018). The bench's own gate is in provenance, in the bench's own words.
+ * (ADR-0018). What made the artefact — the attestation, the models, the rule, the
+ * library version, the calls each layer spent, the bench's own gate — and the risk
+ * categories this bench does not test are in `report.json` and in the `report.md` a
+ * recipient reads. They are not on this page; the figures are.
  */
 
 import { useEffect, useState } from 'react'
@@ -39,25 +58,21 @@ import { Link, useParams } from 'react-router-dom'
 import { readFamily } from '../families'
 import {
   reportPayload,
-  reportVerification,
   runProgress,
   type ReportLocation,
   type TargetReport,
-  type Verification,
 } from '../api/bench'
 import {
   reportView,
-  type CheckReading,
+  type AdaptiveFamilyReading,
   type FamilyAnswer,
-  type Headline,
   type ReportView,
 } from './report'
 
-/** What this screen is holding: the three things it needs, or why it has none. */
+/** What this screen is holding: the two things it needs, or why it has neither. */
 interface Held {
   where: ReportLocation | null
   report: TargetReport | null
-  verification: Verification | null
   /** The run's own sentence about why there is no report, carried unedited. */
   noReport: string
   unavailable: string
@@ -66,7 +81,6 @@ interface Held {
 const NOTHING_YET: Held = {
   where: null,
   report: null,
-  verification: null,
   noReport: '',
   unavailable: '',
 }
@@ -90,12 +104,9 @@ export function ReportScreen() {
           return
         }
         const where = progress.report
-        const [report, verification] = await Promise.all([
-          reportPayload(where.path),
-          reportVerification(where.verification),
-        ])
+        const report = await reportPayload(where.path)
         if (current) {
-          setHeld({ ...NOTHING_YET, where, report, verification })
+          setHeld({ ...NOTHING_YET, where, report })
         }
       } catch (unknown: unknown) {
         if (current) {
@@ -109,10 +120,7 @@ export function ReportScreen() {
     }
   }, [runId])
 
-  const view =
-    held.report && held.verification
-      ? reportView(held.report, held.verification)
-      : null
+  const view = held.report ? reportView(held.report) : null
   return (
     <main className="screen">
       {/*
@@ -159,177 +167,62 @@ export function ReportScreen() {
 function TheReport({ view, where }: { view: ReportView; where: ReportLocation }) {
   return (
     <>
-      <TheHeadline headline={view.headline} />
-
       <section>
-        <h2>Is this artefact checkable?</h2>
-        <p className="consequence">{view.verification.heading}</p>
-        <dl className="checks">
-          {view.verification.checks.map((check) => (
-            <TheCheck check={check} key={check.name} />
+        <h2>The scored layer, one family at a time</h2>
+        <div className="families per-family">
+          {view.answers.map((answer) => (
+            <TheFamily answer={answer} key={`${answer.kind}-${answer.family}`} />
           ))}
-        </dl>
-        <h3>The two claims this artefact carries, printed together</h3>
-        <dl className="review">
-          {view.verification.claims.map((claim) => (
-            <div key={claim.label}>
-              <dt>{claim.label}</dt>
-              <dd>{claim.statement}</dd>
-            </div>
-          ))}
-        </dl>
-        <p className="aside">{view.verification.checkedBy}</p>
-        <p className="aside">{view.verification.notAQualityClaim}</p>
+        </div>
       </section>
 
+      <section>
+        <h2>The adaptive layer, and what it proposed per family</h2>
+        <p className="consequence">{view.adaptive.label}</p>
+        {view.adaptive.families.length ? (
+          <div className="families per-family">
+            {view.adaptive.families.map((family) => (
+              <TheSearch family={family} key={family.family} />
+            ))}
+          </div>
+        ) : (
+          <p className="aside">
+            No episode of the search is recorded against this target, which is a
+            reading about the attacker and not about the agent.
+          </p>
+        )}
+      </section>
+
+      {/* The three files under the names a verifier already knows, and nothing
+          beside them: what a recipient does with them is `scripts/verify` over the
+          directory they land in, and the signed-artefacts screen is the list every
+          artefact this bench has produced is reached from. */}
       <section>
         <h2>The signed artefact</h2>
         <ul>
           <li>
-            <a href={where.path}>report.json</a> — the canonical payload, and the
-            exact bytes the signature covers
+            <a href={where.path}>report.json</a>
           </li>
           <li>
-            <a href={where.rendering}>report.md</a> — the document a human reads,
-            bound to those bytes by digest
+            <a href={where.rendering}>report.md</a>
           </li>
           <li>
-            <a href={where.signature}>report.sig</a> — the detached signature
+            <a href={where.signature}>report.sig</a>
           </li>
         </ul>
-        {/* The instruction, and not the argument for it: what made the paragraph
-            long was the case for portable evidence, and the three links above are
-            that case. */}
-        <p className="aside">
-          Save all three into one directory under the names they arrive with, then run{' '}
-          <code>uv run python -m scripts.verify</code> over it. That check reaches no
-          network, needs no credential, and pins the key whose fingerprint this
-          repository’s README publishes.
-        </p>
       </section>
-
-      <section>
-        <h2>What was measured, one family at a time</h2>
-        <p>{view.measured.reproducibility}</p>
-        <p className="aside">{view.measured.cuts}</p>
-        <div className="families">
-          {view.measured.answers.map((answer) => (
-            <TheFamily answer={answer} key={`${answer.kind}-${answer.family}`} />
-          ))}
-        </div>
-        <p className="consequence">{view.noFigureSpansTwoFamilies}</p>
-        <p className="aside">{view.ratesAndBands}</p>
-      </section>
-
-      <section>
-        <h2>The adaptive layer</h2>
-        <p className="consequence">{view.adaptive.label}</p>
-        <p>{view.adaptive.statement}</p>
-        <p className="aside">{view.adaptive.reproducibility}</p>
-        {view.adaptive.episodes.map((episode) => (
-          <p key={`${episode.family}-${episode.description}`}>
-            <strong>{readFamily(episode.family)}</strong> — {episode.outcome}, over{' '}
-            {episode.turns}. {episode.description}.
-          </p>
-        ))}
-        <p className="aside">
-          Routes are described in prose and never as payload text, so this report is
-          not a working exploit somebody can lift out of it (ADR-0008). A turn is not
-          an attempt: nothing in this section joins a count above it.
-        </p>
-      </section>
-
-      <section>
-        <h2>What this bench does not test at all</h2>
-        <p>{view.coverage.statement}</p>
-        <dl className="review">
-          {view.coverage.gaps.map((gap) => (
-            <div key={gap.category}>
-              <dt>{gap.category}</dt>
-              <dd>{gap.reason}</dd>
-            </div>
-          ))}
-        </dl>
-      </section>
-
-      <TheProvenance view={view} />
     </>
   )
 }
 
-/** The headline: declared, and defeated. */
-function TheHeadline({ headline }: { headline: Headline }) {
-  return (
-    <section>
-      <h2>{headline.heading}</h2>
-      <p className="consequence">{headline.statement}</p>
-      {headline.defeated.map((defeat) => (
-        <div className="defeat" key={defeat.control}>
-          <h3>
-            {defeat.control} — claims {readFamily(defeat.family)}
-          </h3>
-          <p>{defeat.stated}</p>
-          <p className="aside">Broken by {defeat.brokenBy.join(', ')}.</p>
-        </div>
-      ))}
-      {headline.standing.length ? (
-        <>
-          <h3>Declared, and not defeated</h3>
-          <ul>
-            {headline.standing.map((control) => (
-              <li key={control.control}>{control.stated}</li>
-            ))}
-          </ul>
-        </>
-      ) : null}
-      {headline.absent.length ? (
-        <>
-          <h3>On the checklist, and not declared</h3>
-          {/*
-            The names, and the sentence once.
-
-            `stated` is the payload's own line and it is the same twenty words for
-            every control — *the checklist asks about this control and this target did
-            not claim it. An absence is not a finding and nothing was attempted against
-            it* — which read four times over is a paragraph that hides the four names
-            inside it. The signed field is unchanged; what this screen prints is the
-            list it is a list of, under the sentence that is true of all of them.
-          */}
-          <p className="aside">
-            The checklist asks about these and this target claimed none of them. An
-            absence is not a finding: nothing was attempted against any of them.
-          </p>
-          <ul className="names">
-            {headline.absent.map((control) => (
-              <li key={control.control}>{control.control}</li>
-            ))}
-          </ul>
-        </>
-      ) : null}
-    </section>
-  )
-}
-
-/** One of the three results, under the name the verifier gave it. */
-function TheCheck({ check }: { check: CheckReading }) {
-  return (
-    <div className={check.held ? 'check' : 'check did-not-hold'}>
-      <dt>
-        {check.name}: <strong>{check.outcome}</strong>
-      </dt>
-      <dd>{check.statement}</dd>
-    </div>
-  )
-}
-
 /**
- * One family, as a block.
+ * One family, as a card that opens with its figures.
  *
  * Three shapes rather than one row with empty cells: a family whose rate is
  * withheld and a family the target could not be measured on carry no figures at
- * all, so there is no cell for a `0.00` to be drawn into. Blocks rather than a
- * table for the same reason the two cost figures are blocks — a table wants a total
- * row, and this stack has nowhere to put one.
+ * all, so there is no cell for a `0.00` to be drawn into. Cards rather than a table
+ * for the same reason the two cost figures are blocks — a table wants a total row,
+ * and this grid has nowhere to put one.
  */
 function TheFamily({ answer }: { answer: FamilyAnswer }) {
   if (answer.kind === 'withheld') {
@@ -337,8 +230,6 @@ function TheFamily({ answer }: { answer: FamilyAnswer }) {
       <div className="family absent">
         <h3>{readFamily(answer.family)}</h3>
         <p className="at">rate not published — {answer.reason}</p>
-        <p>{answer.stated}</p>
-        <p className="aside">{answer.note}</p>
       </div>
     )
   }
@@ -356,98 +247,65 @@ function TheFamily({ answer }: { answer: FamilyAnswer }) {
   return (
     <div className="family">
       <h3>{readFamily(answer.family)}</h3>
-      <p>
-        <span className="calls">{figures.rate}</span>
-        <span className="kind">{figures.counts}</span>
-      </p>
-      <p>
-        Interval: <strong>{figures.interval}</strong>. The interval and never the
-        point estimate is what the band is read from.
-      </p>
-      <p>
-        Band: <strong>{figures.band}</strong> — {figures.bandReads}
-      </p>
-      <p className="aside">{figures.cuts}</p>
-      <p className="aside">Verdicts here are {figures.verdictClass}.</p>
-      <p className="aside">{figures.instrument}</p>
-      <p className="aside">{figures.discrimination}</p>
-      {figures.limits.map((limit) => (
-        <p className="aside" key={limit.identifier}>
-          {limit.identifier}: these cases test one case within it. They do not test{' '}
-          {limit.doesNotTest}.
+      <div className="rate-line">
+        <p className="score">
+          <span className="calls">{figures.rate}</span>
         </p>
-      ))}
+        <p className="score">
+          <span className="kind">band</span> <strong>{figures.band}</strong>
+        </p>
+      </div>
+      <ul className="rates">
+        <li>
+          <span className="who">interval</span>{' '}
+          <span className="rate">{figures.interval}</span>{' '}
+          <span className="who">{figures.intervalAt}</span>
+        </li>
+        {figures.kappa ? (
+          <li>
+            <span className="who">κ</span>{' '}
+            <span className="rate">{figures.kappa.figure}</span>
+          </li>
+        ) : null}
+        <li>
+          <span className="who">verdicts</span>{' '}
+          <span className="rate">{figures.verdictClass}</span>
+        </li>
+      </ul>
+      <p className="aside">{figures.counts}</p>
+      {figures.kappa ? <p className="aside">{figures.kappa.counts}</p> : null}
     </div>
   )
 }
 
-/** How this artefact was made — and nothing about what it found. */
-function TheProvenance({ view }: { view: ReportView }) {
-  const provenance = view.provenance
+/**
+ * One family the search worked in: its episodes, and what each proposed.
+ *
+ * The turn count is the card's figure and it is the only number on it — a turn is
+ * not an attempt, so there is nothing here to read against the cards above.
+ */
+function TheSearch({ family }: { family: AdaptiveFamilyReading }) {
   return (
-    <section>
-      <h2>How this report was made</h2>
-      <dl className="review">
-        <div>
-          <dt>artefact</dt>
-          <dd>{view.artefact}</dd>
-        </div>
-        <div>
-          <dt>attested by</dt>
-          <dd>
-            {provenance.attestedBy}, recorded {provenance.recordedAt}
-          </dd>
-        </div>
-        <div>
-          <dt>endpoint</dt>
-          <dd>
-            {provenance.endpointDigest} — as a digest, because a live URL that
-            answers jailbreak payloads is not a thing to write into a document that
-            travels.
-          </dd>
-        </div>
-        {provenance.models.map((model) => (
-          <div key={model.instrument}>
-            <dt>{model.instrument} model</dt>
-            <dd>{model.model}</dd>
+    <div className="family">
+      <h3>{readFamily(family.family)}</h3>
+      {family.episodes.map((episode, at) => (
+        <div key={`${at}-${episode.proposed}`}>
+          <div className="rate-line">
+            <p className="score">
+              <span className="calls">{episode.turns}</span>
+            </p>
+            <p className="score">
+              <span className="kind">episode</span> <strong>{episode.outcome}</strong>
+            </p>
           </div>
-        ))}
-        <div>
-          <dt>library</dt>
-          <dd>{provenance.library}</dd>
+          <p className="aside">Proposed: {episode.proposed}.</p>
         </div>
-        {provenance.callsSpent.map((spent) => (
-          <div key={spent.layer}>
-            <dt>{spent.layer} layer</dt>
-            <dd>{spent.calls} calls on the wire</dd>
-          </div>
-        ))}
-      </dl>
-      <p className="aside">
-        Reported per layer and never as one figure: a blended number hides which half
-        of the run spent the operator’s budget.
+      ))}
+      <p className="kind">
+        {family.broke
+          ? 'the search broke this family — recorded, and scored nowhere'
+          : 'the search did not break this family'}
       </p>
-
-      <h3>What the operator attested to</h3>
-      <ul>
-        {provenance.statements.map((statement) => (
-          <li key={statement}>{statement}</li>
-        ))}
-      </ul>
-
-      <h3>The rule these figures were measured under</h3>
-      <ul>
-        {provenance.rule.map((part) => (
-          <li key={part}>{part}</li>
-        ))}
-      </ul>
-
-      <h3>The bench’s own gate, cited as provenance</h3>
-      <blockquote>{provenance.gate.statement}</blockquote>
-      <p className="aside">{provenance.gate.note}</p>
-
-      <h3>What has not been validated</h3>
-      <p className="aside">{provenance.formatUnvalidated}</p>
-    </section>
+    </div>
   )
 }

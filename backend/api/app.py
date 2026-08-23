@@ -189,7 +189,7 @@ from backend.api.runs import (
 from backend.bench.adaptive.budget import DECLARED_ADAPTIVE_BUDGET, AdaptiveBudget
 from backend.bench.adjudication import Completion
 from backend.bench.admission import admitted_library
-from backend.bench.cited import the_citation
+from backend.bench.cited import the_citation, the_reliability
 from backend.bench.completion import (
     ADJUDICATOR_MODEL_ENV,
     REFERENCE_MODEL_ENV,
@@ -2986,7 +2986,16 @@ def deployed_bench() -> BenchConfig:
     return BenchConfig(
         cases=admitted_library(library),
         adjudicator=adjudicator,
-        report=ReportConfig(signing_key=key, gate=the_citation(library), models=models),
+        report=ReportConfig(
+            signing_key=key,
+            gate=the_citation(library),
+            models=models,
+            # The κ the cited gate run measured, and only if it measured it on the
+            # model these runs adjudicate with. The guard is the whole reason this is
+            # read here rather than inside the report path: a κ about another
+            # instrument is not a κ about these verdicts (ADR-0004, ADR-0013).
+            reliability=the_reliability(library).for_adjudicator(models.adjudicating),
+        ),
     )
 
 

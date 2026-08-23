@@ -1052,10 +1052,11 @@ select option {
 /*
  * The six families of one gate run, two to a row, each with its rates plotted.
  *
- * `.families` on its own is one column, which is what the report and the
- * questionnaire want: there a family is a paragraph of prose. Here a family is six
- * numbers, so two fit across the reading column and a reader sees the six without
- * scrolling past four.
+ * `.families` on its own is one column, which is what the questionnaire wants:
+ * there a family is a paragraph of prose. Here — and on a target's report, where a
+ * family is its rate, its interval, its band, `D` and `κ` — a family is figures, so
+ * two fit across the reading column and a reader sees the six without scrolling
+ * past four.
  *
  * `auto-fit`, so a narrow window gets one column and the cards keep their order
  * either way. **The order is the library's and never the scores'** — a grid sorted
@@ -1078,7 +1079,8 @@ select option {
   gap: 1rem;
 }
 
-/* The three rates on one line, with `D` at the end of it. */
+/* The three rates on one line, with `D` at the end of it — and, on a target's
+ * report, the family's own rate on the left with its band on the right. */
 .family .rate-line {
   display: flex;
   align-items: baseline;
@@ -1108,6 +1110,24 @@ select option {
 .family .score {
   margin: 0;
   white-space: nowrap;
+}
+
+/*
+ * The label inside a figure line, at the size of the card's quiet text.
+ *
+ * A target's report puts one word beside a figure — *band* over the band, *episode*
+ * over an episode's outcome — and it wants the size and the grey `.family > .kind`
+ * gives the verdict under a gate card. Selected by the line it sits in rather than
+ * by widening that child selector, so the `D` on a gate card is untouched.
+ */
+.family .rate-line .kind {
+  font-size: 0.8rem;
+  color: var(--quiet);
+}
+
+/* The figure list sits under the rate line rather than beside it. */
+.family .rate-line + .rates {
+  margin-top: 0.7rem;
 }
 
 /* The verdict under the card, at the size of the legend above it: one word, and the

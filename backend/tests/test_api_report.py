@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, cast, get_type_hints
@@ -35,9 +35,11 @@ from fastapi.testclient import TestClient
 from backend.api.app import REPORT_ROUTE, create_app
 from backend.api.report import ReportConfig, Unsigned
 from backend.api.runs import BenchConfig, BenchRuns, RunRecord, RunStatus
-from backend.bench.library import Case
+from backend.bench.library import Case, Family
 from backend.bench.payload import GateCitation, canonical, document
 from backend.bench.rendering import REPORT_MARKDOWN, REPORT_PAYLOAD
+from backend.bench.rule import DECLARED_RULE
+from backend.bench.scorer import Reliability
 from backend.bench.signing import (
     SIGNATURE_FILE,
     SignedArtefact,
@@ -53,6 +55,7 @@ from backend.bench.verification import (
     ReDerivationOutcome,
     SignatureOutcome,
 )
+from backend.tests.conftest import ADJUDICATING
 from backend.tests.test_api_runs import (
     a_request,
     registered,
@@ -69,6 +72,7 @@ def completed(
     key: Ed25519PrivateKey | None,
     pinned: Ed25519PublicKey | None = None,
     gate: GateCitation | None = None,
+    reliability: Mapping[Family, Reliability] | None = None,
 ) -> Iterator[Served]:
     """One run taken through the API to completion, against a served reference agent.
 
@@ -80,6 +84,12 @@ def completed(
     is the key committed to this repository — which is what a recipient pins, and so
     what a bench signing with a test key is honestly reported against.
 
+    `reliability` is the κ per judged family this bench was configured with — the
+    figures the gate run its library cites measured, on the model these runs
+    adjudicate with (`cited.the_reliability`). Left out, nothing measured the
+    adjudicator and a judged family's rate is withheld rather than published, which
+    is the state every deterministic-only test here runs in.
+
     `gate` is the citation this bench carries into the provenance of what it signs.
     Left out, the bench cites no gate run, which is the state a report states rather
     than omits — and `test_api_gate.py` hands one in so that the route serving the
@@ -89,7 +99,13 @@ def completed(
         BenchConfig(
             cases=cases,
             approval_wait_seconds=60.0,
-            report=ReportConfig(signing_key=key, pinned=pinned, gate=gate),
+            adjudicator=ADJUDICATING,
+            report=ReportConfig(
+                signing_key=key,
+                pinned=pinned,
+                gate=gate,
+                reliability=reliability or {},
+            ),
         )
     )
     bench = cast(BenchRuns, app.state.bench)
@@ -582,3 +598,62 @@ def _keys(node: Any) -> Iterator[str]:
     elif isinstance(node, list):
         for value in node:
             yield from _keys(value)
+
+
+# --- a judged family, and the κ that decides whether its rate is published -------
+
+
+A_MEASURED_ADJUDICATOR = Reliability(
+    family=Family.DISCLOSURE_DENIAL, kappa=0.87, agreements=14, transcripts=15
+)
+"""κ above the declared floor, as the cited gate run measured it."""
+
+
+def test_a_judged_family_publishes_its_rate_when_a_kappa_reached_the_run(
+    disclosure_denial_case: Case,
+) -> None:
+    """The figure ADR-0004 requires, beside the rate it is about.
+
+    κ is measured at the gate, against the pre-registered gold set, on the
+    adjudicating model — and it reaches a run through configuration rather than by
+    being re-taken with the operator's budget (ADR-0013). Given one, the family is
+    published like any other: successes over attempts, an interval, a band, and the κ
+    with the counts it was read from.
+    """
+    with completed(
+        [disclosure_denial_case],
+        generate(),
+        reliability={Family.DISCLOSURE_DENIAL: A_MEASURED_ADJUDICATOR},
+    ) as served:
+        measured = served.fetch().json()["measured"]
+
+    [judged] = measured["judged"]
+    assert judged["family"] == "disclosure_denial"
+    assert judged["attempts"] == DECLARED_RULE.attempts_per_case
+    assert judged["successes"] == judged["attempts"], "the stub adjudicator succeeded"
+    assert judged["band"] == "fails"
+    assert judged["reliability"]["kappa"] == pytest.approx(0.87)
+    assert judged["reliability"]["agreements"] == 14
+    assert judged["reliability"]["transcripts"] == 15
+    # Published, and so absent from the families whose rate the report may not state.
+    assert measured["withheld"] == []
+
+
+def test_the_same_family_is_withheld_when_no_kappa_reached_the_run(
+    disclosure_denial_case: Case,
+) -> None:
+    """No κ, no published rate — and the reason said by name.
+
+    The attempts were made and the rate is on the run (ADR-0006); what it does not
+    have is a statable evidentiary strength, so the report withholds it (ADR-0015).
+    `no_kappa_measured` is a different fact from a κ below the floor and is not a κ of
+    zero.
+    """
+    with completed([disclosure_denial_case], generate()) as served:
+        measured = served.fetch().json()["measured"]
+
+    assert measured["judged"] == []
+    [withheld] = measured["withheld"]
+    assert withheld["family"] == "disclosure_denial"
+    assert withheld["reason"] == "no_kappa_measured"
+    assert withheld["kappa"] is None

@@ -10,11 +10,11 @@
  *
  * **All three results on every row, always.** A row showing the signature alone
  * would let its reader infer re-derivability from integrity, which is the one
- * inference ADR-0017 exists to prevent. The reading is `verificationReading` from the
- * report screen — imported rather than reimplemented, the way the gate screen imports
- * the front door's citation reading: one wording for the three results and the two
- * claims, rather than two that would only have to disagree once for a screen to state
- * a property nobody checked.
+ * inference ADR-0017 exists to prevent. The reading is `verificationReading`, which
+ * lives in `report/report.ts` and is now read only here — the report screen shows
+ * what was measured and links to the three files, and no screen draws the three
+ * results. One wording for them, so nothing has to disagree for a screen to state a
+ * property nobody checked.
  *
  * **The two claims stay two.** Integrity is over the whole document;
  * re-derivability is over the **scored layer alone**, because the adaptive layer is
@@ -130,8 +130,9 @@ export interface ArtefactReading {
   /**
    * The three results, the two claims, and whose check this was.
    *
-   * The report screen's own reading, unchanged: three outcomes named individually,
-   * two claims stated separately, and `checkedBy` on every one of them.
+   * Three outcomes named individually, two claims stated separately, and
+   * `checkedBy` on every one of them. Carried per row and drawn by no screen: what
+   * settles it for a recipient is their own run of `scripts/verify`.
    */
   verification: VerificationReading
 }
@@ -140,9 +141,9 @@ export interface ArtefactReading {
  * The three outcomes, each in the shortest words that still name it.
  *
  * *Did not verify* rather than *failed*: what failed is one of three named results,
- * and this word says only that the artefact is not one to send. The result that
- * failed is beside it on the artefact's own screen, and no word here stands in for
- * reading it.
+ * and this word says only that the artefact is not one to send. Which result failed
+ * is in the row's own reading and in `scripts/verify` over the three files; no word
+ * here stands in for reading it.
  */
 const SETTLED_IN_A_WORD: Record<Settled, string> = {
   verified: 'Verified',
@@ -205,10 +206,10 @@ export function artefactsReading(list: ArtefactList): ArtefactsReading {
 /**
  * One row.
  *
- * The verification is passed whole into the report screen's own reading, so that the
- * three results, the two claims and the sentence naming whose check it is arrive here
- * in the same words the report screen shows them in — and a row cannot end up with
- * fewer than three results without that function losing one.
+ * The verification is passed whole into `verificationReading`, so the three results,
+ * the two claims and the sentence naming whose check it is arrive here in one
+ * wording — and a row cannot end up with fewer than three results without that
+ * function losing one.
  */
 function artefactReading(row: ArtefactRow): ArtefactReading {
   const verification = verificationReading(row.verification)

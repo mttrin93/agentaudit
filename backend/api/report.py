@@ -37,8 +37,8 @@ absence rather than a blank.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
-from dataclasses import dataclass
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass, field
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import (
     Ed25519PrivateKey,
@@ -47,7 +47,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import (
 
 from backend.bench.assembler import assemble, reported_episodes
 from backend.bench.calibration import CalibrationResult
-from backend.bench.library import Case
+from backend.bench.library import Case, Family
 from backend.bench.payload import (
     DeclaredModels,
     GateCitation,
@@ -55,6 +55,7 @@ from backend.bench.payload import (
     TargetPayload,
 )
 from backend.bench.rule import GateRule
+from backend.bench.scorer import Reliability
 from backend.bench.signing import SignedArtefact, encoded, public_key, signed
 from backend.bench.verification import Published, Verification, checked
 
@@ -130,6 +131,35 @@ class ReportConfig:
     target run and the citation arrives already made.
     """
 
+    reliability: Mapping[Family, Reliability] = field(default_factory=dict)
+    """κ per judged family, measured on the instrument that adjudicates these runs.
+
+    ADR-0004 requires κ beside every judged rate, and a judged family that reaches
+    this module without one is withheld rather than published (ADR-0015) — which is
+    what an empty mapping means and what it does. It is **not** re-measured per run:
+    κ is a reading about the adjudicator against the pre-registered gold set, the
+    gate is where the bench measures its own instruments, and a target run that
+    re-took it would be spending an operator's budget to learn something about the
+    bench (ADR-0013, and the same division ADR-0018 draws for `D`).
+
+    So it arrives already measured, from the gate run the case library cites
+    (`bench/cited.the_reliability`), and only when that gate run adjudicated with the
+    model these runs adjudicate with — `CitedReliability.for_adjudicator` is the
+    guard, and `app.deployed_bench` is where it is applied. A κ measured on another
+    model is a figure about another instrument, and it does not reach a rate it says
+    nothing about.
+
+    What crosses from the gate is this and nothing else: no rate, no interval, no
+    band and no `D`, none of which has a definition for one target (ADR-0018).
+
+    **Read at boot, and not through `gate_runs.Cites`.** A gate run started from the
+    console updates the citation in this process through that one edge, and the edge
+    is a `GateCitation` in and nothing out — a per-family κ crossing it is the
+    widening ADR-0021 forbids. So a gate run made here becomes the κ these runs
+    publish at the next process start, off the record it wrote into the library,
+    which is the same durable path the citation already takes.
+    """
+
     pinned: Ed25519PublicKey | None = None
     """The public key a verification of this bench's reports is run against.
 
@@ -169,6 +199,11 @@ def payload_for(
             # No gate decision, and no argument that could carry one. The bench's own
             # citation reaches the provenance block below and nothing else (ADR-0018).
             episodes=reported_episodes(state.episodes, target_run.target.name),
+            # κ does cross, and only κ: it is the figure ADR-0004 requires beside a
+            # judged rate, it is about the adjudicator rather than about this target,
+            # and the configuration is where it was already checked against the model
+            # these runs adjudicate with.
+            reliability=config.reliability,
         ),
         provenance=Provenance(
             # Read off the record that authorised the run rather than off the

@@ -60,15 +60,17 @@ which one a report carries and never a loss of the ones before it.
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from collections.abc import Mapping
+from dataclasses import dataclass, replace
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
 from backend.bench.gate_record import RecordedGateRun
-from backend.bench.library import LibraryVersion
+from backend.bench.library import Family, LibraryVersion
 from backend.bench.payload import GateCitation, citation
-from backend.bench.scorer import GateOutcome
+from backend.bench.rule import DECLARED_RULE, GateRule
+from backend.bench.scorer import GateOutcome, Reliability
 
 CITED_GATE_RUN = "gate-run.json"
 """What the cited gate run is called inside the library that cites it.
@@ -214,3 +216,101 @@ def the_citation(library: Path) -> GateCitation | None:
         )
     except (KeyError, TypeError, ValueError):
         return None
+
+
+@dataclass(frozen=True)
+class CitedReliability:
+    """The κ the cited gate run measured, and the instrument it measured it on.
+
+    **Why a target's report may carry these at all.** κ is a reading about the
+    adjudicator against the pre-registered gold set — fifteen transcripts per judged
+    family — and ADR-0004 requires it beside every judged rate. It is not a
+    measurement of the target and a target run does not re-take it: the gate is where
+    the instrument is measured, which is the same division that puts `D` on the
+    instrument's side of ADR-0018. What crosses to a target's report is the κ of the
+    adjudicator that decided that target's judged families, and nothing else the gate
+    measured — no rate, no interval, no band, no `D`.
+
+    **The model is carried so that the caller can refuse.** A κ measured on one model
+    says nothing about another, so `measured` is handed to a run only when
+    `adjudicating_model` is the model that run adjudicates with (`for_adjudicator`).
+    An older record naming no model answers `None`, and `for_adjudicator` then hands
+    over nothing: the judged families stay withheld as they are today, which is the
+    reading `no κ was measured` already covers.
+    """
+
+    measured: Mapping[Family, Reliability]
+    adjudicating_model: str | None
+
+    def for_adjudicator(self, model: str) -> Mapping[Family, Reliability]:
+        """These κ figures, if they were measured on `model`, and nothing otherwise."""
+        if self.adjudicating_model is None or self.adjudicating_model != model:
+            return {}
+        return self.measured
+
+
+NO_RELIABILITY_CITED = CitedReliability(measured={}, adjudicating_model=None)
+"""What a library with no readable cited gate run offers: nothing, stated once."""
+
+
+def the_reliability(library: Path) -> CitedReliability:
+    """The κ per judged family from the gate run this library cites.
+
+    Read off the **record** the citation names rather than out of the citation
+    itself: the citation is the outcome and the library version, and the figures live
+    in the machine-readable record beside it (ADR-0023). Nothing here parses prose —
+    the counts are fields on `JudgedReliability` and a record written before they
+    were fields carries `None`, which is skipped rather than filled in from the
+    sentence that mentions them.
+
+    The floor comes off the record's own rule, so a κ read back is judged against the
+    bar the gate applied to it and never against whatever `rule.py` says today.
+
+    **Anything unreadable is nothing at all**, on the same terms as `the_citation`: a
+    missing record, an unparsable one, a shape from a future field set, a family whose
+    entry has no counts. Each answers with that family absent, and the report then
+    withholds its rate exactly as it does now.
+    """
+    cited = the_citation(library)
+    if cited is None:
+        return NO_RELIABILITY_CITED
+    try:
+        record = RecordedGateRun.model_validate_json(
+            (library / cited.record).read_text(encoding="utf-8")
+        )
+    except (OSError, ValueError):
+        return NO_RELIABILITY_CITED
+    rule = _rule_of(record)
+    measured: dict[Family, Reliability] = {}
+    for judged in record.decision.reliability:
+        if (
+            judged.kappa is None
+            or judged.agreements is None
+            or judged.transcripts is None
+        ):
+            continue
+        try:
+            family = Family(judged.family)
+        except ValueError:
+            continue
+        measured[family] = Reliability(
+            family=family,
+            kappa=judged.kappa,
+            agreements=judged.agreements,
+            transcripts=judged.transcripts,
+            rule=rule,
+        )
+    return CitedReliability(
+        measured=measured, adjudicating_model=record.adjudicating_model
+    )
+
+
+def _rule_of(record: RecordedGateRun) -> GateRule:
+    """The κ floor this gate run applied, on the declared rule's other numbers.
+
+    Only the floor is read back, because only the floor decides what a κ means:
+    `Reliability.fit_to_report` reads it and nothing else off the rule. The rest of
+    the rule that decided a *gate* has no definition for one target (ADR-0018), and a
+    report states its own.
+    """
+    return replace(DECLARED_RULE, kappa_floor=record.rule.kappa_floor)

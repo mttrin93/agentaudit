@@ -1022,6 +1022,10 @@ def test_nothing_reads_the_record_by_parsing_the_markdown(
         decided_at=record["decided_at"],
         document=record["document"],
         record=record["record"],
+        # Configuration, like the three names above it: which instrument measured the
+        # κ figures on this record is not a figure and is not recoverable from the
+        # result, so the writer states it and this states the same thing.
+        adjudicating_model=record["adjudicating_model"],
     )
     assert json.loads(off_the_result.model_dump_json()) == record
 

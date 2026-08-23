@@ -228,10 +228,21 @@ class ExcludedFamily(BaseModel):
 
 
 class JudgedReliability(BaseModel):
-    """One judged family's κ against the gold set, or the stated absence of one."""
+    """One judged family's κ against the gold set, or the stated absence of one.
+
+    **The counts are fields and not only a clause inside `stated`.** κ over fifteen
+    transcripts and κ over fifteen hundred are the same number and not the same
+    evidence, so a reader recovering this figure needs the denominator as a figure —
+    and a target's report reuses this reading (`cited.the_reliability`), which it
+    could not do from a sentence. `None` on both is a record written before they were
+    fields, and it is read as a κ that cannot be reused rather than as a count of
+    zero.
+    """
 
     family: str
     kappa: float | None
+    agreements: int | None = None
+    transcripts: int | None = None
     stated: str
 
 
@@ -348,6 +359,8 @@ def gate_decided(gate: GateResult) -> GateDecided:
             JudgedReliability(
                 family=str(family),
                 kappa=None if measured is None else measured.kappa,
+                agreements=None if measured is None else measured.agreements,
+                transcripts=None if measured is None else measured.transcripts,
                 stated=(
                     measured.stated()
                     if measured is not None
@@ -425,11 +438,28 @@ class RecordedGateRun(BaseModel):
 
     rule: DeclaredRule
     decision: GateDecided
+
+    adjudicating_model: str | None = None
+    """The instrument the κ figures above were measured on (ADR-0013).
+
+    Recorded because a κ is a reading about one model and never a general claim, and
+    because a target's report reuses these figures: `cited.the_reliability` hands them
+    to a run only when the run's own adjudicating model is this one, so a κ measured
+    on a different instrument cannot arrive beside a rate it says nothing about
+    (ADR-0004). `None` is a record written before the field existed, and it is read as
+    *unknown instrument* — a κ that is not reused rather than one assumed to match.
+    """
+
     recorded: str = RECORDED_BESIDE_THE_DOCUMENT
 
 
 def recorded_gate_run(
-    gate: GateResult, *, decided_at: str, document: str | None, record: str
+    gate: GateResult,
+    *,
+    decided_at: str,
+    document: str | None,
+    record: str,
+    adjudicating_model: str | None = None,
 ) -> RecordedGateRun:
     """This gate run as a record, off the result the run left in memory.
 
@@ -446,6 +476,7 @@ def recorded_gate_run(
         record=record,
         rule=declared_rule(gate.decision.rule),
         decision=gate_decided(gate),
+        adjudicating_model=adjudicating_model,
     )
 
 

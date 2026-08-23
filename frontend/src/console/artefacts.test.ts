@@ -304,14 +304,13 @@ describe('the three verification results', () => {
       expect(field).not.toMatch(/accent|colou?r|hue|tick|badge|icon|severity|grade/i)
     }
 
-    // And the screen that draws the three results prints each outcome's name inside
-    // the element the class draws, so the border only repeats what the words already
-    // said. That screen is the report: this list carries the two claims' scope and
-    // links to the results rather than drawing them, so the assertion follows the
-    // markup it is about.
-    expect(theReport).toContain("check.held ? 'check' : 'check did-not-hold'")
-    expect(theReport).toContain('{check.outcome}')
+    // No screen draws the three results: the report screen was the one that did, and
+    // it is now the figures and nothing else. Whichever screen draws them next, the
+    // rule is the one asserted here — a result is named, and a class only repeats
+    // what the words already said. Neither of these two chooses a hue from a
+    // verdict, and the reading they are built from names none to choose.
     expect(theReport).not.toMatch(/verified \? '[a-z-]*(green|good|pass)/i)
+    expect(theReport).not.toContain('did-not-hold')
     expect(component).not.toMatch(/verified \? '[a-z-]*(green|good|pass)/i)
     // And this list draws no result at all: nothing here can show one of the three
     // without the other two, because nothing here shows any of them.

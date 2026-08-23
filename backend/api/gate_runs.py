@@ -993,6 +993,10 @@ def _write_back(
         # field a reader would follow as a path (ADR-0023).
         document=None,
         record=record_named(stamped),
+        # The instrument the κ figures on this record were measured on, so a target
+        # report can reuse them only where it adjudicates with the same model
+        # (`cited.the_reliability`, ADR-0004).
+        adjudicating_model=config.report.models.adjudicating,
     )
     write_the_record(recorded, record.library)
     replaced = cite(recorded, record.library)

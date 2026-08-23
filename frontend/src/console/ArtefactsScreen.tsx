@@ -6,32 +6,30 @@
  * thing the existing idiom says.
  *
  * **A box says which artefact it is and what to save.** The name, the id and the
- * instant, and the three files as the filenames they will be saved under. Everything
- * else about an artefact — the three results, the two claims, the sentence under each
- * of them — is on the report, which the name at the top of every box links to. One box
- * carrying all of it was taller than the window, and a page of four was a document
- * rather than a list of things to send.
+ * instant, and the three files as the filenames they will be saved under. The three
+ * results, the two claims and the sentence under each of them are in the reading and
+ * on no screen: the report screen is the figures and the three files, and what
+ * settles whether a document is one to send is a recipient's own run of
+ * `scripts/verify`. One box carrying all of it was taller than the window, and a
+ * page of four was a document rather than a list of things to send.
  *
  * The command a recipient runs is not on this screen. `reading.command` is still built
  * and still tested, and a recipient is handed a directory rather than this page.
  *
- * **Neither the three results nor the two claims are on this screen; both are on the
- * report.** Every one of them is in the reading, named individually and in the
- * verifier's order, and the report prints all three results with the outcome inside the
- * element that draws it, and both claims in full beside the figures they bound — no
- * tick, no badge, nothing that reduces three results to one mark (ADR-0005, ADR-0017,
- * spec §75).
+ * **Neither the three results nor the two claims are on this screen.** Every one of
+ * them is in the reading, named individually and in the verifier's order, and
+ * nothing draws them — no tick, no badge, nothing that reduces three results to one
+ * mark (ADR-0005, ADR-0017, spec §75).
  *
- * A box that showed one result and not the other two, or one claim and not the other,
- * would be the inference those decisions exist to prevent. Showing none of them is not
- * that: this is the list you reach a report from, and the name at the head of every box
- * is the link.
+ * A box that showed one result and not the other two, or one claim and not the
+ * other, would be the inference those decisions exist to prevent. Showing none of
+ * them is not that: this is the list you reach a report from, and the name at the
+ * head of every box is the link.
  *
  * **Whose check this is, is said where it is acted on.** The bench computed these
  * readings over the bytes it holds, and that is not the check a recipient makes —
- * `checkedBy` says so on every artefact in the reading, and the report screen prints
- * it beside the figures somebody is about to send. This screen is the list they get
- * to it from.
+ * `checkedBy` says so on every artefact in the reading. This screen is the list a
+ * report is reached from.
  *
  * **The files are links because there are routes.** Unlike the gate document, which
  * the gate screen names rather than links, all three of these are served — and each

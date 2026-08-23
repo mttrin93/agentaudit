@@ -491,6 +491,10 @@ def record_run(
         # come off `gate_record`, which is the one place either format lives —
         # a console gate run dates its record the same way (ADR-0023).
         record=record_named(stamped),
+        # The instrument the κ figures on this record were measured on, so a target
+        # report can reuse them only where it adjudicates with the same model
+        # (`cited.the_reliability`, ADR-0004).
+        adjudicating_model=args.adjudicator_model,
     )
     path.write_text(
         "\n".join(

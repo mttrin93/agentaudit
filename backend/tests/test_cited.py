@@ -42,6 +42,7 @@ import json
 from collections.abc import Iterator, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 from backend.bench.admission import admitted_library
 from backend.bench.cited import (
@@ -50,6 +51,7 @@ from backend.bench.cited import (
     citation_of,
     cite,
     the_citation,
+    the_reliability,
 )
 from backend.bench.gate import GateResult
 from backend.bench.gate_record import (
@@ -94,12 +96,17 @@ def a_failing_gate() -> GateResult:
     )
 
 
+ANOTHER_MODEL = "openrouter:someone/else-mini"
+"""A model that is not the one the records below say measured their κ."""
+
+
 def a_record(
     gate: GateResult,
     *,
     decided_at: str = "2026-08-19T09:38:37+00:00",
     at: datetime = datetime(2026, 8, 19, 9, 38, 37, tzinfo=UTC),
     document: bool = True,
+    adjudicating_model: str | None = "stub:adjudicating",
 ) -> RecordedGateRun:
     """One gate run as the record both entry points write it in.
 
@@ -111,6 +118,7 @@ def a_record(
         decided_at=decided_at,
         document=document_named(at) if document else None,
         record=record_named(at),
+        adjudicating_model=adjudicating_model,
     )
 
 
@@ -362,8 +370,13 @@ def test_nothing_here_recovers_a_figure_by_parsing_a_document() -> None:
 
     The import-level form of #75's refusal. A figure recovered from a document
     written for a person breaks on a rewording, and this module's whole reason for
-    existing is that there is a record to point at instead. It reads exactly one
-    thing: the `.json` it wrote itself.
+    existing is that there is a record to point at instead.
+
+    **Two reads, and both of them records.** The citation this module wrote, and the
+    gate run record the citation names — which is where the κ a target's report
+    reuses lives (`the_reliability`). Neither is prose: the dated Markdown is not
+    named anywhere in the code, and the counts behind a κ are fields on the record
+    rather than a clause in the sentence beside them.
     """
     imported = set(_imports_of(CITED_SOURCE))
 
@@ -374,7 +387,7 @@ def test_nothing_here_recovers_a_figure_by_parsing_a_document() -> None:
     code = _code_of(CITED_SOURCE)
     assert ".md" not in code, "cited.py names a Markdown file in its code"
     assert ".json" in code, "cited.py names the record shape it does read"
-    assert code.count("read_text(") == 1, "cited.py reads more than its own citation"
+    assert code.count("read_text(") == 2, "cited.py reads something besides two records"
 
 
 def test_the_citation_carries_no_per_family_figure_and_nothing_that_spans_two() -> None:
@@ -522,3 +535,127 @@ def _numbers(body: object, name: str = "") -> Iterator[tuple[str, float]]:
     elif isinstance(body, Sequence) and not isinstance(body, str):
         for index, value in enumerate(body):
             yield from _numbers(value, f"{name}[{index}]")
+
+
+# --- the κ a target's report reuses ------------------------------------------
+
+
+def _cited_gate_with_kappa(library: Path, **record: Any) -> RecordedGateRun:
+    """A gate run that measured both judged families, written into `library` and cited.
+
+    Both κ figures above the floor, because what is under test is the reading that
+    crosses to a target's report rather than the decision rule that already has its
+    own tests.
+    """
+    measured = judged(
+        wrongful=_fit(Family.WRONGFUL_COMMITMENT),
+        disclosure=_fit(Family.DISCLOSURE_DENIAL),
+    )
+    gate = GateResult(
+        decision=decide_gate(
+            outcomes_for(*([SEPARATES] * 6)),
+            reliability=measured,
+        ),
+        library=A_VERSION,
+        reliability=measured,
+        attempts=540,
+        agents=("trivial", "weak", "hardened"),
+    )
+    written = a_record(gate, **record)
+    write_the_record(written, library)
+    cite(written, library)
+    return written
+
+
+def test_the_kappa_a_report_reuses_is_read_off_the_record_with_its_counts(
+    tmp_path: Path,
+) -> None:
+    """κ, its counts and the floor the gate applied — as figures, not out of prose.
+
+    A target run does not re-measure κ: it is a reading about the adjudicator against
+    the pre-registered gold set, and the gate is where the bench measures its own
+    instruments (ADR-0004, ADR-0013). What crosses is this and nothing else, which is
+    asserted here by reading what came back rather than by inspecting what did not.
+    """
+    written = _cited_gate_with_kappa(tmp_path)
+
+    reading = the_reliability(tmp_path)
+
+    assert reading.adjudicating_model == "stub:adjudicating"
+    assert set(reading.measured) == {
+        Family.WRONGFUL_COMMITMENT,
+        Family.DISCLOSURE_DENIAL,
+    }
+    reused = reading.measured[Family.DISCLOSURE_DENIAL]
+    assert reused.kappa == 0.86
+    assert (reused.agreements, reused.transcripts) == (14, 15)
+    # The bar is the one the gate applied, off the record's own rule rather than off
+    # whatever `rule.py` says today.
+    assert reused.floor == written.rule.kappa_floor
+    assert reused.fit_to_report
+
+
+def test_a_kappa_measured_on_another_model_reaches_no_run(tmp_path: Path) -> None:
+    """The guard, in both directions and in the third case as well.
+
+    κ is a reading about one instrument. Handed to a run that adjudicates with a
+    different model it would be a figure about something else printed beside a rate it
+    says nothing about — so the caller asks for the model it uses and gets nothing
+    unless the gate measured that one.
+    """
+    _cited_gate_with_kappa(tmp_path)
+
+    reading = the_reliability(tmp_path)
+
+    assert reading.for_adjudicator("stub:adjudicating") == reading.measured
+    assert reading.for_adjudicator(ANOTHER_MODEL) == {}
+
+
+def test_a_record_that_names_no_instrument_offers_its_kappa_to_nobody(
+    tmp_path: Path,
+) -> None:
+    """An older record is an unknown instrument, and unknown is not a match.
+
+    `adjudicating_model` arrived with this reading, so a record written before it is
+    a κ nobody can attribute. It is read as *not reusable* rather than as *measured on
+    whatever asks*, which would be the one shape of this feature that could put a
+    stranger's κ beside a published rate.
+    """
+    _cited_gate_with_kappa(tmp_path, adjudicating_model=None)
+
+    reading = the_reliability(tmp_path)
+
+    assert reading.measured, "the κ figures are still read off the record"
+    assert reading.adjudicating_model is None
+    assert reading.for_adjudicator("stub:adjudicating") == {}
+
+
+def test_a_kappa_with_no_counts_beside_it_is_not_read_at_all(tmp_path: Path) -> None:
+    """The counts are a field or the figure does not travel.
+
+    κ over fifteen transcripts and κ over fifteen hundred are the same number and not
+    the same evidence, and the counts are only in the record's prose on a record
+    written before they were fields. Nothing here parses that sentence: the family is
+    absent, and the report withholds its rate exactly as it does today.
+    """
+    written = _cited_gate_with_kappa(tmp_path)
+    older = json.loads(written.model_dump_json())
+    for judged_family in older["decision"]["reliability"]:
+        del judged_family["agreements"]
+        del judged_family["transcripts"]
+    (tmp_path / written.record).write_text(
+        json.dumps(older, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+
+    reading = the_reliability(tmp_path)
+
+    assert reading.measured == {}
+
+
+def test_a_library_citing_nothing_offers_no_kappa(tmp_path: Path) -> None:
+    """No citation, no record to read, and no κ — the state a fresh bench is in."""
+    reading = the_reliability(tmp_path)
+
+    assert reading.measured == {}
+    assert reading.adjudicating_model is None
+    assert reading.for_adjudicator("stub:adjudicating") == {}

@@ -29,3 +29,6 @@ wheels/
 # that a lease left behind by a killed run can be cleared by hand — it is a fact
 # about one machine's running processes and never part of the library.
 .gate-run.lease
+
+# Node
+node_modules/

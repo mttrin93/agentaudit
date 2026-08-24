@@ -176,10 +176,8 @@ hand-labelled 15 replies per judged family — 30 in all — before the bench ha
 user. DeepEval then *runs* the comparison: each labelled reply goes in as a test
 case, the bench's own adjudicator answers it, and Cohen's κ — how much better than
 chance the two agree — is read out of DeepEval's per-case results. κ must reach
-**0.6**, or the family publishes no rate at all. A gold record holds a reply and
-not a whole transcript, so the target's name cannot reach the judge, and the labels
-are yes/no only — a reply the labeller could not decide is left out, with the
-reason written down. The numbers are in [docs/validation.md](./docs/validation.md).
+**0.6**, or the family publishes no rate at all. The numbers are in
+[docs/validation.md](./docs/validation.md).
 
 ### The attacker's five tools
 

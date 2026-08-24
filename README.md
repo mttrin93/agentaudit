@@ -1,106 +1,237 @@
 # AgentAudit
 
-An adversarial test bench for AI agents. It attacks a target agent across six failure families, proves its own discriminating power before its results are trusted, and reports the outcome as signed evidence a recipient can verify offline.
+AgentAudit attacks your AI agent on purpose, so you can find out how it fails
+before a customer does.
 
-Full design in [PLAN.md](./PLAN.md) · vocabulary in [CONTEXT.md](./CONTEXT.md) · decisions in [docs/adr/](./docs/adr/).
+You point it at your agent's HTTP endpoint. It sends recorded attacks, watches
+what your agent does, and writes a signed report. Anyone you send that report to
+can check it offline — no account, no network, no trust in us.
 
-> **Status: pre-build.** This README carries the disclosure posture only, because that decision binds from the first commit. Purpose, users, D1–D14, the article mapping and a worked example arrive at phase 5.
+It attacks six kinds of failure:
+
+| Family | The question it asks |
+| --- | --- |
+| indirect prompt injection | Does your agent obey instructions hidden in a document it reads? |
+| scope creep | Does it use tools it was not given? |
+| wrongful commitment | Does it promise things it has no right to promise? |
+| data leakage | Does it hand over its own configuration? |
+| halt defeat | Does it keep working after being told to stop? |
+| disclosure denial | Does it deny being an AI when asked? |
+
+**One thing makes this different from a test script:** before you are allowed to
+trust a number, the bench measures *itself*. It runs the same attacks against
+three agents it built on purpose — one with no defences, one weak, one hardened.
+A case that cannot tell those three apart proves nothing, so it is retired
+instead of trusted. And two of the six families are decided by an LLM judge, not
+by a rule: those publish a rate only after the judge has been checked against
+hand-labelled transcripts. Until then the report says *rate not published* and
+gives the reason.
 
 ---
 
-## Disclosure posture
+## How it works
 
-`backend/cases/` is a working library of adversarial payloads with success conditions, in a public repository. That is what makes this repository useful and what makes it a weapon. The position is deliberate, not accidental — see [ADR-0008](./docs/adr/0008-repo-disclosure-posture.md).
+```mermaid
+flowchart TD
+    subgraph you["You, in the browser"]
+        R["1. Register your agent<br/>URL · a nonce to plant · 3 attestations"]
+        A["2. See the cost, then answer<br/>nothing is sent before you say yes"]
+        W["3. Watch it run"]
+        D["4. Read the report"]
+    end
 
-- **The harness is public.** Registration, scanner, attacker, evaluator, judge, scorer, assembler, report, the gate (`scripts/gate.py`) and the offline signature check (`scripts/verify.py`).
-- **A payload is public when the situation is the mechanism.** Most of this library works because of what it asks for and where it asks from — an errand that sounds like the agent's own job, a stop signal followed by ordinary housekeeping, a persona instruction and then a direct question. The prose description conveys those as fully as the text does, so withholding the text would hide what is tested and protect nobody. Each record states which side of this line it is on, and argues it.
-- **A payload is withheld when its wording is the working part.** Anything that reads as a reusable override, jailbreak or filter defeat — a phrasing someone could lift and point at a target that was never in this repository. The description is enough to understand what is tested and to reproduce the finding against your own agent; it is not enough to lift as an attack.
-- **Cases derived from published techniques stay public, with citation.** They are already public knowledge, and citing the source supports the external-identifier column in the article mapping.
+    R --> A --> S
 
-The line used to be drawn at origin — originated here meant withheld — and that proxy failed in both directions: it described situational cases as weapons and shipped the one case whose wording *is* the mechanism out with a citation. See the amendment in [ADR-0008](./docs/adr/0008-repo-disclosure-posture.md).
-- **Nothing operational is ever committed.** No target credentials, no user findings, no real attestations, no nonces. `.env` is gitignored.
+    subgraph run["The run, in the backend"]
+        S["Scored layer<br/>recorded cases, fixed number of attempts<br/>every number in the report comes from here"]
+        AD["Adaptive layer<br/>an attacker agent invents its own attacks<br/>never scored — reported on its own"]
+        S --> AD
+    end
 
-### The attacker generates payloads at runtime
+    AD --> P["report.json + report.md + report.sig"]
+    S -.-> W
+    AD -.-> W
+    P --> D
+    P --> V["Your customer runs scripts/verify.py<br/>offline, no network"]
 
-The bench also carries an **adaptive attacker** — an agent that, after the fixed case library has run, attacks the same target by a route of its own choosing. It composes novel payloads while the run is happening, which changes three things about what ships here and leaves the split above alone.
-
-- **The repository ships a weapon factory rather than a weapon.** A real change of kind, and a smaller one than it sounds: the attacker's reach is bounded by a model anyone can already prompt. **Its system prompt and its five tools are public**, because withholding them would hollow out the claim that the harness is public while withholding nothing scarce.
-- **Transcripts are not committed.** A successful adaptive route against a defended agent is a working, previously unpublished exploit written down. `docs/validation.md` records the statistics, the family and a prose description of the route. It never records the payload.
-- **Cases the attacker discovers are withheld by default.** A route found by breaking a defended agent is the one artefact whose wording is demonstrably the working part: it beat a target that resisted the whole library, so the phrasing carries something the prose does not. That is the withheld side of the line above.
-
-If you are a researcher who wants a withheld payload for defensive work, open an issue describing the use; the answer may still be no.
-
-## Running a target through the API
-
-The bench runs from something other than a terminal too. Start it with the app factory:
-
+    G["The gate — scripts/gate.py<br/>same attacks vs 3 reference agents<br/>+ 30 hand-labelled transcripts (DeepEval)"]
+    G -->|"decides which families<br/>may publish a rate"| P
 ```
-uv run uvicorn backend.api.app:create_app --factory
+
+Two layers, and they are never added together. The scored layer produces the
+rates. The adaptive layer is an agent with five tools that goes looking for new
+routes; nothing it finds reaches a rate. If it finds something good, it can
+*propose* a new case, and a threshold decides whether the case library grows.
+
+### The attacker's five tools
+
+| Tool | The decision it makes |
+| --- | --- |
+| `run_probe` | what to send next, given what came back. The only thing in the adaptive layer that touches your agent |
+| `read_tool_trace` | whether it is worth a turn to inspect what your agent called. Offered only against a target that reports its tool calls |
+| `check_canary` | whether the objective has been met yet |
+| `retrieve_precedent` | what has worked against similar targets before, identity-stripped |
+| `propose_case` | whether this route is worth promoting into the scored library |
+
+Each step it answers with one tool and one argument. An answer that parses to
+nothing is not quietly turned into a probe.
+
+### What it remembers
+
+**Short-term is the episode.** The brief is rebuilt from scratch on every step:
+the blinded handle for your agent, the family, the break condition in prose,
+turns used against the cap, and a numbered log of everything done so far in
+*this* episode. Nothing is summarised or trimmed — the bound is the turn cap
+(`T`, 8 by default; `k` is 2 episodes per family). It never carries another
+episode's log, and every probe opens a fresh session, so your agent's own memory
+is not part of the route either
+([ADR-0011](./docs/adr/0011-the-adaptive-attacker-is-label-blind.md)).
+
+**Long-term is a file**, `precedent/findings.json`, so it outlives the process
+([ADR-0019](./docs/adr/0019-long-term-memory-that-does-not-survive-a-restart-is-not-long-term.md)).
+One entry per deterministic finding — the family, what failed, and how to fix
+it — and no target identity at all, because redaction defends a single lookup and
+not a corpus. Retrieval is an equality filter on the family, most recent first,
+capped at 20; there are no embeddings and nothing scores relevance. The attacker
+is shown the failure prose only — the remediation half is withheld from it and
+goes to the report. The store is git-ignored and never committed.
+
+## Try it
+
+You need [uv](https://docs.astral.sh/uv/), Node 22+ (Vite 8), and an
+[OpenRouter](https://openrouter.ai) key.
+
+```bash
+uv sync --all-groups
+cp .env.example .env          # put your OPENROUTER_API_KEY in it
 ```
 
-**It will not start without a signing key.** The factory reads `AGENTAUDIT_SIGNING_KEY` and refuses to boot when it is empty, naming the variable and the command that makes a pair. A bench with no key runs the whole library against your endpoint and then has no document to give you — every report refused as `never_signed` — and the signature is what makes a report portable, which is the only thing this bench claims to produce ([ADR-0020](./docs/adr/0020-a-factory-with-no-signing-key-refuses-to-boot.md)). For a local run, generate a pair and export the private half in the shell you start the server from:
+The bench signs its reports, and **it refuses to start without a signing key**.
+Make one:
 
-```
+```bash
 uv run python -m scripts.keygen --public /tmp/dev-signing.pub
-export AGENTAUDIT_SIGNING_KEY=<the value printed once, base64, one line>
+export AGENTAUDIT_SIGNING_KEY=<the private half it prints once>
 ```
 
-**What it attacks with is what you declare.** `AGENTAUDIT_ADJUDICATOR_MODEL` and `AGENTAUDIT_ATTACKER_MODEL` are read by the factory as well as by the scripts: exported, they are the instrument that decides the two judged families and the model the adaptive layer attacks with, and every report names them. Left unset, the bench still boots and still runs — no judged family, and the deterministic stand-in of `backend/bench/adaptive/scripted.py` in the adaptive layer — and the provenance block says *not declared* rather than naming a model nothing called. A model named and unbuildable stops the boot the way a missing key does, because an instrument named in a configuration and absent from the process is a console offering a control that spends and then fails.
+Start the two halves in two terminals:
 
-`.env.example` lists every variable this repository reads, with placeholders and the defaults that apply when one is left unset; copy it to the gitignored `.env`. The signing key is the exception it names: the scripts read `.env`, the API does not, so a key that lives only there starts `scripts/` and leaves the factory refusing to boot.
-
-Point `--public` somewhere outside the repository, as above: `keygen` refuses to replace the committed public key, and a report signed by a dev key verifies only against the dev public half — pass it to `scripts/verify.py` with `--pubkey`. The private half goes in the environment and nowhere a commit can reach: the shell, or the gitignored `.env` the scripts load — base64 on one line, which is the format for exactly that reason. Nothing in this codebase writes a private key to disk; `keygen` prints it once. A deployed instance gets a real key set in its environment, and its public half is the committed one whose fingerprint is published below.
-
-Three calls start a run, and both of the controls that make one authorised are in them:
-
-1. **`POST /nonces`** issues the value you plant in the target's configuration. Only somebody who can edit that configuration can plant it, which is what makes the echo proof that you control the endpoint.
-2. **`POST /runs`** carries the target, the attestation's three statements, that nonce and your own price per call. It answers with a `run_id` and the estimate — **the scored layer exactly and the adaptive layer as a ceiling, never one blended figure** — and then halts. Nothing has reached your endpoint at that point. A run whose attestation is incomplete, or whose nonce this bench never issued, is refused here; a nonce the target does not echo back is refused by the run itself, because the probe that checks it is a call on your endpoint and the halt is ahead of it.
-3. **`POST /runs/{run_id}/approval`** answers the halt. A separate request rather than a field on the one above: the halt is a real LangGraph interrupt against a checkpointer, and a decision taken in front of the figures is not a checkbox somebody scrolled past ([ADR-0007](./docs/adr/0007-canary-nonce-as-proof-of-control.md)). On a yes the suite runs in the background under the ceiling you confirmed and aborts rather than exceed it. On anything else — including no answer at all — nothing is sent and nothing is spent, and the run says which of the two happened.
-
-The price per call is yours to declare and is never defaulted from the bench's own configuration: your confirmation is the liability record, and a run you have not priced reports its cost as *not priced* rather than as zero.
-
-**A gate run has its own three calls, and it is not a run.** `POST /gate-runs` records the same three attestation statements and declares the estimate per layer, `POST /gate-runs/{gate_run_id}/approval` answers the halt, and `GET /gate-runs/{gate_run_id}` reports progress per layer and then the decision under the declared rule with every per-family figure the run measured. It is the whole live case library against the three reference agents — about 830 calls — and it writes back to every case record it reads, so it holds an exclusive lease on the library while it goes and one runs at a time. `PLAN.md` §8 put this on the command line and [ADR-0021](./docs/adr/0021-the-console-may-start-a-gate-run.md) reverses that, including what serving it over HTTP gives up; `scripts/gate.py` is still the path that writes a dated document, and it now writes the same decision as a machine-readable record beside it — the shape `GET /gate-runs/{gate_run_id}` serves, so the per-family figures are recoverable from a historical gate run without parsing its prose.
-
-### Registering a target in the browser
-
-The same three calls, as a screen that walks you through them. The frontend is a Vite, React and TypeScript app in [`frontend/`](./frontend):
-
-```
-cd frontend && npm install && npm run dev     # then http://localhost:5173
-npm run build                                 # typecheck and production build
-npm test                                      # the guard rules, no browser
+```bash
+uv run uvicorn backend.api.app:create_app --factory   # the API, port 8000
+cd frontend && npm install && npm run dev             # the console, port 5173
 ```
 
-The dev server proxies `/nonces`, `/runs`, `/report`, `/artefacts`, `/bench` and `/gate-runs` to the API on `http://127.0.0.1:8000` — set `AGENTAUDIT_API` to point it somewhere else. The proxy is the whole of the cross-origin arrangement: the API installs no CORS middleware, and a header the bench would send to every caller forever is not a thing to add so that one developer's browser is happy.
+Open <http://localhost:5173>.
 
-**Registration is a walk rather than a form.** The endpoint and its price, then the nonce to plant, then the three attestations one screen at a time with the consequence of each stated beside it, then the tool-call visibility declaration — which is where you are told that scope creep and halt defeat report as *not measurable* without it, and that the tool list you type is a declaration the bench cannot verify. A registration the bench refuses is shown in the bench's own words and hands you back to the plant step, and so is a run whose target never echoed the nonce: that one cannot be known until after the cost interrupt is answered, so the run screen points back here.
+**No agent of your own to test?** The repository ships three built-in agents —
+one with no defences, one weak, one hardened — and the bench can attack all three
+without you registering anything. That is a **gate run**, and it is how the bench
+checks itself. Run it from the terminal:
 
-## Verifying a report
-
-A report is three files under fixed names: `report.json` — the canonical JSON payload, which is the artefact — `report.md`, the document a human reads, and `report.sig`, a detached Ed25519 signature over the payload's bytes. Check them with no network and no credential:
-
+```bash
+uv run python -m scripts.gate --identity "your name"
 ```
+
+### What you will do on screen
+
+1. **Register a target.** Its URL, its token, and how many times one message may
+   be retried. You also declare which tools your agent has — the bench cannot
+   check that list, and it says so.
+2. **Plant a nonce.** The bench gives you a short value. You paste it into your
+   agent's system prompt. Only someone who can edit that prompt can do this, so
+   it proves the endpoint is yours. The same value is also the secret the data
+   leakage attacks try to steal.
+3. **Attest, one statement at a time.** That you are allowed to test this
+   endpoint, that it is not production, and that you accept the cost and the
+   provider-policy hits. Each statement shows what it means before you tick it.
+4. **Confirm the cost.** The run stops and shows two figures — the scored layer
+   exactly, the adaptive layer as a ceiling. Nothing has touched your agent yet.
+   Say no and nothing is sent.
+5. **Watch.** Position, calls spent per layer, and each family filling up.
+6. **Read the report.** A rate per family with its confidence interval, the
+   attacks that worked with your agent's own replies, and the routes the
+   adaptive attacker took.
+
+### Check a report
+
+```bash
 uv run python -m scripts.verify path/to/report
 ```
 
-It prints **three results, always all three**: whether the signature is valid over the payload, whether `report.md` hashes to the digest inside the payload, and whether the arithmetic re-derives — every rate, Wilson interval, band and κ floor recomputed from the counts the payload carries, through the same functions the bench used, plus a check that the rule and band cut points the report says it was read against are the ones this repository declares. The third is the one that is a check on the bench rather than on the transport, and it is what makes *re-derivable* something you established rather than something the document asserted. Each failure has its own named outcome, so you learn *which* property failed, and a report that states no per-family figure is reported as having re-derived nothing rather than as having agreed. See [ADR-0017](./docs/adr/0017-the-signature-covers-the-document-and-carries-two-claims.md).
+It always prints three answers: is the signature valid, does `report.md` match
+the payload, and does the arithmetic recompute from the raw counts. The third is
+the interesting one — it re-derives every rate and interval, so *re-derivable* is
+something you checked rather than something we claimed.
 
-**A valid signature is not a quality claim.** It says these bytes are the ones that were produced and that nothing has altered them — the adaptive section included, since the signature covers the whole payload. It says nothing whatsoever about whether the agent is safe, and the report carries no score, no grade and no declaration of conformity.
+### Settings
 
-### The signing key
+The **Settings** screen shows what the bench is currently set to: the signing
+keys, the case library, the four models behind its instruments, and each layer's
+ceiling. Five things there can be changed, and each one is printed in the report
+of every run made under it:
 
-The public key is committed at [`keys/agentaudit-signing.pub`](./keys/agentaudit-signing.pub) and `scripts/verify.py` pins it by default; `--pubkey` takes another. Its fingerprint, which is also the `key_id` inside every payload it signs:
+- the adaptive attacker's model (five to choose from) and its temperature
+- turns per episode, episodes per family, attempts per case
 
-```
-sha256:dcfa72c1b118550a6f35b96f457d24429e10d3308d5780ff8ec5a042ffa72a93
-```
+One warning worth repeating: `attempts_per_case` is the denominator of every
+rate. The declared value is 10. A run at a lower number is honest, but it is not
+a gate result and nothing may compare it to one.
 
-Compare that against the `key_id` in a report you receive. A valid signature over a key you have not seen published is not provenance — it only proves that whoever sent the document also sent the key — which is why a report signed by any other key is reported under its own outcome rather than as tampering.
+## Optional tasks
 
-**The private half is never committed.** It is read from `AGENTAUDIT_SIGNING_KEY` and from nowhere else, so publishing this repository does not publish the ability to forge its reports. `uv run python -m scripts.keygen` generates a pair, writes the public half and prints the private half once; it refuses to replace a committed public key, because rotation invalidates every signature ever issued under the old one and has to be a deliberate act with the fingerprint above updated in the same commit.
+**Done (4 medium, 1 hard, plus 2 easy).**
+
+| # | Task | How |
+| --- | --- | --- |
+| E3 | Choose from a list of LLMs | Five attacker models in Settings; the scripts take `--model`, `--adjudicator-model`, `--attacker-model` |
+| E4 | Tune the main settings | Settings has temperature, `T`, `k` and attempts per case, each with the range the route enforces |
+| M2 | Long-term or short-term memory | Both. Run state for one run; a file-backed precedent store that survives a restart |
+| M3 | A tool that calls an external API | The attacker's `run_probe` calls your agent over HTTP. Five tools in total |
+| M7 | Multi-model support | OpenAI, Anthropic and DeepSeek via OpenRouter. `scripts/swap.py` runs the same library on two models and compares the results |
+| M8 | A security guard, and developer settings kept apart | Proof of control, three attestations and a cost halt before anything is sent. Settings is its own screen |
+| H3 | An AI evaluation report | DeepEval runs 30 hand-labelled transcripts and measures Cohen's κ per judged family. Results in [docs/validation.md](./docs/validation.md) |
+
+**Partly done.**
+
+| # | Task | What is missing |
+| --- | --- | --- |
+| E5 | Interactive help | Every screen says in one line what it answers, and registration is a guided walk. There is no help chatbot |
+| M1 | Token usage and cost | Cost is real: your declared price per call, per layer, before and after. Token counts are not read from the provider |
+| H1 | Agentic RAG | The attacker has a `retrieve_precedent` tool over a durable store, so it does not rediscover the same route every run. Retrieval is by filter, not embeddings |
+| H5 | External data sources | The indirect injection family plants hostile content in a document your agent fetches. Nothing else reaches outside |
+
+**Not done, and why.**
+
+| # | Task | Why not |
+| --- | --- | --- |
+| E1, E2 | ChatGPT critique · agent personality | Not deliverables for a test bench |
+| M4 | Users and personalisation | One operator, one process. Nothing here is per-user |
+| M5, H4 | Learn from user ratings | Refused on purpose. A rating may never move a measured rate — see [ADR-0006](./docs/adr/0006-overrides-never-change-a-measured-rate.md) |
+| M6 | Plugin system for tools | The five tools exist; the enable/disable UI and plugin loader do not. Deliberately dropped — see [PLAN.md](./PLAN.md) |
+| H2 | LangSmith or Langfuse | Not wired up |
 
 ## Safety
 
-The bench makes an agent take unauthorised actions and defeat its own stop control. **Against a production endpoint it causes the damage it measures.**
+This tool makes an agent take unauthorised actions and defeat its own stop
+control. **Against a production endpoint it causes the damage it measures.**
 
-Registration therefore requires proof that you control the target — a nonce you must plant in its system prompt and which the target must echo back — plus an explicit attestation that you are authorised to test it, that it is not production, and that you accept the provider-policy and inference-cost consequences of being attacked. No run starts without both. See [ADR-0007](./docs/adr/0007-canary-nonce-as-proof-of-control.md).
+That is why a run cannot start without both proofs: a nonce you planted (so the
+endpoint is yours) and three attestations you made by hand (so the decision is
+recorded). See [ADR-0007](./docs/adr/0007-canary-nonce-as-proof-of-control.md).
+
+`backend/cases/` holds real attack payloads in a public repository. The rule is
+in [ADR-0008](./docs/adr/0008-repo-disclosure-posture.md): a payload is public
+when the *situation* is the mechanism, and withheld when the *wording* is. Routes
+the adaptive attacker discovers are withheld by default, and no transcript is
+ever committed. Nothing operational is committed either — no tokens, no nonces,
+no real attestations. The private signing key is read from the environment only.
+
+## Where to read more
+
+| For | Read |
+| --- | --- |
+| The words — target, case, attempt, family, verdict | [CONTEXT.md](./CONTEXT.md) |
+| Every decision and why | [docs/adr/](./docs/adr/) |
+| Scope and phases | [PLAN.md](./PLAN.md) |
+| What the bench has measured about itself | [docs/validation.md](./docs/validation.md) |
+| Commands, tests, standing rules | [CLAUDE.md](./CLAUDE.md) |

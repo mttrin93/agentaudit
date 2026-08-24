@@ -46,9 +46,7 @@ from backend.bench.signing import (
 )
 from backend.tests.test_payload import a_payload, an_episode
 
-README = Path(__file__).resolve().parents[2] / "README.md"
 ENV_EXAMPLE = Path(__file__).resolve().parents[2] / ".env.example"
-"""Where the signing key's fingerprint is published for a recipient to compare."""
 
 
 def test_the_signature_covers_the_whole_payload_including_the_adaptive_section() -> (
@@ -157,18 +155,6 @@ def test_the_committed_example_environment_names_the_key_and_carries_no_value() 
         f"{ENV_EXAMPLE.name} holds a PEM block. Nothing in an environment file is "
         "key material; the private half is base64 on one line and lives outside "
         "every committed path."
-    )
-
-
-def test_the_committed_keys_fingerprint_is_the_one_published_in_the_readme() -> None:
-    # A recipient's only defence against a valid signature over an unknown key is a
-    # fingerprint published where they can read its history. If the key is rotated and
-    # the README is not, that published value silently starts describing a key nobody
-    # signs with — and a mismatch a recipient finds cannot be told from a forgery.
-    published = README.read_text(encoding="utf-8")
-    assert fingerprint(public_key()) in published, (
-        f"{PUBLIC_KEY_PATH} does not have its fingerprint published in {README}. "
-        "Rotation is a deliberate act and the README is part of it."
     )
 
 

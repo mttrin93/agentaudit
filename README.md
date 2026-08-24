@@ -42,11 +42,16 @@ flowchart TD
 
     R --> A --> S
 
+    C["The case library<br/>18 hand-written cases, one payload each"]
+
     subgraph run["The run, in the backend"]
         S["Scored layer<br/>recorded cases, fixed number of attempts<br/>every number in the report comes from here"]
         AD["Adaptive layer<br/>an attacker agent invents its own attacks<br/>never scored — reported on its own"]
         S --> AD
     end
+
+    C -->|"the 18 payloads it sends"| S
+    AD -->|"propose_case — the only edge<br/>back to the scored side"| G
 
     AD --> P["report.json + report.md + report.sig"]
     S -.-> W
@@ -56,6 +61,7 @@ flowchart TD
 
     G["The gate — scripts/gate.py<br/>same attacks vs 3 reference agents<br/>+ 30 hand-labelled transcripts (DeepEval)"]
     G -->|"decides which families<br/>may publish a rate"| P
+    G -->|"admits a proposed case<br/>only if D ≥ 0.4"| C
 ```
 
 Two layers, and they are never added together. The scored layer produces the

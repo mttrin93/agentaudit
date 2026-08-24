@@ -61,8 +61,7 @@ export const ATTESTATION_STATEMENTS: readonly Statement[] = [
     consequence:
       'The payloads reach your model provider under your credentials, so the ' +
       'policy violations are recorded against your account and the inference ' +
-      'is billed to it. The run screen shows what it will cost before anything ' +
-      'is sent, and it halts there until you answer.',
+      'is billed to it.',
   },
 ]
 
@@ -135,16 +134,6 @@ export interface Declarations {
    * by leaving the first unticked would be a waiver nobody read.
    */
   proof_waived: boolean
-  /**
-   * The value is planted, and the operator says the target will not echo it.
-   *
-   * A third statement rather than a second use of the one above, because it says
-   * something the other two cannot: that the canary is in place *and* the proof is
-   * out of reach. The waiver above is for an operator who could not plant it, and
-   * its consequence is one this one must not carry — the leakage family runs here,
-   * because the value it goes after is in the target (ADR-0024).
-   */
-  echo_waived: boolean
 }
 
 /**
@@ -177,7 +166,6 @@ export function nothingDeclared(): Declarations {
     nonce: '',
     nonce_planted: false,
     proof_waived: false,
-    echo_waived: false,
   }
 }
 
@@ -323,13 +311,16 @@ function startRunBody(declarations: Declarations): StartRunBody {
       currency: priced ? declarations.currency.trim() : '',
     },
     note_planted: declarations.note_planted,
-    // Two declarations, two fields, and the bench reads a different thing off each
-    // (ADR-0024). The value's presence decides whether the leakage family is run;
-    // whether a missing echo stops the run is the other one. Both waivers on this
-    // screen relax the same guard, so both reach the same field — an operator who
-    // could not plant it has nothing to echo either.
+    // Two fields, one tick. This screen offers two states and no third — the value
+    // is planted, or the operator could not plant it and says so — and the plant
+    // tick carries both declarations, because an agent whose disclosure rule is
+    // blanket cannot tell the registration check from an attack and refuses a probe
+    // it has the value for (ADR-0024). The bench still reads a different thing off
+    // each: the presence decides whether the leakage family is run, and the waiver
+    // decides only whether a missing echo stops the run. The probe is still sent and
+    // the reply still kept, so a target that echoes anyway has proved control.
     nonce_planted: declarations.nonce_planted,
-    echo_waived: declarations.echo_waived || declarations.proof_waived,
+    echo_waived: declarations.nonce_planted,
   }
 }
 

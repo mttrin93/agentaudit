@@ -1,13 +1,14 @@
 """The HTTP surface: a nonce, a run, the answer to the run's interrupt, and the
 artefact it produced.
 
-Nineteen routes, in three families. `POST /nonces` issues the value an operator
+Twenty routes, in three families. `POST /nonces` issues the value an operator
 plants to prove they control the endpoint; `POST /runs` records the attestation,
 declares the estimate and halts; `POST /runs/{id}/approval` answers the halt; `GET
 /runs` lists the runs on the record; `GET /runs/{id}` says where the run has got to;
-`GET /runs/{id}/episodes` serves the probes that run's own episodes sent, out of this
-process's memory and out of no document; four under `/report/{id}` — three that serve
-the files one signed run leaves, the payload, the rendering and the detached
+`GET /runs/{id}/episodes` serves the probes that run's own episodes sent and `GET
+/runs/{id}/attempts` the exchanges behind its scored layer's successes, both out of
+this process's memory and out of no document; four under `/report/{id}` — three that
+serve the files one signed run leaves, the payload, the rendering and the detached
 signature, and a fourth that says what a verifier makes of them; `GET /artefacts`
 lists every signed artefact with that same reading beside it; four under `/bench`,
 whose subject is the bench rather than any run — `GET /bench/gate`, `GET
@@ -254,7 +255,7 @@ from backend.graph.budget import (
     CallPrice,
     Layer,
 )
-from backend.graph.runstate import RunState
+from backend.graph.runstate import Attempt, RunState
 from backend.targets.reference.corpus import SHARED_FOLDER
 
 CASES_DIR = Path(__file__).resolve().parents[1] / "cases"
@@ -1348,6 +1349,167 @@ def _breaks(episodes: Sequence[AdaptiveEpisode]) -> list[FamilyBreak]:
         )
         for family, row in rows.items()
     ]
+
+
+RUN_ATTEMPTS_ROUTE = "/runs/{run_id}/attempts"
+"""Where the exchanges behind one run's succeeded attempts are read. Memory, and
+never bytes anybody signed.
+
+The scored layer's counterpart to `RUN_EPISODES_ROUTE`, on the same terms and for the
+same reason: an operator reading their report asks what the payload that beat their
+agent actually said, and the answer is a recorded case and a reply, held in the
+process that ran it. Under `/runs` because the subject is one run of one operator's
+own endpoint, and there is no counterpart under `/gate-runs` for the reason there is
+no episode one — a gate run attacks this bench's own reference agents (ADR-0018).
+
+**Only the attempts that succeeded.** A resisted attempt is the same recorded payload
+against the same case, and serving all of them would be the log this surface has
+already refused once (`RECENT_ATTEMPTS`). What a reader of a report is asking is which
+attacks worked, so what is served is `RunState.succeeded_attempts` and nothing else.
+
+**The artefact is still the line this does not cross.** The signed payload carries
+`successes` and `attempts` per family and no transcript — `document()` is built key by
+key precisely so that an attempt's transcript has nowhere to arrive — and this response
+is built from `Attempt.transcript`, which nothing signs and no file holds (ADR-0008,
+spec story 105). What that gives up is stated on the response and on the screen: a
+screenshot of this is a copy of a payload that worked against a live agent, and the
+operator who took it is carrying it.
+"""
+
+THE_EXCHANGES_THIS_PROCESS_IS_HOLDING = (
+    "the attacks that worked, as they went on the wire and as this target answered "
+    "them, read out of this process's memory. Not part of the signed artefact: the "
+    "report this run signs carries each family's successes over its attempts and no "
+    "transcript, because a payload that beat a target is a working attack and the "
+    "artefact is the document that circulates (ADR-0008, spec story 105). Nothing "
+    "here is committed and nothing here is signed, and it is gone when this process "
+    "stops — a copy taken from this response is the operator's to hold and the "
+    "operator's to account for"
+)
+"""What this response is, said on the response, because a screenshot travels alone.
+
+The same three bounds the probes route states, in the scored layer's own terms: the
+text is read off a record in this process's memory, the assembler has nowhere to put
+it, and a restart ends it.
+"""
+
+NO_ATTEMPT_SUCCEEDED = (
+    "no attempt in this run's scored layer succeeded, so there is no exchange to "
+    "read. A stated absence and not an empty list: a run halted at its interrupt, a "
+    "run nobody approved, a run refused at registration and a run whose every "
+    "attempt was resisted all arrive here, and only the last of them is a reading "
+    "about the target — the run's own standing and each family's own rate say which "
+    "this was"
+)
+
+
+class FamilyExchanges(BaseModel):
+    """One family's succeeded attempts, with the exchange behind each.
+
+    Grouped by family because that is the unit a rate is denominated in and the unit
+    the report's cards are read in, and grouped nowhere else on this response.
+
+    **A list, never a figure.** There is no count on this record and no denominator:
+    the rate is on the report, measured over the attempts the plan declared, and a
+    length taken from this list would be a numerator with nothing under it — a family
+    is here only if something in it succeeded, so the absence of a family is not a
+    zero (ADR-0006, ADR-0010).
+    """
+
+    family: str
+
+    verdict_class: str
+    """How this family's verdicts were reached, off the attempts themselves.
+
+    Carried so that a reader of an exchange knows which instrument called it a
+    success before they read the reply: a deterministic verdict is re-derivable from
+    the text in front of them, and a judged one is an adjudicator's reading with a κ
+    figure of its own (ADR-0004, ADR-0013). Never inferred from the family name,
+    which is the inference the record exists to make impossible.
+    """
+
+    succeeded: list[AttemptPayload]
+    """The attempts that worked, in the order they were made."""
+
+
+class RunExchanges(BaseModel):
+    """Every succeeded attempt this run recorded, by family, with its exchange."""
+
+    held: Literal[True] = True
+    run_id: str
+    families: list[FamilyExchanges]
+    stated: str
+
+
+class NoExchanges(BaseModel):
+    """Nothing in this run's scored layer succeeded, said in words.
+
+    The same shape with the families gone and a sentence in their place, on
+    `NoProbes`' reasoning: an empty list would read as a layer that ran and found
+    nothing, and a run that never got to its first attempt is a different fact from
+    a target that resisted every one.
+    """
+
+    held: Literal[False] = False
+    run_id: str
+    stated: str
+
+
+def exchanges_behind(record: RunRecord) -> RunExchanges | NoExchanges:
+    """One run's succeeded attempts by family, or the stated absence of any.
+
+    Read off `RunState.succeeded_attempts` in the order they were made and grouped
+    into `Family`'s own order, which is the order the report's cards are in: two
+    surfaces a reader moves between line up row for row.
+
+    Nothing here is counted or summarised. There is no figure on this response that
+    spans two families, and none that spans two attempts of one — what a family's
+    rate is stays on the report, where its denominator is.
+    """
+    succeeded = record.run_state.succeeded_attempts
+    if not succeeded:
+        return NoExchanges(run_id=record.run_id, stated=NO_ATTEMPT_SUCCEEDED)
+    grouped: dict[Family, list[Attempt]] = {}
+    for attempt in succeeded:
+        grouped.setdefault(attempt.family, []).append(attempt)
+    return RunExchanges(
+        run_id=record.run_id,
+        families=[
+            FamilyExchanges(
+                family=str(family),
+                verdict_class=str(grouped[family][0].verdict_class),
+                succeeded=[_exchange(attempt) for attempt in grouped[family]],
+            )
+            for family in Family
+            if family in grouped
+        ],
+        stated=THE_EXCHANGES_THIS_PROCESS_IS_HOLDING,
+    )
+
+
+def _exchange(attempt: Attempt) -> AttemptPayload:
+    """One attempt as the evidence behind its verdict, in the shape the run route
+    already serves one in.
+
+    The same model rather than a second one, because it is the same fact: what went
+    out, what came back, and how that was scored. What differs is how many of them a
+    response carries and why, and that is the route's business rather than the
+    record's.
+    """
+    return AttemptPayload(
+        family=str(attempt.family),
+        case_id=attempt.case_id,
+        agent=attempt.target_name,
+        # One-based on the way out, like every other index this surface serves: a
+        # reader counts *the third attempt* and the record holds an index into ten.
+        attempt=attempt.index + 1,
+        sent=_message(attempt.transcript.sent),
+        reply=attempt.transcript.reply_text,
+        verdict=str(attempt.verdict),
+        verdict_class=str(attempt.verdict_class),
+        status_code=attempt.transcript.status_code,
+        sends=attempt.transcript.sends,
+    )
 
 
 def _attachment(filename: str) -> dict[str, str]:
@@ -2631,17 +2793,17 @@ def tuning(config: BenchConfig) -> Tuning:
 
 
 def _offered(attacking: str) -> tuple[tuple[str, str], ...]:
-    """The models to offer: the four, and whatever this bench is currently on.
+    """The models to offer: the declared list, and whatever this bench is currently on.
 
     The stand-in is not on the list. It is reachable — the route admits it, so a
-    bench can be put back on test equipment — but offering it as a choice beside four
-    models invites picking it by accident, and an operator who wanted no spend would
-    not be on this screen.
+    bench can be put back on test equipment — but offering it as a choice beside the
+    declared models invites picking it by accident, and an operator who wanted no
+    spend would not be on this screen.
 
-    **The current setting is always a row, whatever it is.** A form that showed four
-    options while the bench ran a fifth would draw the first option as selected and be
-    wrong about the instrument — which is the one thing a screen about instruments may
-    not be.
+    **The current setting is always a row, whatever it is.** A form that showed the
+    declared list while the bench ran something else would draw the first option as
+    selected and be wrong about the instrument — which is the one thing a screen about
+    instruments may not be.
     """
     if any(identifier == attacking for identifier, _ in ATTACKER_MODELS):
         return ATTACKER_MODELS
@@ -2782,6 +2944,13 @@ ATTACKER_MODELS: tuple[tuple[str, str], ...] = (
         "openrouter:anthropic/claude-opus-4.7",
         "expensive, and the run that answers whether the model was the ceiling: an "
         "A_break that does not move here is a reading about the bench, not the model",
+    ),
+    (
+        "openrouter:deepseek/deepseek-v4-flash-0731",
+        "the cheapest on this list by a wide margin and post-trained for agent "
+        "workflows — but measured at 16s a call against the baseline's 2s, so an "
+        "episode that takes minutes here takes an hour: pick it for a run whose "
+        "budget is the constraint, never for one whose clock is",
     ),
 )
 """The models this console offers as the adaptive attacker, with what each is for.
@@ -3998,6 +4167,46 @@ def create_app(
                 ),
             )
         return probes_sent(record)
+
+    @app.get(RUN_ATTEMPTS_ROUTE)
+    def serve_the_exchanges_behind_this_runs_successes(
+        run_id: Annotated[str, PathParam()],
+    ) -> RunExchanges | NoExchanges:
+        """The attacks that worked on this run, as they went out and came back.
+
+        The scored layer's counterpart to the episodes route, on the same terms: the
+        attempts are read off the `RunState` this process is holding, for a run this
+        process started, and the response says on itself that it is not part of the
+        artefact, is committed nowhere and does not survive a restart (ADR-0008,
+        amended).
+
+        **The signed report is untouched by this and cannot be reached from here.**
+        What a run signs carries each family's successes over its attempts and the
+        boundary of the claim; `document()` is assembled key by key so that an
+        attempt's transcript has nowhere to arrive. This response is built from
+        `Attempt.transcript` instead — a record that exists already, that no run
+        writes to disk, and that the assembler never sees.
+
+        **Two absences and two answers**, as the episodes route answers them. A run
+        id this process never issued is a `404` by name, which is what every earlier
+        run becomes after a restart. A run on the record in which nothing succeeded
+        is a `200` that says so in words — a fact about where the run got to, or
+        about a target that resisted everything, and the rates say which. Neither is
+        an empty list.
+        """
+        record = bench.record(run_id)
+        if record is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=(
+                    f"no run {run_id} was started by this bench. The exchange behind "
+                    "an attempt lives with the process that made it and is held "
+                    "nowhere else, so a run this process did not start has none to "
+                    "read — and a restart leaves every earlier run in exactly that "
+                    "state"
+                ),
+            )
+        return exchanges_behind(record)
 
     def servable(run_id: str) -> SignedArtefact:
         """This run's signed artefact, or the named reason there is none to serve.

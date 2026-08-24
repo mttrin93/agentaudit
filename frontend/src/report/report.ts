@@ -57,7 +57,9 @@
 import type {
   AdaptiveSection,
   FamilyEntry,
+  FamilyRun,
   MeasuredSection,
+  RunAttempts,
   RunEpisodes,
   TargetReport,
   Verification,
@@ -211,6 +213,17 @@ export function familyAnswers(measured: MeasuredSection): FamilyAnswer[] {
 
 /** One episode of the search: what it proposed in that family, and over how long. */
 export interface AdaptiveEpisodeReading {
+  /**
+   * How the episode ended, in words a reader does not need the statistics for.
+   *
+   * `censored` is the record's word and it is a right-censored observation: the
+   * attacker did not break the family within its turn cap, and nothing was learnt
+   * about what one more turn would have done. A card printing that word says *the
+   * search was cut off* to a reader who knows the term and nothing at all to one who
+   * does not — and *no break* would say the opposite of the truth, because it reads
+   * as a defence that held. So the card says `out of turns`, which is what happened,
+   * and `report.json` keeps the word a statistician needs.
+   */
   outcome: string
   turns: string
   /**
@@ -261,6 +274,23 @@ export interface AdaptiveReading {
   families: AdaptiveFamilyReading[]
 }
 
+/** The episode outcomes this bench records, mapped to the words a card prints. */
+const OUTCOMES_IN_PLAIN_WORDS: Readonly<Record<string, string>> = {
+  censored: 'out of turns',
+}
+
+/**
+ * One outcome as a card says it, or the record's own word where there is nothing
+ * to gain by rewording it.
+ *
+ * A lookup and not a rewrite: an outcome this map has no entry for is printed as the
+ * payload wrote it, so a seventh outcome added upstream reaches the screen as itself
+ * rather than as whatever a fallthrough decided it was.
+ */
+function readOutcome(outcome: string): string {
+  return OUTCOMES_IN_PLAIN_WORDS[outcome] ?? outcome
+}
+
 export function adaptiveReading(adaptive: AdaptiveSection): AdaptiveReading {
   const broken = new Set(adaptive.families_broken)
   const families: AdaptiveFamilyReading[] = []
@@ -277,7 +307,7 @@ export function adaptiveReading(adaptive: AdaptiveSection): AdaptiveReading {
       families.push(reading)
     }
     const line = {
-      outcome: episode.outcome,
+      outcome: readOutcome(episode.outcome),
       turns: `${episode.turns} ${episode.turns === 1 ? 'turn' : 'turns'}`,
       proposed: episode.description,
     }
@@ -451,6 +481,104 @@ export function routeReading(served: RunEpisodes): RouteReading {
         // makes it in `reading`.
         toolTrace: probe.tool_trace ?? '',
         reading: probe.reading,
+      })),
+    })),
+  }
+}
+
+/**
+ * What one family attempted, in the words the published cards use for it.
+ *
+ * **For the cards that publish no rate.** A withheld family's rate is absent from the
+ * artefact by design — `Withheld` has no field for one, and no field for the counts
+ * either — but the attempts were made and the measurement is on the run (ADR-0006
+ * keeps a measured rate measured). So the counts are read off the run's own progress,
+ * out of this process's memory, exactly as the exchanges below are: what a card gains
+ * is the numerator and the denominator, and what it still does not state is the rate
+ * with the interval and the band that would make it a published figure (ADR-0015).
+ *
+ * Keyed by family and never joined to the answers: `reportView` reads the payload and
+ * nothing else, and a counts line threaded into it would be the one edge that lets a
+ * figure from outside the artefact into a reading of the artefact.
+ */
+export function attemptCounts(families: FamilyRun[]): Record<string, string> {
+  const counted: Record<string, string> = {}
+  for (const family of families) {
+    // A family the declarations dropped attempted nothing, and `0 of 0` drawn on a
+    // card reads as a family that resisted everything.
+    if (family.attempted === 0) {
+      continue
+    }
+    counted[family.family] =
+      `${family.succeeded} of ${family.attempted} attempts succeeded`
+  }
+  return counted
+}
+
+/** One exchange as the block draws it: what went out, what came back, how it read. */
+export interface ExchangeReading {
+  /** `attempt 3` — the ordinal the bench counted, and nothing that is a total. */
+  at: string
+  caseId: string
+  sent: string
+  reply: string
+  /** The transport's own answer, so a reply nobody could read is not a silent one. */
+  answered: string
+}
+
+/**
+ * One family's succeeded attempts, under the family they were made in.
+ *
+ * `verdictClass` is carried rather than derived, on the record's own reasoning: a
+ * deterministic success is re-derivable from the text beside it and a judged one is
+ * an adjudicator's reading, and the one thing nothing may do is work that out from
+ * the family name (ADR-0004).
+ */
+export interface FamilyExchangeReading {
+  family: string
+  verdictClass: string
+  exchanges: ExchangeReading[]
+}
+
+/**
+ * The attacks that worked, read into what the block draws, or the stated absence.
+ *
+ * The same two shapes `RouteReading` has and for the same reason: a run where nothing
+ * succeeded answers in words, because an empty list would read as a target that
+ * resisted everything when it may be a run nobody approved.
+ *
+ * **Nothing here is counted.** There is no field on this reading for a length, a
+ * total or a proportion: the rate is on the cards above with its own denominator and
+ * its own interval, and a figure derived here would be the same measurement taken a
+ * second way (ADR-0005, ADR-0006).
+ */
+export type ExchangesReading =
+  | { kind: 'held'; note: string; families: FamilyExchangeReading[] }
+  | { kind: 'absent'; note: string; stated: string }
+
+/**
+ * The exchanges behind one run's successes, read into what the block draws.
+ *
+ * Grouped as the response grouped them and re-sorted nowhere: the families arrive in
+ * the library's own order so this block and the cards above line up row for row, and
+ * the attempts within one arrive in the order they were made.
+ */
+export function exchangesReading(served: RunAttempts): ExchangesReading {
+  if (!served.held) {
+    return { kind: 'absent', note: NOT_PART_OF_THE_ARTEFACT, stated: served.stated }
+  }
+  return {
+    kind: 'held',
+    note: NOT_PART_OF_THE_ARTEFACT,
+    families: served.families.map((family) => ({
+      family: family.family,
+      verdictClass: family.verdict_class,
+      exchanges: family.succeeded.map((one) => ({
+        at: `attempt ${one.attempt}`,
+        caseId: one.case_id,
+        sent: one.sent,
+        reply: one.reply,
+        answered: `HTTP ${one.status_code}`,
       })),
     })),
   }

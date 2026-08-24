@@ -281,13 +281,6 @@ function TheInterrupt({
                   <span className="money">{figure.cost}</span>
                   <span className="kind">{figure.kind}</span>
                   <span className="aside">{figure.basis}</span>
-                  {/* What the calls are and what the limit is, in one paragraph:
-                      the two were a line apart and they are one thought — this is
-                      what this layer spends, and this is what it may not exceed. */}
-                  <span className="aside">
-                    {figure.spends} Enforced against this layer alone:{' '}
-                    {figure.ceiling} calls. The run aborts rather than exceed it.
-                  </span>
                 </dd>
               </div>
             ))}

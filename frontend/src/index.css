@@ -2071,6 +2071,58 @@ code {
   white-space: pre-wrap;
 }
 
+/* The scored layer's exchanges, as the same cards the rest of this page is in: one
+ * per family, and no rule under them. A stacked pair with a line beneath it is a
+ * table waiting for a total, and the total of two families' successes is a figure
+ * with nothing under it — the denominator is on the card above (ADR-0005). */
+.exchanges {
+  display: grid;
+  gap: 1rem;
+  margin: 1.5rem 0;
+}
+
+/* Sent and reply as they went, keeping their own whitespace: a payload reflowed into
+ * a paragraph is not the payload an engineer is being handed. */
+.exchanges .probe,
+.exchanges .reply {
+  margin: 0.25rem 0 0;
+  padding: 0.5rem 0.65rem;
+  background: var(--page);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.85rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  overflow-x: auto;
+}
+
+/* The target's own words, set apart from the attacker's without a second face, as
+ * `.route .bubble.reply` does it: the only thing distinguishing the two is who said
+ * it. */
+.exchanges .reply {
+  background: var(--sunk, var(--page));
+  color: var(--quiet);
+}
+
+/* The payload that worked, found at a glance in a column of ones that did not.
+ *
+ * `--succeeded` is this console's existing red and it is already in the attacker's
+ * sense — the *attack* succeeding, not a defect graded — so the one thing it says
+ * here is the thing it says on the answering bars (ADR-0005). It grades nothing: a
+ * payload either worked or it is not in this block, which is a binary fact and not a
+ * severity, and no rate, band or `D` is coloured anywhere.
+ *
+ * The tint is never the only carrier. The adaptive probe keeps the sentence under it
+ * and every exchange in `.exchanges` is a success by construction, so a greyscale
+ * screenshot loses the emphasis and none of the meaning.
+ */
+.bubble.worked,
+.exchanges .probe {
+  border-color: var(--succeeded);
+  border-left-width: 3px;
+}
+
 /* What broke each family, above the sequence. `.family` cards like everywhere else
  * on this page, and no rule under them: a stacked pair with a line beneath it is a
  * table waiting for a total, and there is no total here to want. */

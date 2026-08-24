@@ -21,6 +21,16 @@ ADR-0007's amendment gave that operator a waiver, and the waiver does two things
 
 So the state this ADR adds is `nonce_planted = true, echo_waived = true`: the probe is sent, the reply is kept, a missing echo does not stop the run, **the leakage family runs**, and the artefact says control was declared and not proved — the same sentence a waived run has always carried.
 
+## The console asks it once, with the plant tick (2026-08-24)
+
+**The register walk offers two states and the second declaration is no longer a second question.** Its plant step had both waivers as two checkboxes in one section, and an operator reading them asked which was required. Neither is, and that is the problem: two ticks relaxing the same guard for opposite reasons cannot say so in a label, and a waiver read as mandatory is one nobody made on purpose. So the walk now offers *planted* or *cannot plant*, and `Declarations` no longer holds `echo_waived` at all.
+
+**The plant tick carries both declarations.** A run that says the value is in the target sends `nonce_planted = true, echo_waived = true` — the state this ADR added, now the only planted state the console produces. The alternative was refusing the target for having the defence the bench exists to measure: an agent whose disclosure rule is blanket refuses the registration check it has the value for, and a walk that stopped there stopped on the finding.
+
+Nothing in the bench moved. `echo_waived` is still a field on the route, `proof_waived` is still derived as `echo_waived or not nonce_planted`, `plan_for` still reads only `nonce_planted` so the leakage family still runs, the probe is still sent, and `echoed` still records what came back — a target that echoes anyway has proved control whatever was declared.
+
+**What the operator no longer ticks, the screen does not say either.** The plant step carries the value, the bench's own statement about it and the one tick. So the second declaration is made on the operator's behalf and is read back nowhere on the walk: what stands is the attestation, the nonce having been issued by this bench, and the artefact's permanent record that control was declared and not proved. That is the trade this section exists to record, and it is a larger one than the box it replaced.
+
 ## What this gives up
 
 **Authorisation loses its evidence and keeps only its record.** On this path what stands between the bench and an endpoint nobody owns is the attestation plus the nonce having been issued by this bench — that the caller went through registration, not that they can configure the target. That is weaker than an echo and it is the point of the trade. It is not weaker than the waiver ADR-0007 already accepted; it is the same weakening, now available to an operator who has more control over their target rather than less.

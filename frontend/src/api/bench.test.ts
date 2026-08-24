@@ -93,9 +93,11 @@ describe('the registration this screen posts', () => {
       // on each, so a waiver that could be had by leaving a field out is one nobody
       // made — and they are two fields because the bench reads two different things
       // off them: the leakage family from the first, the echo guard from the second
-      // (ADR-0024).
+      // (ADR-0024). One tick sets both: a value declared planted is a run that may
+      // start without the echo, because the target that refuses to repeat it is the
+      // case the second field exists for.
       nonce_planted: true,
-      echo_waived: false,
+      echo_waived: true,
     })
   })
 

@@ -612,6 +612,78 @@ export async function runEpisodes(runId: string): Promise<RunEpisodes> {
 }
 
 /**
+ * One family's succeeded attempts, with the exchange behind each.
+ *
+ * Grouped by family because that is the unit a rate is denominated in and the unit
+ * the report's cards are read in. **A list and never a figure**: there is no count on
+ * this record, and a length taken off `succeeded` would be the numerator of a rate
+ * whose denominator is on the report. A family is here only if something in it
+ * succeeded, so the absence of a family is not a zero.
+ */
+export interface FamilyExchanges {
+  family: string
+  /**
+   * How this family's verdicts were reached, off the attempts themselves.
+   *
+   * Carried so a reader knows which instrument called the attack a success before
+   * they read the reply: a deterministic verdict is re-derivable from the text in
+   * front of them, a judged one is an adjudicator's reading with a κ of its own
+   * (ADR-0004). Never inferred from the family name.
+   */
+  verdict_class: string
+  succeeded: AttemptExchange[]
+}
+
+/**
+ * The attacks that worked on one live run, out of the bench's own memory.
+ *
+ * **Not the signed payload, and it is a different type for that reason.** The
+ * artefact carries each family's successes over its attempts and no transcript —
+ * `document()` is built key by key so an attempt's transcript has nowhere to arrive
+ * — and this is served by `GET /runs/{id}/attempts` from the process that made them,
+ * committed nowhere and gone at a restart (ADR-0008, amended). `stated` is the
+ * bench's own sentence saying exactly that, printed rather than paraphrased: a
+ * screenshot of the block travels without the paragraph around it.
+ */
+export interface RunExchanges {
+  held: true
+  run_id: string
+  families: FamilyExchanges[]
+  stated: string
+}
+
+/**
+ * Nothing in this run's scored layer succeeded, said in words rather than as an
+ * empty list.
+ *
+ * A run halted at its interrupt, a run nobody approved, a run refused at
+ * registration and a target that resisted every attempt all arrive here, and only
+ * the last is a reading about the target. An empty list would read as the last one
+ * whichever it was.
+ */
+export interface NoExchanges {
+  held: false
+  run_id: string
+  stated: string
+}
+
+export type RunAttempts = RunExchanges | NoExchanges
+
+/**
+ * The exchanges behind one run's succeeded attempts, from the process holding them.
+ *
+ * Thrown rather than returned as an outcome, like every other read here: an id this
+ * process never started is the answer a restart gives for every earlier run, and the
+ * bench's own sentence says so.
+ */
+export async function runAttempts(runId: string): Promise<RunAttempts> {
+  return (await fetched(
+    `/runs/${encodeURIComponent(runId)}/attempts`,
+    'exchanges behind this run’s successes',
+  )) as RunAttempts
+}
+
+/**
  * One attempt as evidence: what went out, what came back, and how it was scored.
  *
  * The bench serves the last one and never the log, so this arrives as a list of at

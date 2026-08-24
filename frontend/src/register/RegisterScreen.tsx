@@ -701,8 +701,6 @@ function PlantStep({ declarations, declare, issued, issue, busy }: PlantProps) {
         <>
           <p className="nonce">{issued.nonce}</p>
           <p>{issued.statement}</p>
-          <h3>The probe the run will send, verbatim</h3>
-          <pre>{issued.echo_probe}</pre>
           <label className="declaration">
             <input
               type="checkbox"
@@ -712,11 +710,8 @@ function PlantStep({ declarations, declare, issued, issue, busy }: PlantProps) {
                   nonce_planted: event.target.checked,
                   // Planting it retracts the waiver. Leaving both standing would let
                   // a run go out declaring the value planted *and* unplantable,
-                  // which is two different runs described at once. Unticking it
-                  // retracts the other declaration for the mirror reason: an echo
-                  // nobody planted a value for is not an echo somebody is waiting on.
+                  // which is two different runs described at once.
                   proof_waived: event.target.checked ? false : declarations.proof_waived,
-                  echo_waived: event.target.checked ? declarations.echo_waived : false,
                 })
               }
             />
@@ -736,9 +731,7 @@ function PlantStep({ declarations, declare, issued, issue, busy }: PlantProps) {
           after the button is pressed is an offer to undo a step rather than to skip
           it. Hidden once the value is declared planted, when there is nothing left
           to waive. */}
-      {declarations.nonce_planted ? (
-        <PlantedAndWillNotEcho declare={declare} waived={declarations.echo_waived} />
-      ) : (
+      {declarations.nonce_planted ? null : (
         <WaiveTheProof declare={declare} waived={declarations.proof_waived} />
       )}
     </section>
@@ -809,63 +802,6 @@ function WaiveTheProof({
 }
 
 /**
- * Planted, and the target will not repeat it — the other half of ADR-0024.
- *
- * Offered only where the value is declared planted, which is exactly where
- * `WaiveTheProof` is withdrawn: the two are the same guard relaxed for opposite
- * reasons, and an operator meeting both at once would be reading two runs described
- * at the same time.
- *
- * **The consequences are two, not three, and the missing one is the point.** An
- * agent whose disclosure rule is blanket cannot tell the registration check from an
- * attack and refuses both — so nothing proves the endpoint is the operator's, and
- * the artefact says so permanently. What does *not* happen is the leakage family
- * being dropped: the canary is in the target, so the family is measurable, and it is
- * the family whose defence this target has just demonstrated.
- */
-function PlantedAndWillNotEcho({
-  declare,
-  waived,
-}: {
-  declare: (changed: Partial<Declarations>) => void
-  waived: boolean
-}) {
-  return (
-    <section className="waiver">
-      <h3>Or start without the echo, having planted it</h3>
-      <p>
-        If your agent refuses to repeat its own configuration, it will refuse the
-        registration check too. Two things change:
-      </p>
-      <ul>
-        <li>
-          <strong>Nothing checks that this endpoint is yours.</strong>
-        </li>
-        <li>
-          <strong>The artefact says so, permanently.</strong>
-        </li>
-      </ul>
-      <p>
-        <strong>Data leakage still runs.</strong> The value is in the target, so the
-        family that goes after it is measuring something — which is the whole reason
-        this is not the waiver above.
-      </p>
-      <label className="declaration">
-        <input
-          type="checkbox"
-          checked={waived}
-          onChange={(event) => declare({ echo_waived: event.target.checked })}
-        />
-        <span>
-          This value is planted, my agent will not repeat it on request, and I am
-          starting the run without the proof.
-        </span>
-      </label>
-    </section>
-  )
-}
-
-/**
  * The three statements, on one page, each under the consequence of making it.
  *
  * An ordered list rather than three sections, because that is what it is: three
@@ -907,9 +843,6 @@ function AttestationStep({ declarations, declare }: StepProps) {
           </li>
         ))}
       </ol>
-      <p className="aside">
-        All three statements are required and each is recorded separately.
-      </p>
     </section>
   )
 }

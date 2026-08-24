@@ -78,6 +78,7 @@ from backend.bench.signing import (
 )
 from backend.bench.verification import SignatureOutcome
 from backend.graph.budget import REGISTRATION_PROBES_PER_TARGET
+from backend.targets.reference.model import ModelConfig, Provider
 from backend.tests.conftest import retired_case, some_cases
 
 DECLARED = DeclaredModels(
@@ -594,6 +595,30 @@ def test_the_declared_inputs_of_the_next_run_can_be_set_and_are_read_back() -> N
     assert after["ceilings"]["scored"]["attempts_per_case"] == 4
 
 
+def test_every_offered_attacker_model_is_a_slug_a_provider_could_answer() -> None:
+    """Each offered identifier parses, names a real provider, and says what it is for.
+
+    The list is closed because a mistyped slug is refused by the provider at the
+    *first call* — after the operator has attested and confirmed a spend — so the
+    shape of every entry is worth asserting where it costs nothing. What this cannot
+    check is that the model exists at the provider; what it does check is that nothing
+    on the list is unparseable, unprovided, duplicated or unexplained.
+    """
+    for identifier, purpose in ATTACKER_MODELS:
+        config = ModelConfig.parse(identifier)
+        assert config.provider is Provider.OPENROUTER, identifier
+        # A slug, not a bare model name: OpenRouter addresses every model as
+        # `vendor/model`, and one without the vendor is a 404 at the first call.
+        assert "/" in config.name, identifier
+        # The sentence is the whole reason the list is a list of pairs: a dropdown of
+        # four slugs with no purpose beside them is a choice nobody can make.
+        assert purpose.strip(), identifier
+
+    offered = [identifier for identifier, _ in ATTACKER_MODELS]
+    assert len(offered) == len(set(offered))
+    assert UNDECLARED_MODEL not in offered
+
+
 def test_the_attacker_model_set_here_is_the_one_the_report_will_name() -> None:
     """One call sets the client and the identifier, so a report cannot name a model
     that never ran.
@@ -715,7 +740,7 @@ def test_the_stand_in_is_not_offered_but_the_current_setting_always_is(
         [chosen] = [model for model in offered if model["chosen"]]
         assert chosen["identifier"] == UNDECLARED_MODEL
 
-        # Set one of the four, and the stand-in stops being offered at all.
+        # Set one of the offered models, and the stand-in stops being offered.
         after = client.put(
             BENCH_TUNING_ROUTE,
             json={

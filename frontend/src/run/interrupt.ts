@@ -82,9 +82,27 @@ export interface CostFigure {
   kind: string
   basis: string
   cost: string
+  /**
+   * The ceiling this layer alone is enforced against, carrying its own `≤`.
+   *
+   * Kept on the record though the interrupt no longer prints it: the two ceilings
+   * are the pair `interrupt.test.ts` reads to assert that nothing here is summed,
+   * and a view holding one figure per layer is what makes that assertion possible.
+   */
   ceiling: string
-  /** What this layer does with those calls, in the units it does it in. */
-  spends: string
+
+  /**
+   * What this layer does with those calls, where a screen still says it.
+   *
+   * Optional because the two screens sharing this record no longer agree about it.
+   * The run's own interrupt prints the figure, its basis and its cost and nothing
+   * else; the gate's estimate still spells out what each layer spends, because the
+   * three reference agents and the two ceilings behind that figure are not a thing
+   * an operator of *this* bench can read off the number. Absent rather than empty on
+   * the side that dropped it: a blank line where a sentence goes reads as a sentence
+   * that failed to load.
+   */
+  spends?: string
 }
 
 /** `181`, or `≤ 96` when the figure is a bound. */
@@ -104,18 +122,12 @@ export function costFigures(estimate: RunEstimate): readonly CostFigure[] {
   return [
     {
       layer: 'scored',
-      label: 'Fixed suite — the scored layer',
+      label: 'The scored layer',
       calls: rendered(estimate.scored.calls, estimate.scored.kind),
       kind: estimate.scored.kind,
       basis: estimate.scored.basis,
       cost: estimate.scored.cost,
       ceiling: `≤ ${estimate.scored_ceiling}`,
-      // *Every number the bench signs comes from here* went: what the calls are is
-      // what this line is for, and where the report's figures come from is a fact
-      // about the report.
-      spends:
-        'Recorded cases, ten attempts each, plus the one probe that checks your ' +
-        'nonce.',
     },
     {
       layer: 'adaptive',
@@ -125,9 +137,6 @@ export function costFigures(estimate: RunEstimate): readonly CostFigure[] {
       basis: estimate.adaptive.basis,
       cost: estimate.adaptive.cost,
       ceiling: `≤ ${estimate.adaptive_ceiling}`,
-      spends:
-        'Episodes an attacker drives itself, under a turn cap. Nothing here is ' +
-        'scored, so none of these calls reaches a rate.',
     },
   ]
 }

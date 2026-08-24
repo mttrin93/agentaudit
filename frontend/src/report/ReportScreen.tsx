@@ -67,19 +67,25 @@ import { Link, useParams } from 'react-router-dom'
 import { readFamily } from '../families'
 import {
   reportPayload,
+  runAttempts,
   runEpisodes,
   runProgress,
   type ReportLocation,
+  type RunAttempts,
   type RunEpisodes,
   type TargetReport,
 } from '../api/bench'
 import {
+  attemptCounts,
+  exchangesReading,
   reportView,
   routeReading,
   type AdaptiveFamilyReading,
   type EpisodeRouteReading,
+  type ExchangesReading,
   type FamilyBreakReading,
   type FamilyAnswer,
+  type FamilyExchangeReading,
   type ReportView,
   type RouteReading,
 } from './report'
@@ -102,6 +108,30 @@ interface Held {
    * the bench's own sentence for it.
    */
   episodes: RunEpisodes | null
+  /**
+   * The exchanges behind this run's succeeded attempts, or `null`.
+   *
+   * Held apart from `report` on the same reasoning as `episodes`, and from
+   * `episodes` because they are two layers: these are attempts of the scored suite
+   * and those are turns of a search, and a field holding both would be the one
+   * addition ADR-0010 exists to prevent.
+   *
+   * `null` is *this app did not get an answer*. The bench saying nothing succeeded is
+   * a `NoExchanges`, and the block prints the bench's own sentence for it.
+   */
+  attempts: RunAttempts | null
+  /**
+   * What each family attempted, keyed by family, out of the run's own progress.
+   *
+   * For the cards that publish no rate. The artefact carries no counts for a withheld
+   * family — `Withheld` has no field for a rate and none for the counts either — and
+   * the attempts were still made, so the numerator and the denominator are read from
+   * the same memory the exchanges are. Held in its own field for the reason they are:
+   * `reportView` reads the payload and nothing else, and a counts line threaded into
+   * it would be the edge that lets a figure from outside the artefact into a reading
+   * of the artefact.
+   */
+  counts: Record<string, string>
   /** The run's own sentence about why there is no report, carried unedited. */
   noReport: string
   unavailable: string
@@ -111,6 +141,8 @@ const NOTHING_YET: Held = {
   where: null,
   report: null,
   episodes: null,
+  attempts: null,
+  counts: {},
   noReport: '',
   unavailable: '',
 }
@@ -140,8 +172,16 @@ export function ReportScreen() {
         // which is the state the probes are meant to be in — is not a reason to
         // refuse a reader the report.
         const episodes = await theProbes(runId)
+        const attempts = await theExchanges(runId)
         if (current) {
-          setHeld({ ...NOTHING_YET, where, report, episodes })
+          setHeld({
+            ...NOTHING_YET,
+            where,
+            report,
+            episodes,
+            attempts,
+            counts: attemptCounts(progress.families),
+          })
         }
       } catch (unknown: unknown) {
         if (current) {
@@ -194,7 +234,13 @@ export function ReportScreen() {
       ) : null}
 
       {view && held.where ? (
-        <TheReport view={view} where={held.where} episodes={held.episodes} />
+        <TheReport
+          view={view}
+          where={held.where}
+          episodes={held.episodes}
+          attempts={held.attempts}
+          counts={held.counts}
+        />
       ) : null}
     </main>
   )
@@ -216,15 +262,35 @@ async function theProbes(runId: string): Promise<RunEpisodes | null> {
   }
 }
 
+/**
+ * The exchanges behind the successes, or nothing, on the same terms as the probes.
+ *
+ * The other read whose absence is ordinary: an attempt's transcript lives in the
+ * process that made it, so every run from before a restart answers `404` — the
+ * disclosure posture working rather than a fault — and the figures on this page are
+ * unaffected either way.
+ */
+async function theExchanges(runId: string): Promise<RunAttempts | null> {
+  try {
+    return await runAttempts(runId)
+  } catch {
+    return null
+  }
+}
+
 /** The whole report, in the order a reader meets it. */
 function TheReport({
   view,
   where,
   episodes,
+  attempts,
+  counts,
 }: {
   view: ReportView
   where: ReportLocation
   episodes: RunEpisodes | null
+  attempts: RunAttempts | null
+  counts: Record<string, string>
 }) {
   return (
     <>
@@ -232,10 +298,16 @@ function TheReport({
         <h2>The scored layer, one family at a time</h2>
         <div className="families per-family">
           {view.answers.map((answer) => (
-            <TheFamily answer={answer} key={`${answer.kind}-${answer.family}`} />
+            <TheFamily
+              answer={answer}
+              counted={counts[answer.family] ?? ''}
+              key={`${answer.kind}-${answer.family}`}
+            />
           ))}
         </div>
       </section>
+
+      {attempts ? <TheExchanges exchanges={exchangesReading(attempts)} /> : null}
 
       <section>
         <h2>The adaptive layer, and what it proposed per family</h2>
@@ -279,6 +351,55 @@ function TheReport({
 }
 
 /**
+ * The attacks that worked, one family at a time, with what came back.
+ *
+ * Under the scored cards because it is the scored layer's evidence: a card says a
+ * family's rate and this says which attempts that rate counted. Nothing here is a
+ * figure — a reader counting the rows is reading a numerator whose denominator is on
+ * the card above, and there is no field on this block for either.
+ */
+function TheExchanges({ exchanges }: { exchanges: ExchangesReading }) {
+  return (
+    <section>
+      <h2>The attacks that worked</h2>
+      {exchanges.kind === 'absent' ? (
+        <p className="aside">{exchanges.stated}</p>
+      ) : (
+        <div className="exchanges">
+          {exchanges.families.map((family) => (
+            <TheFamilyExchanges family={family} key={family.family} />
+          ))}
+        </div>
+      )}
+    </section>
+  )
+}
+
+/** One family's succeeded attempts, in the order they were made. */
+function TheFamilyExchanges({ family }: { family: FamilyExchangeReading }) {
+  return (
+    <div className="family">
+      <h3>{readFamily(family.family)}</h3>
+      <p className="kind">{family.verdictClass}</p>
+      <ol className="probes">
+        {family.exchanges.map((exchange) => (
+          <li key={`${exchange.caseId}-${exchange.at}`}>
+            <p className="at">
+              {exchange.caseId}, {exchange.at} — {exchange.answered}
+            </p>
+            {/* Sent and reply as they went, in blocks that keep their own
+                whitespace: a payload reflowed to a paragraph is not the payload,
+                and an operator handing this to an engineer is handing over text. */}
+            <pre className="probe">{exchange.sent}</pre>
+            <pre className="reply">{exchange.reply}</pre>
+          </li>
+        ))}
+      </ol>
+    </div>
+  )
+}
+
+/**
  * One family, as a card that opens with its figures.
  *
  * Three shapes rather than one row with empty cells: a family whose rate is
@@ -287,12 +408,23 @@ function TheReport({
  * for the same reason the two cost figures are blocks — a table wants a total row,
  * and this grid has nowhere to put one.
  */
-function TheFamily({ answer }: { answer: FamilyAnswer }) {
+function TheFamily({
+  answer,
+  counted,
+}: {
+  answer: FamilyAnswer
+  counted: string
+}) {
   if (answer.kind === 'withheld') {
     return (
       <div className="family absent">
         <h3>{readFamily(answer.family)}</h3>
-        <p className="at">rate not published — {answer.reason}</p>
+        {/* The counts, and no rate over them and no line about the one that is
+            absent. The attempts were made and the measurement is on the run, so what
+            this card does not state is the figure with the interval and the band that
+            would make it publishable (ADR-0006, ADR-0015). Empty where the process no
+            longer holds the run, which is every run after a restart. */}
+        {counted ? <p className="aside">{counted}</p> : null}
       </div>
     )
   }
@@ -351,10 +483,6 @@ function TheRoute({ route }: { route: RouteReading }) {
   return (
     <section>
       <h2>The probes this run sent</h2>
-      {/* The sentence is the block, not a footnote on it: everything else on this
-          page is in the artefact and this is not, so a reader who screenshots the
-          probes has the disclaimer in the same picture. */}
-      <p className="consequence">{route.note}</p>
       {route.kind === 'absent' ? (
         <p className="aside">{route.stated}</p>
       ) : (
@@ -393,7 +521,7 @@ function TheFamilyBreak({ family }: { family: FamilyBreakReading }) {
       {family.broke ? (
         <>
           <p className="broke">broke it — {family.at}</p>
-          <p className="bubble">{family.probe}</p>
+          <p className="bubble worked">{family.probe}</p>
         </>
       ) : (
         <p className="kind">{family.stated}</p>
@@ -407,9 +535,10 @@ function TheFamilyBreak({ family }: { family: FamilyBreakReading }) {
  *
  * The turn count is the card's one figure and it is the episode's own — a turn is not
  * an attempt, so there is nothing here to read against the cards above (ADR-0010).
- * The break is marked in a sentence rather than by a colour or a badge: which probe
- * worked is the fact this block was asked for, and a fact carried by a tint is one a
- * greyscale screenshot loses.
+ * The probe that broke it is marked twice: the sentence under it, and `worked` on the
+ * bubble itself. The sentence is the load-bearing one — a fact carried by a tint
+ * alone is a fact a greyscale screenshot loses — and the tint is what makes the one
+ * probe that worked findable in a column of probes that did not.
  */
 function TheEpisode({ episode }: { episode: EpisodeRouteReading }) {
   return (
@@ -430,7 +559,9 @@ function TheEpisode({ episode }: { episode: EpisodeRouteReading }) {
               <p className="ordinal">
                 {probe.at} — {probe.reading}
               </p>
-              <p className="bubble">{probe.probe}</p>
+              <p className={probe.confirmedTheBreak ? 'bubble worked' : 'bubble'}>
+                {probe.probe}
+              </p>
               {/* The reply, because a probe without one is unreadable: *censored* is
                   a fact about the attacker, and only the text that came back tells a
                   target that refused from one that was never asked the right thing. */}
@@ -470,14 +601,8 @@ function TheSearch({ family }: { family: AdaptiveFamilyReading }) {
               <span className="kind">episode</span> <strong>{episode.outcome}</strong>
             </p>
           </div>
-          <p className="aside">Proposed: {episode.proposed}.</p>
         </div>
       ))}
-      <p className="kind">
-        {family.broke
-          ? 'the search broke this family — recorded, and scored nowhere'
-          : 'the search did not break this family'}
-      </p>
     </div>
   )
 }

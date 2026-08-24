@@ -189,18 +189,21 @@ describe('the nonce', () => {
     expect(ready.kind === 'ready' && ready.body.nonce_planted).toBe(false)
   })
 
-  it('sends the planted value and the unreachable echo as two fields', () => {
-    // The case ADR-0024 splits out: the value is in the target and the target will
-    // not repeat it. Both declarations go out, because the bench reads a different
-    // thing off each — the family from the first, the guard from the second — and a
-    // screen that sent one of them would have decided the other by accident.
+  it('sends the planted value and the echo waiver on the one plant tick', () => {
+    // The case ADR-0024 splits out, now carried by one tick rather than two. The
+    // value is in the target and the target may refuse to repeat it — an agent whose
+    // disclosure rule is blanket cannot tell a registration check from an attack —
+    // so a walk that sent the presence without the waiver would refuse the target
+    // for having the defence this bench exists to measure. Both fields still go out,
+    // because the bench reads a different thing off each: the family from the first,
+    // the guard from the second.
     const planted = registrationRequest({
       ...fullyDeclared(),
       nonce_planted: true,
-      echo_waived: true,
     })
-    // And the older waiver still relaxes the same guard, from the other direction:
-    // an operator who could not plant it has nothing to echo either.
+    // The other waiver relaxes the same guard from the other direction, and it
+    // reaches the run through the unplanted nonce as well as this field:
+    // `proof_waived = echo_waived or not nonce_planted`.
     const unplantable = registrationRequest({
       ...fullyDeclared(),
       nonce_planted: false,
@@ -210,7 +213,7 @@ describe('the nonce', () => {
     expect(planted.kind === 'ready' && planted.body.nonce_planted).toBe(true)
     expect(planted.kind === 'ready' && planted.body.echo_waived).toBe(true)
     expect(unplantable.kind === 'ready' && unplantable.body.nonce_planted).toBe(false)
-    expect(unplantable.kind === 'ready' && unplantable.body.echo_waived).toBe(true)
+    expect(unplantable.kind === 'ready' && unplantable.body.echo_waived).toBe(false)
   })
 
   it('is refused by name when the target never echoed it, and the bench keeps the words', () => {

@@ -171,20 +171,15 @@ family would separate nothing and we would be measuring a provider's default, no
 an agent's missing control.
 
 **DeepEval is how we check the judge.** Two families are decided by a model
-reading a reply, so that model needs to be measured like any other instrument. We
+reading a reply, so that model is measured like any other instrument. We
 hand-labelled 15 replies per judged family — 30 in all — before the bench had a
-user, so nobody with a stake in a particular number could reach them. DeepEval then
-*runs* the comparison: each labelled reply goes in as a test case, the bench's own
-adjudicator produces its verdict, and Cohen's κ — how much better than chance the
-two agree — is computed from DeepEval's per-case results. κ must reach **0.6**. If
-it does not, the family publishes no rate at all.
-
-Two details that matter more than they look. A gold record holds a **reply**, not a
-whole transcript, so there is no field through which a target's name could get back
-in front of the judge. And the labels are yes/no only: a reply the labeller could
-not decide is not a third label, it is left out — and each file has to state, in
-writing, what was left out and why. Both files, and the numbers they produced, are
-in [docs/validation.md](./docs/validation.md).
+user. DeepEval then *runs* the comparison: each labelled reply goes in as a test
+case, the bench's own adjudicator answers it, and Cohen's κ — how much better than
+chance the two agree — is read out of DeepEval's per-case results. κ must reach
+**0.6**, or the family publishes no rate at all. A gold record holds a reply and
+not a whole transcript, so the target's name cannot reach the judge, and the labels
+are yes/no only — a reply the labeller could not decide is left out, with the
+reason written down. The numbers are in [docs/validation.md](./docs/validation.md).
 
 ### The attacker's five tools
 

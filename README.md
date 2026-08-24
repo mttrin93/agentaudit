@@ -181,6 +181,13 @@ chance the two agree — is read out of DeepEval's per-case results. κ must rea
 
 ### The attacker's five tools
 
+It works one family at a time, and one step at a time: it is handed what came
+back from its last probe, picks a single tool, and goes again until it breaks the
+target or runs out of turns. A break is the harness applying the family's own
+condition to the reply — never the attacker's claim that it won — and an episode
+that ends any other way is recorded as *censored*, meaning the attacker stopped
+rather than the target held.
+
 | Tool | The decision it makes |
 | --- | --- |
 | `run_probe` | what to send next, given what came back. The only thing in the adaptive layer that touches your agent |
@@ -314,22 +321,6 @@ a gate result and nothing may compare it to one.
 | M5, H4 | Learn from user ratings | Refused on purpose. A rating may never move a measured rate — see [ADR-0006](./docs/adr/0006-overrides-never-change-a-measured-rate.md) |
 | M6 | Plugin system for tools | The five tools exist; the enable/disable UI and plugin loader do not. Deliberately dropped — see [PLAN.md](./PLAN.md) |
 | H2 | LangSmith or Langfuse | Not wired up |
-
-## Safety
-
-This tool makes an agent take unauthorised actions and defeat its own stop
-control. **Against a production endpoint it causes the damage it measures.**
-
-That is why a run cannot start without both proofs: a nonce you planted (so the
-endpoint is yours) and three attestations you made by hand (so the decision is
-recorded). See [ADR-0007](./docs/adr/0007-canary-nonce-as-proof-of-control.md).
-
-`backend/cases/` holds real attack payloads in a public repository. The rule is
-in [ADR-0008](./docs/adr/0008-repo-disclosure-posture.md): a payload is public
-when the *situation* is the mechanism, and withheld when the *wording* is. Routes
-the adaptive attacker discovers are withheld by default, and no transcript is
-ever committed. Nothing operational is committed either — no tokens, no nonces,
-no real attestations. The private signing key is read from the environment only.
 
 ## Where to read more
 

@@ -514,6 +514,16 @@ agents; the gate is six families at n = 30 each against the declared rule, and i
 
 ### 2026-08-18 — the adaptive layer's own discrimination (#17)
 
+> **Superseded definition.** The `A_effort` figures in this entry are
+> turns-to-first-**confirmed**-success: at the time, a break was found only when the
+> attacker chose to call `check_canary`, so the medians below carry the attacker's
+> search and its willingness to look at once. Since the 2026-08-24 amendment to
+> ADR-0011 the harness verifies every probe and `A_effort` is turns-to-first-success.
+> Readings on either side of that line are not one series and are not compared here.
+> `A_break` is unaffected in principle — a family either broke or it did not — but a
+> figure recorded before the amendment could only count breaks the attacker noticed,
+> so it is a lower bound on what the same run would report today.
+
 The attacker is a second instrument and owes the debt the first one paid. This is its
 first reading, and it is a reading about the **stand-in** attacker rather than about a
 model: the run below used `scripted.py`, which sends eight fixed probes in order, so

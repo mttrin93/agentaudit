@@ -23,7 +23,7 @@ import functools
 import os
 from enum import StrEnum
 
-from openai import OpenAI
+from openai import OpenAI, omit
 
 from backend.bench.adjudication import Completion
 
@@ -65,6 +65,18 @@ under the agents because it is doing a harder job than they are, and keeping the
 two settings apart is what lets #15 move one without moving the other.
 """
 
+
+DEFAULT_ATTACKER_TEMPERATURE = 0.0
+"""What the attacker is sampled at when a deployment declares nothing.
+
+Zero, and declared rather than left to the provider. The attacker's job is to compose
+the next probe from what came back, which is reasoning about an observation and not
+invention: the variety that matters between episodes comes from the target's replies
+and from `k`, not from sampling noise. Declared because a report has a field for it —
+a run whose temperature reads *not declared* is a run nobody can repeat the conditions
+of, and the provider's own default is a fact about the provider that can change under
+a bench without anybody editing anything.
+"""
 
 DEFAULT_ATTACKER_MODEL = "openrouter:openai/gpt-4.1-mini"
 """The model the adaptive attacker runs on, and a third declared setting.
@@ -168,7 +180,7 @@ def declared_turns_per_episode() -> int | None:
     return turns
 
 
-def completion_for(spec: str) -> Completion:
+def completion_for(spec: str, temperature: float | None = None) -> Completion:
     """The bench's model call, from a `<provider>:<model>` configuration string.
 
     A string rather than a client, so the model an instrument used is a value a run
@@ -183,10 +195,10 @@ def completion_for(spec: str) -> Completion:
         )
     match Provider(provider):
         case Provider.OPENROUTER:
-            return _openrouter_completion(name)
+            return _openrouter_completion(name, temperature)
 
 
-def _openrouter_completion(name: str) -> Completion:
+def _openrouter_completion(name: str, temperature: float | None = None) -> Completion:
     # The client is built here rather than on the first call, so a missing
     # credential is a refusal at configuration time. A run that reached its first
     # judged attempt before discovering it had no instrument would already have
@@ -200,6 +212,11 @@ def _openrouter_completion(name: str) -> Completion:
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": message},
             ],
+            # `omit` rather than a number when nothing was declared: a temperature
+            # this bench invented would be a setting a report named and nobody
+            # chose, and the provider's own default is a fact about the provider
+            # rather than a value to copy into the field that records a choice.
+            temperature=omit if temperature is None else temperature,
         )
         return answered.choices[0].message.content or ""
 

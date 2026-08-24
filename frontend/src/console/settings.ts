@@ -50,8 +50,10 @@
 import type {
   AdaptiveCeiling,
   BenchSettings,
+  ModelChoice,
   ModelSetting,
   ScoredCeiling,
+  Tuning,
   WillBeSignedBy,
 } from '../api/bench'
 import { REFERENCE_AGENTS, type ReferenceAgent } from './gate'
@@ -155,12 +157,53 @@ export interface CeilingsBlock {
   ceilings: Ceiling[]
 }
 
+/** One number an operator may set, with the range the route enforces. */
+export interface TunedNumber {
+  /** The field name the route takes, used as the form's own key. */
+  name: 'temperature' | 'turns_per_episode' | 'episodes_per_family' | 'attempts_per_case'
+  label: string
+  value: number | null
+  low: number
+  high: number
+  /** What this setting decides, in one line, so no label carries it alone. */
+  decides: string
+  /** Empty unless leaving it blank means something, which is temperature's case. */
+  absent: string
+}
+
+/**
+ * The one block on this screen that changes anything (ADR-0025).
+ *
+ * Five settings: the attacker's model, its temperature, `T`, `k`, and attempts per
+ * case. Each is a declared input of a run — it changes what the next run *measured* —
+ * and each is printed in the provenance of every run made under it, which is the
+ * condition they are offered on.
+ *
+ * `warning` is the bench's own sentence about `attempts_per_case`, carried and never
+ * paraphrased: four of the five bound a layer that is scored on nothing, and the
+ * fifth is the scored denominator the gate is decided at. A block offering the fifth
+ * without that sentence would be offering a way to produce a rate that reads like a
+ * gate reading.
+ */
+export interface TuningBlock {
+  kind: 'tuning'
+  heading: string
+  statement: string
+  models: ModelChoice[]
+  numbers: TunedNumber[]
+  /** `n` at the current setting, and the `n` the declared rule reads. */
+  attemptsPerFamily: string
+  declaredAttemptsPerCase: string
+  warning: string
+}
+
 export type SettingsBlock =
   | KeysBlock
   | LibraryBlock
   | AgentsBlock
   | ModelsBlock
   | CeilingsBlock
+  | TuningBlock
 
 const WILL_SIGN = 'An artefact this bench produces will be signed by'
 const IS_VERIFIED_AGAINST = 'A verification of one is run against'
@@ -306,6 +349,65 @@ function adaptiveCeiling(adaptive: AdaptiveCeiling): Ceiling {
  * is opened with, and the two ceilings are last because they are the only block whose
  * point is made by there being two of it.
  */
+const WHAT_A_TUNED_SETTING_DECIDES: Record<TunedNumber['name'], string> = {
+  temperature:
+    'how varied the attacker\u2019s probes are. Left blank it is the provider\u2019s ' +
+    'own default, which is a fact about the provider and not a choice this bench ' +
+    'recorded',
+  turns_per_episode:
+    'T \u2014 how many probes one episode may send before it is capped. An episode ' +
+    'that reaches the cap without breaking the target is censored, which is a ' +
+    'reading about the attacker and never about the target',
+  episodes_per_family:
+    'k \u2014 how many episodes run per family per target. Episodes are not samples ' +
+    'of a rate, so more of them buys coverage of the attacker\u2019s search and no ' +
+    'precision',
+  attempts_per_case:
+    'attempts per recorded case, which is the scored denominator. This is the one ' +
+    'setting here that moves a rate',
+}
+
+function tunedNumbers(tuning: Tuning): TunedNumber[] {
+  return [
+    {
+      name: 'temperature',
+      label: 'attacker temperature',
+      value: tuning.temperature,
+      low: tuning.temperature_bounds.low,
+      high: tuning.temperature_bounds.high,
+      decides: WHAT_A_TUNED_SETTING_DECIDES.temperature,
+      absent: tuning.temperature_absent,
+    },
+    {
+      name: 'turns_per_episode',
+      label: 'turns per episode',
+      value: tuning.turns_per_episode,
+      low: tuning.turns_bounds.low,
+      high: tuning.turns_bounds.high,
+      decides: WHAT_A_TUNED_SETTING_DECIDES.turns_per_episode,
+      absent: '',
+    },
+    {
+      name: 'episodes_per_family',
+      label: 'episodes per family',
+      value: tuning.episodes_per_family,
+      low: tuning.episodes_bounds.low,
+      high: tuning.episodes_bounds.high,
+      decides: WHAT_A_TUNED_SETTING_DECIDES.episodes_per_family,
+      absent: '',
+    },
+    {
+      name: 'attempts_per_case',
+      label: 'attempts per case',
+      value: tuning.attempts_per_case,
+      low: tuning.attempts_bounds.low,
+      high: tuning.attempts_bounds.high,
+      decides: WHAT_A_TUNED_SETTING_DECIDES.attempts_per_case,
+      absent: '',
+    },
+  ]
+}
+
 export function settingsScreen(bench: BenchSettings): SettingsBlock[] {
   return [
     {
@@ -347,6 +449,16 @@ export function settingsScreen(bench: BenchSettings): SettingsBlock[] {
         scoredCeiling(bench.ceilings.scored),
         adaptiveCeiling(bench.ceilings.adaptive),
       ],
+    },
+    {
+      kind: 'tuning',
+      heading: 'What the next run is made with',
+      statement: bench.tuning.statement,
+      models: bench.tuning.attacker_models,
+      numbers: tunedNumbers(bench.tuning),
+      attemptsPerFamily: `${bench.tuning.attempts_per_family} attempts per family`,
+      declaredAttemptsPerCase: `the declared rule reads ${bench.tuning.declared_attempts_per_case}`,
+      warning: bench.tuning.attempts_warning,
     },
   ]
 }

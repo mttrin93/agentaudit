@@ -39,8 +39,11 @@ nothing runs.
 from __future__ import annotations
 
 import base64
+import json
 from dataclasses import replace
+from typing import cast
 
+import pytest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import (
     Ed25519PrivateKey,
     Ed25519PublicKey,
@@ -49,18 +52,21 @@ from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
 
 from backend.api.app import (
+    ATTACKER_MODELS,
+    BENCH_FAMILIES_ROUTE,
     BENCH_GATE_RECORD_ROUTE,
     BENCH_GATE_ROUTE,
     BENCH_NOTES_ROUTE,
     BENCH_SETTINGS_ROUTE,
+    BENCH_TUNING_ROUTE,
     GATE_RUN_APPROVAL_ROUTE,
     GATE_RUNS_ROUTE,
     NOT_HELD_BY_THIS_BENCH,
     create_app,
 )
 from backend.api.report import UNDECLARED_MODEL, UNDECLARED_MODELS, ReportConfig
-from backend.api.runs import BenchConfig
-from backend.bench.adaptive.budget import AdaptiveBudget
+from backend.api.runs import BenchConfig, BenchRuns, DeclaredGap, plan_for
+from backend.bench.adaptive.budget import DECLARED_ADAPTIVE_BUDGET, AdaptiveBudget
 from backend.bench.library import Case, Family, LibraryVersion
 from backend.bench.payload import DeclaredModels
 from backend.bench.rule import DECLARED_RULE, GateRule
@@ -177,15 +183,30 @@ def test_the_route_states_the_configuration_a_run_will_actually_use() -> None:
     """
     body = settings_of(configured(models=DECLARED))
 
-    assert list(body) == ["statement", "signing", "library", "models", "ceilings"]
+    assert list(body) == [
+        "statement",
+        "signing",
+        "library",
+        "models",
+        "ceilings",
+        # The sixth, and the only one that is a control: the declared inputs of the
+        # next run, with the bounds the route enforces (ADR-0025).
+        "tuning",
+    ]
     assert "a read" in str(body["statement"]).lower()
 
-    # Not one field here is a measurement of anybody's target: no family is named,
-    # so there is nothing on this response that could be read as a rate or a band
-    # about an agent somebody registered (ADR-0018).
-    served = a_client(configured(models=DECLARED)).get(BENCH_SETTINGS_ROUTE).text
+    # Not one field here is a measurement of anybody's target. A family is named in
+    # exactly one place — the switch that says whether the next run covers it — and
+    # that row carries no number, so there is nothing on this response that could be
+    # read as a rate or a band about an agent somebody registered (ADR-0018).
+    body = a_client(configured(models=DECLARED)).get(BENCH_SETTINGS_ROUTE).json()
+    switches = body["tuning"].pop("families")
+    assert [row["family"] for row in switches] == [str(family) for family in Family]
+    for row in switches:
+        assert set(row) == {"family", "covered"}
+        assert isinstance(row["covered"], bool)
     for family in Family:
-        assert family.value not in served
+        assert family.value not in json.dumps(body)
 
 
 def test_the_two_key_identifiers_are_two_facts_and_never_one() -> None:
@@ -425,8 +446,13 @@ def test_the_two_layer_ceilings_share_no_field_and_nothing_adds_them() -> None:
 
     assert figures(scored) & figures(adaptive) == set()
 
-    # And no figure anywhere on the response is a sum across the two layers.
-    present = set(numbers_in(body))
+    # And no figure anywhere on the response is a sum across the two layers. Read
+    # over the two ceiling blocks rather than over the whole body, because `tuning`
+    # restates both layers' settings side by side — it is the form's own state, and
+    # the numbers on it are the settings themselves rather than figures read off a
+    # run. The field-name check below still covers it, so a *named* blend anywhere
+    # on the response still fails.
+    present = set(numbers_in({key: body[key] for key in body if key != "tuning"}))
     for one in figures(scored):
         for other in figures(adaptive):
             here, there = scored[one], adaptive[other]
@@ -470,13 +496,21 @@ def test_the_declared_figures_are_read_off_the_records_that_declare_them() -> No
     assert "adaptive/budget.py" in str(adaptive["declared_in"])
 
 
-def test_no_route_under_the_bench_prefix_changes_a_setting() -> None:
-    """`/bench` is the instrument's own prefix and every method on it is a `GET`.
+def test_one_route_under_the_bench_prefix_writes_and_it_is_the_declared_inputs() -> (
+    None
+):
+    """`/bench` holds exactly one write, and it is the tuning route (ADR-0025).
 
     Over the route table rather than over this module, because the claim is about the
-    whole surface: rotation and configuration stay in the environment and the command
-    line, so a settings screen has nothing to post to and a write appearing here
-    fails whatever it is called.
+    whole surface. The line is not *no writes* any more and it is not *any write*: a
+    setting that changes what the **next run measures** may be set from the console,
+    and it is printed in the provenance of every run made under it. Everything else
+    stays where it was — the signing key is read from the environment by
+    `signing.signing_key` and by no route (ADR-0020), the library is what was mounted,
+    and the citation moves only when a gate run earns it (ADR-0023).
+
+    A second write appearing under this prefix fails here whatever it is called, which
+    is the protection this test still is.
     """
     app = create_app(BenchConfig(cases=[]))
     under_bench = {
@@ -492,10 +526,12 @@ def test_no_route_under_the_bench_prefix_changes_a_setting() -> None:
         (BENCH_GATE_RECORD_ROUTE, "GET"),
         (BENCH_NOTES_ROUTE, "GET"),
         (BENCH_SETTINGS_ROUTE, "GET"),
+        (BENCH_TUNING_ROUTE, "PUT"),
+        (BENCH_FAMILIES_ROUTE, "PUT"),
     }
 
-    # And nothing anywhere on this bench takes a key, a model or a threshold: the
-    # settings screen is a reader, and the routes that write take an attestation, an
+    # And nothing anywhere on this bench takes a key: the one setting route takes the
+    # declared inputs of a run and nothing else, and the rest take an attestation, an
     # approval, or a nonce request.
     writes = {
         route.path
@@ -508,6 +544,13 @@ def test_no_route_under_the_bench_prefix_changes_a_setting() -> None:
         "/nonces",
         "/runs",
         "/runs/{run_id}/approval",
+        # The one setting a console may write, since ADR-0025: the attacker's model
+        # and temperature, T, k and attempts per case. Every one of them is printed
+        # in the report of every run made under it, and none of them is a key.
+        BENCH_TUNING_ROUTE,
+        # And the second: which families the next run covers. Its own statement from
+        # its own screen, and it takes no instrument.
+        BENCH_FAMILIES_ROUTE,
         # The gate-run family, since ADR-0021: one route that records the attestation
         # and declares the estimate, one that answers the halt. Neither is under
         # `/bench`, and neither takes a key, a model or a threshold — a gate run
@@ -515,3 +558,239 @@ def test_no_route_under_the_bench_prefix_changes_a_setting() -> None:
         GATE_RUNS_ROUTE,
         GATE_RUN_APPROVAL_ROUTE,
     }
+
+
+def test_the_declared_inputs_of_the_next_run_can_be_set_and_are_read_back() -> None:
+    """The one write under `/bench`, and it answers with what the bench now holds.
+
+    The response is the whole settings reading rather than an acknowledgement, so a
+    console renders what was stored instead of what it hoped it sent — the same
+    reason every other route here returns a record instead of a status.
+    """
+    app = create_app(BenchConfig(cases=[]))
+    with TestClient(app) as client:
+        answered = client.put(
+            BENCH_TUNING_ROUTE,
+            json={
+                "attacker_model": UNDECLARED_MODEL,
+                "temperature": 0.7,
+                "turns_per_episode": 12,
+                "episodes_per_family": 1,
+                "attempts_per_case": 4,
+            },
+        )
+        after = client.get(BENCH_SETTINGS_ROUTE).json()
+
+    assert answered.status_code == 200
+    tuned = answered.json()["tuning"]
+    assert tuned["turns_per_episode"] == 12
+    assert tuned["episodes_per_family"] == 1
+    assert tuned["attempts_per_case"] == 4
+    assert tuned["temperature"] == 0.7
+    # And the reading a later GET serves is the same one: the write moved the record
+    # every run is estimated and attempted against, not a copy of it.
+    assert after["tuning"] == tuned
+    assert after["ceilings"]["adaptive"]["turns_per_episode"] == 12
+    assert after["ceilings"]["scored"]["attempts_per_case"] == 4
+
+
+def test_the_attacker_model_set_here_is_the_one_the_report_will_name() -> None:
+    """One call sets the client and the identifier, so a report cannot name a model
+    that never ran.
+
+    The pairing `declared_instrument` makes at boot, made again here: the settings
+    block's attacker row and the provenance the artefact carries are read off the
+    same field.
+    """
+    app = create_app(BenchConfig(cases=[]))
+    with TestClient(app) as client:
+        body = client.put(
+            BENCH_TUNING_ROUTE,
+            json={
+                "attacker_model": UNDECLARED_MODEL,
+                "temperature": None,
+                "turns_per_episode": 8,
+                "episodes_per_family": 2,
+                "attempts_per_case": 10,
+            },
+        ).json()
+
+    [attacker] = [
+        model for model in body["models"] if "attacker" in model["instrument"]
+    ]
+    assert attacker["identifier"] == UNDECLARED_MODEL
+    [chosen] = [model for model in body["tuning"]["attacker_models"] if model["chosen"]]
+    assert chosen["identifier"] == UNDECLARED_MODEL
+
+
+def test_a_model_this_console_does_not_offer_is_refused_before_anything_is_built() -> (
+    None
+):
+    """A slug the provider refuses fails at the first call, after the spend is
+    confirmed. So the list is closed and the refusal names what is on it.
+    """
+    app = create_app(BenchConfig(cases=[]))
+    with TestClient(app) as client:
+        answered = client.put(
+            BENCH_TUNING_ROUTE,
+            json={
+                "attacker_model": "openrouter:openai/gpt-9-imaginary",
+                "temperature": None,
+                "turns_per_episode": 8,
+                "episodes_per_family": 2,
+                "attempts_per_case": 10,
+            },
+        )
+        after = client.get(BENCH_SETTINGS_ROUTE).json()
+
+    assert answered.status_code == 422
+    assert "gpt-9-imaginary" in answered.json()["detail"]
+    # Nothing was set: a refused request leaves the bench where it was.
+    declared = DECLARED_ADAPTIVE_BUDGET.turns_per_episode
+    assert after["tuning"]["turns_per_episode"] == declared
+
+
+def test_a_setting_outside_its_range_is_refused_rather_than_clamped() -> None:
+    """A bench that quietly moved a number would run a setting nobody chose and
+    print it in a report as though they had."""
+    app = create_app(BenchConfig(cases=[]))
+    with TestClient(app) as client:
+        answered = client.put(
+            BENCH_TUNING_ROUTE,
+            json={
+                "attacker_model": UNDECLARED_MODEL,
+                "temperature": 9.5,
+                "turns_per_episode": 8,
+                "episodes_per_family": 2,
+                "attempts_per_case": 10,
+            },
+        )
+        after = client.get(BENCH_SETTINGS_ROUTE).json()
+
+    assert answered.status_code == 422
+    assert "temperature=9.5" in answered.json()["detail"]
+    assert after["tuning"]["temperature"] is None
+
+
+def test_the_block_says_a_run_below_the_declared_rule_is_not_a_gate_result() -> None:
+    """`attempts_per_case` is the scored denominator and the block says so.
+
+    The other four settings bound a layer that is scored on nothing; this one moves
+    the number the Wilson interval, the band, monotonicity and the retirement rule
+    are all defined against (ADR-0003). A screen offering it without that sentence
+    would be offering a way to produce a rate that reads like a gate reading.
+    """
+    app = create_app(BenchConfig(cases=[]))
+    with TestClient(app) as client:
+        tuned = client.get(BENCH_SETTINGS_ROUTE).json()["tuning"]
+
+    assert tuned["declared_attempts_per_case"] == DECLARED_RULE.attempts_per_case
+    assert "not a gate result" in tuned["attempts_warning"]
+    assert "n = 30" in tuned["attempts_warning"]
+
+
+def test_the_stand_in_is_not_offered_but_the_current_setting_always_is(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Four options, and a fifth row only when the bench is on something else.
+
+    The stand-in is reachable — the route admits it, so a bench can be put back on
+    test equipment — and it is not a choice beside four models, because an operator
+    who wanted no spend would not be on this screen. What may never happen is a form
+    showing four options while the bench runs a fifth: it would draw the first as
+    selected and be wrong about the instrument.
+    """
+    # The client is built when the model is set, which is the point — a slug the
+    # provider refuses fails before the spend rather than mid-run. That needs a
+    # credential, and a test that needed one would pass on a machine that has it and
+    # fail in CI, which is a test about the environment.
+    monkeypatch.setattr(
+        "backend.api.app.completion_for", lambda spec, temperature=None: _attacking
+    )
+    app = create_app(BenchConfig(cases=[]))
+    with TestClient(app) as client:
+        # This bench declared no attacker, so it is on the stand-in: the row is there
+        # because it is what is *set*, and it is marked as the chosen one.
+        offered = client.get(BENCH_SETTINGS_ROUTE).json()["tuning"]["attacker_models"]
+        [chosen] = [model for model in offered if model["chosen"]]
+        assert chosen["identifier"] == UNDECLARED_MODEL
+
+        # Set one of the four, and the stand-in stops being offered at all.
+        after = client.put(
+            BENCH_TUNING_ROUTE,
+            json={
+                "attacker_model": ATTACKER_MODELS[0][0],
+                "temperature": None,
+                "turns_per_episode": 8,
+                "episodes_per_family": 2,
+                "attempts_per_case": 10,
+            },
+        ).json()["tuning"]["attacker_models"]
+
+    assert [model["identifier"] for model in after] == [
+        identifier for identifier, _ in ATTACKER_MODELS
+    ]
+    assert UNDECLARED_MODEL not in [model["identifier"] for model in after]
+
+
+def _attacking(system_prompt: str, brief: str) -> str:
+    """A stand-in attacker client. Never called: nothing here starts a run."""
+    return "tool: check_canary"
+
+
+def test_a_family_switched_off_is_dropped_and_stated_as_not_run(
+    leakage_case: Case, scope_creep_case: Case
+) -> None:
+    """Not run, and never a rate of zero.
+
+    The gap is the point. A family whose cases are simply absent from a run is a
+    reader guessing which of three answers it was — not applicable, not measurable, or
+    not asked — and only the report can tell them, so the plan carries the reason.
+    """
+    app = create_app(BenchConfig(cases=[leakage_case, scope_creep_case]))
+    with TestClient(app) as client:
+        answered = client.put(
+            BENCH_FAMILIES_ROUTE, json={"families": [str(leakage_case.family)]}
+        )
+        bench = cast(BenchRuns, app.state.bench)
+
+    assert answered.status_code == 200
+    covered = answered.json()["tuning"]["families"]
+    assert {row["family"]: row["covered"] for row in covered}[
+        str(scope_creep_case.family)
+    ] is False
+
+    plan = plan_for(bench.config, note_planted=True)
+    assert [case.id for case in plan.cases] == [leakage_case.id]
+    assert plan.gaps[scope_creep_case.family] is DeclaredGap.FAMILY_SWITCHED_OFF
+    assert "not run" in DeclaredGap.FAMILY_SWITCHED_OFF.stated()
+    assert "not a family that held" in DeclaredGap.FAMILY_SWITCHED_OFF.stated()
+
+
+def test_a_run_covering_no_family_is_refused() -> None:
+    """A run covering nothing attacks nothing and still spends a registration probe.
+
+    Refused rather than accepted as an expensive no-op: the estimate would charge for
+    a probe per target and the report would carry six gaps and no reading.
+    """
+    app = create_app(BenchConfig(cases=[]))
+    with TestClient(app) as client:
+        answered = client.put(BENCH_FAMILIES_ROUTE, json={"families": []})
+        after = client.get(BENCH_SETTINGS_ROUTE).json()["tuning"]["families"]
+
+    assert answered.status_code == 422
+    assert "attacks nothing" in answered.json()["detail"]
+    assert all(row["covered"] for row in after)
+
+
+def test_a_family_this_bench_does_not_have_is_refused_by_name() -> None:
+    """The six are a closed enum, and a typo is not a family switched off."""
+    app = create_app(BenchConfig(cases=[]))
+    with TestClient(app) as client:
+        answered = client.put(
+            BENCH_FAMILIES_ROUTE, json={"families": ["sql_injection"]}
+        )
+
+    assert answered.status_code == 422
+    assert "sql_injection" in answered.json()["detail"]
+    assert "data_leakage" in answered.json()["detail"]

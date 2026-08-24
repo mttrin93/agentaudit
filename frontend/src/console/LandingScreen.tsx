@@ -54,7 +54,15 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 
 import { readFamily } from '../families'
-import { benchArtefacts, benchRuns, type ArtefactList, type RunList } from '../api/bench'
+import {
+  benchArtefacts,
+  benchRuns,
+  benchSettings,
+  coverFamilies,
+  type ArtefactList,
+  type FamilyCovered,
+  type RunList,
+} from '../api/bench'
 import {
   WHAT_THIS_CONSOLE_DOES,
   WHAT_THIS_INSTRUMENT_IS,
@@ -88,6 +96,17 @@ const NO_ARTEFACTS_LIST_YET: HeldArtefacts = { list: null, unavailable: '' }
 export function LandingScreen() {
   const [runs, setRuns] = useState<HeldRuns>(NO_LIST_YET)
   const [signed, setSigned] = useState<HeldArtefacts>(NO_ARTEFACTS_LIST_YET)
+  /*
+   * Which families the next run covers, on its own state like the two above.
+   *
+   * `null` until the bench answers, and the switches are drawn from the bench's answer
+   * rather than from a local copy — so what a reader sees is what the next run will do
+   * and not what this screen last sent. A refusal leaves the switches where they were
+   * and says why: the bench refuses a change while a run is going, which is a state to
+   * wait out rather than an error to work around.
+   */
+  const [families, setFamilies] = useState<FamilyCovered[] | null>(null)
+  const [refused, setRefused] = useState('')
 
   useEffect(() => {
     let current = true
@@ -136,6 +155,41 @@ export function LandingScreen() {
       current = false
     }
   }, [])
+
+  useEffect(() => {
+    let current = true
+    const read = async () => {
+      try {
+        const bench = await benchSettings()
+        if (current) {
+          setFamilies(bench.tuning.families)
+        }
+      } catch {
+        // The switches simply do not draw. A families block that reported a failed
+        // settings read would be this section explaining somebody else's problem.
+        if (current) {
+          setFamilies(null)
+        }
+      }
+    }
+    void read()
+    return () => {
+      current = false
+    }
+  }, [])
+
+  const cover = async (family: string, on: boolean) => {
+    const asked = (families ?? [])
+      .filter((one) => (one.family === family ? on : one.covered))
+      .map((one) => one.family)
+    setRefused('')
+    try {
+      const bench = await coverFamilies(asked)
+      setFamilies(bench.tuning.families)
+    } catch (refusal: unknown) {
+      setRefused(`${refusal}`)
+    }
+  }
 
   return (
     <main className="screen">
@@ -233,20 +287,43 @@ export function LandingScreen() {
       */}
       <section>
         <h2>The families</h2>
+        {refused ? (
+          <div className="citation uncited" role="alert">
+            <h3>Nothing was changed</h3>
+            <p>{refused}</p>
+          </div>
+        ) : null}
         <dl className="said">
           {THE_FAMILIES.map((one) => (
             <div key={one.family}>
               <dt>
-                {readFamily(one.family)}
                 {/*
-                  A switch drawn on and not a switch. These six are the library the
-                  bench ships and every run attacks all of them, so there is nothing
-                  here to turn off — a real control that refused to move would be a
-                  worse lie than a mark that never claimed to be one. `role="img"` with
-                  a label, because it is a picture of a state and not a checkbox: a
-                  keyboard never lands on it and a screen reader reads the words.
+                  The tick box first and the name after it, which is the order a
+                  reader scans: the question this block answers is *which of these
+                  will run*, and a control at the end of the line is one the eye
+                  finds last. A checkbox, so a keyboard lands on it and a screen
+                  reader reads it as what it is, with the family's own name as its
+                  label.
+
+                  Switching one off is not measuring it at zero: the bench drops that
+                  family's cases and its report states the family as *not run*. A
+                  family that was not asked is not a family that held.
                 */}
-                <span className="switch on" role="img" aria-label="on by default" />
+                {families === null ? (
+                  <span className="tick on" role="img" aria-label="on by default" />
+                ) : (
+                  <input
+                    className="tick"
+                    type="checkbox"
+                    checked={
+                      families.find((held) => held.family === one.family)?.covered ??
+                      true
+                    }
+                    aria-label={readFamily(one.family)}
+                    onChange={(event) => void cover(one.family, event.target.checked)}
+                  />
+                )}
+                {readFamily(one.family)}
               </dt>
               <dd>{one.says}</dd>
             </div>

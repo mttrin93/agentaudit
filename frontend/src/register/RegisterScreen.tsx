@@ -68,7 +68,7 @@ import { rememberTheFigures, rememberWhoAttested } from '../run/interrupt'
  * `ATTESTATION_STATEMENTS` inside it, so a statement added to the record appears on
  * this walk without anything here being touched.
  */
-const STEPS = ['target', 'plant', 'attest', 'tools', 'register'] as const
+const STEPS = ['target', 'plant', 'tools'] as const
 
 type Step = (typeof STEPS)[number]
 
@@ -84,22 +84,37 @@ type Step = (typeof STEPS)[number]
 const STEP_TITLES: Record<Step, string> = {
   target: 'The endpoint',
   plant: 'Plant the nonce',
-  attest: 'The three attestations',
   tools: 'What the bench will see',
-  register: 'Register',
 }
+
+/*
+ * Two steps fewer, and one of them was a page and not a declaration.
+ *
+ * **The review step is gone.** It restated what the four screens before it had just
+ * been told and offered a button. What it was standing in front of is not the spend:
+ * registration records the attestation and plans the run, and the halt in front of the
+ * estimate is on the next screen and is where nothing has been sent yet (ADR-0007).
+ * The submit moved onto the last step of the walk.
+ *
+ * **The three attestations are no longer their own page**, and they are still asked.
+ * They sit at the foot of the endpoint step, where the URL they are about is: the page
+ * is gone, the walk is two screens shorter, and nothing is asserted on an operator's
+ * behalf. The alternative — a console that sent three statements nobody made — is the
+ * one thing ADR-0007 is written to prevent, and the honest version of removing the
+ * *record* is a change to what every artefact this bench signs asserts rather than a
+ * change to a walk.
+ */
 
 const PLANT_STEP = STEPS.indexOf('plant')
 
 /*
  * What a target that answers in text only costs, on the summary and not on the answer.
  *
- * It was on both: under the *No* radio, where the paragraph over the question had
- * just named the two families and said they report not measurable, and again in the
- * summary. On the answer it was the sentence above it, repeated inside the option.
- * The summary keeps it because a row reading *not visible* and nothing else states a
- * declaration without its consequence, and names the families rather than pointing at
- * them — there is nothing above that row for *those families* to refer to.
+ * Back under the *No* radio, and only there. It was on the review step, which is
+ * gone with the rest of that page — and a declaration whose consequence is stated
+ * nowhere is one an operator makes without knowing what it costs. It names the two
+ * families rather than pointing at them, because there is nothing beside it for
+ * *those families* to refer to.
  */
 const TOOL_TRACE_NOT_MEASURABLE =
   `${TOOL_TRACE_FAMILIES.join(' and ')} will report not measurable, and the ` +
@@ -302,13 +317,18 @@ export function RegisterScreen() {
       ) : null}
 
       {current === 'target' ? (
-        <TargetStep
-          declarations={declarations}
-          declare={declare}
-          kinds={kinds}
-          notes={notes}
-          unpaired={unpaired}
-        />
+        <>
+          <TargetStep
+            declarations={declarations}
+            declare={declare}
+            kinds={kinds}
+            notes={notes}
+            unpaired={unpaired}
+          />
+          {/* The three statements, at the foot of the screen that names the endpoint
+              they are about rather than on a page of their own. */}
+          <AttestationStep declarations={declarations} declare={declare} />
+        </>
       ) : null}
       {current === 'plant' ? (
         <PlantStep
@@ -319,21 +339,15 @@ export function RegisterScreen() {
           busy={busy}
         />
       ) : null}
-      {current === 'attest' ? (
-        <AttestationStep declarations={declarations} declare={declare} />
-      ) : null}
       {current === 'tools' ? (
         <ToolVisibilityStep declarations={declarations} declare={declare} />
-      ) : null}
-      {current === 'register' ? (
-        <RegisterStep declarations={declarations} request={request} />
       ) : null}
 
       <footer className="walk">
         <button type="button" onClick={() => setStep(step - 1)} disabled={step === 0}>
           Back
         </button>
-        {current === 'register' ? (
+        {current === STEPS[STEPS.length - 1] ? (
           <button
             type="button"
             className="primary"
@@ -374,10 +388,11 @@ function canLeave(step: Step, declarations: Declarations): boolean {
       declarations.proof_waived
     )
   }
-  if (step === 'attest') {
-    // All three, and the name they are recorded against. One page rather than three
-    // does not make any of them optional: what held the walk per statement now holds
-    // it for the set, and `registrationRequest` still names the ones left unmade.
+  if (step === 'target') {
+    // The three statements are on this step now, and they hold it exactly as they
+    // held their own page: all three, and the name they are recorded against. A
+    // screen that let the walk past them would be a console asserting them itself,
+    // and `registrationRequest` still names the ones left unmade.
     return (
       ATTESTATION_STATEMENTS.every(
         (statement) => declarations.attested[statement.field],
@@ -930,6 +945,12 @@ function ToolVisibilityStep({ declarations, declare }: StepProps) {
           />
           <span>No — it answers in text only.</span>
         </label>
+        {declarations.exposes_tool_calls === false ? (
+          // The consequence, back under the answer that carries it. It used to live on
+          // the review step, which is gone: a declaration whose cost is stated nowhere
+          // is a declaration an operator makes without knowing what it buys.
+          <p className="aside">{TOOL_TRACE_NOT_MEASURABLE}</p>
+        ) : null}
       </fieldset>
       {declarations.exposes_tool_calls === true ? (
         <label>
@@ -949,64 +970,3 @@ function ToolVisibilityStep({ declarations, declare }: StepProps) {
   )
 }
 
-interface RegisterProps {
-  declarations: Declarations
-  request: ReturnType<typeof registrationRequest>
-}
-
-function RegisterStep({ declarations, request }: RegisterProps) {
-  return (
-    <section>
-      {/*
-        Three verbs and the promise. *Against a hash of the endpoint* went: how the
-        attestation is bound to the URL is a fact about the record, and this paragraph
-        is here to say what pressing the button does. The second sentence stays as it
-        is — it is the one thing an operator needs before pressing it.
-      */}
-      <p>
-        Registering records the attestation, plans the run and halts it in front of
-        its cost. Nothing reaches your endpoint until you answer that halt on the
-        next screen.
-      </p>
-      <dl className="review">
-        <dt>Target</dt>
-        <dd>
-          {declarations.name || '—'} at {declarations.url || '—'}
-        </dd>
-        <dt>Attested by</dt>
-        <dd>{declarations.identity || '—'}</dd>
-        <dt>Nonce</dt>
-        <dd>
-          {declarations.nonce || '—'}
-          {declarations.nonce_planted
-            ? ' — declared planted'
-            : ' — not planted, control declared and not proved'}
-        </dd>
-        <dt>Tool calls</dt>
-        <dd>
-          {declarations.exposes_tool_calls === null
-            ? 'not declared'
-            : declarations.exposes_tool_calls
-              ? `visible, ${declaredTools(declarations).length} tools declared`
-              : `not visible — ${TOOL_TRACE_NOT_MEASURABLE}`}
-        </dd>
-        <dt>Price per call</dt>
-        <dd>
-          {declarations.price_per_call
-            ? `${declarations.price_per_call} ${declarations.currency}`
-            : 'not priced'}
-        </dd>
-      </dl>
-      {request.kind === 'blocked' ? (
-        <div className="blocked">
-          <h3>Not yet, and this is what is missing</h3>
-          <ul>
-            {request.missing.map((missing) => (
-              <li key={missing}>{missing}</li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
-    </section>
-  )
-}

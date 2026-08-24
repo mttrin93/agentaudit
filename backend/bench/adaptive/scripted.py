@@ -17,6 +17,14 @@ readable without knowing which instrument produced it.
 It is not clever and is not meant to be. It reads precedent once, probes, looks
 whenever it has just probed, spends one turn on the trace, and proposes the route
 when the bench tells it the objective is met.
+
+**It reads the reading off whichever tool reported it.** Every probe is verified by
+the harness now, so a probe's own result carries the same word `check_canary` would
+have answered — and a stand-in that only watched `check_canary` would propose
+nothing on a run where the break was announced by the probe that caused it. It
+matches the delimited form rather than the bare word, because the entry it reads
+also quotes the probe, and a probe is attacker-composed text that could contain
+anything.
 """
 
 from __future__ import annotations
@@ -61,7 +69,7 @@ def scripted_attacker(system_prompt: str, brief: str) -> str:
     entries = _entries(brief)
     last = entries[-1] if entries else ""
 
-    if last.startswith(AttackerTool.CHECK_CANARY) and str(Verdict.SUCCEEDED) in last:
+    if f"— {Verdict.SUCCEEDED} —" in last:
         return f"tool: {AttackerTool.PROPOSE_CASE}\nargument: {DESCRIPTION}"
     if not entries:
         return f"tool: {AttackerTool.RETRIEVE_PRECEDENT}"

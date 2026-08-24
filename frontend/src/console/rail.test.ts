@@ -66,15 +66,19 @@ describe('the paths the shell may not move', () => {
     expect(reportPath('run-1')).toBe('/runs/run-1/report')
   })
 
-  it('keeps the gate screen off the prefix the API answers on', () => {
+  it('serves the gate screen at its own path and no longer offers it', () => {
     // `/bench` is the bench's own HTTP prefix and the dev server proxies it, so a
     // screen at `/bench/gate` would be a document request handed to the API — the
     // console's gate screen is at `/gate` and this is where a move to the shadowing
-    // path fails. It is also the console's only new standing destination since the
-    // shell, so the literal is pinned here with the three that may not move.
+    // path fails. The literal stays pinned because a bookmark to it still works.
     expect(GATE_PATH).toBe('/gate')
     expect(GATE_PATH.startsWith('/bench')).toBe(false)
-    expect(railView(GATE_PATH, null).destinations.map((d) => d.path)).toContain(
+
+    // And it is off the rail. A gate run is this bench measuring its own instrument
+    // against its own reference agents — bench-development work with a script and a
+    // document of its own — and the console is for running the two layers against
+    // somebody's target and producing a report. The routes behind it are untouched.
+    expect(railView(GATE_PATH, null).destinations.map((d) => d.path)).not.toContain(
       GATE_PATH,
     )
   })

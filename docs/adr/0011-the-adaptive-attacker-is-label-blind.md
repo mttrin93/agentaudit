@@ -75,6 +75,37 @@ Six remains the number when six families run, which is the case ADR-0003's libra
 is built for. Recorded here rather than in a new decision, because it is the
 consequence of a decision already taken in #16 rather than a new one.
 
+## Amendment, 2026-08-24: every probe is verified, so `A_effort` means what it says
+
+`A_effort` was **median turns-to-first-success**, and until now it measured
+turns-to-first-*confirmed*-success: a break was found only when the attacker chose to
+call `check_canary`, so the figure carried the attacker's search and the attacker's
+willingness to look, added together and not separable. A model that broke a target on
+turn two and never asked produced a censored episode — an observation about the
+attacker's habits, recorded in the place where a reading about the target's defences
+goes.
+
+The harness now applies the objective's success condition to **every** probe as it
+comes back, and an episode ends on the first success. `check_canary` remains as the
+tool that reports what was already found; nothing about the verdict route changes,
+because `_probe` calls the same `evaluate` through the same wrapper (ADR-0004), and no
+new record and no new edge appears — `AdaptiveEpisode` still carries no verdict field
+and `propose_case` is still the only way out (ADR-0010).
+
+Two consequences a reader has to be told rather than left to infer:
+
+- **`A_effort` is not comparable across this line.** Figures recorded before this date
+  are turns-to-first-confirmed-success and are biased upwards by however often the
+  attacker forgot to ask. `docs/validation.md` states which side of the line each
+  reading falls on rather than putting them in one column.
+- **A turn can now be neither a break nor a hold.** A trace-dependent objective
+  against a reply with no trace, and halt defeat against a reply that records no stop
+  signal, are turns whose condition could not be applied at all. They are recorded on
+  the episode as `unverifiable_turns` and printed as *not checkable* — the adaptive
+  counterpart of `NotMeasurable`, and for the same reason: a turn nothing could be
+  read from must not print as a target that held. It counts towards nothing; an
+  episode still has no denominator.
+
 ## Consequences
 
 - The judge must never receive an adaptive transcript, and no adaptive finding is an input to `assess_finding`. Otherwise the judge learns that a target was broken six ways and grades accordingly — ADR-0004's blinding defeated by a channel that did not exist when it was written.

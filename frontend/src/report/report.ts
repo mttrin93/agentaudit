@@ -327,6 +327,37 @@ export interface ProbeReading {
   confirmedTheBreak: boolean
   /** What the mark means, in words, so no colour has to carry it alone. */
   marked: string
+  /** What the target said back, in full, and the empty string for a reply nothing read. */
+  reply: string
+  /**
+   * What the target did on this turn, or the empty string from a target that returns
+   * no trace. Two of the four deterministic families are decided on this and nothing
+   * else, so it is drawn beside the reply rather than a screen away.
+   */
+  toolTrace: string
+  /**
+   * What this turn was found to be, in the bench's own words: broke it, no break, or
+   * not checkable. Carried rather than derived here — the reading is the bench's.
+   */
+  reading: string
+}
+
+/**
+ * Which probe broke one family, or the stated fact that nothing did.
+ *
+ * The question the route block is opened for, answered before the sequence a reader
+ * would otherwise have to read end to end. A position and never a count: `at` names an
+ * episode and a turn, and there is no field on this reading a total could live in.
+ */
+export interface FamilyBreakReading {
+  family: string
+  broke: boolean
+  /** `episode 2, turn 9` — where it first worked, or the empty string if it never did. */
+  at: string
+  /** The probe that did it, or the empty string. */
+  probe: string
+  /** The row in words: what broke it, or which silence this is. */
+  stated: string
 }
 
 /** One episode, in the order it ran, with its probes under it. */
@@ -364,6 +395,8 @@ export type RouteReading =
   | {
       kind: 'held'
       note: string
+      /** One row per family that opened an episode, before the sequence itself. */
+      broke: FamilyBreakReading[]
       episodes: EpisodeRouteReading[]
     }
   | { kind: 'absent'; note: string; stated: string }
@@ -389,6 +422,16 @@ export function routeReading(served: RunEpisodes): RouteReading {
   return {
     kind: 'held',
     note: NOT_PART_OF_THE_ARTEFACT,
+    broke: served.broke.map((family) => ({
+      family: family.family,
+      broke: family.broke,
+      at:
+        family.episode === null || family.turn === null
+          ? ''
+          : `episode ${family.episode}, turn ${family.turn}`,
+      probe: family.probe ?? '',
+      stated: family.stated,
+    })),
     episodes: served.episodes.map((episode) => ({
       family: episode.family,
       outcome: episode.outcome,
@@ -402,6 +445,12 @@ export function routeReading(served: RunEpisodes): RouteReading {
         marked: probe.confirmed_the_break
           ? THE_BREAK_WAS_CONFIRMED_AFTER_THIS_PROBE
           : '',
+        reply: probe.reply,
+        // Empty string rather than null, so the component has one absence to draw
+        // and not two. Which absence it was is the bench's sentence to make, and it
+        // makes it in `reading`.
+        toolTrace: probe.tool_trace ?? '',
+        reading: probe.reading,
       })),
     })),
   }

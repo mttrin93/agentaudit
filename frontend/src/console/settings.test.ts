@@ -132,6 +132,51 @@ const CONFIGURED: BenchSettings = {
       'each layer’s ceiling is enforced against that layer’s own counter, so a layer ' +
       'with room left cannot spend the other’s unspent allowance.',
   },
+  tuning: {
+    attacker_models: [
+      {
+        identifier: 'openrouter:openai/gpt-4.1-mini',
+        decides: 'cheap, and the baseline earlier readings were taken with.',
+        chosen: true,
+      },
+      {
+        identifier: 'openrouter:anthropic/claude-haiku-4.5',
+        decides: 'cheap, and better at following a multi-step brief.',
+        chosen: false,
+      },
+      {
+        identifier: 'not declared',
+        decides: 'the deterministic stand-in: eight fixed probes, no spend.',
+        chosen: false,
+      },
+    ],
+    temperature: null,
+    temperature_bounds: { low: 0, high: 1 },
+    temperature_absent: 'no temperature declared — the provider’s own default.',
+    turns_per_episode: 5,
+    turns_bounds: { low: 1, high: 40 },
+    episodes_per_family: 3,
+    episodes_bounds: { low: 1, high: 10 },
+    attempts_per_case: 7,
+    attempts_bounds: { low: 1, high: 50 },
+    attempts_per_family: 21,
+    declared_attempts_per_case: 10,
+    attempts_warning:
+      'attempts per case is the scored denominator: the gate is decided at the ' +
+      'declared rule, where n = 30 per family, and a run at another number is not a ' +
+      'gate result.',
+    families: [
+      { family: 'indirect_prompt_injection', covered: true },
+      { family: 'scope_creep', covered: false },
+    ],
+    families_off_statement:
+      'a family switched off is not run: its cases are not attempted, no episode ' +
+      'opens against it, and the report states it as not run rather than as a rate ' +
+      'of zero.',
+    statement:
+      'these are the declared inputs of a run, printed in the report of every run ' +
+      'made under them, and a change is refused while a run is going.',
+  },
 }
 
 /** The same bench, declaring that it does not sign and naming no model. */
@@ -237,6 +282,10 @@ describe('the order the blocks are read in', () => {
         'agents',
         'models',
         'ceilings',
+        // Last, and the only block that changes anything: the declared inputs of
+        // the next run (ADR-0025). Last because everything above it is what this
+        // bench *is*, and a form above them would read as the screen's subject.
+        'tuning',
       ])
     }
   })
@@ -414,8 +463,14 @@ describe('each layer’s ceiling', () => {
     // sentence carries one either. The fixture's numbers are chosen so that every one
     // of these sums is absent, which is what makes this fail on a total rather than
     // pass by coincidence.
-    const numbers = new Set(everyNumber(blocks))
-    const said = everyString(blocks).join(' ')
+    // Read over the blocks that *state* figures and not over the form's own state:
+    // `tuning` restates both layers' settings side by side, because that is what
+    // setting them requires, and its numbers are the settings themselves rather
+    // than figures read off a run. The field-name check below still covers it, so a
+    // *named* blend anywhere still fails.
+    const stating = blocks.filter((one) => one.kind !== 'tuning')
+    const numbers = new Set(everyNumber(stating))
+    const said = everyString(stating).join(' ')
     for (const here of ceiling(blocks, 'scored').figures) {
       for (const there of ceiling(blocks, 'adaptive').figures) {
         const crossed = here.value + there.value
@@ -464,44 +519,83 @@ describe('each layer’s ceiling', () => {
 })
 
 describe('nothing on this screen changes a setting', () => {
-  it('offers no handler, no action-shaped field, and no control in the component', () => {
+  it('changes the declared inputs of a run and nothing else on the bench', () => {
     for (const bench of [CONFIGURED, UNSIGNING]) {
       const blocks = settingsScreen(bench)
 
-      // Every leaf is a string, a boolean or a declared number. There is nowhere in
-      // this value for a callback to live, which is what "no control" means at the
-      // seam this screen is tested at: a control needs a handler and a handler needs
-      // a field.
-      for (const leaf of everyOtherLeaf(blocks)) {
+      // Every leaf of every *stating* block is a string, a boolean or a declared
+      // number: there is nowhere in those values for a callback to live, which is
+      // what "states and changes nothing" means at the seam this screen is tested
+      // at. The tuning block is the exception and it is one block (ADR-0025).
+      const stating = blocks.filter((one) => one.kind !== 'tuning')
+      for (const leaf of everyOtherLeaf(stating)) {
         expect(['boolean', 'number']).toContain(typeof leaf)
       }
-      // And no field named for something that happens to a setting. Rotation stays in
-      // the environment and configuration stays on the command line.
+      expect(blocks.filter((one) => one.kind === 'tuning')).toHaveLength(1)
+
+      // And no field anywhere named for something that happens to a *key* or to the
+      // library. Rotation stays in the environment, because a key made on demand
+      // signs every report with one nobody published (ADR-0017, ADR-0020), and the
+      // library is what was mounted.
       for (const field of fieldsOf(blocks)) {
-        expect(field).not.toMatch(
-          /start|launch|submit|click|post|rotate|update|save|write|edit|delete/i,
-        )
+        expect(field).not.toMatch(/rotate|key|sign|library|retire|cite/i)
       }
     }
 
-    // The component itself, read rather than rendered. These screens are driven by
-    // hand, so the absence of the affordance is asserted over the source: no button,
-    // no form, no handler, no write of any kind, and nothing imported that could post.
+    // The component itself, read rather than rendered. The form is admitted; what is
+    // asserted is that it is the *only* write and that it cannot reach anything else
+    // on this bench — no run started, no interrupt answered, no nonce issued, no gate
+    // run, and no fetch of its own outside the two named calls.
     expect(component).toContain('export function SettingsScreen')
-    for (const affordance of [
-      '<button',
-      '<form',
-      '<input',
-      '<select',
-      'onClick',
-      'onSubmit',
-      'onChange',
-      'method:',
-      'fetch(',
+    expect(component).toContain('tuneBench')
+    for (const beyond of [
       'startRun',
       'answerTheInterrupt',
+      'issueNonce',
+      'startGateRun',
+      'fetch(',
+      'method:',
     ]) {
-      expect(component).not.toContain(affordance)
+      expect(component).not.toContain(beyond)
     }
+  })
+
+  it('sends the five settings together, on change, with no confirm step', () => {
+    // A caller that could set the turn budget without restating the model would let
+    // a bench name one instrument in a report while another attacked, which is why
+    // the request takes all five. Asserted over the source, because what this
+    // guards is the shape of the call and not what the screen looks like.
+    const call = component.slice(component.indexOf('await tuneBench({'))
+    // No button and no submit: these are the settings the *next* run starts with,
+    // and that run has its own attestation and its own halt in front of its own
+    // estimate (ADR-0007). Nothing on this screen spends anything.
+    expect(component).not.toContain('<button')
+    expect(component).not.toContain('onSubmit')
+    for (const field of [
+      'attacker_model:',
+      'temperature:',
+      'turns_per_episode:',
+      'episodes_per_family:',
+      'attempts_per_case:',
+    ]) {
+      expect(call).toContain(field)
+    }
+    // The empty box is null and not zero: *no temperature declared* and *sampled at
+    // zero* are two different declarations.
+    expect(call).toContain("=== '' ? null")
+  })
+
+  it('draws the bench’s own caveat about the scored denominator', () => {
+    const tuning = block(settingsScreen(CONFIGURED), 'tuning')
+
+    // Carried, never paraphrased: four of the five settings bound a layer that is
+    // scored on nothing, and this one moves the number the gate is decided at.
+    expect(tuning.warning).toBe(CONFIGURED.tuning.attempts_warning)
+    expect(tuning.warning).toContain('not a gate result')
+    expect(component).toContain('block.warning')
+    // And the n both figures are read at is beside it, at the current setting and at
+    // the declared rule, so a reader sees at a glance which one this bench is on.
+    expect(tuning.attemptsPerFamily).toContain('21')
+    expect(tuning.declaredAttemptsPerCase).toContain('10')
   })
 })

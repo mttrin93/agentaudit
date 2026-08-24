@@ -169,6 +169,7 @@ class DeclaredGap(StrEnum):
     NO_ADJUDICATOR = "no_adjudicator"
     NOTE_NOT_PLANTED = "note_not_planted"
     NONCE_NOT_PLANTED = "nonce_not_planted"
+    FAMILY_SWITCHED_OFF = "family_switched_off"
 
     def stated(self) -> str:
         match self:
@@ -193,6 +194,32 @@ class DeclaredGap(StrEnum):
                     "nowhere in the target cannot leak, so every attempt would "
                     "report resisted against an attack that was never possible"
                 )
+            case DeclaredGap.FAMILY_SWITCHED_OFF:
+                return (
+                    "not run: this family was switched off for this bench, so no "
+                    "case in it was attempted and no episode opened against it. "
+                    "Nothing here is a reading about the target — a family that was "
+                    "not asked is not a family that held"
+                )
+
+
+@dataclass(frozen=True)
+class RunsInFlight(RuntimeError):
+    """An instrument was changed while a run was still going, and was refused.
+
+    Named rather than swallowed, and it names the runs: an operator told *not now*
+    with no way to see what is holding the lock has to guess whether to wait or to
+    decline something.
+    """
+
+    def __init__(self, run_ids: Sequence[str]) -> None:
+        super().__init__(
+            f"{len(run_ids)} run(s) still going — {', '.join(run_ids)}. A run "
+            "awaiting approval was shown an estimate built from the settings it was "
+            "declared with, and changing them now would make that confirmation a "
+            "statement about a different run (ADR-0007). Let them finish, or decline "
+            "them, and set this again"
+        )
 
 
 @dataclass(frozen=True)
@@ -248,6 +275,24 @@ class BenchConfig:
     (`report.py`).
     """
 
+    families: frozenset[Family] = frozenset(Family)
+    """The failure families the next run covers. Every one of them, by default.
+
+    A declared input like the five in `Instrumented`, and the one an operator sets
+    per family rather than per number: a run that covers four families is a cheaper
+    run and a narrower reading, and both of those are the operator's to choose.
+
+    **A family switched off is *not run*, never measured at zero.** `plan_for` drops
+    its cases and records `DeclaredGap.FAMILY_SWITCHED_OFF`, so the report says the
+    family was not attempted — which is the same discipline `NotMeasurable` keeps for
+    a precondition and `OperatorGap` keeps for an unplanted note. A rate of zero over
+    no attempts is the reading this type exists to make unavailable (ADR-0004).
+
+    It reaches the adaptive layer without a second mechanism: an episode needs a
+    deterministic case for its family, and a family whose cases are gone has none, so
+    the layer opens no episode against it (`adaptive/layer.objectives_for`).
+    """
+
     approval_wait_seconds: float = APPROVAL_WAIT_SECONDS
 
 
@@ -298,6 +343,16 @@ def plan_for(
     # never planted it is a run whose leakage cases go after a string that is
     # nowhere in the target. Thirty attempts would come back resisted and the
     # report would read as a defence that was never tested.
+    # The operator's own choice, and it is a gap like the others rather than a
+    # silent narrowing: a family they switched off has to read as *not run* on the
+    # report, because a family absent with no reason beside it is a reader guessing
+    # which of three answers it was.
+    off = [family for family in Family if family not in config.families]
+    for family in off:
+        if any(case.family is family for case in cases):
+            gaps[family] = DeclaredGap.FAMILY_SWITCHED_OFF
+    cases = [case for case in cases if case.family in config.families]
+
     if not nonce_planted:
         leakage = Family.DATA_LEAKAGE
         if any(case.family is leakage for case in cases):
@@ -512,6 +567,46 @@ class PendingApproval:
         return self._payload
 
 
+@dataclass(frozen=True)
+class Instrumented:
+    """The declared inputs of a run that the console may set, as one statement.
+
+    Five numbers and a model identifier, and every one of them changes what a run
+    *measured* rather than how it looks. That is why they arrive together: a caller
+    that could set the turn budget without restating the attacker model could leave
+    a bench whose report names one instrument and whose episodes were run by
+    another, and the four settings of a run's provenance exist to make exactly that
+    unreadable (ADR-0004, ADR-0013).
+
+    **`attempts_per_case` is in a different class from the other four and the
+    difference is not cosmetic.** The other four bound a layer that is scored on
+    nothing (ADR-0010): turning `T` up buys the attacker more rope and moves no rate,
+    no band, no `D` and no gate decision. `attempts_per_case` is the scored
+    denominator — ADR-0003 sets it so that `n = 30` per family, which is what the
+    Wilson interval, the band, monotonicity and the retirement rule are all defined
+    against. A run at a lower number is a real run with real rates and it is **not a
+    gate result**: `GateRule` travels on `TargetRun` and prints beside every figure,
+    so what such a run reports is honest — but nothing may compare it to a reading
+    taken at the declared rule, and `scripts/gate.py` stays on `DECLARED_RULE` and
+    takes no setting from here.
+    """
+
+    attacker_model: str
+    """`<provider>:<model>`, or `UNDECLARED_MODEL` for the deterministic stand-in."""
+
+    temperature: float | None
+    """The attacker's sampling temperature, or `None` for the provider's own default.
+
+    `None` and a number are different declarations: one says *whatever the provider
+    does*, and a bench that wrote its own number into that field would be naming a
+    setting nobody chose.
+    """
+
+    turns_per_episode: int
+    episodes_per_family: int
+    attempts_per_case: int
+
+
 class BenchRuns:
     """Every run this process has started, and every nonce it has issued.
 
@@ -542,6 +637,73 @@ class BenchRuns:
         nowhere else: the gate run this bench cites (ADR-0023).
         """
         return self._config
+
+    def instrument(self, declared: Instrumented, attacker: AttackerCompletion) -> None:
+        """Set the declared inputs of every run this bench starts from now on.
+
+        The second named writer on `BenchConfig`, and it works the way the first one
+        does: `replace` under the lock, because the record is frozen and a run that
+        has already built its payload keeps the instruments it was made with.
+
+        **A run in flight is not re-instrumented, and the caller is refused rather
+        than served.** A run awaiting approval has been shown an estimate built from
+        the budget it was declared with, and ADR-0007's whole mechanism is that
+        nothing exceeds what a human confirmed — so a turn budget raised while that
+        halt is open would make the confirmation a statement about a run that is not
+        the one that ran. `RunsInFlight` names the runs so the operator can wait for
+        them or decline them rather than guess.
+
+        The attacker is passed in already built rather than constructed here: the
+        identifier that goes into `report.models.attacking` and the client that will
+        attack have to come from one call, or a bench can end up naming a model that
+        never ran (`app.declared_instrument` makes the same pairing at boot).
+        """
+        with self._lock:
+            in_flight = [
+                run_id
+                for run_id, record in self._runs.items()
+                if record.status.in_flight
+            ]
+            if in_flight:
+                raise RunsInFlight(in_flight)
+            self._config = replace(
+                self._config,
+                attacker=attacker,
+                rule=replace(
+                    self._config.rule, attempts_per_case=declared.attempts_per_case
+                ),
+                adaptive=replace(
+                    self._config.adaptive,
+                    turns_per_episode=declared.turns_per_episode,
+                    episodes_per_family=declared.episodes_per_family,
+                ),
+                report=replace(
+                    self._config.report,
+                    models=replace(
+                        self._config.report.models,
+                        attacking=declared.attacker_model,
+                        attacking_temperature=declared.temperature,
+                    ),
+                ),
+            )
+
+    def cover(self, families: frozenset[Family]) -> None:
+        """Set the families the next run covers. The third named writer, same lock.
+
+        Refused while a run is going for the reason `instrument` is: a run awaiting
+        approval was shown an estimate built from the families it was declared with,
+        and narrowing them under that halt would make the confirmation a statement
+        about a different run (ADR-0007).
+        """
+        with self._lock:
+            in_flight = [
+                run_id
+                for run_id, record in self._runs.items()
+                if record.status.in_flight
+            ]
+            if in_flight:
+                raise RunsInFlight(in_flight)
+            self._config = replace(self._config, families=families)
 
     def cite(self, citation: GateCitation) -> None:
         """Start citing this gate run, in this process, from now on.
@@ -622,7 +784,7 @@ class BenchRuns:
         this line was authorised by a record that exists.
 
         **`nonce_planted` and `echo_waived` are two declarations and this is the one
-        place they meet** (ADR-0024). The first decides whether the leakage family is
+        place they meet** (ADR-0025). The first decides whether the leakage family is
         measurable, because the canary's presence is what makes it so; the second
         decides whether a missing echo stops the run. A target that planted the value
         and will not repeat it on request is the case the second exists for, and it
@@ -659,7 +821,7 @@ class BenchRuns:
             # about: that this run started without the proof. `nonce_planted` says
             # the canary is absent, so nothing could echo; `echo_waived` says it is
             # present and will not be repeated on request. Two reasons, one
-            # consequence, and the record carries the consequence (ADR-0024).
+            # consequence, and the record carries the consequence (ADR-0025).
             proof_waived=echo_waived or not nonce_planted,
             plan=plan,
             budget=budget,

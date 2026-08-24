@@ -79,10 +79,12 @@ from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
 
 from backend.api.app import (
+    BENCH_FAMILIES_ROUTE,
     BENCH_GATE_RECORD_ROUTE,
     BENCH_GATE_ROUTE,
     BENCH_NOTES_ROUTE,
     BENCH_SETTINGS_ROUTE,
+    BENCH_TUNING_ROUTE,
     GATE_RUN_APPROVAL_ROUTE,
     GATE_RUN_ROUTE,
     GATE_RUNS_ROUTE,
@@ -336,7 +338,7 @@ def test_this_route_reads_and_the_one_that_starts_a_gate_run_is_elsewhere() -> N
 
 
 def test_nothing_under_the_bench_prefix_does_anything_but_read() -> None:
-    """`/bench` is the instrument's own prefix, and it is read-only.
+    """`/bench` reads, apart from the one route that sets a run's declared inputs.
 
     The assertion above is about the word *gate* in a path, and a route called
     `/bench/validate` would walk straight past it. This one is about the prefix: the
@@ -355,9 +357,12 @@ def test_nothing_under_the_bench_prefix_does_anything_but_read() -> None:
 
     **ADR-0021 did not weaken this one.** A gate run can now be started over HTTP,
     and it is started at `POST /gate-runs` — a route whose path says plainly that it
-    is not a read. Nothing moved under `/bench` to do it, and the second assertion
-    below says so from the other end: the writes on this bench are the five that are
-    named, and two of them are the gate-run family's.
+    is not a read. Nothing moved under `/bench` to do it.
+
+    **ADR-0025 admitted exactly one write here**, and the set below is how narrow it
+    is: the declared inputs of the next run, printed in the provenance of every run
+    made under them. A gate run is still not one of them — it spends money and
+    rewrites the case library, and it stays at its own `POST`.
     """
     app = create_app(BenchConfig(cases=[], report=ReportConfig(gate=CITED)))
     under_bench = {
@@ -373,6 +378,8 @@ def test_nothing_under_the_bench_prefix_does_anything_but_read() -> None:
         (BENCH_GATE_RECORD_ROUTE, "GET"),
         (BENCH_NOTES_ROUTE, "GET"),
         (BENCH_SETTINGS_ROUTE, "GET"),
+        (BENCH_TUNING_ROUTE, "PUT"),
+        (BENCH_FAMILIES_ROUTE, "PUT"),
     }
 
     # And the writes on this bench are the five that are named. Two of them start
@@ -392,6 +399,8 @@ def test_nothing_under_the_bench_prefix_does_anything_but_read() -> None:
         ("/runs/{run_id}/approval", "POST"),
         (GATE_RUNS_ROUTE, "POST"),
         (GATE_RUN_APPROVAL_ROUTE, "POST"),
+        (BENCH_TUNING_ROUTE, "PUT"),
+        (BENCH_FAMILIES_ROUTE, "PUT"),
     }
 
 

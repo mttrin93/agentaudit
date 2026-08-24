@@ -675,7 +675,7 @@ def _adjudicating(system_prompt: str, message: str) -> str:
     return "resisted"
 
 
-def _instruments(spec: str) -> Completion:
+def _instruments(spec: str, temperature: float | None = None) -> Completion:
     """The bench's two instruments, told apart by the string they were declared by.
 
     The same arrangement as `test_gate.py`'s stand-in and for the same reason: one

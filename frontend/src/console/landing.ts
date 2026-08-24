@@ -58,7 +58,7 @@
 
 import type { GateCitation } from '../api/bench'
 
-import { ARTEFACTS_PATH, GATE_PATH, REGISTER_PATH } from './rail'
+import { ARTEFACTS_PATH, REGISTER_PATH } from './rail'
 
 export const WHAT_THIS_INSTRUMENT_IS =
   'AgentAudit attacks an AI agent you own across six families of failure, ten ' +
@@ -106,16 +106,6 @@ export const WHAT_THIS_CONSOLE_DOES: readonly ConsoleDoes[] = [
       'halt.',
     act: 'Register',
     lead: true,
-  },
-  {
-    path: GATE_PATH,
-    name: 'Run the gate',
-    does:
-      'The whole live library against all three reference agents, ten attempts per ' +
-      'case. It can fail, and a failure is a correct outcome. It writes D back onto ' +
-      'every case record it reads.',
-    act: 'Open the gate',
-    lead: false,
   },
   {
     path: ARTEFACTS_PATH,

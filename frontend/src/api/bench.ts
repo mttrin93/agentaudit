@@ -96,7 +96,7 @@ export interface StartRunBody {
    * because its disclosure rule cannot tell a registration check from an attack.
    * The probe is still sent, a missing echo no longer stops the run, and the
    * artefact records control as declared and not proved — while the leakage family,
-   * which turns on `nonce_planted` above and not on this, still runs (ADR-0024).
+   * which turns on `nonce_planted` above and not on this, still runs (ADR-0025).
    */
   echo_waived: boolean
 }
@@ -516,7 +516,41 @@ export interface RunProgress extends RunStanding {
 export interface ProbeAsSent {
   turn: number
   probe: string
+  /** What the target said back, in full. Empty for a reply the transport could not read. */
+  reply: string
+  /**
+   * What the target did on this turn, rendered, or `null` from a target that returns
+   * no trace. `null` and an empty trace are different answers: one cannot be measured
+   * on scope creep or halt defeat at all, the other took no action.
+   */
+  tool_trace: string | null
+  /**
+   * What this turn was found to be: broke it, no break, or not checkable.
+   *
+   * Three answers because two would mislead. Every probe is verified as it comes
+   * back, so *no break* is a reading — but a turn whose reply carried nothing the
+   * objective's condition reads has no answer at all, and calling that *no break*
+   * would describe a defence that was never tested.
+   */
+  reading: string
   confirmed_the_break: boolean
+}
+
+/**
+ * Which probe broke one family, or the stated fact that nothing did.
+ *
+ * A position and never a count: an episode ordinal and a turn, with no field for how
+ * many families broke or a proportion of anything. A family broken in two episodes is
+ * reported at the first — *when it first worked* is a fact, *how often* would be a rate
+ * over episodes that have no denominator (ADR-0010).
+ */
+export interface FamilyBreak {
+  family: string
+  broke: boolean
+  episode: number | null
+  turn: number | null
+  probe: string | null
+  stated: string
 }
 
 /** One episode's outcome, its turn count, and every probe it sent, in order. */
@@ -542,6 +576,8 @@ export interface EpisodeProbes {
 export interface RunProbes {
   held: true
   run_id: string
+  /** One row per family that opened an episode: what broke it, or that nothing did. */
+  broke: FamilyBreak[]
   episodes: EpisodeProbes[]
   stated: string
 }
@@ -1659,6 +1695,67 @@ export interface BenchSettings {
   library: LoadedLibrary
   models: ModelSetting[]
   ceilings: LayerCeilings
+  tuning: Tuning
+}
+
+/** One failure family, and whether the next run covers it. */
+export interface FamilyCovered {
+  family: string
+  covered: boolean
+}
+
+/** One model this console offers as the attacker, and what it is for. */
+export interface ModelChoice {
+  identifier: string
+  decides: string
+  chosen: boolean
+}
+
+/** What a setting may be. The range the route enforces, so the form offers no other. */
+export interface Bounds {
+  low: number
+  high: number
+}
+
+/**
+ * The declared inputs of the next run: what they are set to, and what they may be.
+ *
+ * The one part of the settings response that is a control. Every field here changes
+ * what the **next** run measures rather than how it looks, and every one of them is
+ * printed in the report of every run made under it — which is the condition ADR-0025
+ * admits them on. A run in flight keeps what it was started with, and a change is
+ * refused while one is going.
+ *
+ * **Four of the five bound a layer that is scored on nothing; `attempts_per_case` is
+ * the scored denominator.** `attempts_warning` is the bench's own sentence about the
+ * difference and the screen prints it rather than paraphrasing it.
+ */
+export interface Tuning {
+  attacker_models: ModelChoice[]
+  temperature: number | null
+  temperature_bounds: Bounds
+  temperature_absent: string
+  turns_per_episode: number
+  turns_bounds: Bounds
+  episodes_per_family: number
+  episodes_bounds: Bounds
+  attempts_per_case: number
+  attempts_bounds: Bounds
+  attempts_per_family: number
+  declared_attempts_per_case: number
+  attempts_warning: string
+  families: FamilyCovered[]
+  families_off_statement: string
+  statement: string
+}
+
+/** The five settings, as the console sends them. All five every time. */
+export interface Tune {
+  attacker_model: string
+  temperature: number | null
+  turns_per_episode: number
+  episodes_per_family: number
+  attempts_per_case: number
 }
 
 /**
@@ -1671,6 +1768,56 @@ export interface BenchSettings {
  */
 export async function benchSettings(): Promise<BenchSettings> {
   return (await fetched(BENCH_SETTINGS_PATH, 'bench settings')) as BenchSettings
+}
+
+export const BENCH_TUNING_PATH = '/bench/settings/tuning'
+
+/**
+ * Set the declared inputs of the next run, and read back what the bench now holds.
+ *
+ * The one write under `/bench` (ADR-0025). All five settings go every time, because a
+ * caller that could send the turn budget without restating the attacker model could
+ * leave a bench naming one instrument in a report while another attacked.
+ *
+ * The answer is the whole settings reading, so the screen renders what was stored
+ * rather than what it hoped it sent. A `409` is the bench refusing while a run is
+ * going, and its detail names the runs — thrown like every other failure here, and
+ * the screen shows the sentence.
+ */
+export async function tuneBench(asked: Tune): Promise<BenchSettings> {
+  const response = await fetch(BENCH_TUNING_PATH, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(asked),
+  })
+  if (!response.ok) {
+    throw new Error(
+      `the bench did not take these settings: ${await refusalIn(response)}`,
+    )
+  }
+  return (await response.json()) as BenchSettings
+}
+
+export const BENCH_FAMILIES_PATH = '/bench/settings/families'
+
+/**
+ * Set which families the next run covers, and read back what the bench now holds.
+ *
+ * The second write under `/bench` (ADR-0025), and its own statement rather than a
+ * field on the tuning request: that one is *how the instruments are set* and takes all
+ * five settings every time; this is *what the next run covers*, sent from a different
+ * screen. An empty list is refused — a run covering no family attacks nothing.
+ */
+export async function coverFamilies(families: string[]): Promise<BenchSettings> {
+  const response = await fetch(BENCH_FAMILIES_PATH, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ families }),
+  })
+  if (!response.ok) {
+    throw new Error(`the bench did not take these families: ${await refusalIn(response)}`)
+  }
+  return (await response.json()) as BenchSettings
 }
 
 export const BENCH_NOTES_PATH = '/bench/notes'

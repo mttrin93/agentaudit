@@ -78,6 +78,7 @@ import {
   routeReading,
   type AdaptiveFamilyReading,
   type EpisodeRouteReading,
+  type FamilyBreakReading,
   type FamilyAnswer,
   type ReportView,
   type RouteReading,
@@ -357,13 +358,47 @@ function TheRoute({ route }: { route: RouteReading }) {
       {route.kind === 'absent' ? (
         <p className="aside">{route.stated}</p>
       ) : (
-        <div className="route">
-          {route.episodes.map((episode, at) => (
-            <TheEpisode episode={episode} key={`${at}-${episode.family}`} />
-          ))}
-        </div>
+        <>
+          {/* What broke each family, before the sequence a reader would otherwise
+              have to read end to end. Rows and never a count of them. */}
+          <div className="broke-by-family">
+            {route.broke.map((family) => (
+              <TheFamilyBreak family={family} key={family.family} />
+            ))}
+          </div>
+          <div className="route">
+            {route.episodes.map((episode, at) => (
+              <TheEpisode episode={episode} key={`${at}-${episode.family}`} />
+            ))}
+          </div>
+        </>
       )}
     </section>
+  )
+}
+
+/**
+ * One family, and the probe that broke it — or which silence it is.
+ *
+ * The probe is drawn in full rather than summarised: *which one worked* is the fact
+ * this row exists to carry, and a truncated payload is not one a reader can act on.
+ * A family nothing broke prints the bench's own sentence, because *every turn read
+ * and none of them a break* and *no turn could be read at all* are different facts
+ * and only the first is about the agent.
+ */
+function TheFamilyBreak({ family }: { family: FamilyBreakReading }) {
+  return (
+    <div className={family.broke ? 'family' : 'family absent'}>
+      <h3>{readFamily(family.family)}</h3>
+      {family.broke ? (
+        <>
+          <p className="broke">broke it — {family.at}</p>
+          <p className="bubble">{family.probe}</p>
+        </>
+      ) : (
+        <p className="kind">{family.stated}</p>
+      )}
+    </div>
   )
 }
 
@@ -392,8 +427,21 @@ function TheEpisode({ episode }: { episode: EpisodeRouteReading }) {
         <ol className="probes">
           {episode.probes.map((probe) => (
             <li key={probe.at}>
-              <p className="ordinal">{probe.at}</p>
+              <p className="ordinal">
+                {probe.at} — {probe.reading}
+              </p>
               <p className="bubble">{probe.probe}</p>
+              {/* The reply, because a probe without one is unreadable: *censored* is
+                  a fact about the attacker, and only the text that came back tells a
+                  target that refused from one that was never asked the right thing. */}
+              <p className="ordinal">reply</p>
+              <p className="bubble reply">{probe.reply}</p>
+              {probe.toolTrace ? (
+                <>
+                  <p className="ordinal">what it did</p>
+                  <p className="bubble reply">{probe.toolTrace}</p>
+                </>
+              ) : null}
               {probe.confirmedTheBreak ? (
                 <p className="broke">{probe.marked}</p>
               ) : null}

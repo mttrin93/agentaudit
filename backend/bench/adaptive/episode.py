@@ -139,6 +139,26 @@ class AdaptiveEpisode:
     evidence behind it.
     """
 
+    unverifiable_turns: tuple[int, ...] = ()
+    """The turns whose reply carried nothing this objective's condition could read.
+
+    One-based, in order. A halt-defeat objective against a reply that records no
+    stop signal is the case this exists for: the target may have called five tools,
+    and none of them can be shown to have come *after* a stop that the reply never
+    reported. Empty for an episode every turn of which could be checked.
+
+    **The adaptive counterpart of `NotMeasurable`, and not a verdict** (ADR-0010).
+    It says which turns had no answer available, never what the answer was: there is
+    no `Verdict` on this record and this field cannot become one, because the thing
+    it counts is the absence of evidence rather than a reading of it. Like every
+    other figure here it has no denominator — `turns - len(unverifiable_turns)` is
+    not a sample size and nothing divides by it.
+
+    It matters because the alternative is worse than silence. An episode whose every
+    turn was unreadable and one whose target held print the same word — *censored* —
+    and only one of them is a statement about the target.
+    """
+
     proposals: tuple[ProposedRoute, ...] = ()
     """The routes the attacker put forward during this episode.
 
@@ -162,6 +182,7 @@ class AdaptiveEpisode:
         proposals: Sequence[ProposedRoute] = (),
         started_at: float | None = None,
         consulted_precedent: bool = False,
+        unverifiable_turns: Sequence[int] = (),
     ) -> AdaptiveEpisode:
         """Record an episode with the kit the target's registration allowed it.
 
@@ -183,6 +204,7 @@ class AdaptiveEpisode:
             started_at=time.monotonic() if started_at is None else started_at,
             transcripts=tuple(transcripts),
             proposals=tuple(proposals),
+            unverifiable_turns=tuple(unverifiable_turns),
         )
 
     @property

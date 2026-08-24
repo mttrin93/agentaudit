@@ -731,9 +731,51 @@ button:disabled {
 .said dt {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 0.8rem;
+  /* The tick box leads and the name follows it, so the two columns of boxes line up
+   * down the left edge — which is what makes *which of these will run* readable at a
+   * glance instead of one line at a time. */
+  gap: 0.6rem;
   font-weight: 600;
+}
+
+/* A square box and not a pill: a switch says *this thing is on*, and what these say
+ * is *this one is included in the next run*, which is a selection. Drawn from the
+ * checkbox itself so the keyboard and the screen reader get the real control. */
+.said .tick {
+  appearance: none;
+  flex: none;
+  position: relative;
+  width: 1rem;
+  height: 1rem;
+  margin: 0;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 0.25rem;
+  cursor: pointer;
+}
+
+.said .tick:checked,
+.said .tick.on {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.said .tick:checked::after,
+.said .tick.on::after {
+  content: '';
+  position: absolute;
+  top: 0.15rem;
+  left: 0.28rem;
+  width: 0.28rem;
+  height: 0.5rem;
+  border: solid var(--paper);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+.said .tick:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .said dd {
@@ -2017,6 +2059,81 @@ code {
   margin: 0.35rem 0 0;
   font-size: 0.8rem;
   font-weight: 600;
+}
+
+/* The target's own words, set apart from the attacker's without a second face: the
+ * probe and the reply are both wire text, and the only thing that distinguishes them
+ * is who said it. A tint rather than a border, so a long reply does not read as a
+ * second card inside the card. */
+.route .bubble.reply {
+  background: var(--sunk, var(--page));
+  color: var(--quiet);
+  white-space: pre-wrap;
+}
+
+/* What broke each family, above the sequence. `.family` cards like everywhere else
+ * on this page, and no rule under them: a stacked pair with a line beneath it is a
+ * table waiting for a total, and there is no total here to want. */
+.broke-by-family {
+  display: grid;
+  gap: 1rem;
+  margin: 1.5rem 0;
+}
+
+/* The one form on the settings screen. A column of labelled controls, each with the
+ * sentence saying what it decides under it — the sentence is not a hint, it is what
+ * makes the number readable, so it sits inside the label rather than in a tooltip. */
+.tuning {
+  display: grid;
+  gap: 1.1rem;
+  margin: 1.25rem 0;
+}
+
+.tuning label {
+  display: grid;
+  gap: 0.35rem;
+}
+
+/* The width of the reading column, which is what the registration form's fields are.
+ * Two forms in one console that set their fields to two different widths read as two
+ * applications. */
+.tuning select,
+.tuning input {
+  padding: 0.45rem 0.6rem;
+  /* No background of its own: `input, select` above paints `--paper`, which is what
+   * the registration form's fields are. Two forms in one console painting their
+   * fields two different colours read as two applications. */
+  color: inherit;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  font: inherit;
+}
+
+/* The temperature slider. Full width of the field, because a track is read by its
+ * length and a short one cannot be set precisely; the number that says where it is
+ * sits in the label above it. */
+.tuning input[type='range'] {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  accent-color: var(--accent, currentColor);
+  cursor: pointer;
+}
+
+.tuning button {
+  justify-self: start;
+  padding: 0.5rem 0.9rem;
+  background: var(--page);
+  color: inherit;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  font: inherit;
+  cursor: pointer;
+}
+
+.tuning button[disabled] {
+  cursor: progress;
+  color: var(--quiet);
 }
 
 /*

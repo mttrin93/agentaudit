@@ -158,8 +158,12 @@ function TheArtefacts({ reading }: { reading: ArtefactsReading }) {
           </>
         ) : (
           <div className="citation uncited">
+            {/* The heading is the whole of it. The paragraph under it explained the
+                two ways there can be nothing here — no run has completed, or one
+                completed on a bench with no key — and both of those are answered on
+                the runs list and on that run's own report route. `reading.statement`
+                is still built and still tested. */}
             <h3>No signed artefact on the record</h3>
-            <p>{reading.statement}</p>
           </div>
         )}
       </section>

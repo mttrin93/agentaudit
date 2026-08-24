@@ -275,6 +275,20 @@ class DeclaredModels:
     """The adaptive layer's model, and the adaptive layer's only. It decides
     nothing that is scored (ADR-0010)."""
 
+    attacking_temperature: float | None = None
+    """The temperature that model was sampled at, or `None` for the provider's default.
+
+    Beside the identifier rather than folded into it, because they are two facts and a
+    reader comparing two runs of one model needs the second one separately. `None` is
+    a declaration too — *whatever the provider does* — and a bench that wrote its own
+    number there would be naming a setting nobody chose.
+
+    Deliberately not carried for the other two instruments. The adjudicator and the
+    reference agents are settings of a deployment, and this bench offers no control
+    over their sampling: a field that could only ever read `None` would be a report
+    implying a choice that was never available.
+    """
+
 
 @dataclass(frozen=True)
 class Provenance:

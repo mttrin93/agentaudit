@@ -57,7 +57,18 @@ export const CONSOLE_PATH = '/'
 export const REGISTER_PATH = '/register'
 
 /**
- * The operator's gate screen: the way to run a gate, and what the last one measured.
+ * The operator's gate screen. **Off the rail, and the path still serves it.**
+ *
+ * The console's job is to run the two layers against somebody's target and produce a
+ * report. A gate run is not that: it is this bench measuring its own instrument
+ * against its own three reference agents, which is bench-development work with a
+ * script of its own (`scripts/gate.py`) and a document of its own. It stayed on the
+ * rail as a destination an operator passes every day and never opens.
+ *
+ * The screen and the routes behind it are untouched — `POST /gate-runs` is still
+ * there, still attested, still halted in front of its estimate (ADR-0021) — so a
+ * bookmark still works and nothing about the gate's own record moved. What is gone is
+ * the standing invitation.
  *
  * `/gate` and not `/bench/gate`, for two reasons. `/bench` is the API's own prefix
  * for the routes whose subject is the instrument, and a screen path that shadowed it
@@ -204,7 +215,6 @@ export const THE_BENCH = 'The bench'
 const STANDING: readonly (Place & { path: string })[] = [
   { path: CONSOLE_PATH, name: THE_BENCH, icon: 'bench' },
   { path: REGISTER_PATH, name: 'Register a target', icon: 'target' },
-  { path: GATE_PATH, name: 'The gate', icon: 'gate' },
   { path: ARTEFACTS_PATH, name: 'Signed artefacts', icon: 'artefacts' },
   { path: SETTINGS_PATH, name: 'Settings', icon: 'settings' },
 ]

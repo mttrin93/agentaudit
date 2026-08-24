@@ -65,6 +65,11 @@ routes; nothing it finds reaches a rate. If it finds something good, it can
 
 ### Where the attacks came from, and how we know they work
 
+Before the numbers, the things the numbers are made of. The scored layer sends 18
+attack messages and nothing else, so this is where they came from and what they
+had to prove before any of them was allowed near your agent. The next section is
+what a run does with them.
+
 **The 18 payloads were written by hand, and each one says where it came from.**
 Some copy a technique that is already published — `data-leakage-001` is the plain
 "repeat the text above" trick, and it links to the write-up it came from. The rest
@@ -116,11 +121,15 @@ chance the two agree — is read out of DeepEval's per-case results. κ must rea
 **0.6**, or the family publishes no rate at all. The numbers are in
 [docs/validation.md](./docs/validation.md).
 
-### The scored layer
+That is the whole of the preparation: 18 messages with a stated origin, each one
+shown to separate a defended agent from an undefended one, and two judged families
+with a measured judge behind them. What follows is what a run does with them.
 
-This is the half that produces the numbers. It is deliberately boring: it sends
-attacks that were written down in advance, counts what happened, and does the
-arithmetic in public.
+### The scored layer: what a run does with those 18 cases
+
+This is the half that produces the numbers, and it is deliberately boring. It
+sends the cases exactly as written, counts what happened, and does the arithmetic
+in public.
 
 **What it sends.** Those same 18 cases, and nothing else. A **case** is one attack
 message plus the rule that decides whether it worked, and the messages are not

@@ -49,12 +49,18 @@ from backend.bench.adjudication import (
     NoAdjudicator,
     adjudicate,
 )
-from backend.bench.contract import TargetConfig, Transcript, send_message
+from backend.bench.contract import (
+    TargetConfig,
+    TargetUnreachable,
+    Transcript,
+    send_message,
+)
 from backend.bench.evaluator import Verdict, evaluate
 from backend.bench.library import Case, VerdictClass
 from backend.bench.rule import DECLARED_RULE, GateRule
 from backend.graph.budget import Layer
 from backend.graph.runstate import Attempt, RunState
+from backend.observability import DROPPED, Field, Recorder, Span, start, traced
 
 ADJUDICATIONS_IN_FLIGHT = 4
 """How many judged attempts may be at the instrument at once.
@@ -87,6 +93,16 @@ class Sent:
     began: float
     verdict: Verdict | Future[Verdict]
 
+    span: Recorder = DROPPED
+    """The attempt's span, opened when the message went out and closed when its
+    verdict is recorded.
+
+    Carried on the record rather than held in a `with`, because those two moments
+    are not lexically nested: a judged verdict is decided on another thread while
+    the next messages go out, and the span has to stay open across that. It is a
+    drop when tracing is off, so no call site branches on it.
+    """
+
 
 def run_case(
     target: TargetConfig,
@@ -109,18 +125,29 @@ def run_case(
     try:
         sent: deque[Sent] = deque()
         scored: list[Attempt] = []
-        for index in range(rule.attempts_per_case):
-            sent.append(
-                _send(target, case, canary, run_state, index, adjudicator, pool)
-            )
-            # Everything at the front of the queue whose verdict has arrived, before
-            # the next message goes out: an attempt is recorded as soon as it can be,
-            # so a run watched while it happens does not wait for the case to finish,
-            # and a failed adjudication stops this one within the sends that were
-            # already in flight rather than at the end.
-            scored.extend(_settled(sent, target, run_state))
-        while sent:
-            scored.append(_score(sent.popleft(), target, run_state))
+        with traced(
+            Span.CASE,
+            {
+                Field.FAMILY: case.family,
+                Field.CASE_ID: case.id,
+                # Off the record, like every other reader of it: a trace that
+                # worked the class out from the family name would be making the
+                # inference spec story 18 forbids, in the one place nobody checks.
+                Field.VERDICT_CLASS: case.verdict_class,
+            },
+        ):
+            for index in range(rule.attempts_per_case):
+                sent.append(
+                    _send(target, case, canary, run_state, index, adjudicator, pool)
+                )
+                # Everything at the front of the queue whose verdict has arrived,
+                # before the next message goes out: an attempt is recorded as soon as
+                # it can be, so a run watched while it happens does not wait for the
+                # case to finish, and a failed adjudication stops this one within the
+                # sends that were already in flight rather than at the end.
+                scored.extend(_settled(sent, target, run_state))
+            while sent:
+                scored.append(_score(sent.popleft(), target, run_state))
         return tuple(scored)
     finally:
         # Nothing outstanding is worth waiting for. On the way out through an
@@ -153,17 +180,44 @@ def _send(
     began = time.monotonic()
     run_state.authorise_call(Layer.SCORED, target.retry.sends)
     run_state.enter(target.name, case.family, case.id, index)
-    transcript = send_message(
-        target, case.payload, session_id=f"{case.id}-{index}-{uuid.uuid4()}"
-    )
+    span = start(Span.ATTEMPT, {Field.ATTEMPT_INDEX: index}, current=False)
+    try:
+        transcript = send_message(
+            target, case.payload, session_id=f"{case.id}-{index}-{uuid.uuid4()}"
+        )
+    except TargetUnreachable as unreachable:
+        # The class of the failure and the sends it cost, and nothing else off the
+        # exception: its message names the endpoint url, which is the one identifier
+        # a trace never carries (ADR-0011, ADR-0026).
+        span.record({Field.RETRIES: unreachable.sends - 1})
+        span.errored(unreachable.failure)
+        span.end()
+        raise
+    span.record({Field.RETRIES: transcript.sends - 1})
     run_state.record_call(Layer.SCORED, transcript.sends)
     verdict: Verdict | Future[Verdict]
-    if pool is not None and case.verdict_class is VerdictClass.JUDGED:
-        verdict = pool.submit(verdict_of, case, transcript, target, canary, adjudicator)
-    else:
-        verdict = verdict_of(case, transcript, target, canary, adjudicator)
+    try:
+        if pool is not None and case.verdict_class is VerdictClass.JUDGED:
+            verdict = pool.submit(
+                verdict_of, case, transcript, target, canary, adjudicator
+            )
+        else:
+            verdict = verdict_of(case, transcript, target, canary, adjudicator)
+    except BaseException:
+        # A deterministic verdict is decided on this thread and a case with no
+        # adjudicator is refused here, so this is the second way out of an attempt
+        # whose span is already open. It is closed on the way past rather than left
+        # for `_score`, which is never reached.
+        span.errored()
+        span.end()
+        raise
     return Sent(
-        case=case, index=index, transcript=transcript, began=began, verdict=verdict
+        case=case,
+        index=index,
+        transcript=transcript,
+        began=began,
+        verdict=verdict,
+        span=span,
     )
 
 
@@ -192,9 +246,16 @@ def _score(sent: Sent, target: TargetConfig, run_state: RunState) -> Attempt:
     at this point in the order — so `AdjudicationFailed` stops the run rather than
     becoming a verdict, exactly as it did when the call was made in line.
     """
-    verdict = (
-        sent.verdict.result() if isinstance(sent.verdict, Future) else sent.verdict
-    )
+    try:
+        verdict = (
+            sent.verdict.result() if isinstance(sent.verdict, Future) else sent.verdict
+        )
+    except BaseException:
+        sent.span.errored()
+        sent.span.end()
+        raise
+    sent.span.record({Field.VERDICT: verdict})
+    sent.span.end()
     attempt = Attempt(
         case_id=sent.case.id,
         family=sent.case.family,

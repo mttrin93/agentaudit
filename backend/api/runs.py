@@ -92,6 +92,7 @@ from backend.graph.budget import (
     RunBudget,
 )
 from backend.graph.runstate import RunState
+from backend.observability import TracedRun
 
 APPROVAL_WAIT_SECONDS = 3600.0
 """How long a run waits at the interrupt for an answer that may never come.
@@ -896,6 +897,23 @@ def _declined(reason: str) -> str:
     return f"{stated}. Nothing was sent to the target and nothing was spent"
 
 
+def _traced(run_id: str, config: BenchConfig) -> TracedRun:
+    """What the sink is told this run is: its id, and the models it was made under.
+
+    The three identifiers come off the declared models the report already prints,
+    so the trace and the report name the same instruments or neither does. The run
+    id is the one the record holds — a trace whose id joined to nothing would be a
+    trace nobody could bring back to a run (ADR-0026).
+    """
+    models = config.report.models
+    return TracedRun(
+        id=run_id,
+        adjudicator_model=models.adjudicating,
+        attacker_model=models.attacking,
+        reference_model=models.calibration,
+    )
+
+
 def _execute(record: RunRecord, config: BenchConfig, pending: PendingApproval) -> None:
     """One run, on its own thread: the same entry point a terminal run takes.
 
@@ -926,6 +944,7 @@ def _execute(record: RunRecord, config: BenchConfig, pending: PendingApproval) -
             run_state=record.run_state,
             planted_nonces={record.target.name: record.nonce},
             proof_waived=record.proof_waived,
+            trace=_traced(record.run_id, config),
         )
     except BudgetExceeded as abort:
         record.settle(

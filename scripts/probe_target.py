@@ -45,6 +45,7 @@ in a shell history file.
 import argparse
 import os
 import sys
+import uuid
 from collections.abc import Mapping, Sequence
 from decimal import InvalidOperation
 from enum import StrEnum
@@ -62,6 +63,7 @@ from backend.bench.rule import DECLARED_RULE
 from backend.bench.scorer import Rate
 from backend.graph.budget import BudgetExceeded, Layer, RunBudget
 from backend.graph.runstate import Attempt
+from backend.observability import TracedRun, install, trace_config, tracing
 from scripts.console import (
     EXIT_ABORTED,
     EXIT_DECLINED,
@@ -231,10 +233,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         return EXIT_WITHHELD
 
     adjudicator: Completion | None = None
+    adjudicator_model: str | None = None
     if not args.deterministic_only:
         spec = args.adjudicator_model or os.environ.get(
             ADJUDICATOR_ENV, DEFAULT_ADJUDICATOR_MODEL
         )
+        adjudicator_model = spec
         try:
             # Before the attestation: a run that reached its first judged attempt
             # before discovering it had no instrument would already have spent the
@@ -296,6 +300,15 @@ def main(argv: Sequence[str] | None = None) -> int:
             if case.family is not Family.INDIRECT_PROMPT_INJECTION
         ]
 
+    install(trace_config())
+    # An id generated here and printed below, because a probe is not a run and no
+    # record holds one: the id a trace joins to has to be an id its reader can see.
+    # Named as a run id rather than a gate run's — a probe against somebody's own
+    # agent decides nothing about the bench (ADR-0018).
+    probe_id = str(uuid.uuid4())
+    if tracing():
+        print(f"trace id: {probe_id}")
+
     try:
         result = run_calibration(
             cases=cases,
@@ -305,6 +318,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             approve=terminal_approval(attestation.identity),
             adjudicator=adjudicator,
             budget=RunBudget.declare(cases=cases, targets=[target], price=call_price),
+            trace=TracedRun(id=probe_id, adjudicator_model=adjudicator_model),
         )
     except BudgetExceeded as abort:
         print(f"\nRun aborted on budget: {abort}")

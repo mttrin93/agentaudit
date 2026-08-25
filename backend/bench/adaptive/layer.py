@@ -44,6 +44,7 @@ from backend.bench.contract import TargetConfig
 from backend.bench.library import Case, Family, VerdictClass
 from backend.bench.measurability import runnable
 from backend.graph.runstate import RunState
+from backend.observability import Field, Span, traced
 
 
 @dataclass(frozen=True)
@@ -100,19 +101,30 @@ def run_adaptive_layer(
             if objective is None:
                 continue
             for _ in range(budget.episodes_per_family):
-                episodes.append(
-                    run_episode(
-                        target=entry.target,
-                        objective=Objective(
-                            family=family, case=objective, canary=entry.canary
-                        ),
-                        run_state=run_state,
-                        attacker=attacker,
-                        blinding=blinding,
-                        budget=budget,
-                        precedent=precedent,
+                # The episode's ordinal across the run, which is what
+                # `enter_episode` counts and what the run's own position reports.
+                # An ordinal and not a denominator: an episode has none, and
+                # nothing divides this (ADR-0010, CONTEXT.md).
+                with traced(
+                    Span.EPISODE,
+                    {
+                        Field.FAMILY: family,
+                        Field.EPISODE_INDEX: len(episodes) + 1,
+                    },
+                ):
+                    episodes.append(
+                        run_episode(
+                            target=entry.target,
+                            objective=Objective(
+                                family=family, case=objective, canary=entry.canary
+                            ),
+                            run_state=run_state,
+                            attacker=attacker,
+                            blinding=blinding,
+                            budget=budget,
+                            precedent=precedent,
+                        )
                     )
-                )
     return tuple(episodes)
 
 

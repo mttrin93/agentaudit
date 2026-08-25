@@ -110,6 +110,7 @@ from backend.graph.budget import (
     RunBudget,
 )
 from backend.graph.runstate import RunState
+from backend.observability import TracedRun
 
 GOLDSET_DIR = Path(__file__).resolve().parents[1] / "goldset"
 """The hand-labelled transcripts a judged family's κ is measured against.
@@ -839,6 +840,16 @@ def _decide(
             # confirmed these figures in an earlier request.
             budget=record.budget,
             run_state=record.run_state,
+            # The gate run's own id field, never the run id: the two are different
+            # artefacts with different readers, and a shared field would let a
+            # search for one return the other (ADR-0018).
+            trace=TracedRun(
+                id=record.gate_run_id,
+                gate=True,
+                adjudicator_model=config.report.models.adjudicating,
+                attacker_model=config.report.models.attacking,
+                reference_model=config.report.models.calibration,
+            ),
         )
     except BudgetExceeded as abort:
         record.settle(

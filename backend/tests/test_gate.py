@@ -25,7 +25,13 @@ import pytest
 from backend.bench.adaptive.scripted import SCRIPTED_ATTACKER
 from backend.bench.adjudication import Completion
 from backend.bench.calibration import CalibrationResult, TargetRun, run_calibration
-from backend.bench.cited import CITED_GATE_RUN, citation_of, cite, the_citation
+from backend.bench.cited import (
+    CITED_GATE_RUN,
+    citation_of,
+    cite,
+    the_citation,
+    the_reliability,
+)
 from backend.bench.evaluator import Verdict
 from backend.bench.gate import GateResult, NotAGateRun, read_gate
 from backend.bench.gate_record import recorded_gate_run
@@ -507,7 +513,7 @@ def test_the_terminal_leaves_a_document_a_record_and_a_citation_naming_both(
     cases = tmp_path / "cases"
     cases.mkdir()
 
-    written = _written(gate, gate_run, documents)
+    written = _written(gate, gate_run, documents, cases)
     replaced = cite(written.recorded, cases)
 
     cited = the_citation(cases)
@@ -516,8 +522,11 @@ def test_the_terminal_leaves_a_document_a_record_and_a_citation_naming_both(
     # The two names on the citation are the two files that were written.
     assert cited.document == written.document.name
     assert cited.record == written.record.name
-    assert (documents / cited.record).exists()
+    # The record in the library the citation travels with, and the document where a
+    # person reads it: the citation's two names are the two files, in the two places.
+    assert (cases / cited.record).exists()
     assert (documents / cited.document).exists()
+    assert not (documents / cited.record).exists()
     # The outcome and the library version are the gate's own, not re-derived here.
     assert cited.outcome is gate.decision.outcome
     assert cited.library == gate.library
@@ -528,7 +537,7 @@ def test_the_terminal_leaves_a_document_a_record_and_a_citation_naming_both(
 
     # The figures the citation does not carry are in the file it names, so a reader
     # holding the citation never has to open the prose beside it.
-    figures = json.loads((documents / cited.record).read_text(encoding="utf-8"))
+    figures = json.loads((cases / cited.record).read_text(encoding="utf-8"))
     for outcome in gate.decision.outcomes:
         one = next(
             family
@@ -536,6 +545,107 @@ def test_the_terminal_leaves_a_document_a_record_and_a_citation_naming_both(
             if family["family"] == str(outcome.family)
         )
         assert one["discrimination"] == outcome.discrimination
+
+
+def test_a_terminal_gate_run_leaves_a_library_that_can_publish_its_kappa(
+    gate_run: CalibrationResult, tmp_path: Path, library: list[Case]
+) -> None:
+    """The κ a terminal gate run measured, read back off the library it cites.
+
+    The citation carries the record's **file name** and `cited.the_reliability`
+    resolves it against the library, so the record has to be in the library for the
+    figures behind the citation to be reachable at all. Written from a terminal it
+    was not: the record went beside the dated document under `--record`, the
+    citation named a file the library does not hold, and every judged family in every
+    target report was withheld under `no_kappa_measured` — including one the gate had
+    measured at κ = 0.86 and found fit. A bench that cannot state the reliability of
+    an instrument it just measured publishes no judged rate at all (ADR-0004,
+    ADR-0015).
+
+    So this is the round trip the report path takes, in the order it takes it: write
+    the run the way the terminal writes it, cite it, then read the reliability off
+    the library the way `app.deployed_bench` does. The document keeps its own
+    directory — it is what a person reads — and the figures live beside the cases
+    they are a claim about (ADR-0023 decision Four).
+    """
+    gate = read_gate(
+        gate_run.target_runs,
+        trivial="trivial",
+        weak="weak",
+        hardened="hardened",
+        library=LibraryVersion.of(library),
+        reliability={Family.WRONGFUL_COMMITMENT: UNFIT, Family.DISCLOSURE_DENIAL: FIT},
+    )
+    documents = tmp_path / "gate-runs"
+    cases = tmp_path / "cases"
+    cases.mkdir()
+
+    written = record_run(
+        gate,
+        gate_run,
+        library,
+        documents,
+        _declared_models(),
+        record_into=cases,
+    )
+    cite(written.recorded, cases)
+
+    # The record is in the library, under the name the citation gives it, and the
+    # document is not: two renderings, two readers, and only one of them travels
+    # with the cases.
+    cited = the_citation(cases)
+    assert cited is not None
+    assert cited.document == written.document.name
+    assert written.record == cases / cited.record
+    assert (cases / cited.record).exists()
+    assert (documents / cited.document).exists()
+    assert not (documents / cited.record).exists()
+
+    # And the reliability behind the citation is reachable from the library alone,
+    # which is all a booting bench is given.
+    read_back = the_reliability(cases)
+    assert read_back.adjudicating_model == _declared_models().adjudicator_model
+    assert {
+        family: reading.kappa for family, reading in read_back.measured.items()
+    } == {
+        Family.WRONGFUL_COMMITMENT: UNFIT.kappa,
+        Family.DISCLOSURE_DENIAL: FIT.kappa,
+    }
+    # The guard still holds: these figures are about one adjudicator and reach a
+    # report only where that is the adjudicator (ADR-0004).
+    assert read_back.for_adjudicator(_declared_models().adjudicator_model)
+    assert not read_back.for_adjudicator("openrouter:another/model")
+
+
+def test_the_terminal_records_into_the_library_rather_than_only_being_able_to(
+    gate_run: CalibrationResult,
+) -> None:
+    """The entry point's own call, because a destination nobody passes is a hole.
+
+    The round trip above drives `record_run` directly, and it would go on passing if
+    `run_the_gate` wrote its record beside the document again — which is exactly the
+    state the round trip exists because of. Asserted over the structure for the same
+    reason the lease is: the property is about *where* the one call site writes.
+    """
+    functions = {
+        node.name: node
+        for node in ast.walk(ast.parse(TERMINAL_SOURCE.read_text(encoding="utf-8")))
+        if isinstance(node, ast.FunctionDef)
+    }
+    [recording] = [
+        called
+        for called in ast.walk(functions["run_the_gate"])
+        if isinstance(called, ast.Call)
+        and isinstance(called.func, ast.Name)
+        and called.func.id == "record_run"
+    ]
+    [into] = [
+        keyword.value for keyword in recording.keywords if keyword.arg == "record_into"
+    ]
+    assert isinstance(into, ast.Name) and into.id == "cases_dir", (
+        "the terminal records its gate run somewhere other than the library the "
+        "citation rendered from it points into"
+    )
 
 
 def test_the_terminal_cites_inside_the_lease_it_already_holds(
@@ -690,6 +800,7 @@ def test_a_gate_run_is_written_to_a_document_that_survives_it(
         load_library(CASES_DIR),
         tmp_path,
         _declared_models(),
+        record_into=tmp_path / "cases",
     ).document.read_text(encoding="utf-8")
 
     assert "The scored layer, which decides the gate" in written
@@ -765,15 +876,29 @@ def test_the_entry_point_writes_the_document_rather_than_only_being_able_to(
     assert str(record) in printed
     written = record.read_text(encoding="utf-8")
 
-    # And the record beside it, written by the command rather than only by the writer
-    # the suite calls: a machine-readable record no operator's gate run produces is a
-    # record nobody has, and it is named to the operator on the same terms (#84).
-    beside = list(tmp_path.glob("gate-*.json"))
-    assert beside, (
-        "the entry point wrote its document and left no record beside it. A writer "
-        "the suite calls and the command does not is the shape this bug had"
+    # And the record in the library, written by the command rather than only by the
+    # writer the suite calls: a machine-readable record no operator's gate run
+    # produces is a record nobody has, and it is named to the operator on the same
+    # terms (#84). In the library and not beside the document, because the citation
+    # this run also wrote names it and resolves that name there (ADR-0023) — a record
+    # under `--record` is a citation whose figures no report can reach.
+    into_the_library = [
+        # Not the citation, which is `gate-run.json` in the same directory and is the
+        # one file there that is not a dated record (`cited.CITED_GATE_RUN`).
+        found
+        for found in cases.glob("gate-*.json")
+        if found.name != CITED_GATE_RUN
+    ]
+    assert into_the_library, (
+        "the entry point wrote its document and left no record in the library it "
+        "cited. A writer the suite calls and the command does not is the shape this "
+        "bug had, and a record the citation cannot resolve is the shape it had next"
     )
-    [machine_readable] = beside
+    assert not list(tmp_path.glob("gate-*.json")), (
+        "the record went to the documents, where nothing following the citation "
+        "looks for it"
+    )
+    [machine_readable] = into_the_library
     assert machine_readable.stem == record.stem
     assert str(machine_readable) in printed
     decided = json.loads(machine_readable.read_text(encoding="utf-8"))["decision"]
@@ -849,9 +974,28 @@ SCORED_FENCE = "## The scored layer, which decides the gate\n\n```\n"
 """Where the document's scored-layer section starts, off the fence not a regex."""
 
 
-def _written(gate: GateResult, run: CalibrationResult, directory: Path) -> WrittenRun:
-    """One gate run written down: the dated document, and the record beside it."""
-    return record_run(gate, run, load_library(CASES_DIR), directory, _declared_models())
+def _written(
+    gate: GateResult,
+    run: CalibrationResult,
+    directory: Path,
+    record_into: Path | None = None,
+) -> WrittenRun:
+    """One gate run written down: the dated document, and the record in the library.
+
+    Two directories, because the writer's two files go to two places: the document
+    where a person reads it and the record into the library the citation is read from
+    (ADR-0023). The library defaults to one beside the documents rather than to the
+    documents themselves, so a test asserting they are two directories is asserting
+    something.
+    """
+    return record_run(
+        gate,
+        run,
+        load_library(CASES_DIR),
+        directory,
+        _declared_models(),
+        record_into=record_into or directory / "cases",
+    )
 
 
 def _calls_in(node: ast.AST) -> set[str]:
@@ -909,11 +1053,14 @@ def test_a_gate_run_writes_a_machine_readable_record_beside_its_document(
     written = _written(gate, gate_run, tmp_path)
     record = json.loads(written.record.read_text(encoding="utf-8"))
 
-    # Beside the document, in the same directory and under the same stamp: one gate
-    # run, and a reader who has one file can name the other.
-    assert written.record.parent == written.document.parent
+    # Two directories and one stamp: the record goes into the library, where the
+    # citation rendered from it resolves its name (ADR-0023), and the document where a
+    # person reads it. A reader holding either file can still name the other — the
+    # record carries the document's name, and the document links to the record.
+    assert written.record.parent != written.document.parent
     assert written.record.name == f"{written.document.stem}.json"
     assert record["document"] == written.document.name
+    assert written.record.name in written.document.read_text(encoding="utf-8")
 
     # The decision, the library version and the rule — the rule above the decision,
     # as it is on the wire and on the screen, because an outcome read with no bar
@@ -1040,24 +1187,34 @@ def test_nothing_reads_the_record_by_parsing_the_markdown(
         assert reader not in source, f"{reader} in gate_record.py reads something back"
 
 
-def test_the_dated_document_is_unchanged_by_the_record_written_beside_it(
+def test_the_dated_document_is_unchanged_by_the_record_it_links_to(
     gate_run: CalibrationResult, tmp_path: Path, library: list[Case]
 ) -> None:
-    """An addition beside the document, and not a change to it.
+    """A link to the record, and not a change to the document.
 
     The document's two sections are the two it has always had, its scored half is
-    `GateResult.stated()` and nothing else, and nothing of the record's shape leaked
-    into the prose: the record does not appear in it, and neither does a field name.
+    `GateResult.stated()` and nothing else, and nothing of the record's *shape* leaked
+    into the prose: no field name, and no figure that only the record carries. What
+    the document gained is one address — the record now lives in the library rather
+    than beside the document, so a person reading the prose is told where the fields
+    are (ADR-0023).
     """
     gate = _gate(gate_run.target_runs, library=LibraryVersion.of(library))
 
-    document = _written(gate, gate_run, tmp_path).document.read_text(encoding="utf-8")
+    written = _written(gate, gate_run, tmp_path)
+    document = written.document.read_text(encoding="utf-8")
 
     assert _scored_block(document) == gate.stated()
     assert document.count("\n## ") == 2
     assert "The scored layer, which decides the gate" in document
     assert "The adaptive layer, which decides nothing" in document
-    for shape in (".json", '"discrimination"', "intervals_separate", "decided_at"):
+    # The record is named once, above the sections, as a relative link a reader can
+    # follow from a checked-out repository — and never as an absolute path, which
+    # would name the machine the gate was run on and nothing else.
+    assert document.count(written.record.name) == 2  # named in the link, and its href
+    assert document.count(f"](cases/{written.record.name})") == 1
+    assert str(tmp_path) not in document
+    for shape in ('"discrimination"', "intervals_separate", "decided_at"):
         assert shape not in document, f"{shape} reached the document from the record"
 
 

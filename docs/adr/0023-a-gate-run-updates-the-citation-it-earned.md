@@ -265,6 +265,57 @@ either is deliberately out of scope; the vocabulary side is being handled separa
   other way — from the gate run to the bench, carrying provenance — and it is one
   callable wide.
 
+## Amendment, 2026-08-25: the record lives in the library, or its figures reach nobody
+
+Decision Six above says a console gate run writes its record *into the library* and
+notes, in `api/gate_runs.py`, that "the command-line run writes its record beside its
+dated document; this one has no document to sit beside". Both halves were implemented.
+Together they do not work, and the reason is decision Three: the citation carries the
+record's **file name**, and every reader resolves that name against the library it read
+the citation from (`cited.the_reliability`). A record under `--record` is therefore a
+citation pointing at a file the library does not hold — so `the_reliability` answers
+`NO_RELIABILITY_CITED`, `for_adjudicator` returns nothing, and **every judged family in
+every target report is withheld under `no_kappa_measured`**, including one the gate run
+measured at κ = 1.00 and found fit to report.
+
+That was not a gap in the reasoning about citations; it was a gap between the two
+entry points that the tests could not see. The test named for that difference
+(`..._a_citation_written_from_a_terminal_reaches_this_process_at_its_next_boot`) calls
+`cite(...)` and writes no record, so it asserts the citation and never the figures
+behind it, and the round trip a booting bench actually performs was exercised nowhere.
+It is asserted now, at the command line's end, by
+`test_a_terminal_gate_run_leaves_a_library_that_can_publish_its_kappa` — write the run
+the way the terminal writes it, cite it, then read the reliability off the library
+alone — with a structural test beside it that the entry point passes the library and
+not the document directory.
+
+**The record's home is the library, from both entry points.** `scripts/gate.py` takes
+its record destination as a required keyword and passes the library it holds the lease
+on; `--record` now means the directory the *document* goes to, and the document gains
+one line — a relative link to the record beside the cases. The console path is
+unchanged, and the two entry points now write the same two files to the same two kinds
+of place.
+
+Three reasons this way round rather than widening `GateCitation.record` to a path:
+
+- **A path does not survive the deployment.** The library is a mounted volume and
+  `docs/` is inside the image (decision Four, ADR-0021 condition 4). A path into
+  `docs/gate-runs/` names an image path from a mount, and names nothing at all after a
+  redeploy — so the κ hole would return everywhere except the machine the gate was run
+  on.
+- **The citation travels.** It serialises into every signed provenance block, so
+  `record` is something a recipient reads. A file name is a name inside the artefact
+  they were handed; an absolute path is a fact about the filesystem of whoever ran the
+  gate.
+- **Decision Two stays intact.** The citation is rendered off the record and computes
+  nothing. A path would have to be composed beside the record, or carried as a
+  directory field on `RecordedGateRun` — deployment state on a record of a measurement.
+
+What this gives up is that `docs/gate-runs/` no longer holds the machine-readable
+figures itself: it holds documents, and each links to the record in the library. That
+is decision Four read one step further — cases, citation and the figures the citation
+is a claim about, out of one directory — and the run of 2026-08-24 was moved to match.
+
 ## Consequences
 
 - **ADR-0021's cost list is two items shorter, and it should be read with this file.**
@@ -290,6 +341,11 @@ either is deliberately out of scope; the vocabulary side is being handled separa
   became `cite_the_gate_run_this_bench_last_made`, because the old name is the
   stale-pass reading in an identifier and this decision rejects it. The path is
   unchanged.
+- **A withheld family's card now says why, and shows the κ that barred it.** The
+  report screen printed the counts of the attempts and nothing else, so a family
+  withheld for want of a fit adjudicator read as a family nobody attacked. The payload
+  always carried the reading; the card dropped it. This is the amendment's other half:
+  the first makes the figure reachable, the second puts it where a reader looks.
 - **`CONTEXT.md`'s two entries moved.** *Gate citation* now carries what the record is
   called as well as the document; *gate run record* is what the citation points at
   rather than what a reader has to know to go looking for.

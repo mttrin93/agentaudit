@@ -208,11 +208,13 @@ _Avoid_: gate result, validation stamp, certification, the gate it passed
 
 **Gate run record**:
 The machine-readable form of a gate run's decision, carrying each family's three
-reference-agent rates and its discrimination score. Written beside the **gate
-document** by a gate run started from the command line, and into the case library by
-one started from the console. Since ADR-0023 it is what the **gate citation** *names*
-rather than something a reader has to know exists: the citation carries the address and
-the record carries the figures, so recovering them never means parsing the document.
+reference-agent rates and its discrimination score. Written **into the case library**,
+by both entry points, beside the citation that names it — the citation carries the file
+name and every reader resolves it there, so a record kept anywhere else is a citation
+whose figures nobody can reach (ADR-0023, amended). Since ADR-0023 it is what the
+**gate citation** *names* rather than something a reader has to know exists: the
+citation carries the address and the record carries the figures, so recovering them
+never means parsing the document. The **gate document** links to it.
 _Avoid_: sidecar, gate JSON, gate summary, the gate's data
 
 **Admission**:

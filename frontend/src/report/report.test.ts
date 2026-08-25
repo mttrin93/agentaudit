@@ -253,6 +253,45 @@ describe('a family’s answer', () => {
     // `stated` is carried for the questionnaire block that answers in sentences.
     expect('note' in withheld).toBe(false)
   })
+
+  it('carries the κ that barred it, in the shape a published family carries', () => {
+    const answers = familyAnswers(SERVED.measured)
+    const [withheld] = answers.filter((answer) => answer.kind === 'withheld')
+
+    // The reading is a figure with its counts under it, exactly as on a family whose
+    // rate *is* published: the number that decided this is the number a reader came
+    // for, and a card that printed only the counts of the attempts said nothing at
+    // all about why the rate above them is missing.
+    expect(withheld.kappa).toEqual({
+      figure: '0.59',
+      counts: '13 of 15 gold-set transcripts agreed, declared floor 0.60',
+    })
+    // And the line that stands where the rate would be, in a reader's words.
+    expect(withheld.reads).toBe(
+      'rate not published — κ is below the declared floor',
+    )
+  })
+
+  it('says so where no κ was measured at all, and prints no figure for it', () => {
+    const unmeasured = structuredClone(SERVED)
+    const [barred] = unmeasured.measured.withheld
+    barred.reason = 'no_kappa_measured'
+    barred.kappa = null
+    barred.agreements = null
+    barred.transcripts = null
+
+    const answers = familyAnswers(unmeasured.measured)
+    const [withheld] = answers.filter((answer) => answer.kind === 'withheld')
+
+    // Two different readings and never one figure of zero between them: a κ below
+    // the floor says the adjudicator was measured and found wanting, and no κ says
+    // nobody measured it (ADR-0004, ADR-0013).
+    expect(withheld.kappa).toBe(null)
+    expect(withheld.reads).toBe(
+      'rate not published — no κ was measured against the gold set',
+    )
+    expect(JSON.stringify(withheld)).not.toContain('0.00')
+  })
 })
 
 describe('the view over the whole payload', () => {

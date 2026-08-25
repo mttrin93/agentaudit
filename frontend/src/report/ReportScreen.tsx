@@ -419,12 +419,28 @@ function TheFamily({
     return (
       <div className="family absent">
         <h3>{readFamily(answer.family)}</h3>
-        {/* The counts, and no rate over them and no line about the one that is
-            absent. The attempts were made and the measurement is on the run, so what
-            this card does not state is the figure with the interval and the band that
-            would make it publishable (ADR-0006, ADR-0015). Empty where the process no
-            longer holds the run, which is every run after a restart. */}
+        {/* Why there is no rate here, where the rate would be. What this card does
+            not state is the figure with its interval and its band: the attempts were
+            made and the measurement is on the run, and what it lacks is a statable
+            evidentiary strength (ADR-0006, ADR-0015). It said none of that until now
+            — the counts alone read as a family nobody attacked. */}
+        <p className="at">{answer.reads}</p>
+        {/* And the reading that barred it, in the place and the shape a published
+            family carries its κ, because the number that withheld the rate is the
+            number a reader came for. Absent entirely where nobody measured one: no
+            figure, rather than a κ of zero (ADR-0013). */}
+        {answer.kappa ? (
+          <ul className="rates">
+            <li>
+              <span className="who">κ</span>{' '}
+              <span className="rate">{answer.kappa.figure}</span>
+            </li>
+          </ul>
+        ) : null}
+        {/* Empty where the process no longer holds the run, which is every run after
+            a restart. */}
         {counted ? <p className="aside">{counted}</p> : null}
+        {answer.kappa ? <p className="aside">{answer.kappa.counts}</p> : null}
       </div>
     )
   }

@@ -30,18 +30,26 @@ broken one, because `read_gate` is handed the recorded attempts and nothing else
 **Its output survives the run, three times.** Everything printed is written to a
 dated document under `--record`, in the two sections it was printed in: validation
 history has to exist before the first user does, and a gate answer that lived only in
-a terminal is a gate answer nobody can check (spec story 80). Beside it goes the same
-run as a machine-readable record — each family's three reference-agent rates, its
-`D`, whether the intervals were disjoint and whether the ordering held, under the
-decision and the rule that was applied — so a reader recovers the figures without
-parsing prose, in the shape `GET /gate-runs/{id}` serves them for a gate run started
-from the console (`bench/gate_record.py`, ADR-0021). And the **gate citation** goes
-into the case library itself, naming both files, so that the bench starts citing the
-gate run it just made rather than one wired into a configuration by hand (ADR-0023,
-`bench/cited.py`). None of the three can disagree: one `GateResult` is read once, the
-document's scored section is the record's own rendering of it, and the citation is
-read off that record. The curated narrative stays in `docs/validation.md`; what is
-written here is the run itself.
+a terminal is a gate answer nobody can check (spec story 80). Into the **case
+library** goes the same run as a machine-readable record — each family's three
+reference-agent rates, its `D`, whether the intervals were disjoint and whether the
+ordering held, under the decision and the rule that was applied — so a reader
+recovers the figures without parsing prose, in the shape `GET /gate-runs/{id}` serves
+them for a gate run started from the console (`bench/gate_record.py`, ADR-0021). And
+the **gate citation** goes into the library beside it, naming both files, so that the
+bench starts citing the gate run it just made rather than one wired into a
+configuration by hand (ADR-0023, `bench/cited.py`). None of the three can disagree:
+one `GateResult` is read once, the document's scored section is the record's own
+rendering of it, and the citation is read off that record. The curated narrative
+stays in `docs/validation.md`; what is written here is the run itself.
+
+**The record is in the library and not beside the document.** The citation carries
+the record's file name and every reader resolves it against the library it was found
+in (`cited.the_reliability`), so a record written anywhere else is a citation whose
+figures nobody can reach — which is what withheld every judged rate this bench
+measured, until ADR-0023's amendment moved it. The library holds what travels with
+the cases and what a booting process is given; `--record` holds the document a person
+reads, and the document links to the record from there.
 
 **A failing run replaces a passing citation, and says so.** The citation is what
 this bench last put itself through and not the best answer it ever got, so it is
@@ -233,9 +241,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         "--record",
         default=str(GATE_RUNS_DIR),
         help=(
-            "the directory a dated record of this run is written to. The run's own "
+            "the directory this run's dated document is written to. The run's own "
             "document, which is not docs/validation.md: that one is written by hand "
-            "and reads the records"
+            "and reads the records. The machine-readable record is not written here "
+            "— it goes into --cases, where the citation that names it points"
         ),
     )
     return _run_it(parser.parse_args(argv))
@@ -407,6 +416,11 @@ def run_the_gate(args: argparse.Namespace) -> int:
         Path(args.record),
         args,
         retirement_section(history, decisions, library),
+        # The record goes into the library, beside the citation rendered from it and
+        # inside the same lease as the readings: the citation names the file and every
+        # reader resolves that name against the library, so this is the only directory
+        # a cited record is reachable from (`cited.the_reliability`, ADR-0023).
+        record_into=cases_dir,
     )
     print(f"\nthis run's own document: {written.document}")
     print(f"the same run as a record: {written.record}")
@@ -425,12 +439,14 @@ def run_the_gate(args: argparse.Namespace) -> int:
 
 @dataclass(frozen=True)
 class WrittenRun:
-    """Where this gate run was written down: the document, and the record beside it.
+    """Where this gate run was written down: the document, and the record it cites.
 
-    Two files and one run. A reader gets the prose, a program gets the fields, and
-    neither is the other's summary — they are two renderings of one reading, and the
-    writer below returns both so that no caller can be handed one and told the other
-    exists somewhere.
+    Two files and one run, and they are in two directories on purpose: the prose goes
+    where a person reads it and the fields go into the library, beside the cases they
+    are a claim about and where the citation's own name for the record resolves. A
+    reader gets the prose, a program gets the fields, and neither is the other's
+    summary — they are two renderings of one reading, and the writer below returns
+    both so that no caller can be handed one and told the other exists somewhere.
 
     `recorded` is that one reading, returned rather than rebuilt, because the
     citation is the third rendering of it (`cited.citation_of`): a caller that read
@@ -450,8 +466,10 @@ def record_run(
     directory: Path,
     args: argparse.Namespace,
     retirement: str = "",
+    *,
+    record_into: Path,
 ) -> WrittenRun:
-    """Write this run to a dated document, and to a record beside it.
+    """Write this run to a dated document, and its record into the case library.
 
     The same text the operator saw, because a recorded document that differed from
     the terminal would be two records of one run. One file per run and never an
@@ -459,12 +477,20 @@ def record_run(
     gate run, and two of them in one file is a document whose reader has to work out
     where one ended.
 
-    **The record is the same run in fields rather than in prose**, in the same
-    directory and under the same stamp, so a reader recovers each family's three
-    reference-agent rates and its `D` without parsing a sentence (#84). Its shape is
-    `bench/gate_record.py`'s — the shape `GET /gate-runs/{id}` serves for a gate run
-    started from the console — so the two entry points describe one gate run in one
-    vocabulary (ADR-0021).
+    **The record is the same run in fields rather than in prose**, under the same
+    stamp, so a reader recovers each family's three reference-agent rates and its `D`
+    without parsing a sentence (#84). Its shape is `bench/gate_record.py`'s — the
+    shape `GET /gate-runs/{id}` serves for a gate run started from the console — so
+    the two entry points describe one gate run in one vocabulary (ADR-0021).
+
+    **`record_into` is required and it is the library**, which is the whole of the
+    difference from the version of this that wrote the record beside the document.
+    The citation is rendered off the record and carries its file name; every reader
+    resolves that name against the library it read the citation from, so a record
+    written anywhere else is a citation pointing at nothing and a bench that withholds
+    every judged rate it measured. Keyword-only and undefaulted on the discipline the
+    rest of this arrangement follows: a destination that could be omitted is one a
+    caller omits, and the failure is silent three layers away in a report.
 
     **One reading, two renderings, and the document is rendered from the record.**
     `recorded_gate_run` is called once, and the scored-layer section below is
@@ -480,6 +506,7 @@ def record_run(
     transcripts on the episode (ADR-0008, spec story 105).
     """
     directory.mkdir(parents=True, exist_ok=True)
+    record_into.mkdir(parents=True, exist_ok=True)
     stamped = datetime.now(tz=UTC)
     path = directory / document_named(stamped)
     recorded = recorded_gate_run(
@@ -506,6 +533,12 @@ def record_run(
                 "(judged families only)",
                 f"- attacking model: `{args.attacker_model}` (adaptive layer only)",
                 f"- confirmed by: {result.approval.identity}",
+                # Where the same run is in fields. A relative link rather than a
+                # copy of the file: one record, in the library the citation reads it
+                # from, and this document is how a person walks to it.
+                f"- the same run as fields: "
+                f"[`{recorded.record}`]({_relative(record_into, directory)}"
+                f"/{recorded.record})",
                 "",
                 "## The scored layer, which decides the gate",
                 "",
@@ -532,9 +565,21 @@ def record_run(
     )
     return WrittenRun(
         document=path,
-        record=write_the_record(recorded, directory),
+        record=write_the_record(recorded, record_into),
         recorded=recorded,
     )
+
+
+def _relative(target: Path, seen_from: Path) -> str:
+    """The path from one directory to another, as a link in a Markdown file.
+
+    A relative link and never an absolute one: the document is committed and read on
+    other people's machines, and a link naming the directory this run happened to be
+    started from is a link that works nowhere else. `os.path.relpath` rather than
+    `Path.relative_to`, because the two directories are siblings under the repository
+    rather than one inside the other — the answer climbs before it descends.
+    """
+    return os.path.relpath(target.resolve(), seen_from.resolve())
 
 
 def exit_code(gate: GateResult) -> int:

@@ -63,6 +63,7 @@ import type {
   RunEpisodes,
   TargetReport,
   Verification,
+  WithheldFamily,
 } from '../api/bench'
 
 /**
@@ -132,7 +133,30 @@ export interface Figures {
  */
 export type FamilyAnswer =
   | { kind: 'measured'; family: string; figures: Figures }
-  | { kind: 'withheld'; family: string; reason: string; stated: string }
+  | {
+      kind: 'withheld'
+      family: string
+      reason: string
+      /**
+       * The line that stands where the rate would be, in a reader's words.
+       *
+       * Rendered off `reason` rather than sliced out of `stated`: the payload's
+       * sentence is prose for a recipient of the artefact, and a card that showed the
+       * counts of the attempts and nothing else — which is what this one did — left a
+       * reader to conclude the family was simply not answered.
+       */
+      reads: string
+      /**
+       * The κ that barred the rate, in the shape a published family carries it.
+       *
+       * `null` where the reason is that nobody measured it: a withheld family has no
+       * figure then, and one printed here would be the κ of zero ADR-0013 refuses.
+       * Where there is a reading it goes on the card's figure line, because the
+       * number that withheld the rate is the number the reader came for.
+       */
+      kappa: { figure: string; counts: string } | null
+      stated: string
+    }
   | {
       kind: 'not_measurable'
       family: string
@@ -140,6 +164,20 @@ export type FamilyAnswer =
       stated: string
       note: string
     }
+
+/** What every withheld card says before it says why. */
+const RATE_NOT_PUBLISHED = 'rate not published'
+
+/**
+ * The reason a rate is absent, in a reader's words, keyed by the payload's own name
+ * for it. Two entries because `WithheldReason` has two members and they are two
+ * different readings; an unnamed one falls back to the bare line rather than to a
+ * guess, so a payload from a later field set says *rate not published* and no more.
+ */
+const WITHHELD_READS: Record<string, string> = {
+  kappa_below_floor: `${RATE_NOT_PUBLISHED} — κ is below the declared floor`,
+  no_kappa_measured: `${RATE_NOT_PUBLISHED} — no κ was measured against the gold set`,
+}
 
 const NOT_MEASURABLE_NOTE =
   'No attempt was spent here: a precondition was unmet before the first one. A ' +
@@ -154,6 +192,46 @@ const NOT_MEASURABLE_NOTE =
  * severity is a rank across families, and a rank is the composite ADR-0005 refuses
  * arriving as a layout decision.
  */
+/**
+ * The κ that withheld a rate, or nothing where the payload carries no whole reading.
+ *
+ * Assembled from the fields rather than sliced out of `stated`, on the same terms as
+ * a published family's κ: the figure goes where a rate would be and the counts go
+ * under it. **All three or none** — a figure whose counts are missing is a number
+ * with no denominator, and `cited.the_reliability` drops a reading on the same
+ * condition rather than filling one in.
+ */
+function barringKappa(
+  withheld: WithheldFamily,
+): { figure: string; counts: string } | null {
+  const { kappa, agreements, transcripts } = withheld
+  if (kappa === null || agreements === null || transcripts === null) {
+    return null
+  }
+  return {
+    figure: kappa.toFixed(2),
+    counts: goldSetCounts(agreements, transcripts, withheld.floor),
+  }
+}
+
+/**
+ * The counts a κ was measured over, in one line, wherever a κ is printed.
+ *
+ * One writer for both cards: the reading that publishes a rate and the reading that
+ * withholds one are the same measurement of the same instrument, and two renderings
+ * of it would eventually differ in a way a reader would have to reconcile.
+ */
+function goldSetCounts(
+  agreements: number,
+  transcripts: number,
+  floor: number,
+): string {
+  return (
+    `${agreements} of ${transcripts} gold-set transcripts agreed, ` +
+    `declared floor ${floor.toFixed(2)}`
+  )
+}
+
 export function familyAnswers(measured: MeasuredSection): FamilyAnswer[] {
   return [
     ...measured.deterministic.map(measuredAnswer),
@@ -162,6 +240,8 @@ export function familyAnswers(measured: MeasuredSection): FamilyAnswer[] {
       kind: 'withheld' as const,
       family: withheld.family,
       reason: withheld.reason,
+      reads: WITHHELD_READS[withheld.reason] ?? RATE_NOT_PUBLISHED,
+      kappa: barringKappa(withheld),
       // The payload's own line, carried for the questionnaire block that answers in
       // sentences. The report card prints the named reason and no paragraph: the
       // sentence saying it again is in the report.md a recipient reads.
@@ -198,10 +278,11 @@ export function familyAnswers(measured: MeasuredSection): FamilyAnswer[] {
           ? null
           : {
               figure: entry.reliability.kappa.toFixed(2),
-              counts:
-                `${entry.reliability.agreements} of ` +
-                `${entry.reliability.transcripts} gold-set transcripts agreed, ` +
-                `declared floor ${entry.reliability.floor.toFixed(2)}`,
+              counts: goldSetCounts(
+                entry.reliability.agreements,
+                entry.reliability.transcripts,
+                entry.reliability.floor,
+              ),
             },
       limits: entry.coverage.map((note) => ({
         identifier: note.identifier,

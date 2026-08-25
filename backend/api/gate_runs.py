@@ -949,11 +949,15 @@ def _write_back(
     The order is the argument: a citation is a claim about a library at a version, and
     the version it claims is the one the readings were just stored against.
 
-    **This is where a console gate run's figures become durable.** A command-line run
-    writes its record beside its dated document; this one has no document to sit
-    beside, so the record goes into the library and the citation points at it there.
-    That closes ADR-0021's own complaint that the two entry points leave different
-    traces — the trace is now the same record in a different directory.
+    **This is where a console gate run's figures become durable.** The record goes
+    into the library and the citation points at it there, which is where a
+    command-line run puts its record too: the citation carries the file name and every
+    reader resolves it against the library, so the library is the only directory a
+    cited record is reachable from (ADR-0023, amended — the command line wrote it
+    beside its document until then, and every judged rate was withheld for it). That
+    closes ADR-0021's own complaint that the two entry points leave different traces —
+    the trace is now the same record in the same kind of place, and what a console run
+    still lacks is the dated document.
 
     **The in-process citation is the last thing and it is optional.** `cites` is the
     one edge back onto the bench a run is measured with, and a registry wired to none

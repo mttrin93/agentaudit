@@ -33,6 +33,8 @@ gives the reason.
 
 ```mermaid
 flowchart TD
+    C["The case library<br/>18 hand-written cases, one payload each"]
+
     subgraph you["You, in the browser"]
         R["1. Register your agent<br/>URL · a nonce to plant · 3 attestations"]
         A["2. See the cost, then answer<br/>nothing is sent before you say yes"]
@@ -40,9 +42,9 @@ flowchart TD
         D["4. Read the report"]
     end
 
-    R --> A --> S
+    C ~~~ you
 
-    C["The case library<br/>18 hand-written cases, one payload each"]
+    R --> A --> S
 
     subgraph run["The run, in the backend"]
         S["Scored layer<br/>recorded cases, fixed number of attempts<br/>every number in the report comes from here"]

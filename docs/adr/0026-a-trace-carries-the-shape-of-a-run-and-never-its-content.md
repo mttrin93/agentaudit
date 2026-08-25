@@ -114,7 +114,7 @@ wrote it; a sink that is unreachable must not be. A bench that lost 180 paid cal
 because a container was restarting would be a bench whose observability cost more
 than it explained.
 
-## Three properties of the implementation that carry the decision
+## Four properties of the implementation that carry the decision
 
 - **The tracer provider is private to the module.** `set_tracer_provider` is called
   nowhere in this repository. A global provider is a sink that any library in the
@@ -126,7 +126,19 @@ than it explained.
   `record_exception` and a status description are emitted verbatim. A failure is an
   `ERROR_CLASS` attribute — the named `TargetFailure` — and a bare error status. The
   class is the part that tells a reader which job they have: a timeout is capacity, a
-  rejected token is configuration.
+  rejected token is configuration. **The parameter's type is the enum and not a
+  string**, because that field is the one whose *value* a call site could plausibly
+  invent, and the nearest thing to hand at every such call site is `str(exception)` —
+  which is the message carrying the url. The allowlist constrains the keys; the enum
+  constrains the one value that had a way of going wrong.
+- **An open span is a lost span, so nothing is left open.** A span is exported when
+  it ends, so a span abandoned mid-run is not merely unmarked — it never reaches the
+  sink at all. An attempt's span opens when its message goes on the wire and closes
+  when its verdict is recorded, and a judged verdict is decided on a pool while the
+  next messages go out, so several are open at once. `run_case` drains that queue in
+  a `finally`, and `run_calibration` flushes in one: the run that stopped is the run
+  whose trace is worth having, and both the spans and the push have to survive the
+  exception that stopped it.
 - **Span names are a closed set too.** A name is emitted data as much as an attribute
   is, and a name assembled from a case id or a target's name would be the allowlist
   bypassed through the one part of a span nobody thinks of as a field.

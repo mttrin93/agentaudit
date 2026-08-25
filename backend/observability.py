@@ -104,6 +104,8 @@ from opentelemetry.sdk.trace.sampling import (
 from opentelemetry.trace import Span as OtelSpan
 from opentelemetry.trace import StatusCode
 
+from backend.bench.contract import TargetFailure
+
 log = logging.getLogger(__name__)
 
 SERVICE = "agentaudit"
@@ -209,6 +211,13 @@ class Field(StrEnum):
 
     ERROR_CLASS = "agentaudit.error_class"
     """A `TargetFailure` member, and no message with it.
+
+    The type is the enum and not a string, so the closed set of named outcomes is
+    the closed set of values this field can hold. A `str` here would be the one
+    attribute whose *value* a call site could invent — and the nearest thing to hand
+    at every one of those call sites is `str(exception)`, which is the message that
+    contains the endpoint url. The allowlist constrains the keys; this constrains
+    the one value that had a plausible way of going wrong.
 
     The name of the outcome and nothing else. `TargetUnreachable`'s own message
     carries the endpoint URL, so it is never recorded — the class is the part that
@@ -547,7 +556,7 @@ class Recorder:
     def record(self, fields: Mapping[Field, Value]) -> None:
         """Add attributes to this span."""
 
-    def errored(self, error_class: str | None = None) -> None:
+    def errored(self, error_class: TargetFailure | None = None) -> None:
         """Mark this span failed, with the class of failure and no message.
 
         No exception is recorded and no status description is set, whatever the
@@ -557,6 +566,17 @@ class Recorder:
 
     def end(self) -> None:
         """Close this span and hand its context back."""
+
+    def abandon(self, error_class: TargetFailure | None = None) -> None:
+        """Mark this span failed and close it, in the one call that pairs them.
+
+        For a span whose end is not lexical (`start`), on a path that is leaving
+        through an exception. The two halves are always taken together and are worth
+        exactly one call site each: a span marked failed and never closed is a span
+        that is never exported at all, which is worse than one that was never opened.
+        """
+        self.errored(error_class)
+        self.end()
 
 
 DROPPED: Final = Recorder()
@@ -581,10 +601,15 @@ class _Recording(Recorder):
         except Exception:  # noqa: BLE001 — see the module docstring
             log.warning("tracing: an attribute was dropped", exc_info=True)
 
-    def errored(self, error_class: str | None = None) -> None:
+    def errored(self, error_class: TargetFailure | None = None) -> None:
+        # Through the same boundary every other attribute goes through, rather than
+        # straight onto the span: one line applies the allowlist, and a second route
+        # past it is how the first one stops being true.
+        attributes = (
+            {} if error_class is None else _attributes({Field.ERROR_CLASS: error_class})
+        )
         try:
-            if error_class is not None:
-                self._span.set_attribute(Field.ERROR_CLASS.value, error_class)
+            self._span.set_attributes(attributes)
             self._span.set_status(StatusCode.ERROR)
         except Exception:  # noqa: BLE001 — see the module docstring
             log.warning("tracing: a failure was not marked", exc_info=True)

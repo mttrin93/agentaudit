@@ -287,7 +287,11 @@ def run_calibration(
     `trace` is the run's identity and its declared instruments, for the sink — the
     run id a record holds and the three model identifiers this function is given as
     opaque callables and cannot read (`backend/observability.py`). `None` traces the
-    run without an id, which is what a caller holding no record has. Nothing about
+    run without an id, which joins to nothing and is deliberately still a trace: every
+    entry point in this repository passes one — the API from its run record, the five
+    scripts from `console.traced_run` — so the anonymous case is a caller holding no
+    record, which in practice is this suite. Dropping the trace instead would make a
+    forgotten argument look like a sink that is down. Nothing about
     the run changes either way: the sink is not consulted, no figure comes back from
     it, and a sink that is down or absent is a run that completes normally
     (ADR-0026).
@@ -362,25 +366,29 @@ def run_calibration(
             precedent=precedent,
         )
 
-    with traced(Span.RUN, trace.fields() if trace is not None else None) as span:
-        try:
-            approval = run_under_approval(declared, run_suite, approve)
-        finally:
-            # In a `finally` because the figures are most wanted on the run that
-            # did not finish: a suite that stopped on a transport failure is one
-            # whose calls spent per layer say how far it got. Read off the run
-            # state, which is the authority for them, and never back out of the
-            # sink (ADR-0026).
-            span.record(
-                {
-                    Field.CALLS_SCORED: state.spent_in(Layer.SCORED),
-                    Field.CALLS_ADAPTIVE: state.spent_in(Layer.ADAPTIVE),
-                }
-            )
-    # Once the root span is closed and not before, so what is pushed is a whole
-    # trace. Best effort and short: a script that exited here would otherwise take
-    # the half of the trace that says how the run ended with it.
-    flush()
+    try:
+        with traced(Span.RUN, trace.fields() if trace is not None else None) as span:
+            try:
+                approval = run_under_approval(declared, run_suite, approve)
+            finally:
+                # In a `finally` because the figures are most wanted on the run that
+                # did not finish: a suite that stopped on a transport failure is one
+                # whose calls spent per layer say how far it got. Read off the run
+                # state, which is the authority for them, and never back out of the
+                # sink (ADR-0026).
+                span.record(
+                    {
+                        Field.CALLS_SCORED: state.spent_in(Layer.SCORED),
+                        Field.CALLS_ADAPTIVE: state.spent_in(Layer.ADAPTIVE),
+                    }
+                )
+    finally:
+        # Once the root span is closed and not before, so what is pushed is a whole
+        # trace. In a `finally` for the same reason the figures above are: a run that
+        # stopped on a transport failure is the run whose trace is worth having, and
+        # a flush the exception jumped over would leave it in a buffer that dies with
+        # the process. Best effort and short.
+        flush()
 
     return CalibrationResult(
         run_state=state,

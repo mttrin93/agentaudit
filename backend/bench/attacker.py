@@ -122,9 +122,11 @@ def run_case(
     pool = ThreadPoolExecutor(
         max_workers=ADJUDICATIONS_IN_FLIGHT, thread_name_prefix="adjudication"
     )
+    # Above the `try`, because the `finally` has to be able to reach whatever is
+    # still in it.
+    sent: deque[Sent] = deque()
+    scored: list[Attempt] = []
     try:
-        sent: deque[Sent] = deque()
-        scored: list[Attempt] = []
         with traced(
             Span.CASE,
             {
@@ -150,6 +152,12 @@ def run_case(
                 scored.append(_score(sent.popleft(), target, run_state))
         return tuple(scored)
     finally:
+        # The attempts still queued when the run stopped, each holding a span that
+        # was opened when its message went out. A span that is never closed is never
+        # exported — so leaving these would delete from the sink exactly the attempts
+        # a reader needs to see, on exactly the run that did not finish (ADR-0026).
+        while sent:
+            sent.popleft().span.abandon()
         # Nothing outstanding is worth waiting for. On the way out through an
         # exception the run is over, and a verdict for an attempt no report will
         # carry is a minute of somebody's time spent on nothing.
@@ -190,8 +198,7 @@ def _send(
         # exception: its message names the endpoint url, which is the one identifier
         # a trace never carries (ADR-0011, ADR-0026).
         span.record({Field.RETRIES: unreachable.sends - 1})
-        span.errored(unreachable.failure)
-        span.end()
+        span.abandon(unreachable.failure)
         raise
     span.record({Field.RETRIES: transcript.sends - 1})
     run_state.record_call(Layer.SCORED, transcript.sends)
@@ -251,8 +258,7 @@ def _score(sent: Sent, target: TargetConfig, run_state: RunState) -> Attempt:
             sent.verdict.result() if isinstance(sent.verdict, Future) else sent.verdict
         )
     except BaseException:
-        sent.span.errored()
-        sent.span.end()
+        sent.span.abandon()
         raise
     sent.span.record({Field.VERDICT: verdict})
     sent.span.end()

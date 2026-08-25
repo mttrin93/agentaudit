@@ -101,17 +101,7 @@ def run_adaptive_layer(
             if objective is None:
                 continue
             for _ in range(budget.episodes_per_family):
-                # The episode's ordinal across the run, which is what
-                # `enter_episode` counts and what the run's own position reports.
-                # An ordinal and not a denominator: an episode has none, and
-                # nothing divides this (ADR-0010, CONTEXT.md).
-                with traced(
-                    Span.EPISODE,
-                    {
-                        Field.FAMILY: family,
-                        Field.EPISODE_INDEX: len(episodes) + 1,
-                    },
-                ):
+                with traced(Span.EPISODE, {Field.FAMILY: family}) as span:
                     episodes.append(
                         run_episode(
                             target=entry.target,
@@ -125,6 +115,14 @@ def run_adaptive_layer(
                             precedent=precedent,
                         )
                     )
+                    # Read off the run state rather than counted here. The position
+                    # is the run's own and the run is the authority for it — a second
+                    # counter beside it would be a figure that could come to disagree
+                    # with the one `/runs` reports (ADR-0026). An ordinal and not a
+                    # denominator: an episode has none (ADR-0010, CONTEXT.md).
+                    position = run_state.episode_position
+                    if position is not None:
+                        span.record({Field.EPISODE_INDEX: position.index})
     return tuple(episodes)
 
 

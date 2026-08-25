@@ -18,21 +18,25 @@ attributes-only check, and the failure it would represent is the irreversible on
 
 import ast
 import os
+import threading
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from pathlib import Path
 
 import pytest
 from opentelemetry.sdk.trace import ReadableSpan, SpanProcessor
-from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+from opentelemetry.sdk.trace.export import BatchSpanProcessor, SimpleSpanProcessor
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import (
     InMemorySpanExporter,
 )
 
 from backend import observability
 from backend.api.app import create_app
+from backend.bench.adaptive.precedent import DURABLE_PRECEDENT
+from backend.bench.adjudication import Completion
 from backend.bench.calibration import CalibrationResult, run_calibration
 from backend.bench.contract import TargetFailure, TargetUnreachable
+from backend.bench.evaluator import Verdict
 from backend.bench.library import Case
 from backend.bench.signing import SIGNING_KEY_VARIABLE, encoded_private, generate
 from backend.graph.budget import Layer
@@ -52,6 +56,7 @@ from backend.observability import (
 from backend.tests.conftest import (
     BENCH_ATTESTATION,
     CONFIRMING,
+    a_finding,
     reference_target,
 )
 from backend.tests.flaky_target import IMPATIENT, flaky_target
@@ -63,6 +68,22 @@ A_RUN = TracedRun(
     reference_model="stub:obedient",
 )
 A_GATE_RUN = TracedRun(id="gate-run-under-test", gate=True)
+
+A_LONG_TIME = 600_000
+"""A batch schedule longer than any test, so only an explicit flush exports."""
+
+AN_ADJUDICATORS_PROSE = "the agent conceded the refund without checking eligibility"
+A_PRECEDENT_REASON = "a prior finding's reason, which is narrative and not a shape"
+A_PRECEDENT_REMEDIATION = "a prior finding's remediation, which is also not a shape"
+
+
+def narrating(prose: str, verdict: Verdict = Verdict.SUCCEEDED) -> Completion:
+    """An adjudicator that prefaces its verdict with prose, as a real one does.
+
+    The line the bench reads is the labelled one; everything above it is the
+    instrument talking, and it is the half that must not leave the process.
+    """
+    return lambda system_prompt, message: f"{prose}\nverdict: {verdict}"
 
 
 @contextmanager
@@ -286,6 +307,51 @@ def test_no_payload_reply_narrative_target_name_url_or_token_is_emitted(
         assert withheld not in said, f"{withheld!r} reached the trace"
 
 
+def test_no_adjudicator_narrative_precedent_or_remediation_is_emitted(
+    disclosure_denial_case: Case, leakage_case: Case
+) -> None:
+    """The three exclusions a deterministic run has nothing to test.
+
+    An adjudicated case puts an instrument's prose into the run, and a seeded
+    precedent store puts a prior finding's reason and remediation within reach of
+    the adaptive layer's `retrieve_precedent`. None of the three is a shape, and
+    none of them reaches the sink.
+
+    Both cases run, and the deterministic one is what makes the precedent reachable:
+    the store holds deterministic findings only (ADR-0004), and the adaptive layer
+    runs over the families this run holds a deterministic case for.
+    """
+    DURABLE_PRECEDENT.record(
+        a_finding(
+            family=leakage_case.family,
+            case_id=leakage_case.id,
+            reason=A_PRECEDENT_REASON,
+            remediation=A_PRECEDENT_REMEDIATION,
+        )
+    )
+
+    with recording() as exporter, reference_target() as reference:
+        run_calibration(
+            cases=[disclosure_denial_case, leakage_case],
+            targets=[reference.target],
+            attestation=BENCH_ATTESTATION,
+            plant_nonce=reference.plant_nonce,
+            approve=CONFIRMING,
+            adjudicator=narrating(AN_ADJUDICATORS_PROSE),
+            trace=A_RUN,
+        )
+        spans = list(exporter.get_finished_spans())
+
+    said = " | ".join(strings_in(spans))
+    for withheld in (
+        AN_ADJUDICATORS_PROSE,
+        A_PRECEDENT_REASON,
+        A_PRECEDENT_REMEDIATION,
+    ):
+        assert withheld not in said, f"{withheld!r} reached the trace"
+    assert [span for span in spans if span.name == Span.ATTEMPT]
+
+
 def test_the_endpoint_appears_as_its_hash_or_not_at_all(leakage_case: Case) -> None:
     """The hash the attestation already records, and the url nowhere."""
     result, spans = traced_calibration(leakage_case)
@@ -467,7 +533,58 @@ def test_every_attempt_is_recorded_with_tracing_off_on_and_sampled_to_nothing(
     ]
     assert recorded[0] == recorded[1] == recorded[2]
     assert recorded[0], "a run that recorded no attempt proves nothing here"
+
+    # And the registration record beside them, which is where the liability record
+    # and the Article 12 record are one artefact (`registration.py`). Its endpoint
+    # hash and the nonce are not compared: each run serves its agent on a fresh port
+    # and issues a fresh value, so the two that differ are the two that must.
+    registered = [
+        (
+            result.target_runs[0].registration.complete,
+            result.target_runs[0].registration.echoed,
+            result.target_runs[0].registration.waived,
+            result.target_runs[0].registration.attestation.attestation,
+        )
+        for result in (off, on, sampled)
+    ]
+    assert registered[0] == registered[1] == registered[2]
+    assert registered[0][0], "an unregistered target proves nothing here"
+
     assert emitted and not dropped
+
+
+def test_a_run_that_aborted_still_pushes_its_trace_before_the_process_moves_on(
+    leakage_case: Case,
+) -> None:
+    """The flush is in a `finally`, so the abort does not jump over it.
+
+    Behind a batch processor with its schedule set past the life of this test, so
+    the only thing that can put a span in front of the exporter is the flush itself.
+    Every other test here exports on `end` and would stay green with no flush at
+    all — which is exactly how a run that ended in a transport failure comes to
+    leave nothing behind, its buffered spans dying with the process that held them.
+    """
+    exporter = InMemorySpanExporter()
+    observability._install(
+        BatchSpanProcessor(exporter, schedule_delay_millis=A_LONG_TIME)
+    )
+    try:
+        with flaky_target(failures_before_reply=IMPATIENT.sends + 1) as flaky:
+            with pytest.raises(TargetUnreachable):
+                run_calibration(
+                    cases=[leakage_case],
+                    targets=[flaky.target],
+                    attestation=BENCH_ATTESTATION,
+                    plant_nonce=flaky.plant_nonce,
+                    approve=CONFIRMING,
+                    trace=A_RUN,
+                )
+        pushed = list(exporter.get_finished_spans())
+    finally:
+        observability.install(None)
+
+    assert pushed, "the aborted run's spans never left the buffer"
+    assert Span.RUN in {span.name for span in pushed}
 
 
 def _untraced(case: Case) -> tuple[CalibrationResult, None]:
@@ -549,6 +666,55 @@ def test_a_sample_that_is_not_a_fraction_of_runs_is_refused() -> None:
         trace_config({ENDPOINT_VARIABLE: "http://localhost:4318", SAMPLE_VARIABLE: "x"})
     with pytest.raises(ValueError):
         TraceConfig(endpoint="http://localhost:4318", sample=1.5)
+
+
+def test_an_attempt_in_flight_when_the_run_stops_still_reaches_the_sink(
+    disclosure_denial_case: Case,
+) -> None:
+    """The attempts already sent when an endpoint goes are the ones worth reading.
+
+    A judged case's verdicts are decided on a pool while the next messages go out,
+    so several attempts are open at once. An attempt's span is opened when its
+    message goes on the wire and closed when its verdict is recorded — and a span
+    that is never closed is never *exported*, so leaving the queue behind would
+    delete from the sink exactly the attempts a reader needs, on exactly the run
+    that did not finish (ADR-0026).
+
+    Held still rather than raced: the adjudicator blocks, so nothing settles and
+    every attempt sent stays in the queue until the endpoint stops answering.
+    """
+    held = threading.Event()
+
+    def blocking(system_prompt: str, message: str) -> str:
+        held.wait(timeout=30)
+        return f"verdict: {Verdict.RESISTED}"
+
+    answered = 4  # the registration probe, then three attempts
+    try:
+        with (
+            recording() as exporter,
+            flaky_target(
+                failures_before_reply=0, replies_before_failing=answered
+            ) as flaky,
+        ):
+            with pytest.raises(TargetUnreachable):
+                run_calibration(
+                    cases=[disclosure_denial_case],
+                    targets=[flaky.target],
+                    attestation=BENCH_ATTESTATION,
+                    plant_nonce=flaky.plant_nonce,
+                    approve=CONFIRMING,
+                    adjudicator=blocking,
+                    trace=A_RUN,
+                )
+            spans = list(exporter.get_finished_spans())
+    finally:
+        held.set()
+
+    attempts = [span for span in spans if span.name == Span.ATTEMPT]
+    # Three that were in flight, and the fourth whose send failed.
+    assert len(attempts) == answered
+    assert all(span.end_time is not None for span in attempts)
 
 
 # --- one module owns the sink -----------------------------------------------------

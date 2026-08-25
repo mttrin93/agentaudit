@@ -294,10 +294,10 @@ uv run python -m scripts.gate --identity "your name"
 
 ### Tracing a run
 
-Off by default, and a bench with no sink configured runs and reports exactly the
-same. To see where a run went — per-node timings, the family, case and attempt in
-flight, calls spent per layer, retry storms and error classes — point it at an
-OTLP endpoint:
+A run makes hundreds of calls. When one goes wrong, a trace shows you where. It is
+off by default, and a run with no trace behaves exactly the same.
+
+Turn it on by pointing the bench at an OTLP endpoint:
 
 ```bash
 export AGENTAUDIT_TRACE_ENDPOINT=https://api.smith.langchain.com/otel
@@ -306,27 +306,22 @@ export AGENTAUDIT_TRACE_PROJECT=agentaudit      # optional, files the trace
 export AGENTAUDIT_TRACE_SAMPLE=1.0              # optional, a fraction of runs
 ```
 
-The fields travel under a `langsmith.metadata.` prefix, which is the default and the
-only namespace LangSmith's ingest keeps a custom attribute in — without it the trace
-arrives with its waterfall intact and every field of the allowlist dropped on
-arrival, silently. Point the bench at a collector you run and set
-`AGENTAUDIT_TRACE_ATTRIBUTE_PREFIX=` empty; the names underneath are the same.
+You get timings for each step, the family, case and attempt in flight, calls spent
+per layer, retries and error classes. The trace is filed under the same run id the
+console shows you; a terminal run prints `trace id: …` before it starts.
 
-A run over HTTP traces under the run id the console already shows you. A terminal
-run prints `trace id: …` before it starts.
+**A trace shows the shape of a run, never what was said in it.** No attack payload,
+no reply from your agent, no narrative, and not your agent's name, url or token.
+Only a fixed list of fields is allowed out, and anything not on that list has no way
+to reach the trace. The tracer LangGraph turns on by default is *not* what we use —
+it sends prompts and replies word for word — so the bench switches it off if your
+environment had it on. See
+[ADR-0026](./docs/adr/0026-a-trace-carries-the-shape-of-a-run-and-never-its-content.md).
 
-**A trace carries the shape of a run and never its content.** The fields are a
-declared allowlist — ids, family, case, attempt, node, timings, calls per layer,
-verdict, retry count, error class, model identifiers, and the endpoint *hash*. No
-payload, no reply, no narrative, no target name, no url, no token. The default
-LangGraph tracer is not the mechanism, and it is switched off if your environment
-had it on: it sends prompts and replies verbatim.
-[ADR-0026](./docs/adr/0026-a-trace-carries-the-shape-of-a-run-and-never-its-content.md)
-records what the sink is, and the condition under which it is revisited — before
-the first target that is not one of the built-in agents.
-
-Any OTLP endpoint works. A collector you run yourself is the same two lines with a
-different url.
+Any OTLP endpoint works, including a collector you run yourself. For those, also set
+`AGENTAUDIT_TRACE_ATTRIBUTE_PREFIX=` (empty). LangSmith only keeps custom fields that
+start with `langsmith.metadata.`, so that prefix is the default — without it the
+trace still arrives, but every field is dropped on the way in.
 
 ### Settings
 

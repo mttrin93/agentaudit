@@ -44,6 +44,8 @@ from backend.observability import (
     API_KEY_VARIABLE,
     ENDPOINT_VARIABLE,
     INHERITED_TRACING_VARIABLES,
+    LANGSMITH_METADATA_PREFIX,
+    PREFIX_VARIABLE,
     PROJECT_VARIABLE,
     SAMPLE_VARIABLE,
     Field,
@@ -87,7 +89,7 @@ def narrating(prose: str, verdict: Verdict = Verdict.SUCCEEDED) -> Completion:
 
 
 @contextmanager
-def recording(sample: float = 1.0) -> Iterator[InMemorySpanExporter]:
+def recording(sample: float = 1.0, prefix: str = "") -> Iterator[InMemorySpanExporter]:
     """Install an exporter this test can read, and take it out again afterwards.
 
     Reaches `observability._install`, which is private and is the only way to read
@@ -98,7 +100,7 @@ def recording(sample: float = 1.0) -> Iterator[InMemorySpanExporter]:
     """
     exporter = InMemorySpanExporter()
     processor: SpanProcessor = SimpleSpanProcessor(exporter)
-    observability._install(processor, sample=sample)
+    observability._install(processor, sample=sample, prefix=prefix)
     try:
         yield exporter
     finally:
@@ -106,10 +108,10 @@ def recording(sample: float = 1.0) -> Iterator[InMemorySpanExporter]:
 
 
 def traced_calibration(
-    case: Case, trace: TracedRun = A_RUN, name: str = "trivial"
+    case: Case, trace: TracedRun = A_RUN, name: str = "trivial", prefix: str = ""
 ) -> tuple[CalibrationResult, list[ReadableSpan]]:
     """One case against one served reference agent, with the trace it emitted."""
-    with recording() as exporter, reference_target(name=name) as reference:
+    with recording(prefix=prefix) as exporter, reference_target(name=name) as reference:
         result = run_calibration(
             cases=[case],
             targets=[reference.target],
@@ -182,6 +184,51 @@ def test_the_emitted_fields_are_exactly_the_declared_allowlist(
         failed = list(exporter.get_finished_spans())
 
     assert fields_of(ordinary + gate + failed) == {field.value for field in Field}
+
+
+def test_the_allowlist_reaches_the_sink_under_the_prefix_the_sink_reads(
+    leakage_case: Case,
+) -> None:
+    """A field the sink discards is a field that was never emitted.
+
+    The failure this guards is silent in both directions and cost a real trace: the
+    spans arrive, the waterfall is right, the durations are right, and every
+    attribute of the allowlist is dropped at ingest because `agentaudit.*` is not a
+    namespace LangSmith recognises. Nothing errors, nothing is logged, and a reader
+    concludes the bench emits names and timings by design.
+
+    Asserted over the emitted keys rather than over the configuration, because a
+    prefix that a config held and an exporter did not apply would pass every test
+    that read the config back.
+    """
+    _, spans = traced_calibration(leakage_case, prefix=LANGSMITH_METADATA_PREFIX)
+    emitted = fields_of(spans)
+
+    assert emitted, "a run that emitted no attributes proves nothing here"
+    unprefixed = sorted(
+        key for key in emitted if not key.startswith(LANGSMITH_METADATA_PREFIX)
+    )
+    assert not unprefixed, f"{unprefixed} reach the sink under a name it discards"
+
+    # And the prefix is a rename at the boundary: what is under it is the allowlist
+    # itself, not a second vocabulary spelled in the sink's dialect.
+    stripped = {key.removeprefix(LANGSMITH_METADATA_PREFIX) for key in emitted}
+    assert stripped <= {field.value for field in Field}
+
+
+def test_an_attribute_name_is_prefixed_and_a_span_name_is_not(
+    leakage_case: Case,
+) -> None:
+    """The prefix is the sink's dialect for attributes and nothing else.
+
+    A span name is emitted data too (`Span`), and it is read by the sink as a name
+    rather than as a custom attribute. Prefixing one would rename every node of the
+    waterfall to something no reader recognises, which is the half of the trace that
+    survived the bug intact.
+    """
+    _, spans = traced_calibration(leakage_case, prefix=LANGSMITH_METADATA_PREFIX)
+
+    assert {span.name for span in spans} == {span.value for span in Span}
 
 
 def test_the_emitted_span_names_are_exactly_the_declared_set(
@@ -647,6 +694,38 @@ def test_an_endpoint_that_already_names_the_traces_path_is_not_given_a_second() 
     assert config.traces_url == "https://api.smith.langchain.com/otel/v1/traces"
 
 
+def test_the_prefix_defaults_to_the_dialect_of_the_sink_this_bench_declares() -> None:
+    """An operator who configures an endpoint and a key gets fields that arrive.
+
+    The default is the one place this module is allowed to know which product is on
+    the other end of the url, and it is a default rather than a constant so the next
+    sink is still a value changing (ADR-0026).
+    """
+    config = trace_config({ENDPOINT_VARIABLE: "https://api.smith.langchain.com/otel"})
+
+    assert config is not None
+    assert config.prefix == LANGSMITH_METADATA_PREFIX
+
+
+def test_a_prefix_declared_empty_is_no_prefix_and_not_an_unset_variable() -> None:
+    """The one variable here where blank is a value rather than an absence.
+
+    A collector the operator runs keeps what it is sent, and wants the allowlist's
+    own names. Under this module's usual rule — blank is nothing — that operator
+    could not ask for it: every empty string would fall back to the sink's dialect
+    and there would be no way to say "none".
+    """
+    plain = trace_config(
+        {ENDPOINT_VARIABLE: "http://localhost:4318", PREFIX_VARIABLE: ""}
+    )
+    declared = trace_config(
+        {ENDPOINT_VARIABLE: "http://localhost:4318", PREFIX_VARIABLE: "otel.custom."}
+    )
+
+    assert plain is not None and plain.prefix == ""
+    assert declared is not None and declared.prefix == "otel.custom."
+
+
 def test_a_credential_that_was_not_declared_is_absent_rather_than_empty() -> None:
     """A header with an empty value is a credential that reads as present."""
     config = trace_config({ENDPOINT_VARIABLE: "http://localhost:4318"})
@@ -804,6 +883,7 @@ def test_the_writers_are_exactly_these_and_every_one_of_them_exists() -> None:
         "API_KEY_VARIABLE",
         "PROJECT_VARIABLE",
         "SAMPLE_VARIABLE",
+        "PREFIX_VARIABLE",
         "INHERITED_TRACING_VARIABLES",
     }
     for name, value in observability.WRITERS.items():

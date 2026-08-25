@@ -281,6 +281,16 @@ priorities inverted.
 
 API_KEY_VARIABLE: Final = "AGENTAUDIT_TRACE_API_KEY"
 PROJECT_VARIABLE: Final = "AGENTAUDIT_TRACE_PROJECT"
+PREFIX_VARIABLE: Final = "AGENTAUDIT_TRACE_ATTRIBUTE_PREFIX"
+"""What the sink needs in front of an attribute name, when it is not the default.
+
+The one variable of this module where **blank is not nothing**. Elsewhere an empty
+string is how half the tooling says unset, and blank falls back; here blank is the
+meaningful value — a collector that keeps what it is sent wants no prefix at all —
+so this is read with a sentinel and only a genuinely absent variable takes the
+default.
+"""
+
 SAMPLE_VARIABLE: Final = "AGENTAUDIT_TRACE_SAMPLE"
 """What fraction of runs are traced, between 0 and 1, defaulting to all of them.
 
@@ -321,6 +331,19 @@ are accepted here so that neither reading of the documentation produces a sink t
 silently drops everything.
 """
 
+LANGSMITH_METADATA_PREFIX: Final = "langsmith.metadata."
+"""What a sink has to see in front of an attribute name before it keeps it.
+
+LangSmith's ingest recognises `gen_ai.*` and `langsmith.*` and surfaces a custom
+attribute only under `langsmith.metadata.{key}`. An `agentaudit.*` key matches
+neither, so it is accepted on the wire and discarded on arrival: the trace arrives
+with its names, its nesting and its durations, and not one field of the allowlist.
+That is the failure this constant exists to fix, and it is a rename at the boundary
+rather than a change to what is emitted — `Field` keeps its own names, because the
+allowlist is what a diff has to justify and it must not be spelled in a sink's
+dialect.
+"""
+
 
 @dataclass(frozen=True)
 class TraceConfig:
@@ -328,13 +351,23 @@ class TraceConfig:
 
     A configured endpoint and nothing sink-specific in its type: moving to a sink
     the operator runs is this value changing, which is what keeps ADR-0026's revisit
-    condition cheap.
+    condition cheap. `prefix` is a string an operator sets and not a product name in
+    a signature, and its *default* is the dialect of the sink this bench declares —
+    a fact worth writing down here rather than leaving an operator to discover that
+    their fields arrived and were dropped.
     """
 
     endpoint: str
     api_key: str | None = None
     project: str | None = None
     sample: float = 1.0
+    prefix: str = LANGSMITH_METADATA_PREFIX
+    """What is put in front of every attribute name on the way to the wire.
+
+    Empty for a collector that keeps what it is sent. `Field` never spells it: the
+    prefix is applied once, at `_attributes`, which is the boundary a member of the
+    allowlist already crosses to become a string key.
+    """
 
     def __post_init__(self) -> None:
         if not 0.0 <= self.sample <= 1.0:
@@ -430,11 +463,15 @@ def trace_config(environment: Mapping[str, str] | None = None) -> TraceConfig | 
         raise ValueError(
             f"{SAMPLE_VARIABLE}={declared!r} is not a fraction of runs"
         ) from unusable
+    declared_prefix = values.get(PREFIX_VARIABLE)
     return TraceConfig(
         endpoint=endpoint,
         api_key=values.get(API_KEY_VARIABLE, "").strip() or None,
         project=values.get(PROJECT_VARIABLE, "").strip() or None,
         sample=sample,
+        prefix=(
+            LANGSMITH_METADATA_PREFIX if declared_prefix is None else declared_prefix
+        ),
     )
 
 
@@ -468,6 +505,14 @@ def disable_inherited_tracing(
     return turned_off
 
 
+_prefix: str = ""
+"""The prefix the installed sink reads, and empty when nothing is installed.
+
+Module state beside `_provider` because it is a property of the sink rather than of
+a call site: a span is opened with `Field` members wherever it is opened, and what
+those become on the wire is decided once, where the exporter was.
+"""
+
 _provider: TracerProvider | None = None
 """This module's own provider, never the global one.
 
@@ -485,9 +530,10 @@ def install(config: TraceConfig | None) -> None:
     it is logged and tracing stays off, because a debugging aid may not be the reason
     a run does not start.
     """
-    global _provider
+    global _provider, _prefix
     if config is None:
         _provider = None
+        _prefix = ""
         return
     try:
         from opentelemetry.exporter.otlp.proto.http.trace_exporter import (
@@ -499,13 +545,15 @@ def install(config: TraceConfig | None) -> None:
                 OTLPSpanExporter(endpoint=config.traces_url, headers=config.headers)
             ),
             sample=config.sample,
+            prefix=config.prefix,
         )
     except Exception:  # noqa: BLE001 — a sink is never a reason a run does not start
         log.warning("tracing is off: the sink could not be built", exc_info=True)
         _provider = None
+        _prefix = ""
 
 
-def _install(processor: SpanProcessor, sample: float = 1.0) -> None:
+def _install(processor: SpanProcessor, sample: float = 1.0, prefix: str = "") -> None:
     """Install one span processor behind a sampler. The seam the tests export to.
 
     A private function with a public sibling because it is the only way a test can
@@ -513,7 +561,7 @@ def _install(processor: SpanProcessor, sample: float = 1.0) -> None:
     be read back out of the sink. Nothing outside this module and its tests calls it
     (ADR-0026, `test_observability.py`).
     """
-    global _provider
+    global _provider, _prefix
     sampler: Sampler = (
         ALWAYS_ON if sample >= 1.0 else ParentBased(TraceIdRatioBased(sample))
     )
@@ -522,6 +570,7 @@ def _install(processor: SpanProcessor, sample: float = 1.0) -> None:
     )
     provider.add_span_processor(processor)
     _provider = provider
+    _prefix = prefix
 
 
 def flush(timeout_millis: int = 5_000) -> None:
@@ -635,6 +684,12 @@ def _attributes(fields: Mapping[Field, Value] | None) -> dict[str, Value]:
     programming error and raises here rather than being dropped quietly: it can only
     fire in a test, and a silently discarded attribute is a trace that lies about
     what it carries.
+
+    The installed sink's prefix goes on here and nowhere else, because this is
+    already the one line where a member of the allowlist becomes a string key. A
+    prefix applied at a call site would be a call site that knows a sink, and a
+    prefix applied inside `Field` would be the allowlist spelled in a sink's dialect
+    — unreadable against the run record it is supposed to join to.
     """
     if not fields:
         return {}
@@ -646,7 +701,7 @@ def _attributes(fields: Mapping[Field, Value] | None) -> dict[str, Value]:
                 "this bench carries the shape of a run and never its content "
                 "(ADR-0026)"
             )
-    return {key.value: value for key, value in fields.items()}
+    return {_prefix + key.value: value for key, value in fields.items()}
 
 
 @contextmanager
@@ -730,6 +785,7 @@ WRITERS: Final = MappingProxyType(
         "API_KEY_VARIABLE": API_KEY_VARIABLE,
         "PROJECT_VARIABLE": PROJECT_VARIABLE,
         "SAMPLE_VARIABLE": SAMPLE_VARIABLE,
+        "PREFIX_VARIABLE": PREFIX_VARIABLE,
         "INHERITED_TRACING_VARIABLES": INHERITED_TRACING_VARIABLES,
     }
 )

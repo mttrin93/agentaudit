@@ -306,6 +306,12 @@ export AGENTAUDIT_TRACE_PROJECT=agentaudit      # optional, files the trace
 export AGENTAUDIT_TRACE_SAMPLE=1.0              # optional, a fraction of runs
 ```
 
+The fields travel under a `langsmith.metadata.` prefix, which is the default and the
+only namespace LangSmith's ingest keeps a custom attribute in — without it the trace
+arrives with its waterfall intact and every field of the allowlist dropped on
+arrival, silently. Point the bench at a collector you run and set
+`AGENTAUDIT_TRACE_ATTRIBUTE_PREFIX=` empty; the names underneath are the same.
+
 A run over HTTP traces under the run id the console already shows you. A terminal
 run prints `trace id: …` before it starts.
 

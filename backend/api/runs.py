@@ -106,6 +106,15 @@ anything — and either way nothing was sent and nothing was spent.
 """
 
 PRESENT_WAIT_SECONDS = 30.0
+
+FINISHED_WAIT_SECONDS = 30.0
+"""How long a declining request waits for the worker to finish with the record.
+
+Generous for what it waits on: a declined run sends nothing, so the worker has only
+to carry the refusal back out of the graph. The bound exists so that a worker which
+somehow never finishes cannot hold an HTTP request open, not because the wait is
+expected to be long.
+"""
 """How long `start` waits for the graph to reach its interrupt.
 
 Nothing has been sent to the target by then — the halt is ahead of registration —
@@ -450,6 +459,17 @@ class RunRecord:
         "started this run"
     )
     confirmed_by: str = ""
+
+    finished: threading.Event = field(default_factory=threading.Event, repr=False)
+    """Set by the thread that ran this run, when it has finished writing to it.
+
+    A run has two threads that can reach its record — the worker, and whatever
+    request is asking about it — and exactly one of them may say what the run
+    *did*. This is how the other one knows to wait. It says the record is complete
+    and not that the run succeeded: an aborted run, a failed one and a declined one
+    all set it, because all three are the worker having nothing left to write.
+    """
+
     result: CalibrationResult | None = None
     report: SignedArtefact | Unsigned = field(default_factory=Unsigned)
     """The signed report this run produced, or the reason it has none.
@@ -872,7 +892,18 @@ class BenchRuns:
                 ),
             )
         else:
-            record.settle(RunStatus.DECLINED, _declined(approval.reason))
+            # Deliberately not settled here. The worker is unwinding the graph with
+            # this refusal in its hands and is the only thread that may say what the
+            # run did — it attaches the result and then settles. A request that
+            # settled the record itself would be a second writer of one terminal
+            # state, and the loser's write is the one a poller reads: `declined` on
+            # a record whose result is not attached yet.
+            if not record.finished.wait(FINISHED_WAIT_SECONDS):
+                # The worker is wedged, which is not something a declining operator
+                # can be left holding. What this states is what the request knows —
+                # the answer was recorded and nothing was sent — and the worker's
+                # own write, if it ever lands, says the same thing.
+                record.settle(RunStatus.DECLINED, _declined(approval.reason))
         return record
 
 
@@ -922,6 +953,17 @@ def _execute(record: RunRecord, config: BenchConfig, pending: PendingApproval) -
     adaptive layer are all reached through `run_calibration`, which is what the
     gate and `scripts/probe_target.py` reach them through.
     """
+    try:
+        _run(record, config, pending)
+    finally:
+        # In a `finally` and not at the end, because every way out of `_run` is a
+        # run the worker has finished with: an abort, a transport failure and a
+        # refusal are all states somebody is waiting to read.
+        record.finished.set()
+
+
+def _run(record: RunRecord, config: BenchConfig, pending: PendingApproval) -> None:
+    """The body of one run. Everything `_execute` has to set an event around."""
     # Named against the seam's own type rather than passed straight through, so
     # that a signature drifting away from `Approve` is a typecheck failure here
     # and not a run that halts and never resumes.

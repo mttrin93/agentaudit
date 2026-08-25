@@ -913,6 +913,37 @@ def test_a_declined_interrupt_sends_nothing_and_spends_nothing_and_says_so(
     assert record.result.target_runs == ()
 
 
+def test_a_declined_run_is_settled_by_the_thread_that_ran_it_and_not_by_the_answer(
+    leakage_case: Case,
+) -> None:
+    """A run reads as settled only once the thread that ran it has finished with it.
+
+    The failure this guards is a race with two writers of one terminal state. The
+    request that declines an interrupt used to settle the record itself, in the
+    HTTP thread, while the worker was still unwinding the graph — so a poller could
+    see `declined` on a record whose `result` had not been attached yet, and did:
+    this suite failed exactly that way whenever the machine was loaded enough for
+    the worker to lose.
+
+    Asserted with no polling at all, because polling is what hid it. When the answer
+    returns, the run is over and everything a settled run carries is on it.
+    """
+    with watched_reference() as watched, api([leakage_case]) as (client, bench):
+        nonce = registered(client, watched)
+        started = client.post("/runs", json=a_request(watched.target, nonce)).json()
+        answered = client.post(
+            f"/runs/{started['run_id']}/approval",
+            json={"confirmed": False, "identity": "operator", "reason": "too dear"},
+        ).json()
+        record = _record(bench, started)
+
+        assert record.finished.is_set()
+        assert answered["status"] == "declined"
+        assert record.status is RunStatus.DECLINED
+        assert record.result is not None
+        assert record.result.target_runs == ()
+
+
 def test_an_unanswered_interrupt_sends_nothing_and_spends_nothing_and_says_so(
     leakage_case: Case,
 ) -> None:

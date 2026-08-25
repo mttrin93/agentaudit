@@ -256,6 +256,11 @@ from backend.graph.budget import (
     Layer,
 )
 from backend.graph.runstate import Attempt, RunState
+from backend.observability import (
+    disable_inherited_tracing,
+    install,
+    trace_config,
+)
 from backend.targets.reference.corpus import SHARED_FOLDER
 
 CASES_DIR = Path(__file__).resolve().parents[1] / "cases"
@@ -4000,6 +4005,19 @@ def create_app(
     the library is not something a deployment acquires by omission — and a bench that
     declared nothing at all gets the deployed reading of both.
     """
+    # Two lines of tracing, and both of them before a bench exists. The first turns
+    # off every tracer this process inherited: one environment variable activates a
+    # callback tracer that sends prompts and replies verbatim, and a deployment that
+    # inherited it would be publishing payloads before it served a route — the
+    # switches are named in `observability.INHERITED_TRACING_VARIABLES` and nowhere
+    # else, because one module knows what is on the far end of the sink and this is
+    # not it (ADR-0026). The second points this bench at the sink
+    # its environment declares, and `None` — no sink — is a bench that boots, runs
+    # and reports normally. ADR-0020's shape without its severity: a signing key is
+    # what makes a report portable and a trace sink is a convenience, and a bench
+    # that would not start without a debugging tool has its priorities inverted.
+    disable_inherited_tracing()
+    install(trace_config())
     declared = config is not None
     bench = BenchRuns(config if config is not None else deployed_bench())
     if gate_runs is None:

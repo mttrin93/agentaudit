@@ -21,6 +21,7 @@ records of one run.
 """
 
 import sys
+import uuid
 from collections.abc import Sequence
 from decimal import Decimal
 
@@ -42,6 +43,7 @@ from backend.bench.rule import DECLARED_RULE, GateRule
 from backend.bench.scorer import Rate
 from backend.graph.approval import Approval, Approve
 from backend.graph.budget import BudgetPayload, CallPrice
+from backend.observability import TracedRun, install, trace_config, tracing
 from backend.targets.reference.corpus import SUPPLIER_NOTE
 
 TOKEN_ENV = "AGENTAUDIT_TARGET_TOKEN"
@@ -61,6 +63,38 @@ EXIT_ABORTED = 4
 """Exit code when the run hit its declared ceiling and stopped."""
 
 REPLY_EXCERPT = 400
+
+
+def traced_run(
+    *,
+    gate: bool = False,
+    adjudicator_model: str | None = None,
+    attacker_model: str | None = None,
+    reference_model: str | None = None,
+) -> TracedRun:
+    """Point this process at the sink its environment declares, and mint an id for
+    the run about to happen.
+
+    Here rather than in each script for the reason the attestation is: five scripts
+    reach a target, and a mechanism that exists five times is a mechanism that
+    diverges. Nothing is emitted when no sink is configured, and the id is printed
+    only when one is — an id nobody can look up is a line of noise.
+
+    A terminal run holds no record of its own, so the id is generated here. That is
+    the difference from a run over HTTP, whose id the run record already has and
+    which the API passes through instead (`api/runs.py`).
+    """
+    install(trace_config())
+    identity = str(uuid.uuid4())
+    if tracing():
+        print(f"trace id: {identity}")
+    return TracedRun(
+        id=identity,
+        gate=gate,
+        adjudicator_model=adjudicator_model,
+        attacker_model=attacker_model,
+        reference_model=reference_model,
+    )
 
 
 def price(per_call: str | None, currency: str) -> CallPrice | None:

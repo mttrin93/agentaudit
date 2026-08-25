@@ -49,7 +49,7 @@ from backend.bench.adaptive.scripted import SCRIPTED_ATTACKER
 from backend.bench.adjudication import Completion, NoAdjudicator
 from backend.bench.applicability import SkippedCase, applicable, skipped_cases
 from backend.bench.attacker import run_case
-from backend.bench.contract import TargetConfig
+from backend.bench.contract import TargetConfig, TargetUnreachable
 from backend.bench.evaluator import Verdict
 from backend.bench.library import Case, Family, LibraryVersion, VerdictClass
 from backend.bench.measurability import (
@@ -61,14 +61,23 @@ from backend.bench.measurability import (
 from backend.bench.registration import (
     Attestation,
     Registration,
+    endpoint_hash,
     issue_nonce,
     register,
 )
 from backend.bench.rule import DECLARED_RULE, GateRule
 from backend.bench.scorer import Rate, failure_rate
 from backend.graph.approval import ApprovalOutcome, Approve, run_under_approval
-from backend.graph.budget import RunBudget
+from backend.graph.budget import Layer, RunBudget
 from backend.graph.runstate import Attempt, RunState
+from backend.observability import (
+    Field,
+    Span,
+    TracedRun,
+    disable_inherited_tracing,
+    flush,
+    traced,
+)
 
 PlantNonce = Callable[[TargetConfig, str], None]
 
@@ -240,6 +249,7 @@ def run_calibration(
     run_state: RunState | None = None,
     planted_nonces: Mapping[str, str] | None = None,
     proof_waived: bool = False,
+    trace: TracedRun | None = None,
 ) -> CalibrationResult:
     """Run the given cases against the given targets and return what was measured.
 
@@ -273,7 +283,27 @@ def run_calibration(
     (ADR-0007, amended). It reaches `register` and changes one thing there: whether a
     missing echo stops the run. The probe is still sent and what came back is still
     recorded, so a target that echoes anyway is recorded as having proved control.
+
+    `trace` is the run's identity and its declared instruments, for the sink — the
+    run id a record holds and the three model identifiers this function is given as
+    opaque callables and cannot read (`backend/observability.py`). `None` traces the
+    run without an id, which joins to nothing and is deliberately still a trace: every
+    entry point in this repository passes one — the API from its run record, the five
+    scripts from `console.traced_run` — so the anonymous case is a caller holding no
+    record, which in practice is this suite. Dropping the trace instead would make a
+    forgotten argument look like a sink that is down. Nothing about
+    the run changes either way: the sink is not consulted, no figure comes back from
+    it, and a sink that is down or absent is a run that completes normally
+    (ADR-0026).
+
+    **The inherited tracers are turned off here**, at the top of the one entry point,
+    ahead of the first LangGraph invocation and long ahead of the first call to an
+    endpoint. One environment variable would otherwise activate a callback tracer
+    that sends payloads and replies verbatim, and a guard that works only because
+    nobody set the variable is not a guard. Which variables those are is
+    `observability.INHERITED_TRACING_VARIABLES` and is not restated here.
     """
+    disable_inherited_tracing()
     unscorable = [
         case.id for case in cases if case.verdict_class is VerdictClass.JUDGED
     ]
@@ -336,7 +366,29 @@ def run_calibration(
             precedent=precedent,
         )
 
-    approval = run_under_approval(declared, run_suite, approve)
+    try:
+        with traced(Span.RUN, trace.fields() if trace is not None else None) as span:
+            try:
+                approval = run_under_approval(declared, run_suite, approve)
+            finally:
+                # In a `finally` because the figures are most wanted on the run that
+                # did not finish: a suite that stopped on a transport failure is one
+                # whose calls spent per layer say how far it got. Read off the run
+                # state, which is the authority for them, and never back out of the
+                # sink (ADR-0026).
+                span.record(
+                    {
+                        Field.CALLS_SCORED: state.spent_in(Layer.SCORED),
+                        Field.CALLS_ADAPTIVE: state.spent_in(Layer.ADAPTIVE),
+                    }
+                )
+    finally:
+        # Once the root span is closed and not before, so what is pushed is a whole
+        # trace. In a `finally` for the same reason the figures above are: a run that
+        # stopped on a transport failure is the run whose trace is worth having, and
+        # a flush the exception jumped over would leave it in a buffer that dies with
+        # the process. Best effort and short.
+        flush()
 
     return CalibrationResult(
         run_state=state,
@@ -367,7 +419,20 @@ def _run_target(
     nonce = planted or issue_nonce()
     if plant_nonce is not None:
         plant_nonce(target, nonce)
-    registration = register(target, nonce, attestation, run_state, proof_waived)
+    # The hash and never the url, through the one function that derives it, and
+    # recorded before the probe rather than after it: a registration that failed is
+    # the misfire a reader most needs to place, and it has no record to read the
+    # hash off (ADR-0007, ADR-0011).
+    with traced(
+        Span.REGISTER, {Field.ENDPOINT_HASH: endpoint_hash(target.url)}
+    ) as span:
+        try:
+            registration = register(target, nonce, attestation, run_state, proof_waived)
+        except TargetUnreachable as unreachable:
+            # The class of the failure, off the named outcome. Never the exception's
+            # message, which contains the url.
+            span.errored(unreachable.failure)
+            raise
 
     # Two filters, in this order, and both ahead of the first attempt.
     #

@@ -292,6 +292,42 @@ uv run python -m scripts.gate --identity "your name"
    attacks that worked with your agent's own replies, and the routes the
    adaptive attacker took.
 
+### Tracing a run
+
+Off by default, and a bench with no sink configured runs and reports exactly the
+same. To see where a run went — per-node timings, the family, case and attempt in
+flight, calls spent per layer, retry storms and error classes — point it at an
+OTLP endpoint:
+
+```bash
+export AGENTAUDIT_TRACE_ENDPOINT=https://api.smith.langchain.com/otel
+export AGENTAUDIT_TRACE_API_KEY=<your LangSmith key>
+export AGENTAUDIT_TRACE_PROJECT=agentaudit      # optional, files the trace
+export AGENTAUDIT_TRACE_SAMPLE=1.0              # optional, a fraction of runs
+```
+
+The fields travel under a `langsmith.metadata.` prefix, which is the default and the
+only namespace LangSmith's ingest keeps a custom attribute in — without it the trace
+arrives with its waterfall intact and every field of the allowlist dropped on
+arrival, silently. Point the bench at a collector you run and set
+`AGENTAUDIT_TRACE_ATTRIBUTE_PREFIX=` empty; the names underneath are the same.
+
+A run over HTTP traces under the run id the console already shows you. A terminal
+run prints `trace id: …` before it starts.
+
+**A trace carries the shape of a run and never its content.** The fields are a
+declared allowlist — ids, family, case, attempt, node, timings, calls per layer,
+verdict, retry count, error class, model identifiers, and the endpoint *hash*. No
+payload, no reply, no narrative, no target name, no url, no token. The default
+LangGraph tracer is not the mechanism, and it is switched off if your environment
+had it on: it sends prompts and replies verbatim.
+[ADR-0026](./docs/adr/0026-a-trace-carries-the-shape-of-a-run-and-never-its-content.md)
+records what the sink is, and the condition under which it is revisited — before
+the first target that is not one of the built-in agents.
+
+Any OTLP endpoint works. A collector you run yourself is the same two lines with a
+different url.
+
 ### Settings
 
 The **Settings** screen shows what the bench is currently set to: the signing
@@ -308,7 +344,7 @@ a gate result and nothing may compare it to one.
 
 ## Optional tasks
 
-**Done (4 medium, 1 hard, plus 2 easy).**
+**Done (4 medium, 2 hard, plus 2 easy).**
 
 | # | Task | How |
 | --- | --- | --- |
@@ -318,6 +354,7 @@ a gate result and nothing may compare it to one.
 | M3 | A tool that calls an external API | The attacker's `run_probe` calls your agent over HTTP. Five tools in total |
 | M7 | Multi-model support | OpenAI, Anthropic and DeepSeek via OpenRouter. `scripts/swap.py` runs the same library on two models and compares the results |
 | M8 | A security guard, and developer settings kept apart | Proof of control, three attestations and a cost halt before anything is sent. Settings is its own screen |
+| H2 | An LLM observability tool | LangSmith over OpenTelemetry, carrying a declared field allowlist and never prompts or replies. See **Tracing a run** above and [ADR-0026](./docs/adr/0026-a-trace-carries-the-shape-of-a-run-and-never-its-content.md) |
 | H3 | An AI evaluation report | DeepEval runs 30 hand-labelled transcripts and measures Cohen's κ per judged family. Results in [docs/validation.md](./docs/validation.md) |
 
 **Partly done.**
@@ -337,7 +374,6 @@ a gate result and nothing may compare it to one.
 | M4 | Users and personalisation | One operator, one process. Nothing here is per-user |
 | M5, H4 | Learn from user ratings | Refused on purpose. A rating may never move a measured rate — see [ADR-0006](./docs/adr/0006-overrides-never-change-a-measured-rate.md) |
 | M6 | Plugin system for tools | The five tools exist; the enable/disable UI and plugin loader do not. Deliberately dropped — see [PLAN.md](./PLAN.md) |
-| H2 | LangSmith or Langfuse | Not wired up |
 
 ## Where to read more
 

@@ -72,6 +72,7 @@ from backend.bench.library import Case, Family
 from backend.bench.measurability import checkable
 from backend.graph.budget import BudgetExceeded
 from backend.graph.runstate import RunState
+from backend.observability import Field, Span, traced
 
 AttackerCompletion = Callable[[str, str], str]
 """The attacker's model: a system prompt and a brief in, one tool call out.
@@ -302,15 +303,16 @@ class _Episode:
         # the convention the scored layer already follows, where `enter` names the
         # attempt in flight rather than the last one that came back (#55).
         self.run_state.enter_turn(self.turns + 1)
-        transcript = run_probe(
-            self.target,
-            probe,
-            self.run_state,
-            # Its own session, like every scored attempt: a probe that shared a
-            # session with the last one would make the target's memory part of
-            # the route, and the route is what a proposed case has to reproduce.
-            session_id=f"episode-{uuid.uuid4()}",
-        )
+        with traced(Span.TURN, {Field.TURN: self.turns + 1}):
+            transcript = run_probe(
+                self.target,
+                probe,
+                self.run_state,
+                # Its own session, like every scored attempt: a probe that shared a
+                # session with the last one would make the target's memory part of
+                # the route, and the route is what a proposed case has to reproduce.
+                session_id=f"episode-{uuid.uuid4()}",
+            )
         self.transcripts.append(transcript)
         reading = self._verify(transcript)
         # The reading before the reply and not after it. The log entry a later brief

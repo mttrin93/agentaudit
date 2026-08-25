@@ -80,6 +80,7 @@ from scripts.console import (
     print_provenance,
     rate_line,
     terminal_approval,
+    traced_run,
 )
 
 CASES_DIR = Path(__file__).resolve().parents[1] / "backend" / "cases"
@@ -210,6 +211,11 @@ def main(argv: Sequence[str] | None = None) -> int:
                 attacker=attacker,
                 budget=RunBudget.declare(
                     cases=cases, targets=targets, price=call_price
+                ),
+                trace=traced_run(
+                    adjudicator_model=args.adjudicator_model,
+                    attacker_model=args.attacker_model,
+                    reference_model=args.model,
                 ),
             )
         except BudgetExceeded as abort:

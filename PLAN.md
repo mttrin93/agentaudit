@@ -266,7 +266,7 @@ Question 4 must be asked in the first conversation, not at hour 30. Track A also
 | Multi-tenant isolation in the precedent store | **Blocker before user one**, and more so now that the adaptive attacker reads the store through `retrieve_precedent`. It holds unpatched exploits against named companies' agents, and the new consumer is one whose whole purpose is to use them. The attacker's view is identity-stripped from phase 2f — that is a blinding requirement (ADR-0011), not tenant isolation, and it is not a substitute for it. |
 | Deploy with Terraform on a live URL | The known gap, and the cheapest hiring points available. Not before 2e exists — a hosted bench without the authorisation guard is an open attack proxy. |
 | Five real users with staging endpoints | Track A's output. Step 9 of the capstone sequence, and the step that fails most often. |
-| Langfuse traces on every attack | Observability, and a hard optional task. |
+| A trace sink the operator runs, before the first target that is not a reference agent | [ADR-0026](./docs/adr/0026-a-trace-carries-the-shape-of-a-run-and-never-its-content.md)'s revisit condition, and the remaining half of the observability task. Traces go to LangSmith today, which is sound while every target is this project's own test equipment. Cheap by construction: the sink is a url and one module knows what is on the far end of it. |
 | Scheduled run and signed report by email | Article 72, post-market monitoring. |
 | Queue instead of background tasks | Only when concurrency demands it. |
 
@@ -622,7 +622,7 @@ The bar clears inside the Sprint 3 line with margin on the medium tasks, and exa
 - **Hard, in Sprint 3:** an AI evaluation report proving quality — §9, executed through DeepEval over the κ gold set (phase 3b), with the discrimination statistics computed on top. The task names Ragas or DeepEval; arguing that Ragas is RAG-specific defeats only half that sentence, so the tool is used rather than argued away. [ADR-0009](./docs/adr/0009-deepeval-executes-the-goldset.md).
 - **Medium, at P0 complete:** feedback loop that improves the agent (`case_gap` override → `propose_case` → admission gate).
 - **Hard, part-built in Sprint 3:** an agent that learns. The loop runs end to end from phase 4d — the adaptive attacker finds a route the fixed suite missed, `propose_case` drafts it, the admission gate decides at `D ≥ 0.4` against the reference agents plus a second model, and the library the next run uses is different because of it. It is auditable because **the arbiter is a stated threshold rather than the model's own confidence**, which most implementations of this task lack. Stated precisely, because the task says *learn from user feedback*: the mechanism is built and demonstrated before any user exists, and the user-fed entry point — `case_gap` into the same gate — is the remaining half and waits on Track A. Claiming the whole task on adaptive discovery alone would be claiming a user this project does not yet have.
-- **Hard, later:** LLM observability with Langfuse (P1).
+- **Hard, in Sprint 4:** one LLM observability tool — LangSmith, reached over OpenTelemetry rather than through the LangGraph auto-tracer, so a trace carries a declared field allowlist and never a payload, a reply or a target's token. [ADR-0026](./docs/adr/0026-a-trace-carries-the-shape-of-a-run-and-never-its-content.md). The remaining half — a sink the operator runs — is P1, above.
 
 ---
 

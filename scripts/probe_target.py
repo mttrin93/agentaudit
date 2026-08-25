@@ -74,6 +74,7 @@ from scripts.console import (
     price,
     rate_line,
     terminal_approval,
+    traced_run,
 )
 
 CASES_DIR = Path(__file__).resolve().parents[1] / "backend" / "cases"
@@ -231,10 +232,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         return EXIT_WITHHELD
 
     adjudicator: Completion | None = None
+    adjudicator_model: str | None = None
     if not args.deterministic_only:
         spec = args.adjudicator_model or os.environ.get(
             ADJUDICATOR_ENV, DEFAULT_ADJUDICATOR_MODEL
         )
+        adjudicator_model = spec
         try:
             # Before the attestation: a run that reached its first judged attempt
             # before discovering it had no instrument would already have spent the
@@ -305,6 +308,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             approve=terminal_approval(attestation.identity),
             adjudicator=adjudicator,
             budget=RunBudget.declare(cases=cases, targets=[target], price=call_price),
+            # A probe is not a gate run: it decides nothing about the bench, so it
+            # traces under the run id field (ADR-0018). No record holds the id, so
+            # the helper mints one and prints it.
+            trace=traced_run(adjudicator_model=adjudicator_model),
         )
     except BudgetExceeded as abort:
         print(f"\nRun aborted on budget: {abort}")

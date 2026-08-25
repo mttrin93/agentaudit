@@ -150,6 +150,7 @@ from scripts.console import (
     provenance_section,
     retirement_section,
     terminal_approval,
+    traced_run,
 )
 
 CASES_DIR = Path(__file__).resolve().parents[1] / "backend" / "cases"
@@ -328,6 +329,12 @@ def run_the_gate(args: argparse.Namespace) -> int:
                 attacker=attacker,
                 budget=RunBudget.declare(
                     cases=cases, targets=targets, price=call_price
+                ),
+                trace=traced_run(
+                    gate=True,
+                    adjudicator_model=args.adjudicator_model,
+                    attacker_model=args.attacker_model,
+                    reference_model=args.model,
                 ),
             )
         except BudgetExceeded as abort:

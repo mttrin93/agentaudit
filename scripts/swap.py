@@ -121,6 +121,7 @@ from scripts.console import (
     price,
     provenance_section,
     terminal_approval,
+    traced_run,
 )
 from scripts.gate import CASES_DIR, DEFAULT_MODEL, GOLDSET_DIR, reference_targets
 
@@ -431,6 +432,7 @@ def calibrate_on(
                 budget=RunBudget.declare(
                     cases=list(cases), targets=targets, price=price_per_call
                 ),
+                trace=traced_run(reference_model=str(model)),
             )
         except BudgetExceeded as abort:
             print(f"\nRun aborted on budget: {abort}")

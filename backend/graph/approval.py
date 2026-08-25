@@ -31,6 +31,7 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.types import Command, interrupt
 
 from backend.graph.budget import BudgetPayload, RunBudget
+from backend.observability import Field, Span, traced
 
 CONFIRM_COST: Final = "confirm_cost"
 RUN_SUITE: Final = "run_suite"
@@ -121,8 +122,9 @@ class ApprovalRun:
 
     def _confirm_cost(self, state: ApprovalState) -> ApprovalState:
         """Surface the estimate and stop. Nothing above the interrupt spends."""
-        answer = interrupt(self.budget.as_payload())
-        return read_answer(answer)
+        with traced(Span.CONFIRM_COST, {Field.NODE: Span.CONFIRM_COST}):
+            answer = interrupt(self.budget.as_payload())
+            return read_answer(answer)
 
     def _decided(self, state: ApprovalState) -> Literal["run_suite", "__end__"]:
         """The one edge the human's answer decides. Everything that spends is
@@ -134,8 +136,14 @@ class ApprovalRun:
 
         Returns no state update: what this node did is visible in the run's own
         counters, and the graph has no second opinion to offer about it.
+
+        The span around it is how long the suite took, which is the figure that
+        separates a bench working slowly from a bench stuck on one endpoint. The
+        node's name is on the span as well as being the span's name, so a reader
+        querying by node does not have to know that the two coincide here.
         """
-        self._suite()
+        with traced(Span.RUN_SUITE, {Field.NODE: Span.RUN_SUITE}):
+            self._suite()
 
     @property
     def paused(self) -> bool:

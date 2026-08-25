@@ -44,6 +44,7 @@ from backend.bench.contract import TargetConfig
 from backend.bench.library import Case, Family, VerdictClass
 from backend.bench.measurability import runnable
 from backend.graph.runstate import RunState
+from backend.observability import Field, Span, traced
 
 
 @dataclass(frozen=True)
@@ -100,19 +101,28 @@ def run_adaptive_layer(
             if objective is None:
                 continue
             for _ in range(budget.episodes_per_family):
-                episodes.append(
-                    run_episode(
-                        target=entry.target,
-                        objective=Objective(
-                            family=family, case=objective, canary=entry.canary
-                        ),
-                        run_state=run_state,
-                        attacker=attacker,
-                        blinding=blinding,
-                        budget=budget,
-                        precedent=precedent,
+                with traced(Span.EPISODE, {Field.FAMILY: family}) as span:
+                    episodes.append(
+                        run_episode(
+                            target=entry.target,
+                            objective=Objective(
+                                family=family, case=objective, canary=entry.canary
+                            ),
+                            run_state=run_state,
+                            attacker=attacker,
+                            blinding=blinding,
+                            budget=budget,
+                            precedent=precedent,
+                        )
                     )
-                )
+                    # Read off the run state rather than counted here. The position
+                    # is the run's own and the run is the authority for it — a second
+                    # counter beside it would be a figure that could come to disagree
+                    # with the one `/runs` reports (ADR-0026). An ordinal and not a
+                    # denominator: an episode has none (ADR-0010, CONTEXT.md).
+                    position = run_state.episode_position
+                    if position is not None:
+                        span.record({Field.EPISODE_INDEX: position.index})
     return tuple(episodes)
 
 

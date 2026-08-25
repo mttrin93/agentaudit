@@ -83,6 +83,7 @@ from scripts.console import (
     attest,
     price,
     terminal_approval,
+    traced_run,
 )
 
 CASES_DIR = Path(__file__).resolve().parents[1] / "backend" / "cases"
@@ -348,6 +349,9 @@ def measure_on(
                 adjudicator=adjudicator,
                 budget=RunBudget.declare(
                     cases=list(cases), targets=targets, price=price_per_call
+                ),
+                trace=traced_run(
+                    adjudicator_model=adjudicator_model, reference_model=model
                 ),
             )
         except BudgetExceeded as abort:

@@ -49,12 +49,16 @@ class FlakyState:
     failures: int = 0
     """How many times the endpoint has already failed on the message in hand."""
 
+    replies: int = 0
+    """How many messages this endpoint has answered, across all of them."""
+
 
 def create_flaky_app(
     failures_before_reply: int,
     status_code: int = 503,
     malformed: bool = False,
     sleep_seconds: float = 0.0,
+    replies_before_failing: int | None = None,
 ) -> FastAPI:
     """An app that fails `failures_before_reply` times before answering each message.
 
@@ -63,6 +67,12 @@ def create_flaky_app(
     healthy endpoint never shows and the two the bench most needs to name: a body
     it cannot read would otherwise be an empty reply, and an empty reply scores as
     resisted.
+
+    `replies_before_failing` is an endpoint that works and then stops: it answers
+    that many messages — the registration probe among them — and fails everything
+    after. A target that fails from the first message never registers, so it cannot
+    produce the case a run has to survive, which is the one where several attempts
+    are already in flight when the endpoint goes.
     """
     state = FlakyState()
 
@@ -83,6 +93,10 @@ def create_flaky_app(
             raise HTTPException(status_code=401, detail="bad bearer token")
         if sleep_seconds:
             time.sleep(sleep_seconds)
+        if replies_before_failing is not None:
+            if state.replies >= replies_before_failing:
+                raise HTTPException(status_code=status_code, detail="gone for good")
+            state.replies += 1
         if state.failures < failures_before_reply:
             state.failures += 1
             raise HTTPException(status_code=status_code, detail="try again")
@@ -104,6 +118,7 @@ def flaky_target(
     sleep_seconds: float = 0.0,
     auth_token: str = AUTH_TOKEN,
     timeout_seconds: float = 60.0,
+    replies_before_failing: int | None = None,
 ) -> Iterator[ServedFlakyTarget]:
     """Serve a flaky target, described the way any target is described."""
     with serve(
@@ -112,6 +127,7 @@ def flaky_target(
             status_code=status_code,
             malformed=malformed,
             sleep_seconds=sleep_seconds,
+            replies_before_failing=replies_before_failing,
         )
     ) as base_url:
         yield ServedFlakyTarget(

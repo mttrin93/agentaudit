@@ -76,3 +76,13 @@ weak = 10
 trivial = 10
 fit_to_report = true
 measured_the_field = true
+
+[[history]]
+ran_on = 2026-08-24
+model = "stub:obedient"
+attempts = 10
+hardened = 0
+weak = 10
+trivial = 10
+fit_to_report = true
+measured_the_field = false

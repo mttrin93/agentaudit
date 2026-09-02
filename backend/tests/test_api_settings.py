@@ -61,7 +61,9 @@ from backend.api.app import (
     BENCH_TUNING_ROUTE,
     GATE_RUN_APPROVAL_ROUTE,
     GATE_RUNS_ROUTE,
+    NO_EFFORT_HELD_FOR_THIS_INSTRUMENT,
     NOT_HELD_BY_THIS_BENCH,
+    TEMPERATURE_RANGE,
     create_app,
 )
 from backend.api.report import UNDECLARED_MODEL, UNDECLARED_MODELS, ReportConfig
@@ -71,8 +73,10 @@ from backend.bench.adaptive.episode import AttackerTool
 from backend.bench.adaptive.tools import ToolInvocation
 from backend.bench.capability import (
     NO_REASONING_EFFORT_ACCEPTED,
+    NO_TEMPERATURE_ACCEPTED,
     ReasoningEffort,
     accepts_temperature,
+    capabilities_of,
 )
 from backend.bench.library import Case, Family, LibraryVersion
 from backend.bench.payload import DeclaredModels
@@ -403,6 +407,60 @@ def test_the_four_model_settings_are_four_rows_and_never_one() -> None:
     assert isinstance(undeclared, list)
     assert [row["declared"] for row in undeclared] == [False, False, False, False]
     assert [row["identifier"] for row in undeclared[:3]] == [UNDECLARED_MODEL] * 3
+
+
+def test_each_model_row_states_the_effort_it_is_set_to_or_the_absence_of_one() -> None:
+    """The row was the model and not what the model was set to.
+
+    A reader of this block could see which model the adjudicator runs on and not the
+    conditions it ran under — and two runs of one model at one temperature and
+    different reasoning effort are two different instruments (#5). So the effort is on
+    the row, and where this bench holds none it says so rather than showing a blank:
+    the rule the fourth row already followed for its identifier.
+
+    The attacker's is the record's own sentence and never a second wording of it. It
+    is the one field on this screen with four statements behind it — a declared level,
+    none declared, a model with no such setting, and a model this table holds no line
+    for — and the last two are different facts about different things, so a screen
+    composing its own version would eventually state one while the signed document
+    stated the other (ADR-0017).
+    """
+    declared = replace(
+        DECLARED,
+        attacking="openrouter:openai/gpt-5-mini",
+        attacking_temperature=None,
+        attacking_reasoning_effort=ReasoningEffort.HIGH,
+    )
+    models = settings_of(configured(models=declared))["models"]
+    assert isinstance(models, list)
+
+    [attacker] = [row for row in models if "attacker" in row["instrument"]]
+    assert attacker["effort"] == declared.reasoning_effort_stated()
+    assert "reasoning effort high" in attacker["effort"]
+
+    # The three this bench sets no thinking budget on say the absence, once each, and
+    # never with the attacker's sentence: a row reading *effort high* against the
+    # adjudicator would be this route asserting a setting nobody made.
+    elsewhere = [row["effort"] for row in models if "attacker" not in row["instrument"]]
+    assert elsewhere == [NO_EFFORT_HELD_FOR_THIS_INSTRUMENT] * 3
+    assert NO_EFFORT_HELD_FOR_THIS_INSTRUMENT != attacker["effort"]
+
+    # Never a blank on any row, whatever the bench is configured with.
+    undeclared = settings_of(configured())["models"]
+    assert isinstance(undeclared, list)
+    for row in [*models, *undeclared]:
+        assert str(row["effort"]).strip()
+
+    # And a model this table holds no line for reads as a presumption rather than as
+    # a claim about the provider: the fourth statement, kept apart from *this model
+    # has no such setting* because one is about the provider and one is about this
+    # bench's own table.
+    presumed = settings_of(
+        configured(models=replace(DECLARED, attacking="openrouter:a/model-with-no-row"))
+    )["models"]
+    assert isinstance(presumed, list)
+    [row] = [one for one in presumed if "attacker" in one["instrument"]]
+    assert "no line in the capability table" in str(row["effort"])
 
 
 def test_the_two_layer_ceilings_share_no_field_and_nothing_adds_them() -> None:
@@ -854,6 +912,119 @@ def test_a_reasoning_effort_is_offered_only_for_a_model_that_has_the_setting(
     assert chat["reasoning_efforts"] == []
     assert chat["reasoning_effort"] is None
     assert "no reasoning effort" in chat["reasoning_effort_stated"]
+
+
+def test_a_temperature_is_offered_only_for_a_model_that_takes_one(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A range for a chat attacker, none for a reasoning one, and a sentence both times.
+
+    The reasoning select's own rule read the other way round, and the half of #4 its
+    own report named as left undone: the capability was enforced at the route and the
+    console learned it from the 422 *after* the operator had moved the slider. Served
+    state and not a frontend guess — the table is declared once
+    (`bench/capability.py`) and a console holding a copy of it would be a second table
+    to disagree with.
+
+    The two absences stay two. `temperature_bounds` being absent is *this model
+    accepts none* — a choice nobody was offered — and `temperature_absent` is *no
+    temperature declared*, a choice nobody made. `temperature_stated` is the sentence
+    a run made now would print, so the screen cannot say one thing while the signed
+    document says another (ADR-0017, ADR-0025).
+    """
+    monkeypatch.setattr(
+        "backend.api.app.attacker_completion_for",
+        lambda spec, temperature=None, reasoning_effort=None: _attacking,
+    )
+    app = create_app(BenchConfig(cases=[]))
+    with TestClient(app) as client:
+        chat = client.put(
+            BENCH_TUNING_ROUTE,
+            json={
+                "attacker_model": AN_OFFERED_CHAT_MODEL,
+                "temperature": 0.4,
+                "reasoning_effort": None,
+                "turns_per_episode": 8,
+                "episodes_per_family": 2,
+                "attempts_per_case": 10,
+            },
+        )
+        reasoning = client.put(
+            BENCH_TUNING_ROUTE,
+            json={
+                "attacker_model": A_MODEL_THAT_TAKES_NO_TEMPERATURE,
+                "temperature": None,
+                "reasoning_effort": None,
+                "turns_per_episode": 8,
+                "episodes_per_family": 2,
+                "attempts_per_case": 10,
+            },
+        ).json()["tuning"]
+
+    assert chat.status_code == 200
+    offered = chat.json()["tuning"]
+    assert offered["temperature_bounds"] == {
+        "low": TEMPERATURE_RANGE[0],
+        "high": TEMPERATURE_RANGE[1],
+    }
+    assert offered["temperature"] == 0.4
+    assert "sampled at temperature 0.4" in offered["temperature_stated"]
+
+    # And nothing offered where there is no setting, with the reason stated rather
+    # than left to a null: a form drawing a slider here offers a control whose every
+    # value the route refuses at the moment it is set.
+    assert reasoning["temperature_bounds"] is None
+    assert reasoning["temperature"] is None
+    assert reasoning["temperature_stated"] == NO_TEMPERATURE_ACCEPTED
+    # Two statements about one blank, and they are not the same string.
+    assert reasoning["temperature_absent"] != reasoning["temperature_stated"]
+    assert offered["temperature_absent"] == reasoning["temperature_absent"]
+
+
+def test_every_offered_gpt_5_model_is_a_declared_row_and_not_the_presumption() -> None:
+    """The ordered prefix table covers every GPT-5 identifier this console offers.
+
+    The hazard the table's ordering exists for, checked on the list rather than
+    assumed: `gpt-5-chat` precedes `openai/gpt-5` because a chat variant would
+    otherwise be classified by the family prefix, and the same silence would classify
+    a chat model added to the list below. Each of these was confirmed against
+    OpenRouter's own model list before it was written down: the whole GPT-5 line this
+    console offers takes a reasoning effort and no explicit temperature.
+
+    Asserted as `declared`, not merely as the right answer: the presumption is the
+    standard chat set, so a slug the table never matched would read as *takes a
+    temperature* here and be refused by the provider at the first call of a run whose
+    budget was already confirmed.
+    """
+    line = [
+        identifier
+        for identifier, _ in ATTACKER_MODELS
+        if "openai/gpt-5" in identifier and "gpt-5-chat" not in identifier
+    ]
+    assert len(line) >= 11
+
+    for identifier in line:
+        reading = capabilities_of(identifier)
+        assert reading.declared, identifier
+        assert reading.accepts_reasoning_effort is True, identifier
+        assert reading.accepts_temperature is False, identifier
+
+
+def test_no_two_offered_models_are_recommended_by_the_same_sentence() -> None:
+    """A model added with a filler line is a model nobody can choose between.
+
+    The `decides` line is the whole reason the list is a list of pairs, so *distinct*
+    is the property worth asserting rather than *non-empty*: a dropdown of fifteen
+    slugs under two sentences repeated is a dropdown of two choices.
+    """
+    said = [decides for _, decides in ATTACKER_MODELS]
+    assert len(said) == len(set(said))
+    # And no line is a prefix of another, which is the near miss a copied entry makes.
+    for one in said:
+        for other in said:
+            if one is other:
+                continue
+            assert not other.startswith(one[:40])
 
 
 def test_a_reasoning_effort_a_model_has_no_setting_for_is_refused_when_it_is_set(

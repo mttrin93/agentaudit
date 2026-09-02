@@ -2160,6 +2160,16 @@ code {
   cursor: pointer;
 }
 
+/* Where a control the chosen model has no setting for would have been. A sentence
+ * and not an empty slot: a slider that vanishes without a word reads as a console
+ * that lost the setting rather than as a model that never offered it. Quiet, because
+ * it is a statement about what cannot be set and not a refusal of something that
+ * was. */
+.tuning .unavailable {
+  margin: 0;
+  color: var(--quiet);
+}
+
 .tuning button {
   justify-self: start;
   padding: 0.5rem 0.9rem;

@@ -1734,6 +1734,16 @@ export interface ModelSetting {
   identifier: string
   declared: boolean
   decides: string
+  /**
+   * What this instrument is set to think at, or the stated absence of a setting.
+   *
+   * The row was the model and not what the model was set to, so a reader saw which
+   * model the adjudicator runs on and not the conditions it ran under. One of the
+   * four statements a provenance block keeps apart for the attacker, and a stated
+   * absence for the three rows this bench holds no thinking budget on. Never a
+   * blank, and the response's own sentence rather than one composed here.
+   */
+  effort: string
 }
 
 /**
@@ -1838,8 +1848,20 @@ export interface Bounds {
 export interface Tuning {
   attacker_models: ModelChoice[]
   temperature: number | null
-  temperature_bounds: Bounds
+  /**
+   * The range a temperature may be set in, or `null` when there is no setting.
+   *
+   * `null` when the chosen attacker accepts no temperature, on the same terms
+   * `reasoning_efforts` is served empty: a form drawing a slider against a reasoning
+   * model offers a control whose every value the route refuses. Served state and not
+   * a guess — the capability table is declared once in the bench and this console
+   * reads its answer rather than holding a copy of it.
+   */
+  temperature_bounds: Bounds | null
+  /** What leaving it undeclared means, on a model that has the setting. */
   temperature_absent: string
+  /** What a run made now would print about its sampling, in the record's own words. */
+  temperature_stated: string
   /** The levels the chosen model accepts. Empty when it has no such setting. */
   reasoning_efforts: EffortChoice[]
   reasoning_effort: string | null

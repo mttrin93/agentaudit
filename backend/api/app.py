@@ -2534,6 +2534,21 @@ THE_SECOND_REFERENCE_MODEL = (
     "collapse this block exists to make visible"
 )
 
+NO_EFFORT_HELD_FOR_THIS_INSTRUMENT = (
+    "no reasoning effort held for this instrument — this bench offers no thinking "
+    "budget over it, so none is declared and none is sent. A statement about this "
+    "bench's own settings and not about what the model would accept: the adaptive "
+    "attacker's row is the only one an operator sets an effort on"
+)
+"""What three of the four rows say where an effort would be.
+
+Stated rather than blank, on the fourth row's own reasoning: a block that printed an
+effort for the one instrument that has one and nothing for the other three would read
+as three models set to a default nobody chose. The bench holds a thinking budget for
+the adaptive attacker and for nothing else (`payload.DeclaredModels`), and this is
+that absence said out loud (ADR-0017, #5).
+"""
+
 NOT_HELD_BY_THIS_BENCH = (
     "not held by this bench — declared on the command line, per run, to the script "
     "that uses it"
@@ -2562,6 +2577,19 @@ class ModelSetting(BaseModel):
     decides: str
     """What it decides, and which other setting it must never be collapsed with."""
 
+    effort: str
+    """What this instrument is set to think at, or the stated absence of a setting.
+
+    The row was the model and not what the model was set to, so a reader of this
+    block could see which model the adjudicator runs on and not the conditions it ran
+    under — and two runs of one model at one temperature and different effort are two
+    different instruments (#5). One of the four statements
+    `DeclaredModels.reasoning_effort_stated` keeps apart for the attacker, and
+    `NO_EFFORT_HELD_FOR_THIS_INSTRUMENT` for the three rows this bench sets no
+    thinking budget on. Never a blank, and never a figure: the field is the record's
+    own sentence, carried.
+    """
+
 
 def model_settings(models: DeclaredModels) -> list[ModelSetting]:
     """The four settings, in the order they are declared, each on its own row.
@@ -2579,24 +2607,31 @@ def model_settings(models: DeclaredModels) -> list[ModelSetting]:
             identifier=models.calibration,
             declared=models.calibration != UNDECLARED_MODEL,
             decides=THE_REFERENCE_AGENTS_MODEL,
+            effort=NO_EFFORT_HELD_FOR_THIS_INSTRUMENT,
         ),
         ModelSetting(
             instrument="the adjudicator",
             identifier=models.adjudicating,
             declared=models.adjudicating != UNDECLARED_MODEL,
             decides=THE_ADJUDICATORS_MODEL,
+            effort=NO_EFFORT_HELD_FOR_THIS_INSTRUMENT,
         ),
         ModelSetting(
             instrument="the adaptive attacker",
             identifier=models.attacking,
             declared=models.attacking != UNDECLARED_MODEL,
             decides=THE_ADAPTIVE_ATTACKERS_MODEL,
+            # The one row this bench holds an effort for, and the sentence is the
+            # record's own — the same four statements a signed provenance block
+            # keeps apart, and not a second wording of them (#5, ADR-0017).
+            effort=models.reasoning_effort_stated(),
         ),
         ModelSetting(
             instrument="the second reference model",
             identifier=NOT_HELD_BY_THIS_BENCH,
             declared=False,
             decides=THE_SECOND_REFERENCE_MODEL,
+            effort=NO_EFFORT_HELD_FOR_THIS_INSTRUMENT,
         ),
     ]
 
@@ -2728,8 +2763,34 @@ class Tuning(BaseModel):
 
     attacker_models: list[ModelChoice]
     temperature: float | None
-    temperature_bounds: Bounds
+    temperature_bounds: Bounds | None
+    """The range a temperature may be set in, or nothing when there is no setting.
+
+    **`None` when the chosen attacker accepts no temperature**, on the same terms
+    `reasoning_efforts` is served empty below: a form drawing a slider against a
+    reasoning model offers a control whose every value the route refuses, and it
+    would learn that from the 422 after the operator had moved it (#4). Served state
+    and not a frontend guess — the capability table is declared in one place
+    (`bench/capability.py`) and a console restating it would be a second table.
+    """
+
     temperature_absent: str
+    """What leaving the slider undeclared means, on a model that has the setting.
+
+    Not the same statement as the bounds being absent: *no temperature declared* is
+    a choice nobody made, and *this model accepts none* is a choice nobody was
+    offered. `temperature_stated` below is the one that says which (ADR-0017).
+    """
+
+    temperature_stated: str
+    """What a run made now would print about its sampling, in the record's own words.
+
+    Carried from `DeclaredModels.temperature_stated` rather than composed here, for
+    the reason `reasoning_effort_stated` is: it is the sentence the signed document
+    will state, and a second wording on this screen would only have to disagree with
+    it once (ADR-0017).
+    """
+
     reasoning_efforts: list[EffortChoice]
     """The levels the chosen model accepts, and which one the next run is on.
 
@@ -2836,8 +2897,16 @@ def tuning(config: BenchConfig) -> Tuning:
             for identifier, decides in _offered(attacking)
         ],
         temperature=config.report.models.attacking_temperature,
-        temperature_bounds=Bounds(low=TEMPERATURE_RANGE[0], high=TEMPERATURE_RANGE[1]),
+        # Offered only where the model takes one, which is the reasoning select's own
+        # rule read in the other direction: a slider drawn against a reasoning model
+        # is a control whose every value the route refuses.
+        temperature_bounds=(
+            Bounds(low=TEMPERATURE_RANGE[0], high=TEMPERATURE_RANGE[1])
+            if accepts_temperature(attacking)
+            else None
+        ),
         temperature_absent=NO_TEMPERATURE_DECLARED,
+        temperature_stated=config.report.models.temperature_stated(),
         # Offered only where the model has the setting: a level drawn against a chat
         # model is a control whose every value the route refuses.
         reasoning_efforts=(
@@ -2891,7 +2960,7 @@ def _offered(attacking: str) -> tuple[tuple[str, str], ...]:
             attacking,
             THE_STAND_IN_ATTACKER
             if attacking == UNDECLARED_MODEL
-            else "what this bench is set to now, and not one of the four above",
+            else "what this bench is set to now, and not one of those above",
         ),
     )
 
@@ -3014,9 +3083,70 @@ ATTACKER_MODELS: tuple[tuple[str, str], ...] = (
         "baseline — the first thing to try when episodes read as one idea rephrased",
     ),
     (
+        "openrouter:openai/gpt-5-nano",
+        "the floor of the GPT-5 line and the cheapest of the reasoning family here: "
+        "pick it to answer whether a run needs reasoning at all, before paying the "
+        "larger models for how much of it they sell",
+    ),
+    (
         "openrouter:openai/gpt-5-mini",
         "mid-tier reasoning, for a run where the question is whether the attacker "
         "can plan rather than whether it can phrase",
+    ),
+    (
+        "openrouter:openai/gpt-5.2",
+        "the last frontier model of the GPT line before the Codex line was merged "
+        "into it, and the one to hold a 5.4 or 5.5 reading against when the question "
+        "is whether that merge changed what the attacker does",
+    ),
+    (
+        "openrouter:openai/gpt-5.2-codex",
+        "5.2 post-trained for long unattended engineering work rather than for "
+        "conversation: the same price as 5.2 beside it, so the pair is the closest "
+        "thing this list has to a controlled comparison of post-training",
+    ),
+    (
+        "openrouter:openai/gpt-5.4",
+        "the first of the merged line, and the first reasoning model here with a "
+        "million-token window: the one to pick when an episode's transcript is what "
+        "the attacker keeps losing rather than the idea",
+    ),
+    (
+        "openrouter:openai/gpt-5.4-mini",
+        "the merged line at a third of 5.4's input price: the default for a long "
+        "adaptive run whose budget is the constraint but whose reasoning still has "
+        "to hold across turns",
+    ),
+    (
+        "openrouter:openai/gpt-5.4-nano",
+        "the cheapest of the merged line by a wide margin: the floor to re-take a "
+        "nano-tier baseline at when the older gpt-5-nano reading is the one being "
+        "questioned",
+    ),
+    (
+        "openrouter:openai/gpt-5.5",
+        "the most expensive model on this list and deliberately so \u2014 it is the "
+        "GPT-side answer to whether the model was the ceiling, the way "
+        "claude-opus-4.7 is the Anthropic-side one, and the two disagreeing is a "
+        "reading about the bench",
+    ),
+    (
+        "openrouter:openai/gpt-5.6-luna",
+        "the cheap tier of the newest line, at gpt-5.4-nano's price with the "
+        "million-token window: the one to pick for a high-volume run of short "
+        "episodes",
+    ),
+    (
+        "openrouter:openai/gpt-5.6-sol",
+        "the flagship of the newest line and its strongest at multi-step tool use, "
+        "which is what an adaptive episode is: pick it when the question is the best "
+        "attacker available and not what an attacker costs",
+    ),
+    (
+        "openrouter:openai/gpt-5.6-terra",
+        "the middle tier of the newest line, between Luna and Sol on output price "
+        "and on neither's errand: the one to run when Luna's episodes read as "
+        "underpowered and Sol's bill is why the run has not been repeated",
     ),
     (
         "openrouter:anthropic/claude-opus-4.7",
@@ -3025,7 +3155,8 @@ ATTACKER_MODELS: tuple[tuple[str, str], ...] = (
     ),
     (
         "openrouter:deepseek/deepseek-v4-flash-0731",
-        "the cheapest on this list by a wide margin and post-trained for agent "
+        "the cheapest output tokens on this list by a wide margin and post-trained "
+        "for agent "
         "workflows — but measured at 16s a call against the baseline's 2s, so an "
         "episode that takes minutes here takes an hour: pick it for a run whose "
         "budget is the constraint, never for one whose clock is",

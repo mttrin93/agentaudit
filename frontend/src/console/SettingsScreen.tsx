@@ -33,7 +33,12 @@
 
 import { useEffect, useRef, useState } from 'react'
 
-import { benchSettings, tuneBench, type BenchSettings } from '../api/bench'
+import {
+  benchSettings,
+  tuneBench,
+  type BenchSettings,
+  type Bounds,
+} from '../api/bench'
 import {
   settingsScreen,
   type AgentsBlock,
@@ -41,7 +46,6 @@ import {
   type LibraryBlock,
   type ModelsBlock,
   type SettingsBlock,
-  type TunedNumber,
   type TuningBlock,
 } from './settings'
 
@@ -205,8 +209,8 @@ function Block({
  * what it can do is not claim to: until the control is moved, `shown` reads
  * *not declared* and the request carries `null`.
  */
-function provided(one: TunedNumber): number {
-  return (one.low + one.high) / 2
+function provided(bounds: Bounds): number {
+  return (bounds.low + bounds.high) / 2
 }
 
 /** The temperature as the label states it: the live number, or that none is declared.
@@ -231,6 +235,12 @@ function TheTuning({
   // `null` and not `''`: nothing declared is a statement of its own, and it is the
   // one the request carries for an unset control.
   const [effort, setEffort] = useState<string | null>(block.reasoning.chosen)
+  // Its own state and not a row in `numbers`, because it is the one setting the
+  // chosen model may have no setting for at all: `''` is *not declared* and the
+  // request carries `null` for it.
+  const [temperature, setTemperature] = useState(
+    block.sampling.chosen === null ? '' : `${block.sampling.chosen}`,
+  )
   const [numbers, setNumbers] = useState<Record<string, string>>(
     Object.fromEntries(
       block.numbers.map((one) => [one.name, one.value === null ? '' : `${one.value}`]),
@@ -253,6 +263,7 @@ function TheTuning({
   const send = async (asked: {
     model: string
     effort: string | null
+    temperature: string
     numbers: Record<string, string>
   }) => {
     const at = (name: string) => asked.numbers[name] ?? ''
@@ -262,8 +273,9 @@ function TheTuning({
         attacker_model: asked.model,
         // An untouched slider is `null` and not a zero: *no temperature declared* is
         // a different statement from *sampled at zero*, and the field records which
-        // one an operator made.
-        temperature: at('temperature') === '' ? null : Number(at('temperature')),
+        // one an operator made. A model that accepts none draws no slider at all and
+        // sends the same `null`.
+        temperature: asked.temperature === '' ? null : Number(asked.temperature),
         // Sent every time, like every other field: this `PUT` is the whole statement
         // of how the instruments are set, so a request that left it out would clear
         // an effort the bench is holding.
@@ -288,6 +300,7 @@ function TheTuning({
   const settle = (asked: {
     model: string
     effort: string | null
+    temperature: string
     numbers: Record<string, string>
   }) => {
     if (pending.current !== null) {
@@ -319,7 +332,18 @@ function TheTuning({
               // it — so the level is cleared with the model that accepted it, and
               // the reading that comes back says what the new model offers.
               setEffort(null)
-              void send({ model: event.target.value, effort: null, numbers })
+              // And the temperature with it, for the same reason in the other
+              // direction: a chat model's temperature carried onto a reasoning model
+              // is a pair the route refuses rather than half-drops, so it is cleared
+              // with the model that accepted it and the reading that comes back says
+              // whether the new one has the setting at all.
+              setTemperature('')
+              void send({
+                model: event.target.value,
+                effort: null,
+                temperature: '',
+                numbers,
+              })
             }}
           >
             {block.models.map((one) => (
@@ -342,7 +366,7 @@ function TheTuning({
                 setEffort(picked)
                 // Settled the moment it is made, like the model pick above: there is
                 // nothing to stop moving.
-                void send({ model, effort: picked, numbers })
+                void send({ model, effort: picked, temperature, numbers })
               }}
             >
               <option value="">not declared</option>
@@ -364,52 +388,69 @@ function TheTuning({
             against the four rather than re-read on every visit. It stays on the
             block, where `settings.test.ts` holds it. */}
 
+        {/* Drawn only where the model takes one, which is the reasoning select's own
+            rule read the other way round: a slider against a reasoning model is a
+            control whose every value the route refuses, and until the response said
+            so the form learned it from the 422 after the operator had moved it. The
+            sentence saying *why* there is no slider is the response's own and is
+            built rather than drawn, on the same terms as every other per-control
+            sentence here — `block.sampling.stated`, which is what the signed
+            document will print. */}
+        {block.sampling.bounds !== null ? (
+          <label>
+            <span className="kind">
+              attacker temperature <strong>{stated(temperature)}</strong>
+            </span>
+            {/* A slider, and the value beside the label because a track with no
+                number on it is a control an operator cannot report. It has no
+                "undeclared" position — a range input always has a value — so an
+                untouched slider sends `null` and the label says so: *no temperature
+                declared* and *sampled at zero* are two different statements and the
+                field records which one was made. */}
+            <input
+              type="range"
+              value={
+                temperature === '' ? `${provided(block.sampling.bounds)}` : temperature
+              }
+              min={block.sampling.bounds.low}
+              max={block.sampling.bounds.high}
+              step={0.1}
+              onChange={(event) => {
+                setTemperature(event.target.value)
+                settle({ model, effort, temperature: event.target.value, numbers })
+              }}
+            />
+          </label>
+        ) : (
+          // The one sentence on this form that is drawn rather than built, and the
+          // reason is that it is not an explanation of the screen: a control that
+          // was here a moment ago and is now gone is a silence an operator has to
+          // decode, and what they would decode it as is *the console lost the
+          // setting*. The response's own words, which are the words the signed
+          // provenance block of a run made now would print — never a second wording
+          // composed here (ADR-0017).
+          <p className="unavailable">{block.sampling.stated}</p>
+        )}
         {/* Every control's own sentence — what it decides, and what leaving the
             temperature undeclared means — is built and not drawn. The reading keeps
             them and `settings.test.ts` holds them. */}
-        {block.numbers.map((one) =>
-          one.name === 'temperature' ? (
-            <label key={one.name}>
-              <span className="kind">
-                {one.label} <strong>{stated(read(one.name))}</strong>
-              </span>
-              {/* A slider, and the value beside the label because a track with no
-                  number on it is a control an operator cannot report. It has no
-                  "undeclared" position — a range input always has a value — so an
-                  untouched slider sends `null` and the label says so: *no temperature
-                  declared* and *sampled at zero* are two different statements and the
-                  field records which one was made. */}
-              <input
-                type="range"
-                value={read(one.name) === '' ? `${provided(one)}` : read(one.name)}
-                min={one.low}
-                max={one.high}
-                step={0.1}
-                onChange={(event) => {
-                  const moved = { ...numbers, [one.name]: event.target.value }
-                  setNumbers(moved)
-                  settle({ model, effort, numbers: moved })
-                }}
-              />
-            </label>
-          ) : (
-            <label key={one.name}>
-              <span className="kind">{one.label}</span>
-              <input
-                type="number"
-                value={read(one.name)}
-                min={one.low}
-                max={one.high}
-                step={1}
-                onChange={(event) => {
-                  const typed = { ...numbers, [one.name]: event.target.value }
-                  setNumbers(typed)
-                  settle({ model, effort, numbers: typed })
-                }}
-              />
-            </label>
-          ),
-        )}
+        {block.numbers.map((one) => (
+          <label key={one.name}>
+            <span className="kind">{one.label}</span>
+            <input
+              type="number"
+              value={read(one.name)}
+              min={one.low}
+              max={one.high}
+              step={1}
+              onChange={(event) => {
+                const typed = { ...numbers, [one.name]: event.target.value }
+                setNumbers(typed)
+                settle({ model, effort, temperature, numbers: typed })
+              }}
+            />
+          </label>
+        ))}
 
         {/* The scored denominator's caveat, the `n` at this setting and the `n` the
             declared rule reads are all built and not drawn. They are still on the

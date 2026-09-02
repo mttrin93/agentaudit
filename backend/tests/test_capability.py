@@ -137,6 +137,31 @@ def test_the_temperature_exception_is_also_the_reasoning_effort_exception() -> N
     assert accepts_reasoning_effort("openrouter:openai/gpt-5") is True
 
 
+def test_a_model_that_takes_neither_setting_is_a_row_and_not_a_derived_answer() -> None:
+    """`gpt-5.2-chat` takes no temperature and has no thinking budget either.
+
+    The row that proves the record was right not to derive the second answer from the
+    first. The provider lists neither `temperature` nor `reasoning_effort` among the
+    parameters it supports, so a table that read *refuses a temperature* as *is a
+    reasoning model* would offer it an effort it refuses — the provider's error
+    arriving at the first call of a run whose budget was already confirmed, which is
+    the arrangement #4 replaced.
+
+    And it is matched before the family prefix above it, like the chat variant one
+    version below: `openai/gpt-5` would otherwise answer for it.
+    """
+    reading = capabilities_of("openrouter:openai/gpt-5.2-chat")
+
+    assert reading.accepts_temperature is False
+    assert reading.accepts_reasoning_effort is False
+    assert reading.declared is True
+    # A declared reading and not the presumption: the sentence a report prints for it
+    # is a claim about the provider, which is only honest because there is a row.
+    assert "presumed" not in reading.stated()
+    # The family it would have been swallowed by answers the other way.
+    assert accepts_reasoning_effort("openrouter:openai/gpt-5.2") is True
+
+
 def test_a_model_with_no_line_is_presumed_to_have_no_thinking_budget() -> None:
     """The presumption withholds a parameter that is not in the standard set.
 

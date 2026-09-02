@@ -136,9 +136,10 @@ class ModelCapabilities:
     True is the reasoning family and nothing else: the parameter exists because those
     models have a thinking budget to spend, and a chat model refuses it the way a
     reasoning model refuses a temperature. The two fields are declared per row rather
-    than derived from each other — they are opposites in every row this table holds
-    today, and a provider that ships a model taking both would need a row and not a
-    rewrite.
+    than derived from each other, and `NEITHER_SETTING` is why: `openai/gpt-5.2-chat`
+    takes neither, so a bench deriving the second answer from the first would offer it
+    a thinking budget the provider refuses. A model taking both would be a row here on
+    the same terms and not a rewrite.
     """
 
     declared: bool = True
@@ -180,6 +181,24 @@ accepts the second, and a bench answering them from two places would eventually
 answer them about two different models.
 """
 
+NEITHER_SETTING = ModelCapabilities(
+    accepts_temperature=False, accepts_reasoning_effort=False
+)
+"""Models that take neither: no explicit temperature, and no thinking budget.
+
+The combination the other three rows imply is impossible and the provider ships
+anyway. `openai/gpt-5.2-chat` is the non-reasoning member of the 5.2 line and it did
+not inherit the chat set with it: the provider lists neither `temperature` nor
+`reasoning_effort` among the parameters it supports. Declared rather than left to the
+`openai/gpt-5` prefix above it, because that prefix would offer it a thinking budget
+it refuses — the provider's error arriving at the first call of a run whose budget is
+already moving, which is the arrangement #4 replaced.
+
+It is a row and not a fourth flag on the record: the two questions were always
+independent, and this is the row that proves the record was right not to derive one
+from the other.
+"""
+
 TAKES_A_TEMPERATURE = ModelCapabilities(
     accepts_temperature=True, accepts_reasoning_effort=False
 )
@@ -207,8 +226,11 @@ CAPABILITIES: tuple[tuple[str, ModelCapabilities], ...] = (
     # Ordered, first match wins, and the exception comes before the family it is an
     # exception to: `gpt-5-chat` is the non-reasoning member of the GPT-5 line and
     # takes a temperature like any other chat model, so a plain prefix match on
-    # `openai/gpt-5` would withhold a parameter it accepts.
+    # `openai/gpt-5` would withhold a parameter it accepts. `gpt-5.2-chat` is the
+    # same exception one version on and it does not take one either, which is why
+    # each chat variant is a row of its own rather than a rule about the word.
     ("openai/gpt-5-chat", TAKES_A_TEMPERATURE),
+    ("openai/gpt-5.2-chat", NEITHER_SETTING),
     ("openai/gpt-5", REASONING_FAMILY),
     ("openai/o1", REASONING_FAMILY),
     ("openai/o3", REASONING_FAMILY),

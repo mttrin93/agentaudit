@@ -44,6 +44,7 @@ import { describe, expect, it } from 'vitest'
 
 import type { BenchSettings } from '../api/bench'
 import component from './SettingsScreen.tsx?raw'
+import view from './settings.ts?raw'
 import {
   KEYGEN_COMMAND,
   settingsScreen,
@@ -91,24 +92,28 @@ const CONFIGURED: BenchSettings = {
       identifier: 'provider:model-alpha',
       declared: true,
       decides: 'what is being measured, and never the instrument measuring it.',
+      effort: 'no reasoning effort held for this instrument.',
     },
     {
       instrument: 'the adjudicator',
       identifier: 'provider:model-beta',
       declared: true,
       decides: 'the two judged families, and the one κ is measured on.',
+      effort: 'no reasoning effort held for this instrument.',
     },
     {
       instrument: 'the adaptive attacker',
       identifier: 'provider:model-gamma',
       declared: true,
       decides: 'nothing that is scored.',
+      effort: 'reasoning effort medium — declared, and the value the request carried',
     },
     {
       instrument: 'the second reference model',
       identifier: 'not held by this bench',
       declared: false,
       decides: 'what a swap is measured against, declared on the command line.',
+      effort: 'no reasoning effort held for this instrument.',
     },
   ],
   ceilings: {
@@ -153,6 +158,9 @@ const CONFIGURED: BenchSettings = {
     temperature: null,
     temperature_bounds: { low: 0, high: 1 },
     temperature_absent: 'no temperature declared — the provider’s own default.',
+    temperature_stated:
+      'no temperature declared — the provider’s own default, whatever that is. An ' +
+      'absence somebody left, and not a number this bench chose on their behalf',
     reasoning_efforts: [
       { level: 'low', chosen: false },
       { level: 'medium', chosen: true },
@@ -526,6 +534,121 @@ describe('each layer’s ceiling', () => {
     expect(ceiling(moved, 'scored').limit).not.toContain('7 attempts')
     expect(ceiling(moved, 'adaptive').limit).toContain('208 turns per target')
     expect(ceiling(moved, 'adaptive').limit).not.toContain('165 turns')
+  })
+})
+
+/**
+ * The same bench on a reasoning attacker: no temperature setting to be had.
+ *
+ * `temperature_bounds` is `null` and `temperature_stated` is the sentence the record
+ * would print — the response answering *this model accepts none*, which is not the
+ * response's *no temperature declared* and not a fourth thing the console composed.
+ */
+const ON_A_REASONING_MODEL: BenchSettings = {
+  ...CONFIGURED,
+  tuning: {
+    ...CONFIGURED.tuning,
+    temperature: null,
+    temperature_bounds: null,
+    temperature_stated:
+      'this model accepts no temperature \u2014 it samples at the provider\u2019s own ' +
+      'default and refuses the parameter, so none was sent. Not the same statement ' +
+      'as no temperature declared: the choice was unavailable, not unmade',
+  },
+}
+
+describe('the temperature the chosen model accepts', () => {
+  it('draws the slider from the served bounds and from no range of its own', () => {
+    const tuning = block(settingsScreen(CONFIGURED), 'tuning')
+
+    // The range the route enforces, read off the wire. A console holding its own
+    // bounds is a form offering a value the route refuses.
+    expect(tuning.sampling.bounds).toBe(CONFIGURED.tuning.temperature_bounds)
+    expect(tuning.sampling.chosen).toBe(CONFIGURED.tuning.temperature)
+    // And no row among the whole numbers is the temperature: it is the one setting a
+    // model may have none of, so it is its own field rather than a row with a
+    // nullable range.
+    expect(tuning.numbers.map((one) => one.name)).toEqual([
+      'turns_per_episode',
+      'episodes_per_family',
+      'attempts_per_case',
+    ])
+  })
+
+  it('offers no temperature at all for a model that accepts none, and says why', () => {
+    const on = block(settingsScreen(ON_A_REASONING_MODEL), 'tuning')
+
+    // The reasoning select's own rule, read the other way round: a slider against a
+    // model that refuses the parameter is a control whose every value the route
+    // refuses, and before this the form learned that from the 422 after the operator
+    // had already moved it (#4).
+    expect(on.sampling.bounds).toBeNull()
+    // Drawn on the served bounds and on nothing the component decided for itself.
+    expect(component).toContain('block.sampling.bounds !== null')
+    expect(component).toContain('block.sampling.bounds.low')
+    expect(component).toContain('block.sampling.bounds.high')
+    // And the reason is drawn where the slider was, in the response's own words: a
+    // control that was there a moment ago and is now gone is a silence an operator
+    // decodes as a console that lost the setting.
+    expect(component).toContain('{block.sampling.stated}')
+
+    // Two statements and never one. *This model accepts none* is a choice nobody was
+    // offered and *no temperature declared* is a choice nobody made, and both arrive
+    // from the response rather than being composed here: the second is the sentence a
+    // signed provenance block will print, and a console wording of its own would
+    // only have to disagree with it once (ADR-0017).
+    expect(on.sampling.stated).toBe(ON_A_REASONING_MODEL.tuning.temperature_stated)
+    expect(on.sampling.absent).toBe(ON_A_REASONING_MODEL.tuning.temperature_absent)
+    expect(on.sampling.stated).not.toBe(on.sampling.absent)
+    // And the same field on a model that has the setting says the other thing, so
+    // neither sentence is a constant this screen prints regardless.
+    const chat = block(settingsScreen(CONFIGURED), 'tuning')
+    expect(chat.sampling.stated).toBe(CONFIGURED.tuning.temperature_stated)
+    expect(chat.sampling.stated).not.toBe(on.sampling.stated)
+  })
+
+  it('holds no copy of the capability table and no model name of its own', () => {
+    // Which model accepts what is declared once, in `backend/bench/capability.py`,
+    // and reaches this screen as served state. A console that named a model or a
+    // family here would be a second table, and the two would disagree the first time
+    // a provider shipped a variant only one of them had heard of.
+    for (const source of [component, view]) {
+      for (const restated of [
+        'gpt-',
+        'openai/',
+        'anthropic/',
+        'claude-',
+        'deepseek',
+        'openrouter:',
+      ]) {
+        expect(source).not.toContain(restated)
+      }
+    }
+  })
+})
+
+describe('the effort each instrument is set to', () => {
+  it('is stated on every one of the four rows, and never left blank', () => {
+    const models = block(settingsScreen(CONFIGURED), 'models').models
+
+    // The row was the model and not what the model was set to, so a reader saw which
+    // model the adjudicator runs on and not the conditions it ran under — and two
+    // runs of one model at one temperature and different effort are two different
+    // instruments (#5).
+    expect(models.map((model) => model.effort)).toEqual(
+      CONFIGURED.models.map((model) => model.effort),
+    )
+    for (const model of models) {
+      expect(model.effort.trim()).not.toBe('')
+    }
+
+    // The one row this bench holds an effort for carries the record's own sentence,
+    // and the three it holds none for state that rather than showing a blank.
+    const [attacker] = models.filter((model) =>
+      model.instrument.includes('adaptive attacker'),
+    )
+    expect(attacker.effort).toContain('reasoning effort medium')
+    expect(models.filter((model) => model.effort === attacker.effort)).toHaveLength(1)
   })
 })
 

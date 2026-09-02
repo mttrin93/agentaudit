@@ -50,6 +50,7 @@
 import type {
   AdaptiveCeiling,
   BenchSettings,
+  Bounds,
   EffortChoice,
   ModelChoice,
   ModelSetting,
@@ -158,18 +159,23 @@ export interface CeilingsBlock {
   ceilings: Ceiling[]
 }
 
-/** One number an operator may set, with the range the route enforces. */
+/**
+ * One number an operator may set, with the range the route enforces.
+ *
+ * The three whole numbers, and not the temperature: a temperature is a setting the
+ * chosen model may have no setting for at all, so it is its own field on the block
+ * beside the reasoning effort rather than a row here with a nullable range. These
+ * three are set on every model there is.
+ */
 export interface TunedNumber {
   /** The field name the route takes, used as the form's own key. */
-  name: 'temperature' | 'turns_per_episode' | 'episodes_per_family' | 'attempts_per_case'
+  name: 'turns_per_episode' | 'episodes_per_family' | 'attempts_per_case'
   label: string
   value: number | null
   low: number
   high: number
   /** What this setting decides, in one line, so no label carries it alone. */
   decides: string
-  /** Empty unless leaving it blank means something, which is temperature's case. */
-  absent: string
 }
 
 /**
@@ -191,6 +197,27 @@ export interface TuningBlock {
   heading: string
   statement: string
   models: ModelChoice[]
+  /**
+   * The temperature the chosen model accepts, if it accepts one at all.
+   *
+   * `bounds` is `null` when the chosen attacker takes no temperature, which is the
+   * rule `reasoning.levels` follows one field down: a slider drawn against a model
+   * that refuses the parameter is a control whose every value the route refuses, and
+   * before this the form learned that from the 422 after the operator had moved it.
+   *
+   * **Four statements about one setting and none of them composed here.** A declared
+   * number is `chosen`; *no temperature declared* is `absent`; *this model accepts
+   * none* and *no line in the table for this model* are both `stated`, which is the
+   * sentence the signed document will print — carried from the response so the screen
+   * cannot say one thing while the record says another.
+   */
+  sampling: {
+    bounds: Bounds | null
+    chosen: number | null
+    absent: string
+    decides: string
+    stated: string
+  }
   /**
    * The reasoning efforts the chosen model accepts, and what an unset one means.
    *
@@ -371,11 +398,13 @@ const WHAT_A_REASONING_EFFORT_DECIDES =
   'at one temperature and different effort are two different instruments, and a ' +
   'report that recorded only the first would call them identical'
 
+const WHAT_A_TEMPERATURE_DECIDES =
+  'how varied the attacker\u2019s probes are. Left blank it is the provider\u2019s ' +
+  'own default, which is a fact about the provider and not a choice this bench ' +
+  'recorded \u2014 and a model that takes no temperature was never offered the choice, ' +
+  'which is a third thing again'
+
 const WHAT_A_TUNED_SETTING_DECIDES: Record<TunedNumber['name'], string> = {
-  temperature:
-    'how varied the attacker\u2019s probes are. Left blank it is the provider\u2019s ' +
-    'own default, which is a fact about the provider and not a choice this bench ' +
-    'recorded',
   turns_per_episode:
     'T \u2014 how many probes one episode may send before it is capped. An episode ' +
     'that reaches the cap without breaking the target is censored, which is a ' +
@@ -392,22 +421,12 @@ const WHAT_A_TUNED_SETTING_DECIDES: Record<TunedNumber['name'], string> = {
 function tunedNumbers(tuning: Tuning): TunedNumber[] {
   return [
     {
-      name: 'temperature',
-      label: 'attacker temperature',
-      value: tuning.temperature,
-      low: tuning.temperature_bounds.low,
-      high: tuning.temperature_bounds.high,
-      decides: WHAT_A_TUNED_SETTING_DECIDES.temperature,
-      absent: tuning.temperature_absent,
-    },
-    {
       name: 'turns_per_episode',
       label: 'turns per episode',
       value: tuning.turns_per_episode,
       low: tuning.turns_bounds.low,
       high: tuning.turns_bounds.high,
       decides: WHAT_A_TUNED_SETTING_DECIDES.turns_per_episode,
-      absent: '',
     },
     {
       name: 'episodes_per_family',
@@ -416,7 +435,6 @@ function tunedNumbers(tuning: Tuning): TunedNumber[] {
       low: tuning.episodes_bounds.low,
       high: tuning.episodes_bounds.high,
       decides: WHAT_A_TUNED_SETTING_DECIDES.episodes_per_family,
-      absent: '',
     },
     {
       name: 'attempts_per_case',
@@ -425,7 +443,6 @@ function tunedNumbers(tuning: Tuning): TunedNumber[] {
       low: tuning.attempts_bounds.low,
       high: tuning.attempts_bounds.high,
       decides: WHAT_A_TUNED_SETTING_DECIDES.attempts_per_case,
-      absent: '',
     },
   ]
 }
@@ -477,6 +494,13 @@ export function settingsScreen(bench: BenchSettings): SettingsBlock[] {
       heading: 'What the next run is made with',
       statement: bench.tuning.statement,
       models: bench.tuning.attacker_models,
+      sampling: {
+        bounds: bench.tuning.temperature_bounds,
+        chosen: bench.tuning.temperature,
+        absent: bench.tuning.temperature_absent,
+        decides: WHAT_A_TEMPERATURE_DECIDES,
+        stated: bench.tuning.temperature_stated,
+      },
       reasoning: {
         levels: bench.tuning.reasoning_efforts,
         chosen: bench.tuning.reasoning_effort,

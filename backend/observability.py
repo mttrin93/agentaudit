@@ -1,11 +1,9 @@
 """The one place a trace is emitted, and the whole of what a trace may carry.
 
-A run is 180 scored calls plus retries and judge calls, plus up to 96 adaptive
-calls; a gate run is around 830. When a family comes back all-zero the operator has
-two explanations — the target defended, or the instrument misfired — and until this
-module existed nothing on the record told them which. `docs/validation.md` answers
-that question for the bench as a whole, once, at gate time. It cannot answer it for
-the run in front of you.
+ADR-0026 argues why this module exists: the all-zero family an operator cannot
+explain, and — separately — the tracer already latent in the lock, which switches on
+from the environment with no allowlist in front of it. What follows is what those
+two arguments cost the code.
 
 **What this emits is the shape of a run and never its content.** `Field` is an
 allowlist and not a redaction pass: a field that is not a member of it has no way to
@@ -18,35 +16,32 @@ A trace of shapes is not a weak trace. Timings, per-node counts, retry storms an
 error classes are what actually locate a misfire; the payload text is what you
 already have in `backend/cases/`.
 
-## Three things this is not
+## Three things this is not, and what each costs here
 
-**Not the Article 12 log.** `Article.RECORD_KEEPING` is a compliance obligation and
-part of the evidence chain, and `registration.py` puts the liability record and the
-Article 12 record in one artefact deliberately. A trace is a debugging aid pointed at
-a sink the operator can delete. So tracing may sample and the Article 12 log may not,
-and with tracing off every attempt is still recorded.
+ADR-0026 argues all three; these are the lines of code that hold them.
 
-**Never the authority for a figure.** Calls spent, rates, intervals and bands come
-from the run. If a trace disagrees with the run, the run is right and the trace is a
-bug. Nothing in this module returns what it emitted, which is why no consumer can
-read a figure back out of the sink (ADR-0006, ADR-0010, ADR-0026).
+**Not the Article 12 log.** Tracing may sample and the Article 12 log may not, so
+`registration.py` keeps the liability record and the Article 12 record in one
+artefact and nothing here touches it. With tracing off every attempt is still
+recorded.
 
-**Never a run's dependency.** A sink that is down, slow or misconfigured must not
-fail, stall or alter a run. Every function here swallows its own failures and logs
-them locally; the one thing `traced` does not swallow is an exception from the body
+**Never the authority for a figure.** Nothing in this module returns what it
+emitted, so no consumer can read a figure back out of the sink (ADR-0006, ADR-0010,
+ADR-0026). If a trace disagrees with the run, the run is right and the trace is a
+bug.
+
+**Never a run's dependency.** Every function here swallows its own failures and logs
+them locally. The one thing `traced` does not swallow is an exception from the body
 it wraps, because that is the run failing and the run's failure is not the tracer's
-to eat. A bench that lost 180 paid calls because a container was restarting would be
-a bench whose observability cost more than it explained.
+to eat.
 
-## Why OpenTelemetry rather than the tracer the sink ships with
+## Plain OTel spans, not the tracer the sink ships with
 
-LangSmith's LangGraph integration captures inputs and outputs verbatim — full
-prompts, full model replies. Switched on as documented, the first traced run sends
-the attack payloads, the target's replies and the target's `auth_token` to a third
-party. The convenience of the auto-tracer is exactly the convenience of having no
-allowlist, so it is not the mechanism here: these are plain OTel spans carrying
-allowlisted attributes, exported to an OTLP endpoint that happens to be LangSmith's
-today and is a URL in the environment tomorrow (ADR-0026).
+ADR-0026 decision 4 rejects the auto-tracer, which captures inputs and outputs
+verbatim.
+What is here instead: plain OTel spans carrying allowlisted attributes, exported to
+an OTLP endpoint that happens to be LangSmith's today and is a URL in the
+environment tomorrow.
 
 Three smaller properties of the implementation carry weight, and none of them is
 incidental:

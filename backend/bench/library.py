@@ -412,13 +412,10 @@ class GateReading:
     measured_the_field: bool
     """Whether the model underneath the three reference agents was the field at all.
 
-    False on a stub run. `scripts/gate.py --model stub:obedient` is how the pipeline
-    is exercised without spending money, and it is a gate run like any other: it
-    reads every case and appends a reading. But the stub is a fixture with hardcoded
-    replies that breaks all three reference agents identically by construction, so
-    its `D` is a statement about the fixture and not a poor estimate of anything.
-    Retiring on it would claim the field moved from a measurement that never touched
-    the field (ADR-0022).
+    False on a stub run. `scripts/gate.py --model stub:obedient` is a gate run like
+    any other — it reads every case and appends a reading — and ADR-0022 argues why
+    the reading it appends is a statement about the fixture, so this flag is what
+    lets `retirement.py` decline to retire on one.
 
     Recorded here by the run that took the reading, on the same terms as
     `fit_to_report` and for the same reason: provenance is a fact about the run.

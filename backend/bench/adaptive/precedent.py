@@ -245,11 +245,9 @@ class JsonFileStore(BaseStore):
     written before it. That is a slow design and a correct one at this size — a
     single tenant's findings, read once per family per run.
 
-    A dependency was the alternative. `langgraph.checkpoint.sqlite` is not
-    installed, and a schema plus a lifecycle for one tenant's findings is out of
-    proportion until cross-tenant isolation arrives and brings a real query
-    surface with it (ADR-0019, considered options). The claim rests on the
-    interface and the lifetime rather than on the backend's brand.
+    A database-backed store was the alternative, and ADR-0019's considered options
+    record why it lost and when to revisit it. What that leaves here is the claim
+    resting on the interface and the lifetime rather than on the backend's brand.
 
     Two operations are refused rather than approximated: a semantic `query`, which
     would need an index this store has no dependency for, and a filter operator

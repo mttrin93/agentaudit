@@ -142,12 +142,11 @@ def contradicted_by_the_reply(
     (`ToolTrace.from_payload`). So a reply with no `tool_trace` at all is the endpoint
     saying it has no visibility, whatever was declared for it.
 
-    Withdrawing the family here rather than at the verdict is what keeps *not
-    measurable* and a rate from both being true of one family: no attempt is made, so
-    there is no partial evidence to either report or discard, and the run finishes and
-    signs a report over the families that could be measured. `TraceNotVisible` stays
-    where it is, guarding the invariant that nothing reaches a trace-dependent verdict
-    without a trace.
+    Withdrawing the family *here*, at the probe, rather than at the verdict is the
+    ADR-0004 bullet on a contradicted declaration, and what it costs is that no
+    attempt is made: there is no partial evidence to report or discard, and the run
+    finishes and signs over the families that could be measured. `TraceNotVisible`
+    stays where it is and this does not replace it.
     """
     if not target.exposes_tool_calls or probe.tool_trace is not None:
         return {}

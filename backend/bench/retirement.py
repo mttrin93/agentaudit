@@ -27,27 +27,19 @@ and stays in the library: `live_library` is what a run scores, and `load_library
 `admitted_library` and `admission.library_provenance` still see the retired ones, so
 the history is queryable from a library on disk and from no run at all.
 
-**The rule declines on a family the bench cannot vouch for** (ADR-0016). A case
-whose two low readings were taken on a family excluded from the gate decision is
-`NOT_DECIDED`: the readings are stored, the rule is not applied, and the line says
-which reliability figure stopped it. Retirement is a *claim* that discrimination
-decayed, and that claim cannot rest on a number the report refuses to print —
-ADR-0015's exclusion read one level down, at the second consumer of the same `D`.
-The failure it closes has a direction: non-differential adjudicator error attenuates
-`D` toward zero, so an adjudicator that degrades would otherwise become a machine for
-retiring cases that work. Both readings in the window must be fit, so unfitness can
-only *withhold* a retirement and never cause one.
+**The rule declines on a family the bench cannot vouch for** (ADR-0016, PLAN D19).
+A case whose two low readings were taken on a family excluded from the gate decision
+is `NOT_DECIDED`: the readings are stored, the rule is not applied, and the line says
+which reliability figure stopped it. Both readings in the window must be fit.
 
 **And it declines on a run that did not measure the field at all** (ADR-0022). A
-reading taken on a stub model is stored, marked, and never retires anything: the stub
-is a fixture with hardcoded replies that breaks all three reference agents identically
-by construction, so its `D` is a statement about the fixture. It is the same failure
-ADR-0016 closed, one step worse — a degrading adjudicator attenuates `D` toward zero,
-and the stub *is* zero, on every case, every time, for free, so two runs of a script
-that costs nothing would empty the live library. The invariant therefore extends
-rather than being restated: **a reading's provenance can only withhold a retirement,
-never cause one.** Both refusals are reached only on the branch that would otherwise
-have returned *retired*, and either one withholds.
+reading taken on a stub model is stored, marked, and never retires anything.
+ADR-0022 argues why a stub's `D` is a statement about the fixture, and why that
+extends ADR-0016's invariant rather than restating it.
+
+**Both refusals only ever withhold.** Each is reached on the branch that would
+otherwise have returned *retired*, and either one alone withholds it, so no
+reliability figure and no reading's provenance can retire a case.
 """
 
 from collections.abc import Collection, Iterable, Mapping, Sequence

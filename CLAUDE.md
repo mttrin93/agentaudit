@@ -52,6 +52,29 @@ known to work.
 
 **Never merge on red CI.** Report back instead.
 
+**A decision belongs in an ADR; its local consequence belongs in a docstring.**
+The prose in this codebase is an asset, and the long docstrings are the house
+style — so this rule is about *where* a passage lives, never about deleting it.
+Four cases, and only the first two move:
+
+1. A decision, its alternatives, and why the alternatives lost → an ADR. The
+   docstring keeps a one-line pointer to it and the local consequence.
+2. A restatement of something already argued in an ADR, [PLAN.md](./PLAN.md),
+   [CONTEXT.md](./CONTEXT.md) or the README → replaced by the link. This is the
+   table above — *do not restate these here* — applied to source.
+3. Why *this* code at *this* call site is shaped this way → stays. An ADR records
+   a decision and deliberately not its consequence at line 200 of one module;
+   moving that out makes both files worse.
+4. A measurement that licenses a value → stays with the value. The κ readings
+   on `completion.DEFAULT_ADJUDICATOR_MODEL`, `budget.NOT_PRICED`, the per-layer
+   counters: the figure is a property of the literal it sits on, so filing it
+   elsewhere loses the fact that editing the literal invalidates it.
+
+Where prose moves, **both ends move in the same commit** — the ADR gains the
+paragraph, the docstring gains the link — and **no ADR is edited to say something
+it did not decide.** A decision no ADR records is a new ADR to propose, not a
+paragraph appended to the nearest one.
+
 **Blockers and dependencies live in GitHub**, in the native dependency and
 sub-issue fields — not only as prose in an issue body. The issue list is the
 signal for what is ready to start, and it is only a signal if it is machine-

@@ -27,10 +27,9 @@ written here without first widening a type, which is the signal ADR-0010 asks an
 implementer to stop at.
 
 **The adaptive section carries no rate, no interval, no band and no `D`** (ADR-0010),
-and it is labelled *not reproducible* beside two sections that are. Its value to a
-reader is the one thing the fixed suite cannot give them — evidence that eighteen
-cases are not the boundary of what is possible — and that value survives only if
-nobody can mistake it for a measurement. This module owns the section's shape; the
+and it is labelled *not reproducible* beside two sections that are. PLAN §9 says
+what the section is worth to a reader and why that worth survives only while nobody
+can mistake it for a measurement. This module owns the section's shape; the
 statistics that fill it (`A_break`, `A_effort`, the censoring counts) are #17's,
 and they are deliberately absent here rather than stubbed.
 

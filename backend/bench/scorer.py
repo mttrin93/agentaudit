@@ -301,12 +301,9 @@ class FamilyOutcome:
 class GateOutcome(StrEnum):
     """The gate's three answers. `passed: bool` cannot carry them (ADR-0015).
 
-    **Not decided is a third outcome and not a polite fail.** A fail is a measured
-    claim — the bench was asked whether it discriminates and the answer was no. Not
-    decided says too little of the instrument was fit for the question to be put.
-    Collapsing them would be the same error as reporting a family at 0.0 because
-    nothing could be measured, which is the distinction `NotMeasurable` exists to
-    hold one level down.
+    **Not decided is a third outcome and not a polite fail** — ADR-0015 argues why,
+    and the enum is how that argument is carried: three members, so no caller can
+    collapse two of them into a boolean on the way out.
     """
 
     PASSED = "passed"
@@ -571,13 +568,9 @@ def band_for(rate: Rate, cuts: BandCuts = DECLARED_BAND_CUTS) -> Band:
       interval so wide it spans both. In each case these counts do not place the
       family against either anchor, and saying so beats resolving it.
 
-    The alternative reading — `holds` when the upper bound clears 0.10, `fails`
-    when the lower bound clears 0.50 — was rejected because at the declared n = 30
-    neither cut is reachable by the agent it was anchored to. `holds` would require
-    a perfect 0 of 30, so the hardened agent's own constructed 10% would read
-    `weak`; `fails` would require 20 of 30, so the weak agent's own 50% would read
-    `weak` too. A band that both reference agents land outside of is a band that
-    describes nothing, and the range 1/30 to 19/30 would collapse into one word.
+    Separation and not a bound clearing a cut point is ADR-0014's decision, and the
+    reading it rejected is argued there with the arithmetic that rejected it. The
+    licence for the two numbers themselves stays with them, on `BandCuts`.
 
     Ties: a bound landing exactly on an anchor counts as *reaching* it, so the
     anchor is inside the interval rather than ruled out. At the declared sample

@@ -687,17 +687,13 @@ class Instrumented:
     another, and the four settings of a run's provenance exist to make exactly that
     unreadable (ADR-0004, ADR-0013).
 
-    **`attempts_per_case` is in a different class from the other four and the
-    difference is not cosmetic.** The other four bound a layer that is scored on
-    nothing (ADR-0010): turning `T` up buys the attacker more rope and moves no rate,
-    no band, no `D` and no gate decision. `attempts_per_case` is the scored
-    denominator — ADR-0003 sets it so that `n = 30` per family, which is what the
-    Wilson interval, the band, monotonicity and the retirement rule are all defined
-    against. A run at a lower number is a real run with real rates and it is **not a
-    gate result**: `GateRule` travels on `TargetRun` and prints beside every figure,
-    so what such a run reports is honest — but nothing may compare it to a reading
-    taken at the declared rule, and `scripts/gate.py` stays on `DECLARED_RULE` and
-    takes no setting from here.
+    **`attempts_per_case` is in a different class from the other four**, and
+    ADR-0025 argues the difference: the other four bound a layer scored on nothing
+    (ADR-0010), and this one is the scored denominator that ADR-0003 sets to give
+    `n = 30` per family. What the difference buys here is that a run at a lower
+    number is honest and is **not a gate result** —
+    `GateRule` travels on `TargetRun` and prints beside every figure, and
+    `scripts/gate.py` stays on `DECLARED_RULE` and takes no setting from this type.
     """
 
     attacker_model: str

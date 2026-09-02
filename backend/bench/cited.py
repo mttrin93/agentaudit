@@ -45,11 +45,8 @@ returns what it displaced, and the caller states it: a failed gate run overwriti
 passing citation is the correct arithmetic — the citation is what the bench last put
 itself through, not the best answer it ever got — and it is only safe because the
 outcome is a field every surface reads and the replacement is announced by name. The
-two alternatives are both wrong and are recorded as rejected in ADR-0023: a stale
-pass left in place is a report claiming a certification the bench has since lost, in
-the flattering direction, and a citation cleared to nothing states *no gate run is
-cited* about a bench that has just measured its own discriminating power and found it
-wanting.
+two alternatives — leave a stale pass in place, or clear the citation on a failure —
+are recorded as rejected in ADR-0023's considered options.
 
 **Nothing is deleted.** Only the pointer moves. Every gate run's record survives
 where it was written — beside its dated document for a command-line run, in the

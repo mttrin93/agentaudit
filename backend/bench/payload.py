@@ -505,9 +505,9 @@ class TargetPayload:
     missing key would read as an older shape of artefact. `rendering.publish` cannot
     write an unbound one.
 
-    Signing the Markdown directly was rejected: it makes byte-stable *rendering* a
-    permanent obligation, where this makes only the serialisation byte-stable and
-    lets the rendering change with a new digest (ADR-0017).
+    Signing the Markdown directly was rejected in ADR-0017's considered options; the
+    consequence here is that only the serialisation has to be byte-stable, so the
+    rendering may change and arrive with a new digest.
     """
 
     key_id: str | None = None

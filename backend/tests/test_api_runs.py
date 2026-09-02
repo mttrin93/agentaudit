@@ -47,9 +47,11 @@ from backend.bench.adaptive.scripted import SCRIPTED_ATTACKER
 from backend.bench.adaptive.tools import ToolInvocation
 from backend.bench.adjudication import Completion
 from backend.bench.calibration import run_calibration
+from backend.bench.capability import ReasoningEffort
 from backend.bench.completion import (
     ADJUDICATOR_MODEL_ENV,
     ATTACKER_MODEL_ENV,
+    ATTACKER_REASONING_EFFORT_ENV,
     DEFAULT_ATTACKER_TEMPERATURE,
     REFERENCE_MODEL_ENV,
     TURNS_PER_EPISODE_ENV,
@@ -680,7 +682,11 @@ def _adjudicating(system_prompt: str, message: str) -> str:
     return "resisted"
 
 
-def _adjudicating_client(spec: str, temperature: float | None = None) -> Completion:
+def _adjudicating_client(
+    spec: str,
+    temperature: float | None = None,
+    reasoning_effort: ReasoningEffort | None = None,
+) -> Completion:
     """The judged families' instrument, built from the string that declared it.
 
     Two builders rather than one, because the factory now calls two: an adjudicator
@@ -693,7 +699,9 @@ def _adjudicating_client(spec: str, temperature: float | None = None) -> Complet
 
 
 def _attacking_client(
-    spec: str, temperature: float | None = None
+    spec: str,
+    temperature: float | None = None,
+    reasoning_effort: ReasoningEffort | None = None,
 ) -> AttackerCompletion:
     """The adaptive layer's instrument, built from the string that declared it."""
     assert spec == AN_ATTACKING_MODEL, spec
@@ -773,7 +781,9 @@ temperature (`bench/capability.py`)."""
 
 
 def _refusing_a_temperature(
-    spec: str, temperature: float | None = None
+    spec: str,
+    temperature: float | None = None,
+    reasoning_effort: ReasoningEffort | None = None,
 ) -> AttackerCompletion:
     """An attacker client that refuses a temperature the way the provider would.
 
@@ -833,7 +843,11 @@ def test_a_declared_attacker_that_takes_a_temperature_is_still_sent_the_default(
     monkeypatch.setenv(ATTACKER_MODEL_ENV, AN_ATTACKING_MODEL)
     sent: list[float | None] = []
 
-    def _recording(spec: str, temperature: float | None = None) -> AttackerCompletion:
+    def _recording(
+        spec: str,
+        temperature: float | None = None,
+        reasoning_effort: ReasoningEffort | None = None,
+    ) -> AttackerCompletion:
         sent.append(temperature)
         return _attacking
 
@@ -843,6 +857,72 @@ def test_a_declared_attacker_that_takes_a_temperature_is_still_sent_the_default(
 
     assert sent == [DEFAULT_ATTACKER_TEMPERATURE]
     assert config.report.models.attacking_temperature == DEFAULT_ATTACKER_TEMPERATURE
+
+
+def test_a_declared_reasoning_effort_reaches_the_client_and_the_record(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The second declared input of the attacker, from the environment to provenance.
+
+    Both halves in one assertion, because the failure #5 was filed for is them coming
+    apart: a run whose reasoning effort reached the client but not the record is a
+    report that calls two different instruments identical.
+    """
+    _declaring_nothing(monkeypatch)
+    monkeypatch.setenv(SIGNING_KEY_VARIABLE, encoded_private(generate()))
+    monkeypatch.setenv(ATTACKER_MODEL_ENV, A_MODEL_THAT_TAKES_NO_TEMPERATURE)
+    monkeypatch.setenv(ATTACKER_REASONING_EFFORT_ENV, "high")
+    sent: list[ReasoningEffort | None] = []
+
+    def _recording(
+        spec: str,
+        temperature: float | None = None,
+        reasoning_effort: ReasoningEffort | None = None,
+    ) -> AttackerCompletion:
+        sent.append(reasoning_effort)
+        return _attacking
+
+    monkeypatch.setattr("backend.api.app.attacker_completion_for", _recording)
+
+    models = cast(BenchRuns, create_app().state.bench).config.report.models
+
+    assert sent == [ReasoningEffort.HIGH]
+    assert models.attacking_reasoning_effort is ReasoningEffort.HIGH
+    assert "reasoning effort high" in models.reasoning_effort_stated()
+
+
+def test_an_effort_declared_for_a_model_with_no_setting_is_resolved_not_sent(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A deployment's declaration meets a chat attacker, and the boot still holds.
+
+    The resolution `temperature_for` does in the other direction: what reaches the
+    client is no parameter, and what reaches the record is the absence *stated as the
+    model's* rather than as a level nobody sent. A boot that passed the declaration
+    through would fail at the first episode of the first run, which is the fault #4
+    moved earlier and this keeps moved.
+    """
+    _declaring_nothing(monkeypatch)
+    monkeypatch.setenv(SIGNING_KEY_VARIABLE, encoded_private(generate()))
+    monkeypatch.setenv(ATTACKER_MODEL_ENV, AN_ATTACKING_MODEL)
+    monkeypatch.setenv(ATTACKER_REASONING_EFFORT_ENV, "high")
+    sent: list[ReasoningEffort | None] = []
+
+    def _recording(
+        spec: str,
+        temperature: float | None = None,
+        reasoning_effort: ReasoningEffort | None = None,
+    ) -> AttackerCompletion:
+        sent.append(reasoning_effort)
+        return _attacking
+
+    monkeypatch.setattr("backend.api.app.attacker_completion_for", _recording)
+
+    models = cast(BenchRuns, create_app().state.bench).config.report.models
+
+    assert sent == [None]
+    assert models.attacking_reasoning_effort is None
+    assert "no reasoning effort" in models.reasoning_effort_stated()
 
 
 @pytest.mark.parametrize("variable", [ATTACKER_MODEL_ENV, ADJUDICATOR_MODEL_ENV])

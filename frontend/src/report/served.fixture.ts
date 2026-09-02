@@ -255,6 +255,8 @@ export const SERVED: TargetReport = {
     "models": {
       "adjudicating": "openrouter:openai/gpt-4.1-mini",
       "attacking": "openrouter:openai/gpt-4.1-mini",
+      "attacking_reasoning_effort": null,
+      "attacking_reasoning_effort_stated": "no line in the capability table for this model, so the standard chat set is presumed and it has no reasoning effort \u2014 a presumption stated as one, and not a measurement of what the provider would accept",
       "attacking_temperature": null,
       "attacking_temperature_stated": "no temperature declared \u2014 the provider's own default, whatever that is. An absence somebody left, and not a number this bench chose on their behalf",
       "calibration": "openrouter:openai/gpt-4.1-nano"

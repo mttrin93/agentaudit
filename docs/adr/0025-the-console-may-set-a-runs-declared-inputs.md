@@ -20,15 +20,23 @@ restarting the process, which is not a consent mechanism; it is a deployment ste
 standing in for one.
 
 **Decision.** One route under `/bench` writes: `PUT /bench/settings/tuning`, taking
-the **declared inputs of the next run** — the adaptive attacker's model and its
-sampling temperature, `T` (turns per episode), `k` (episodes per family), and
-`attempts_per_case`. Everything else on that prefix still only reads.
+the **declared inputs of the next run** — the adaptive attacker's model, its
+sampling temperature and its reasoning effort, `T` (turns per episode), `k`
+(episodes per family), and `attempts_per_case`. Everything else on that prefix still
+only reads.
+
+*Amended by #5*: the reasoning effort joined on exactly these conditions and through
+the same seams. It is the attacker's second sampling setting, offered only for a model
+the capability table says has one, and refused rather than dropped for a model that
+does not — two runs of one model at one temperature and different effort are two
+different instruments, so condition 1 is what admits it.
 
 Admitted on four conditions, and each one is enforced rather than intended:
 
 1. **Every setting is printed in the report of every run made under it.** The
-   attacker's model and temperature land in the provenance block
-   (`DeclaredModels.attacking`, `.attacking_temperature`), `T` and `k` in the adaptive
+   attacker's model, temperature and reasoning effort land in the provenance block
+   (`DeclaredModels.attacking`, `.attacking_temperature`,
+   `.attacking_reasoning_effort`), `T` and `k` in the adaptive
    section, and the rule travels on every `TargetRun` beside the rate it produced.
    This is the condition that makes the others survivable: a setting that changes what
    a run measured is admissible **because** the artefact says what it was.

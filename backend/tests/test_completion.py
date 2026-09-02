@@ -26,7 +26,13 @@ from backend.bench import completion
 from backend.bench.adaptive.attacker import AttackerCompletion
 from backend.bench.adaptive.episode import AttackerTool
 from backend.bench.adaptive.tools import ToolInvocation
-from backend.bench.capability import TemperatureNotAccepted, temperature_for
+from backend.bench.capability import (
+    ReasoningEffort,
+    ReasoningEffortNotAccepted,
+    TemperatureNotAccepted,
+    reasoning_effort_for,
+    temperature_for,
+)
 from backend.bench.completion import (
     MODEL_TIMEOUT_SECONDS,
     attacker_completion_for,
@@ -248,3 +254,89 @@ def test_a_temperature_a_model_rejects_is_refused_before_any_call_is_made(
 
     assert "openai/gpt-5-mini" in str(refused.value)
     assert client.asked == []
+
+
+def test_a_declared_reasoning_effort_reaches_the_request_and_nothing_else_does(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The effort a deployment declared is the effort on the wire, or no parameter.
+
+    Asserted over the request for `temperature`'s reason: `omit` and not `None`,
+    because the SDK sends the key whenever it holds a value and a
+    `reasoning_effort: null` on the wire is the parameter being sent to a model that
+    has no setting for it. Both models in one loop, so a client that stopped sending
+    the parameter altogether fails the half that says it should.
+    """
+    client = _Answering(_a_call("check_canary", "{}"))
+    monkeypatch.setattr(completion, "_client", lambda: client)
+
+    for spec in (A_REASONING_SPEC, AN_ATTACKING_SPEC):
+        attacker_completion_for(
+            spec, reasoning_effort=reasoning_effort_for(spec, ReasoningEffort.HIGH)
+        )("a system prompt", "a brief")
+
+    reasoning, baseline = client.asked
+    assert reasoning["reasoning_effort"] == "high"
+    assert baseline["reasoning_effort"] is omit
+
+
+def test_a_run_that_declared_no_reasoning_effort_sends_none(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """No default, on the model that would take one. Nothing declared is nothing sent.
+
+    The difference from `temperature`, and the reason there is no
+    `DEFAULT_ATTACKER_REASONING_EFFORT`: a thinking budget this bench invented would
+    be a setting a report named and nobody chose.
+    """
+    client = _Answering(_a_call("check_canary", "{}"))
+    monkeypatch.setattr(completion, "_client", lambda: client)
+
+    attacker_completion_for(A_REASONING_SPEC)("a system prompt", "a brief")
+
+    assert client.asked[0]["reasoning_effort"] is omit
+
+
+@pytest.mark.parametrize("build", [completion_for, attacker_completion_for])
+def test_a_reasoning_effort_a_model_has_no_setting_for_is_refused_before_any_call(
+    build: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The temperature refusal's counterpart, at configuration time, on both clients.
+
+    A chat model refuses this parameter as loudly as a reasoning model refuses a
+    temperature, and refusing it here is what keeps the discovery out of the first
+    call of a run whose spend an operator has already confirmed. Refused rather than
+    dropped for ADR-0004's reason: a request the parameter was cut from is a request
+    a provenance block would name the setting on anyway.
+    """
+    client = _Answering(_a_call("check_canary", "{}"))
+    monkeypatch.setattr(completion, "_client", lambda: client)
+
+    with pytest.raises(ReasoningEffortNotAccepted) as refused:
+        build(AN_ATTACKING_SPEC, None, ReasoningEffort.HIGH)
+
+    assert "no reasoning effort setting" in str(refused.value)
+    assert client.asked == []
+
+
+def test_a_reasoning_effort_the_environment_declares_is_read_from_the_closed_set(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Blank is nothing, a level is itself, and anything else is refused.
+
+    `minimal` is the case worth naming: it is a real OpenAI level that the o-series
+    refuses, so forwarding it would put the provider's error at the first episode of
+    a confirmed run. A level this bench does not offer is not a level it passes on.
+    """
+    monkeypatch.delenv(completion.ATTACKER_REASONING_EFFORT_ENV, raising=False)
+    assert completion.declared_reasoning_effort() is None
+
+    monkeypatch.setenv(completion.ATTACKER_REASONING_EFFORT_ENV, "  ")
+    assert completion.declared_reasoning_effort() is None
+
+    monkeypatch.setenv(completion.ATTACKER_REASONING_EFFORT_ENV, "high")
+    assert completion.declared_reasoning_effort() is ReasoningEffort.HIGH
+
+    monkeypatch.setenv(completion.ATTACKER_REASONING_EFFORT_ENV, "minimal")
+    with pytest.raises(ValueError, match="not a reasoning effort this bench offers"):
+        completion.declared_reasoning_effort()

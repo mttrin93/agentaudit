@@ -50,6 +50,7 @@
 import type {
   AdaptiveCeiling,
   BenchSettings,
+  EffortChoice,
   ModelChoice,
   ModelSetting,
   ScoredCeiling,
@@ -174,14 +175,14 @@ export interface TunedNumber {
 /**
  * The one block on this screen that changes anything (ADR-0025).
  *
- * Five settings: the attacker's model, its temperature, `T`, `k`, and attempts per
- * case. Each is a declared input of a run — it changes what the next run *measured* —
+ * Six settings: the attacker's model, its temperature, its reasoning effort, `T`,
+ * `k`, and attempts per case. Each is a declared input of a run — it changes what the next run *measured* —
  * and each is printed in the provenance of every run made under it, which is the
  * condition they are offered on.
  *
  * `warning` is the bench's own sentence about `attempts_per_case`, carried and never
- * paraphrased: four of the five bound a layer that is scored on nothing, and the
- * fifth is the scored denominator the gate is decided at. A block offering the fifth
+ * paraphrased: five of the six bound a layer that is scored on nothing, and the
+ * sixth is the scored denominator the gate is decided at. A block offering the sixth
  * without that sentence would be offering a way to produce a rate that reads like a
  * gate reading.
  */
@@ -190,6 +191,21 @@ export interface TuningBlock {
   heading: string
   statement: string
   models: ModelChoice[]
+  /**
+   * The reasoning efforts the chosen model accepts, and what an unset one means.
+   *
+   * `levels` is empty when the chosen attacker has no such setting, which is not the
+   * same statement as *no level chosen* — `stated` is the sentence a run made now
+   * would print in its provenance, carried from the response rather than composed
+   * here, so a screen cannot say one thing while the signed document says another.
+   */
+  reasoning: {
+    levels: EffortChoice[]
+    chosen: string | null
+    absent: string
+    decides: string
+    stated: string
+  }
   numbers: TunedNumber[]
   /** `n` at the current setting, and the `n` the declared rule reads. */
   attemptsPerFamily: string
@@ -349,6 +365,12 @@ function adaptiveCeiling(adaptive: AdaptiveCeiling): Ceiling {
  * is opened with, and the two ceilings are last because they are the only block whose
  * point is made by there being two of it.
  */
+const WHAT_A_REASONING_EFFORT_DECIDES =
+  'how much of a thinking budget the attacker spends before it answers. A declared ' +
+  'input like the temperature beside it, and not the same one: two runs of one model ' +
+  'at one temperature and different effort are two different instruments, and a ' +
+  'report that recorded only the first would call them identical'
+
 const WHAT_A_TUNED_SETTING_DECIDES: Record<TunedNumber['name'], string> = {
   temperature:
     'how varied the attacker\u2019s probes are. Left blank it is the provider\u2019s ' +
@@ -455,6 +477,13 @@ export function settingsScreen(bench: BenchSettings): SettingsBlock[] {
       heading: 'What the next run is made with',
       statement: bench.tuning.statement,
       models: bench.tuning.attacker_models,
+      reasoning: {
+        levels: bench.tuning.reasoning_efforts,
+        chosen: bench.tuning.reasoning_effort,
+        absent: bench.tuning.reasoning_effort_absent,
+        decides: WHAT_A_REASONING_EFFORT_DECIDES,
+        stated: bench.tuning.reasoning_effort_stated,
+      },
       numbers: tunedNumbers(bench.tuning),
       attemptsPerFamily: `${bench.tuning.attempts_per_family} attempts per family`,
       declaredAttemptsPerCase: `the declared rule reads ${bench.tuning.declared_attempts_per_case}`,

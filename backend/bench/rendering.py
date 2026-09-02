@@ -584,6 +584,10 @@ def _how_the_run_was_made(body: Mapping[str, Any]) -> Section:
             f"- **{models['attacking']}** — the adaptive layer's model, and the "
             "adaptive layer's only. It decides nothing that is scored.",
             f"  - Sampling: {models['attacking_temperature_stated']}.",
+            # Both declared inputs of the one instrument, under it and never folded
+            # into a single line: two runs of one model at one temperature and
+            # different reasoning effort are two different instruments (#5).
+            f"  - Reasoning: {models['attacking_reasoning_effort_stated']}.",
             "",
             "### The library these attempts came from",
             "",

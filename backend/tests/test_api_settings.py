@@ -69,7 +69,11 @@ from backend.api.runs import BenchConfig, BenchRuns, DeclaredGap, plan_for
 from backend.bench.adaptive.budget import DECLARED_ADAPTIVE_BUDGET, AdaptiveBudget
 from backend.bench.adaptive.episode import AttackerTool
 from backend.bench.adaptive.tools import ToolInvocation
-from backend.bench.capability import accepts_temperature
+from backend.bench.capability import (
+    NO_REASONING_EFFORT_ACCEPTED,
+    ReasoningEffort,
+    accepts_temperature,
+)
 from backend.bench.library import Case, Family, LibraryVersion
 from backend.bench.payload import DeclaredModels
 from backend.bench.rule import DECLARED_RULE, GateRule
@@ -700,6 +704,10 @@ def test_a_setting_outside_its_range_is_refused_rather_than_clamped() -> None:
     assert after["tuning"]["temperature"] is None
 
 
+AN_OFFERED_CHAT_MODEL = "openrouter:openai/gpt-4.1-mini"
+"""On the offered list, and the baseline: it takes a temperature and no reasoning
+effort, which is the row of the capability table this pair of settings turns on."""
+
 A_MODEL_THAT_TAKES_NO_TEMPERATURE = "openrouter:openai/gpt-5-mini"
 """On the offered list, and the model #4 was filed for.
 
@@ -723,7 +731,7 @@ def test_a_temperature_a_model_rejects_is_refused_when_it_is_set(
     """
     monkeypatch.setattr(
         "backend.api.app.attacker_completion_for",
-        lambda spec, temperature=None: _attacking,
+        lambda spec, temperature=None, reasoning_effort=None: _attacking,
     )
     assert A_MODEL_THAT_TAKES_NO_TEMPERATURE in [
         identifier for identifier, _ in ATTACKER_MODELS
@@ -767,7 +775,7 @@ def test_a_model_that_takes_no_temperature_can_be_set_without_one(
     """
     monkeypatch.setattr(
         "backend.api.app.attacker_completion_for",
-        lambda spec, temperature=None: _attacking,
+        lambda spec, temperature=None, reasoning_effort=None: _attacking,
     )
     app = create_app(BenchConfig(cases=[]))
     with TestClient(app) as client:
@@ -788,6 +796,119 @@ def test_a_model_that_takes_no_temperature_can_be_set_without_one(
     assert models.attacking == A_MODEL_THAT_TAKES_NO_TEMPERATURE
     assert models.attacking_temperature is None
     assert "accepts no temperature" in models.temperature_stated()
+
+
+def test_a_reasoning_effort_is_offered_only_for_a_model_that_has_the_setting(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Three levels for a reasoning attacker, none for a chat one, and a sentence both
+    times.
+
+    A screen that drew three levels against a chat model would offer a control whose
+    every value the route refuses at the moment it is set. The empty list is not the
+    same statement as *no level chosen*, which is why `reasoning_effort_stated`
+    travels beside it — the same sentence the provenance block of a run made now
+    would print (#5).
+    """
+    monkeypatch.setattr(
+        "backend.api.app.attacker_completion_for",
+        lambda spec, temperature=None, reasoning_effort=None: _attacking,
+    )
+    app = create_app(BenchConfig(cases=[]))
+    with TestClient(app) as client:
+        answered = client.put(
+            BENCH_TUNING_ROUTE,
+            json={
+                "attacker_model": A_MODEL_THAT_TAKES_NO_TEMPERATURE,
+                "temperature": None,
+                "reasoning_effort": "high",
+                "turns_per_episode": 8,
+                "episodes_per_family": 2,
+                "attempts_per_case": 10,
+            },
+        )
+        reasoning = answered.json()["tuning"]
+        chat = client.put(
+            BENCH_TUNING_ROUTE,
+            json={
+                "attacker_model": AN_OFFERED_CHAT_MODEL,
+                "temperature": 0.0,
+                "reasoning_effort": None,
+                "turns_per_episode": 8,
+                "episodes_per_family": 2,
+                "attempts_per_case": 10,
+            },
+        ).json()["tuning"]
+
+    assert answered.status_code == 200
+    assert [level["level"] for level in reasoning["reasoning_efforts"]] == [
+        str(level) for level in ReasoningEffort
+    ]
+    [chosen] = [level for level in reasoning["reasoning_efforts"] if level["chosen"]]
+    assert chosen["level"] == "high"
+    assert reasoning["reasoning_effort"] == "high"
+    assert "reasoning effort high" in reasoning["reasoning_effort_stated"]
+
+    # And nothing offered for a model with no such setting, with the reason stated
+    # rather than left to an empty list.
+    assert chat["reasoning_efforts"] == []
+    assert chat["reasoning_effort"] is None
+    assert "no reasoning effort" in chat["reasoning_effort_stated"]
+
+
+def test_a_reasoning_effort_a_model_has_no_setting_for_is_refused_when_it_is_set(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The temperature refusal in the other direction, and nothing is set.
+
+    Told in front of the estimate rather than at the first episode: the capability is
+    declared, so this costs no call. Refused rather than dropped, because a bench that
+    quietly sent no effort would print the setting in a provenance block as though the
+    request had carried it (ADR-0004, ADR-0025).
+    """
+    monkeypatch.setattr(
+        "backend.api.app.attacker_completion_for",
+        lambda spec, temperature=None, reasoning_effort=None: _attacking,
+    )
+    app = create_app(BenchConfig(cases=[]))
+    with TestClient(app) as client:
+        refused = client.put(
+            BENCH_TUNING_ROUTE,
+            json={
+                "attacker_model": AN_OFFERED_CHAT_MODEL,
+                "temperature": 0.0,
+                "reasoning_effort": "high",
+                "turns_per_episode": 8,
+                "episodes_per_family": 2,
+                "attempts_per_case": 10,
+            },
+        )
+        unknown = client.put(
+            BENCH_TUNING_ROUTE,
+            json={
+                "attacker_model": A_MODEL_THAT_TAKES_NO_TEMPERATURE,
+                "temperature": None,
+                "reasoning_effort": "minimal",
+                "turns_per_episode": 8,
+                "episodes_per_family": 2,
+                "attempts_per_case": 10,
+            },
+        )
+        after = client.get(BENCH_SETTINGS_ROUTE).json()["tuning"]
+
+    assert refused.status_code == 422
+    assert NO_REASONING_EFFORT_ACCEPTED in refused.json()["detail"]
+    assert AN_OFFERED_CHAT_MODEL in refused.json()["detail"]
+
+    # A level this bench does not offer is refused by name, and the refusal says
+    # which three it holds: `minimal` is a real OpenAI level the o-series rejects.
+    assert unknown.status_code == 422
+    assert "not a reasoning effort this bench offers" in unknown.json()["detail"]
+
+    # Neither request set anything: the bench is on the instrument it was on.
+    assert after["reasoning_effort"] is None
+    [chosen] = [model for model in after["attacker_models"] if model["chosen"]]
+    assert chosen["identifier"] == UNDECLARED_MODEL
 
 
 def test_the_block_says_a_run_below_the_declared_rule_is_not_a_gate_result() -> None:
@@ -824,7 +945,7 @@ def test_the_stand_in_is_not_offered_but_the_current_setting_always_is(
     # fail in CI, which is a test about the environment.
     monkeypatch.setattr(
         "backend.api.app.attacker_completion_for",
-        lambda spec, temperature=None: _attacking,
+        lambda spec, temperature=None, reasoning_effort=None: _attacking,
     )
     app = create_app(BenchConfig(cases=[]))
     with TestClient(app) as client:

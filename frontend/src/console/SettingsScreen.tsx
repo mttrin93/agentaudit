@@ -189,9 +189,9 @@ function Block({
  * an operator setting attempts per case is choosing whether the run is a gate result
  * at all (ADR-0025).
  *
- * The five settings go in one request. A form that could send the turn budget without
+ * The six settings go in one request. A form that could send the turn budget without
  * restating the model would let a bench name one instrument in a report while another
- * attacked, and the request model on the other end takes all five for that reason.
+ * attacked, and the request model on the other end takes all six for that reason.
  *
  * The answer is the whole settings reading, so what the screen draws afterwards is
  * what the bench stored — never what this form hoped it sent. A refusal is shown as
@@ -228,6 +228,9 @@ function TheTuning({
 }) {
   const chosen = block.models.find((model) => model.chosen)
   const [model, setModel] = useState(chosen?.identifier ?? '')
+  // `null` and not `''`: nothing declared is a statement of its own, and it is the
+  // one the request carries for an unset control.
+  const [effort, setEffort] = useState<string | null>(block.reasoning.chosen)
   const [numbers, setNumbers] = useState<Record<string, string>>(
     Object.fromEntries(
       block.numbers.map((one) => [one.name, one.value === null ? '' : `${one.value}`]),
@@ -239,7 +242,7 @@ function TheTuning({
   const read = (name: string) => numbers[name] ?? ''
 
   /**
-   * Send the five settings as they now stand, and draw what the bench answers.
+   * Send the six settings as they now stand, and draw what the bench answers.
    *
    * There is no confirm step, and the reason there does not need to be one is that
    * nothing here spends anything: these are the settings the *next* run will be
@@ -247,7 +250,11 @@ function TheTuning({
    * its own estimate (ADR-0007). The bench refuses a change while a run is going, so
    * a setting cannot move under a run that was already confirmed.
    */
-  const send = async (asked: { model: string; numbers: Record<string, string> }) => {
+  const send = async (asked: {
+    model: string
+    effort: string | null
+    numbers: Record<string, string>
+  }) => {
     const at = (name: string) => asked.numbers[name] ?? ''
     setRefused('')
     try {
@@ -257,6 +264,10 @@ function TheTuning({
         // a different statement from *sampled at zero*, and the field records which
         // one an operator made.
         temperature: at('temperature') === '' ? null : Number(at('temperature')),
+        // Sent every time, like every other field: this `PUT` is the whole statement
+        // of how the instruments are set, so a request that left it out would clear
+        // an effort the bench is holding.
+        reasoning_effort: asked.effort,
         turns_per_episode: Number(at('turns_per_episode')),
         episodes_per_family: Number(at('episodes_per_family')),
         attempts_per_case: Number(at('attempts_per_case')),
@@ -274,7 +285,11 @@ function TheTuning({
    * request per increment would have the bench answering about settings nobody
    * paused on. The last one wins, which is what a settled control is.
    */
-  const settle = (asked: { model: string; numbers: Record<string, string> }) => {
+  const settle = (asked: {
+    model: string
+    effort: string | null
+    numbers: Record<string, string>
+  }) => {
     if (pending.current !== null) {
       clearTimeout(pending.current)
     }
@@ -299,7 +314,12 @@ function TheTuning({
               setModel(event.target.value)
               // A pick is settled the moment it is made — there is nothing to stop
               // moving — so this one does not wait.
-              void send({ model: event.target.value, numbers })
+              // A model change can carry an effort the new model has no setting
+              // for, and the route refuses the pair rather than dropping half of
+              // it — so the level is cleared with the model that accepted it, and
+              // the reading that comes back says what the new model offers.
+              setEffort(null)
+              void send({ model: event.target.value, effort: null, numbers })
             }}
           >
             {block.models.map((one) => (
@@ -309,6 +329,36 @@ function TheTuning({
             ))}
           </select>
         </label>
+        {/* Drawn only where the model has the setting, and the reading says whether
+            an empty list means *no such setting* or *no level chosen*. A select and
+            not a slider, because the levels are a closed set and not a range. */}
+        {block.reasoning.levels.length > 0 ? (
+          <label>
+            <span className="kind">reasoning effort</span>
+            <select
+              value={effort ?? ''}
+              onChange={(event) => {
+                const picked = event.target.value === '' ? null : event.target.value
+                setEffort(picked)
+                // Settled the moment it is made, like the model pick above: there is
+                // nothing to stop moving.
+                void send({ model, effort: picked, numbers })
+              }}
+            >
+              <option value="">not declared</option>
+              {block.reasoning.levels.map((one) => (
+                <option key={one.level} value={one.level}>
+                  {one.level}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
+        {/* What an unset level means, what the setting decides, and the sentence a run
+            made now would print are all built and not drawn — the reading keeps them
+            and `settings.test.ts` holds them, on the same terms as every other
+            per-control sentence on this screen. */}
+
         {/* What the chosen model is for is built and not drawn: the reading carries
             a line per model, and which model to attack with is a decision made once
             against the four rather than re-read on every visit. It stays on the
@@ -338,7 +388,7 @@ function TheTuning({
                 onChange={(event) => {
                   const moved = { ...numbers, [one.name]: event.target.value }
                   setNumbers(moved)
-                  settle({ model, numbers: moved })
+                  settle({ model, effort, numbers: moved })
                 }}
               />
             </label>
@@ -354,7 +404,7 @@ function TheTuning({
                 onChange={(event) => {
                   const typed = { ...numbers, [one.name]: event.target.value }
                   setNumbers(typed)
-                  settle({ model, numbers: typed })
+                  settle({ model, effort, numbers: typed })
                 }}
               />
             </label>

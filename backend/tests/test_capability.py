@@ -13,8 +13,11 @@ that resolving a declared default never turns into a dropped parameter.
 
 from backend.bench.capability import (
     CAPABILITIES,
+    ReasoningEffort,
+    accepts_reasoning_effort,
     accepts_temperature,
     capabilities_of,
+    reasoning_effort_for,
     temperature_for,
 )
 
@@ -104,3 +107,63 @@ def test_every_row_is_matched_against_the_name_and_not_the_provider() -> None:
     for prefix, _ in CAPABILITIES:
         assert ":" not in prefix
         assert capabilities_of(f"openrouter:{prefix}") == capabilities_of(prefix)
+
+
+# --- The second parameter in the same table (#5) ------------------------------
+
+
+def test_the_family_that_refuses_a_temperature_is_the_family_that_thinks() -> None:
+    """Both answers about one model, off one row, in opposite directions.
+
+    The reason `reasoning_effort` is a field here and not a module of its own: the
+    half of the table that takes no temperature is the half that takes an effort, so
+    two tables would be two chances to disagree about one model.
+    """
+    assert accepts_reasoning_effort(A_REASONING_MODEL) is True
+    assert accepts_temperature(A_REASONING_MODEL) is False
+
+    assert accepts_reasoning_effort(A_BASELINE) is False
+    assert accepts_temperature(A_BASELINE) is True
+
+
+def test_the_temperature_exception_is_also_the_reasoning_effort_exception() -> None:
+    """`gpt-5-chat` is the non-reasoning member of the line, on both questions.
+
+    Read off the ordered table rather than off the model name: a bench that matched
+    `openai/gpt-5` first would offer a thinking budget to a chat model, which is the
+    provider's refusal arriving after a spend was confirmed.
+    """
+    assert accepts_reasoning_effort("openrouter:openai/gpt-5-chat") is False
+    assert accepts_reasoning_effort("openrouter:openai/gpt-5") is True
+
+
+def test_a_model_with_no_line_is_presumed_to_have_no_thinking_budget() -> None:
+    """The presumption withholds a parameter that is not in the standard set.
+
+    And it says it is a presumption. `reasoning_effort` is not part of what the chat
+    API documents as standard, so the presumed row has none — but nothing is sent
+    unless somebody declared one, so this withholds nothing a run asked for, and the
+    sentence a report prints for it is `PRESUMED_NO_REASONING_EFFORT` rather than a
+    claim about what the provider would accept.
+    """
+    reading = capabilities_of("openrouter:a/model-nobody-added-a-line-for")
+
+    assert reading.accepts_reasoning_effort is False
+    assert reading.declared is False
+    assert "accepts no reasoning effort" in reading.stated()
+    assert "presumed" in reading.stated()
+
+
+def test_a_declared_reasoning_effort_is_resolved_against_the_table() -> None:
+    """A declared effort meets a model with no setting and becomes a stated absence.
+
+    `temperature_for`'s counterpart, with the difference stated: nothing declared
+    stays nothing declared on every model, because there is no default effort this
+    bench would resolve on anybody's behalf.
+    """
+    assert reasoning_effort_for(A_REASONING_MODEL, ReasoningEffort.HIGH) is (
+        ReasoningEffort.HIGH
+    )
+    assert reasoning_effort_for(A_BASELINE, ReasoningEffort.HIGH) is None
+    assert reasoning_effort_for(A_REASONING_MODEL, None) is None
+    assert reasoning_effort_for(A_BASELINE, None) is None

@@ -153,6 +153,17 @@ const CONFIGURED: BenchSettings = {
     temperature: null,
     temperature_bounds: { low: 0, high: 1 },
     temperature_absent: 'no temperature declared — the provider’s own default.',
+    reasoning_efforts: [
+      { level: 'low', chosen: false },
+      { level: 'medium', chosen: true },
+      { level: 'high', chosen: false },
+    ],
+    reasoning_effort: 'medium',
+    reasoning_effort_absent:
+      'no reasoning effort declared — the provider’s own default, and there is no ' +
+      'default this bench would make on an operator’s behalf.',
+    reasoning_effort_stated:
+      'reasoning effort medium — declared, and the value the request carried',
     turns_per_episode: 5,
     turns_bounds: { low: 1, high: 40 },
     episodes_per_family: 3,
@@ -590,6 +601,16 @@ describe('nothing on this screen changes a setting', () => {
 
     // Carried, never paraphrased: four of the five settings bound a layer that is
     // scored on nothing, and this one moves the number the gate is decided at.
+    // The reasoning effort is carried as the closed list the route enforces, with the
+    // bench's own sentence beside it: two runs of one model at one temperature and
+    // different effort are two different instruments, and the screen may not say one
+    // thing about that while the signed document says another (#5).
+    expect(tuning.reasoning.levels).toBe(CONFIGURED.tuning.reasoning_efforts)
+    expect(tuning.reasoning.chosen).toBe('medium')
+    expect(tuning.reasoning.stated).toBe(CONFIGURED.tuning.reasoning_effort_stated)
+    expect(tuning.reasoning.absent).toBe(CONFIGURED.tuning.reasoning_effort_absent)
+    expect(tuning.reasoning.decides).toContain('two different instruments')
+
     expect(tuning.warning).toBe(CONFIGURED.tuning.attempts_warning)
     expect(tuning.warning).toContain('not a gate result')
     expect(component).toContain('block.warning')

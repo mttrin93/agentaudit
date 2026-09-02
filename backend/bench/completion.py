@@ -38,7 +38,13 @@ from backend.bench.adaptive.tools import (
     invocation_from,
 )
 from backend.bench.adjudication import Completion
-from backend.bench.capability import TemperatureNotAccepted, accepts_temperature
+from backend.bench.capability import (
+    ReasoningEffort,
+    ReasoningEffortNotAccepted,
+    TemperatureNotAccepted,
+    accepts_reasoning_effort,
+    accepts_temperature,
+)
 from backend.bench.unfinished import refuse_unfinished
 
 DEFAULT_OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
@@ -194,7 +200,51 @@ def declared_turns_per_episode() -> int | None:
     return turns
 
 
-def completion_for(spec: str, temperature: float | None = None) -> Completion:
+ATTACKER_REASONING_EFFORT_ENV = "AGENTAUDIT_ATTACKER_REASONING_EFFORT"
+"""Where a deployment declares how hard a reasoning attacker may think.
+
+A fourth variable and **no default beside it**, unlike `DEFAULT_ATTACKER_TEMPERATURE`.
+A temperature is sent on every request whether or not anybody chose one, so the bench
+declaring its own zero is the honest reading of a field that will be printed either
+way; a `reasoning_effort` is sent only when it is declared, so *not declared* is not a
+gap in a report — it is the run's actual condition. A number this bench invented would
+be a thinking budget a report named and nobody chose.
+
+Unset is nothing sent, on every model. A model with no such setting is a separate fact
+and `capability` holds it: an effort declared here against a chat model is refused at
+configuration time rather than dropped into a request the provider will reject.
+"""
+
+
+def declared_reasoning_effort() -> ReasoningEffort | None:
+    """The attacker's reasoning effort as the environment declares it, or `None`.
+
+    Read here for the reason every other variable is: `backend/api/` imports no `os`.
+
+    **A level this bench does not offer is refused rather than passed through.** The
+    set is closed (`capability.ReasoningEffort`) and a deployment that typed
+    `minimal` is asking for a level the o-series refuses, which is a request this
+    cannot honour — and a bench that forwarded it would discover that at the first
+    episode of a run somebody had already confirmed a spend for.
+    """
+    declared = os.environ.get(ATTACKER_REASONING_EFFORT_ENV, "").strip()
+    if not declared:
+        return None
+    try:
+        return ReasoningEffort(declared)
+    except ValueError as unusable:
+        raise ValueError(
+            f"{ATTACKER_REASONING_EFFORT_ENV}={declared!r} is not a reasoning effort "
+            f"this bench offers. The three are "
+            f"{', '.join(str(effort) for effort in ReasoningEffort)}"
+        ) from unusable
+
+
+def completion_for(
+    spec: str,
+    temperature: float | None = None,
+    reasoning_effort: ReasoningEffort | None = None,
+) -> Completion:
     """The bench's model call, from a `<provider>:<model>` configuration string.
 
     A string rather than a client, so the model an instrument used is a value a run
@@ -209,15 +259,20 @@ def completion_for(spec: str, temperature: float | None = None) -> Completion:
         )
     match Provider(provider):
         case Provider.OPENROUTER:
-            return _openrouter_completion(name, temperature)
+            return _openrouter_completion(name, temperature, reasoning_effort)
 
 
-def _openrouter_completion(name: str, temperature: float | None = None) -> Completion:
+def _openrouter_completion(
+    name: str,
+    temperature: float | None = None,
+    reasoning_effort: ReasoningEffort | None = None,
+) -> Completion:
     # The client is built here rather than on the first call, so a missing
     # credential is a refusal at configuration time. A run that reached its first
     # judged attempt before discovering it had no instrument would already have
     # spent the operator's budget on attempts nothing can score.
     _refuse_a_temperature_this_model_will_not_take(name, temperature)
+    _refuse_a_reasoning_effort_this_model_has_no_setting_for(name, reasoning_effort)
     client = _client()
 
     def complete(system_prompt: str, message: str) -> str:
@@ -232,6 +287,12 @@ def _openrouter_completion(name: str, temperature: float | None = None) -> Compl
             # chose, and the provider's own default is a fact about the provider
             # rather than a value to copy into the field that records a choice.
             temperature=omit if temperature is None else temperature,
+            # Omitted on every model that was declared none, and never sent as a
+            # level this bench chose: an effort in the request is an effort somebody
+            # declared, which is what makes the field a report prints readable.
+            reasoning_effort=(
+                omit if reasoning_effort is None else reasoning_effort.value
+            ),
         )
         # Before `message` is read at all. A reply cut off at the token cap is a
         # partial string, and `_verdict_in` cannot tell one from a short answer:
@@ -244,7 +305,9 @@ def _openrouter_completion(name: str, temperature: float | None = None) -> Compl
 
 
 def attacker_completion_for(
-    spec: str, temperature: float | None = None
+    spec: str,
+    temperature: float | None = None,
+    reasoning_effort: ReasoningEffort | None = None,
 ) -> AttackerCompletion:
     """The adaptive attacker's model call, from the same configuration string.
 
@@ -262,15 +325,18 @@ def attacker_completion_for(
         )
     match Provider(provider):
         case Provider.OPENROUTER:
-            return _openrouter_attacker(name, temperature)
+            return _openrouter_attacker(name, temperature, reasoning_effort)
 
 
 def _openrouter_attacker(
-    name: str, temperature: float | None = None
+    name: str,
+    temperature: float | None = None,
+    reasoning_effort: ReasoningEffort | None = None,
 ) -> AttackerCompletion:
     # Built at configuration time for the reason `_openrouter_completion` is: a
     # missing credential is a refusal now rather than at the first episode.
     _refuse_a_temperature_this_model_will_not_take(name, temperature)
+    _refuse_a_reasoning_effort_this_model_has_no_setting_for(name, reasoning_effort)
     client = _client()
 
     def attack(system_prompt: str, brief: str) -> ToolInvocation | None:
@@ -287,6 +353,9 @@ def _openrouter_attacker(
             # answer.
             tools=list(ATTACKER_TOOL_SCHEMAS),
             temperature=omit if temperature is None else temperature,
+            reasoning_effort=(
+                omit if reasoning_effort is None else reasoning_effort.value
+            ),
         )
         # Same check, and it matters more here: a `tool_calls` array cut off at the
         # cap is malformed JSON arriving where the structured path expects a
@@ -327,6 +396,25 @@ def _refuse_a_temperature_this_model_will_not_take(
     """
     if temperature is not None and not accepts_temperature(name):
         raise TemperatureNotAccepted(name, temperature)
+
+
+def _refuse_a_reasoning_effort_this_model_has_no_setting_for(
+    name: str, reasoning_effort: ReasoningEffort | None
+) -> None:
+    """The same refusal for the same reason, about the other parameter.
+
+    Not dropped and the call not attempted: a report naming a reasoning effort the
+    request never carried is the one thing a declared input may not do (ADR-0004,
+    ADR-0025), and a chat model refuses this parameter as loudly as a reasoning model
+    refuses a temperature — at the first call of a run whose spend is already
+    confirmed, which is the moment `capability` exists to get ahead of.
+
+    A caller holding a deployment's *declared* effort rather than an operator's choice
+    resolves it through `capability.reasoning_effort_for` first and records which
+    declaration it made.
+    """
+    if reasoning_effort is not None and not accepts_reasoning_effort(name):
+        raise ReasoningEffortNotAccepted(name, reasoning_effort)
 
 
 @functools.lru_cache(maxsize=1)

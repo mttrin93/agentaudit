@@ -66,7 +66,15 @@ from backend.bench.assembler import (
     ScannedControl,
     TargetResult,
 )
-from backend.bench.capability import NO_TEMPERATURE_ACCEPTED, accepts_temperature
+from backend.bench.capability import (
+    NO_REASONING_EFFORT_ACCEPTED,
+    NO_TEMPERATURE_ACCEPTED,
+    PRESUMED_NO_REASONING_EFFORT,
+    ReasoningEffort,
+    accepts_reasoning_effort,
+    accepts_temperature,
+    capabilities_of,
+)
 from backend.bench.library import ExternalId, LibraryVersion
 from backend.bench.published import UntestedCategory
 from backend.bench.registration import AttestationRecord
@@ -297,6 +305,29 @@ class DeclaredModels:
     implying a choice that was never available.
     """
 
+    attacking_reasoning_effort: ReasoningEffort | None = None
+    """How hard that model was told to think, or `None` for two different absences.
+
+    The second declared input of the same instrument, beside the temperature and for
+    the same reason: two runs of one model at one temperature and different reasoning
+    effort are two different instruments, and a report that records only the first two
+    calls them identical (#5). A run whose sampling conditions are not recorded is a
+    run nobody can repeat.
+
+    **`None` is three statements here and `reasoning_effort_stated` says which.** A
+    model with no such setting was never offered the choice; a model that has one and
+    was declared nothing ran at the provider's own default; and a model this bench
+    holds no capability line for is a presumption stated as one. A value against a
+    model with no setting is refused below, on `attacking_temperature`'s reasoning:
+    the request could not have carried it.
+
+    Deliberately not carried for the other two instruments, and deliberately never
+    defaulted. The adjudicator and the reference agents are settings of a deployment
+    this bench offers no thinking budget over, and unlike a temperature there is no
+    default: an effort is sent only when somebody declared one, so *not declared* is
+    the run's actual condition rather than a gap in the record.
+    """
+
     def __post_init__(self) -> None:
         """Refuse a temperature the attacking model could not have been sent.
 
@@ -316,6 +347,14 @@ class DeclaredModels:
                 f"{self.attacking} was recorded at temperature="
                 f"{self.attacking_temperature}, and it accepts none. "
                 f"{NO_TEMPERATURE_ACCEPTED}"
+            )
+        if self.attacking_reasoning_effort is not None and not (
+            accepts_reasoning_effort(self.attacking)
+        ):
+            raise ValueError(
+                f"{self.attacking} was recorded at reasoning_effort="
+                f"{self.attacking_reasoning_effort}, and it has no such setting. "
+                f"{NO_REASONING_EFFORT_ACCEPTED}"
             )
 
     def temperature_stated(self) -> str:
@@ -337,6 +376,36 @@ class DeclaredModels:
         return (
             f"sampled at temperature {self.attacking_temperature} — declared, and "
             "the value the request carried"
+        )
+
+    def reasoning_effort_stated(self) -> str:
+        """The attacker's reasoning effort as a report says it — one of four.
+
+        Four and never a blank, because the absences are three different facts: a
+        model with no such setting, a model that has one under a provider default
+        nobody overrode, and a model this bench holds no capability line for at all.
+        The last is kept apart from the first because *this model has no reasoning
+        effort* is a claim about the provider and a presumption is a claim about this
+        table — and a signed document may not state the one when it holds the other
+        (ADR-0004, ADR-0017).
+        """
+        capabilities = capabilities_of(self.attacking)
+        if not capabilities.accepts_reasoning_effort:
+            return (
+                NO_REASONING_EFFORT_ACCEPTED
+                if capabilities.declared
+                else PRESUMED_NO_REASONING_EFFORT
+            )
+        if self.attacking_reasoning_effort is None:
+            return (
+                "no reasoning effort declared — this model has the setting and none "
+                "was sent, so the provider's own default, whatever that is. An "
+                "absence somebody left, and not a level this bench chose on their "
+                "behalf"
+            )
+        return (
+            f"reasoning effort {self.attacking_reasoning_effort} — declared, and the "
+            "value the request carried"
         )
 
 
@@ -753,6 +822,18 @@ def _provenance(payload: TargetPayload) -> dict[str, Any]:
             # temperature was undeclared or unavailable (ADR-0025, #4).
             "attacking_temperature": provenance.models.attacking_temperature,
             "attacking_temperature_stated": provenance.models.temperature_stated(),
+            # And the second declared input of the same instrument, on the same
+            # terms: the value is absent on a model with no such setting, and the
+            # sentence beside it says whether that absence is the model's, the
+            # operator's, or this table's presumption (#5).
+            "attacking_reasoning_effort": (
+                None
+                if provenance.models.attacking_reasoning_effort is None
+                else str(provenance.models.attacking_reasoning_effort)
+            ),
+            "attacking_reasoning_effort_stated": (
+                provenance.models.reasoning_effort_stated()
+            ),
         },
         "library": {
             "cases": provenance.library.cases,

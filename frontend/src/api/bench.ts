@@ -432,6 +432,16 @@ export interface ReportProvenance {
      * it and this app prints the statement rather than interpreting the value.
      */
     attacking_temperature_stated: string
+    /** The level the attacker was told to think at, or `null` for three absences. */
+    attacking_reasoning_effort: string | null
+    /**
+     * Which of the four the reading is — the model has no such setting, none was
+     * declared, or this bench holds no capability line for the model at all. Two runs
+     * of one model at one temperature and different reasoning effort are two
+     * different instruments, so the document states the difference and this app
+     * prints the statement rather than interpreting the value.
+     */
+    attacking_reasoning_effort_stated: string
   }
   library: { cases: number; digest: string; stated: string }
   /** Per layer, as the record keeps them. Nothing adds these two. */
@@ -1795,6 +1805,17 @@ export interface ModelChoice {
   chosen: boolean
 }
 
+/**
+ * One reasoning effort this console offers, and whether the next run is on it.
+ *
+ * A closed list and not a range, because it is one. Served empty for a model with no
+ * such setting, so a form cannot draw a control whose every value the route refuses.
+ */
+export interface EffortChoice {
+  level: string
+  chosen: boolean
+}
+
 /** What a setting may be. The range the route enforces, so the form offers no other. */
 export interface Bounds {
   low: number
@@ -1810,7 +1831,7 @@ export interface Bounds {
  * admits them on. A run in flight keeps what it was started with, and a change is
  * refused while one is going.
  *
- * **Four of the five bound a layer that is scored on nothing; `attempts_per_case` is
+ * **Five of the six bound a layer that is scored on nothing; `attempts_per_case` is
  * the scored denominator.** `attempts_warning` is the bench's own sentence about the
  * difference and the screen prints it rather than paraphrasing it.
  */
@@ -1819,6 +1840,12 @@ export interface Tuning {
   temperature: number | null
   temperature_bounds: Bounds
   temperature_absent: string
+  /** The levels the chosen model accepts. Empty when it has no such setting. */
+  reasoning_efforts: EffortChoice[]
+  reasoning_effort: string | null
+  reasoning_effort_absent: string
+  /** What a run made now would print in its provenance, in the record's own words. */
+  reasoning_effort_stated: string
   turns_per_episode: number
   turns_bounds: Bounds
   episodes_per_family: number
@@ -1833,10 +1860,18 @@ export interface Tuning {
   statement: string
 }
 
-/** The five settings, as the console sends them. All five every time. */
+/** The six settings, as the console sends them. All six every time. */
 export interface Tune {
   attacker_model: string
   temperature: number | null
+  /**
+   * One of the levels the reading offered, or `null` for nothing declared.
+   *
+   * Sent every time, like every other field here: a request that left it out would
+   * clear a declared effort the bench is holding, because this `PUT` is the whole
+   * statement of how the instruments are set.
+   */
+  reasoning_effort: string | null
   turns_per_episode: number
   episodes_per_family: number
   attempts_per_case: number
@@ -1859,7 +1894,7 @@ export const BENCH_TUNING_PATH = '/bench/settings/tuning'
 /**
  * Set the declared inputs of the next run, and read back what the bench now holds.
  *
- * The one write under `/bench` (ADR-0025). All five settings go every time, because a
+ * The one write under `/bench` (ADR-0025). All six settings go every time, because a
  * caller that could send the turn budget without restating the attacker model could
  * leave a bench naming one instrument in a report while another attacked.
  *
@@ -1889,7 +1924,7 @@ export const BENCH_FAMILIES_PATH = '/bench/settings/families'
  *
  * The second write under `/bench` (ADR-0025), and its own statement rather than a
  * field on the tuning request: that one is *how the instruments are set* and takes all
- * five settings every time; this is *what the next run covers*, sent from a different
+ * six settings every time; this is *what the next run covers*, sent from a different
  * screen. An empty list is refused — a run covering no family attacks nothing.
  */
 export async function coverFamilies(families: string[]): Promise<BenchSettings> {

@@ -77,6 +77,7 @@ from backend.bench.adaptive.budget import DECLARED_ADAPTIVE_BUDGET, AdaptiveBudg
 from backend.bench.adaptive.scripted import SCRIPTED_ATTACKER
 from backend.bench.adjudication import Completion
 from backend.bench.calibration import CalibrationResult, run_calibration
+from backend.bench.capability import ReasoningEffort
 from backend.bench.contract import TargetConfig, TargetFailure, TargetUnreachable
 from backend.bench.library import Case, Family, LibraryVersion, VerdictClass
 from backend.bench.payload import GateCitation
@@ -288,7 +289,7 @@ class BenchConfig:
     families: frozenset[Family] = frozenset(Family)
     """The failure families the next run covers. Every one of them, by default.
 
-    A declared input like the five in `Instrumented`, and the one an operator sets
+    A declared input like the six in `Instrumented`, and the one an operator sets
     per family rather than per number: a run that covers four families is a cheaper
     run and a narrower reading, and both of those are the operator's to choose.
 
@@ -592,7 +593,7 @@ class PendingApproval:
 class Instrumented:
     """The declared inputs of a run that the console may set, as one statement.
 
-    Five numbers and a model identifier, and every one of them changes what a run
+    Six settings and a model identifier, and every one of them changes what a run
     *measured* rather than how it looks. That is why they arrive together: a caller
     that could set the turn budget without restating the attacker model could leave
     a bench whose report names one instrument and whose episodes were run by
@@ -621,6 +622,16 @@ class Instrumented:
     `None` and a number are different declarations: one says *whatever the provider
     does*, and a bench that wrote its own number into that field would be naming a
     setting nobody chose.
+    """
+
+    reasoning_effort: ReasoningEffort | None
+    """How hard a reasoning attacker may think, or `None` for two different absences.
+
+    Beside the temperature because it is the second declared input of the same
+    instrument, and the two are not interchangeable: a model that takes one takes no
+    other, and two runs of one model at one temperature and different effort are two
+    different instruments (#5). `None` is *nothing declared* here, and a model with no
+    such setting is a fact the record states rather than a value this carries.
     """
 
     turns_per_episode: int
@@ -704,6 +715,7 @@ class BenchRuns:
                         self._config.report.models,
                         attacking=declared.attacker_model,
                         attacking_temperature=declared.temperature,
+                        attacking_reasoning_effort=declared.reasoning_effort,
                     ),
                 ),
             )

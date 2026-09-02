@@ -30,7 +30,12 @@ from pathlib import Path
 import pytest
 
 from backend.bench.assembler import ControlStatus, FamilyEntry, ScannedControl
-from backend.bench.capability import NO_TEMPERATURE_ACCEPTED
+from backend.bench.capability import (
+    NO_REASONING_EFFORT_ACCEPTED,
+    NO_TEMPERATURE_ACCEPTED,
+    PRESUMED_NO_REASONING_EFFORT,
+    ReasoningEffort,
+)
 from backend.bench.contract import DeclaredControl
 from backend.bench.library import Family
 from backend.bench.measurability import NotMeasurable
@@ -272,6 +277,48 @@ def test_the_document_says_which_of_the_three_temperatures_the_attacker_ran_at()
     # unavailable, not unmade* is the distinction a number field cannot carry.
     assert NO_TEMPERATURE_ACCEPTED in unavailable
     assert "the choice was unavailable, not unmade" in unavailable
+
+
+def test_the_document_says_how_hard_the_attacker_was_told_to_think() -> None:
+    """The reasoning line under the same identifier, and it is one of four.
+
+    Three of the four read as an absence in the payload's own field — this model has
+    no such setting, nobody declared a level, and this bench holds no capability line
+    for the model at all — so a document that printed the value and stopped would
+    leave a reader unable to tell which happened. Inside the rendering, and so inside
+    the digest the signature covers (ADR-0017, #5).
+    """
+    presumed = render(a_payload())
+    unavailable = render(
+        a_payload(
+            provenance=replace(
+                a_provenance(),
+                models=replace(MODELS, attacking="openrouter:openai/gpt-5-chat"),
+            )
+        )
+    )
+    declared = render(
+        a_payload(
+            provenance=replace(
+                a_provenance(),
+                models=replace(
+                    MODELS,
+                    attacking="openrouter:openai/gpt-5-mini",
+                    attacking_reasoning_effort=ReasoningEffort.HIGH,
+                ),
+            )
+        )
+    )
+
+    # The fixture's own attacker has no line in the table, so what the document says
+    # about it is the presumption, said as one — never the claim about the provider.
+    assert PRESUMED_NO_REASONING_EFFORT in presumed
+    assert NO_REASONING_EFFORT_ACCEPTED not in presumed
+
+    assert NO_REASONING_EFFORT_ACCEPTED in unavailable
+    assert "the choice was unavailable, not unmade" in unavailable
+
+    assert "reasoning effort high" in declared
 
 
 # --- Two claims, printed together (ADR-0017) ---------------------------------

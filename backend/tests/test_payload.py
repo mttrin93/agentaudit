@@ -40,6 +40,7 @@ from backend.bench.assembler import (
     ScannedControl,
     TargetResult,
 )
+from backend.bench.capability import ReasoningEffort
 from backend.bench.contract import DeclaredControl, Transcript
 from backend.bench.library import (
     Case,
@@ -220,6 +221,11 @@ def test_the_provenance_block_says_how_this_was_made_and_what_it_cost_per_layer(
         # the value alone cannot say which (#4, ADR-0025).
         "attacking_temperature": None,
         "attacking_temperature_stated": MODELS.temperature_stated(),
+        # And the second declared input of the same instrument, absent here because
+        # this attacker has no such setting — with the sentence saying so, because a
+        # blank cannot (#5).
+        "attacking_reasoning_effort": None,
+        "attacking_reasoning_effort_stated": MODELS.reasoning_effort_stated(),
     }
     assert block["library"] == {
         "cases": 18,
@@ -279,6 +285,77 @@ def test_a_temperature_recorded_against_a_model_that_accepts_none_is_refused() -
     with pytest.raises(ValueError, match="accepts none"):
         replace(
             MODELS, attacking="openrouter:openai/gpt-5-mini", attacking_temperature=0.0
+        )
+
+
+def test_a_reasoning_effort_undeclared_unavailable_and_presumed_are_four_readings() -> (
+    None
+):
+    """The four statements this field has to keep apart, and it keeps them.
+
+    `attacking_reasoning_effort` is `None` in three of the four and a reader cannot
+    recover which from a blank: *this model has no such setting* is a fact about the
+    instrument, *none was declared* is a fact about whoever configured it, and *this
+    bench holds no line for this model* is a fact about the capability table. The
+    third is kept apart from the first because a signed document may not state a
+    claim about the provider when what it holds is a presumption (ADR-0004, #5).
+    """
+    A_REASONING_MODEL = "openrouter:openai/gpt-5-mini"
+    # A *declared* chat row, and not this fixture's own attacker: `gpt-4.1-mini` has
+    # no line in the table, so what a report says about it is the presumption below.
+    unavailable = replace(
+        MODELS, attacking="openrouter:openai/gpt-5-chat"
+    ).reasoning_effort_stated()
+    presumed = MODELS.reasoning_effort_stated()
+    undeclared = replace(MODELS, attacking=A_REASONING_MODEL).reasoning_effort_stated()
+    declared = replace(
+        MODELS,
+        attacking=A_REASONING_MODEL,
+        attacking_reasoning_effort=ReasoningEffort.HIGH,
+    ).reasoning_effort_stated()
+
+    assert len({unavailable, presumed, undeclared, declared}) == 4
+    assert "no reasoning effort setting" in unavailable
+    assert "presumed" in presumed
+    assert "no reasoning effort declared" in undeclared
+    assert "high" in declared
+
+    # And the sentence travels in the document rather than being left to a reader of
+    # this test, beside the value: the block prints whichever of the four is true.
+    named = document(
+        a_payload(
+            provenance=replace(
+                a_provenance(),
+                models=replace(
+                    MODELS,
+                    attacking=A_REASONING_MODEL,
+                    attacking_reasoning_effort=ReasoningEffort.HIGH,
+                    # The same model accepts no temperature, which is the row saying
+                    # why one table answers both questions.
+                    attacking_temperature=None,
+                ),
+            )
+        )
+    )["provenance"]["models"]
+    assert named["attacking_reasoning_effort"] == "high"
+    assert named["attacking_reasoning_effort_stated"] == declared
+
+
+def test_a_reasoning_effort_recorded_against_a_model_with_no_setting_is_refused() -> (
+    None
+):
+    """The temperature invariant's counterpart, carried by the same type.
+
+    A declared input printed in a report is the input the run actually ran under, and
+    a record naming `high` against a chat model describes a request nobody made — the
+    clients refuse to compose one (`completion`), so a `DeclaredModels` that could
+    hold the pairing would be the one route by which a report says it anyway.
+    """
+    with pytest.raises(ValueError, match="no such setting"):
+        replace(
+            MODELS,
+            attacking="openrouter:openai/gpt-5-chat",
+            attacking_reasoning_effort=ReasoningEffort.HIGH,
         )
 
 

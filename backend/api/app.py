@@ -207,8 +207,12 @@ from backend.bench.adaptive.scripted import SCRIPTED_ATTACKER
 from backend.bench.adjudication import Completion
 from backend.bench.admission import admitted_library
 from backend.bench.capability import (
+    NO_REASONING_EFFORT_ACCEPTED,
     NO_TEMPERATURE_ACCEPTED,
+    ReasoningEffort,
+    accepts_reasoning_effort,
     accepts_temperature,
+    reasoning_effort_for,
     temperature_for,
 )
 from backend.bench.cited import the_citation, the_reliability
@@ -220,6 +224,7 @@ from backend.bench.completion import (
     attacker_completion_for,
     completion_for,
     declared_model,
+    declared_reasoning_effort,
     declared_turns_per_episode,
 )
 from backend.bench.contract import NOT_A_SECURITY_RESULT, RetryPolicy, TargetConfig
@@ -2680,6 +2685,19 @@ class ModelChoice(BaseModel):
     chosen: bool
 
 
+class EffortChoice(BaseModel):
+    """One reasoning effort this console offers, and whether the next run is on it.
+
+    A closed list and not a range, because it is one: `capability.ReasoningEffort`
+    holds the three levels every reasoning model on the attacker list accepts. Served
+    empty when the chosen model has no such setting, so a form cannot offer a level
+    the route will refuse.
+    """
+
+    level: str
+    chosen: bool
+
+
 class Bounds(BaseModel):
     """What a setting may be. Served so the form draws the range the route enforces."""
 
@@ -2700,7 +2718,7 @@ class Tuning(BaseModel):
     Served so that a screen draws the same limits the route enforces: a form with its
     own idea of the range is a form that offers a setting the bench will refuse.
 
-    **Four of the five bound a layer that is scored on nothing, and the fifth is the
+    **Five of the six bound a layer that is scored on nothing, and the sixth is the
     scored denominator.** They are in one block because they are set in one request,
     and the block says which is which in `attempts_warning` rather than leaving a
     reader to infer it from the field names (ADR-0003, ADR-0010).
@@ -2710,6 +2728,25 @@ class Tuning(BaseModel):
     temperature: float | None
     temperature_bounds: Bounds
     temperature_absent: str
+    reasoning_efforts: list[EffortChoice]
+    """The levels the chosen model accepts, and which one the next run is on.
+
+    **Empty when the chosen attacker has no reasoning effort setting**, which is not
+    the same as *no level chosen* — `reasoning_effort_stated` says which of the two a
+    reader is looking at. A screen that offered three levels for a chat model would be
+    offering a setting this bench refuses at the moment it is set (#5, ADR-0025).
+    """
+
+    reasoning_effort: str | None
+    reasoning_effort_absent: str
+    reasoning_effort_stated: str
+    """What a run made now would print in its provenance, in the record's own words.
+
+    Carried rather than composed here, because it is the sentence the signed document
+    will state (`DeclaredModels.reasoning_effort_stated`) and a second wording on this
+    screen would only have to disagree with it once.
+    """
+
     turns_per_episode: int
     turns_bounds: Bounds
     episodes_per_family: int
@@ -2771,9 +2808,24 @@ NO_TEMPERATURE_DECLARED = (
 )
 
 
+NO_REASONING_EFFORT_DECLARED = (
+    "no reasoning effort declared — the provider's own default, whatever that is. A "
+    "level here is a choice this bench records; leaving it unset is the honest way to "
+    "say the choice was not made, and there is no default this bench would make on "
+    "an operator's behalf"
+)
+"""What the screen says about an unset effort on a model that has the setting.
+
+`NO_TEMPERATURE_DECLARED`'s counterpart, and the difference is in its tail: a
+temperature is sent on every request whether or not anybody chose one, and an effort
+is sent only when somebody did.
+"""
+
+
 def tuning(config: BenchConfig) -> Tuning:
     """What the console may set, as it is set now, with its bounds and its caveat."""
     attacking = config.report.models.attacking
+    effort = config.report.models.attacking_reasoning_effort
     return Tuning(
         attacker_models=[
             ModelChoice(
@@ -2784,6 +2836,19 @@ def tuning(config: BenchConfig) -> Tuning:
         temperature=config.report.models.attacking_temperature,
         temperature_bounds=Bounds(low=TEMPERATURE_RANGE[0], high=TEMPERATURE_RANGE[1]),
         temperature_absent=NO_TEMPERATURE_DECLARED,
+        # Offered only where the model has the setting: a level drawn against a chat
+        # model is a control whose every value the route refuses.
+        reasoning_efforts=(
+            [
+                EffortChoice(level=str(level), chosen=level == effort)
+                for level in ReasoningEffort
+            ]
+            if accepts_reasoning_effort(attacking)
+            else []
+        ),
+        reasoning_effort=None if effort is None else str(effort),
+        reasoning_effort_absent=NO_REASONING_EFFORT_DECLARED,
+        reasoning_effort_stated=config.report.models.reasoning_effort_stated(),
         turns_per_episode=config.adaptive.turns_per_episode,
         turns_bounds=Bounds(low=TURNS_RANGE[0], high=TURNS_RANGE[1]),
         episodes_per_family=config.adaptive.episodes_per_family,
@@ -3042,20 +3107,78 @@ def _a_temperature_this_model_takes(model: str, temperature: float | None) -> No
     )
 
 
+def _a_reasoning_effort_this_model_takes(
+    model: str, reasoning_effort: ReasoningEffort | None
+) -> None:
+    """Refuse an effort the model has no setting for, at the moment it is set.
+
+    `_a_temperature_this_model_takes` in the other direction and for the same reason:
+    the capability is declared, so this is answerable without spending a call, and the
+    operator who picked the level is the person told it cannot be had — rather than a
+    provider's error arriving at the first episode of a run whose spend was confirmed.
+
+    Refused rather than dropped: a bench that quietly sent no effort would print the
+    setting in a provenance block as though the request had carried it (ADR-0004,
+    ADR-0025). Leaving it unset is available and means something of its own.
+    """
+    if reasoning_effort is None or accepts_reasoning_effort(model):
+        return
+    raise HTTPException(
+        status_code=422,
+        detail=(
+            f"{model} has no reasoning effort setting, so "
+            f"reasoning_effort={reasoning_effort} was not set. "
+            f"{NO_REASONING_EFFORT_ACCEPTED}"
+        ),
+    )
+
+
+def _a_level_this_bench_offers(named: str | None) -> ReasoningEffort | None:
+    """The reasoning effort a console named, off the closed set, or nothing declared.
+
+    A 422 naming the three levels rather than a validation error about a field, for
+    `_within`'s reason one step over: the screen is shown a list and the route
+    enforces the same list, so a value outside it is a request this cannot honour and
+    the refusal says what could have been sent instead.
+    """
+    if named is None:
+        return None
+    try:
+        return ReasoningEffort(named)
+    except ValueError as unknown:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"{named!r} is not a reasoning effort this bench offers. The three "
+                f"are {', '.join(str(level) for level in ReasoningEffort)}, or "
+                "nothing declared"
+            ),
+        ) from unknown
+
+
 BENCH_TUNING_ROUTE = "/bench/settings/tuning"
 """Where the declared inputs of the next run are set. The one write on this bench.
 
-A `PUT` because it is the whole statement every time: five settings arrive together
+A `PUT` because it is the whole statement every time: six settings arrive together
 so that a bench cannot end up naming one instrument in a report while another one
 attacked (ADR-0025).
 """
 
 
 class TuneRequest(BaseModel):
-    """The five settings, as the console sends them."""
+    """The six settings, as the console sends them."""
 
     attacker_model: str
     temperature: float | None = None
+    reasoning_effort: str | None = None
+    """One of `capability.ReasoningEffort`, or nothing declared.
+
+    A string rather than the enum, so a level this bench does not offer is a 422 that
+    names the three it does rather than a validation error about a field a caller
+    cannot read. `None` is *nothing declared* and is the honest default: unlike a
+    temperature there is no level this bench would choose on an operator's behalf.
+    """
+
     turns_per_episode: int
     episodes_per_family: int
     attempts_per_case: int
@@ -3066,7 +3189,7 @@ BENCH_FAMILIES_ROUTE = "/bench/settings/families"
 
 Its own route rather than a field on the tuning request, because it is a different
 statement made from a different screen: the tuning request is *how the instruments
-are set* and takes all five settings every time, and this is *what the next run
+are set* and takes all six settings every time, and this is *what the next run
 covers*. A caller sending one has no business restating the other.
 """
 
@@ -3933,11 +4056,13 @@ def declared_instrument(
     never there. The refusal names the variable, because the person who can set one
     is the person reading the traceback.
     """
-    return _declared(variable, completion_for, temperature)
+    return _declared(variable, completion_for, temperature, None)
 
 
 def declared_attacker(
-    variable: str, temperature: float | None = None
+    variable: str,
+    temperature: float | None = None,
+    reasoning_effort: ReasoningEffort | None = None,
 ) -> tuple[str, AttackerCompletion | None]:
     """The same reading for the adaptive attacker, whose client is a different shape.
 
@@ -3947,13 +4072,14 @@ def declared_attacker(
     handing back either would be the shared setting that separation exists to
     prevent. Everything else about the reading is identical, and is shared.
     """
-    return _declared(variable, attacker_completion_for, temperature)
+    return _declared(variable, attacker_completion_for, temperature, reasoning_effort)
 
 
 def _declared[Instrument](
     variable: str,
-    build: Callable[[str, float | None], Instrument],
+    build: Callable[[str, float | None, ReasoningEffort | None], Instrument],
     temperature: float | None,
+    reasoning_effort: ReasoningEffort | None,
 ) -> tuple[str, Instrument | None]:
     """The identifier a report will print, and the client built from it.
 
@@ -3972,7 +4098,15 @@ def _declared[Instrument](
         # says which of the two absences that is (`capability.temperature_for`, #4).
         # A deployment that declared a GPT-5-family attacker used to boot cleanly
         # and fail at the first episode of the first run.
-        return declared, build(declared, temperature_for(declared, temperature))
+        # The reasoning effort is resolved through the same table for the same
+        # reason, in the other direction: a chat model attacker declared with an
+        # effort takes none, and the record says whether the absence is the model's
+        # or the operator's (`capability.reasoning_effort_for`, #5).
+        return declared, build(
+            declared,
+            temperature_for(declared, temperature),
+            reasoning_effort_for(declared, reasoning_effort),
+        )
     except (KeyError, ValueError) as unusable:
         raise RuntimeError(
             f"{variable}={declared!r}: {unusable}. {NAMED_BUT_UNUSABLE}"
@@ -4011,7 +4145,12 @@ def deployed_models() -> tuple[DeclaredModels, Completion | None, AttackerComple
     calibration = declared_model(REFERENCE_MODEL_ENV)
     adjudicating, adjudicator = declared_instrument(ADJUDICATOR_MODEL_ENV)
     attacking, attacker = declared_attacker(
-        ATTACKER_MODEL_ENV, temperature=DEFAULT_ATTACKER_TEMPERATURE
+        ATTACKER_MODEL_ENV,
+        temperature=DEFAULT_ATTACKER_TEMPERATURE,
+        # No default beside it, unlike the temperature: an effort is sent only when
+        # somebody declared one, so an unset variable is a run that ran at the
+        # provider's own default and a record that says exactly that (#5).
+        reasoning_effort=declared_reasoning_effort(),
     )
     return (
         DeclaredModels(
@@ -4028,6 +4167,13 @@ def deployed_models() -> tuple[DeclaredModels, Completion | None, AttackerComple
             # none* rather than as nothing declared (#4).
             attacking_temperature=temperature_for(
                 attacking, DEFAULT_ATTACKER_TEMPERATURE
+            ),
+            # Through the same resolution again, so the record and the request agree
+            # on both parameters: a model with no such setting records `None`, which
+            # `reasoning_effort_stated` prints as the model's absence and not the
+            # operator's (#5).
+            attacking_reasoning_effort=reasoning_effort_for(
+                attacking, declared_reasoning_effort()
             ),
         ),
         adjudicator,
@@ -4545,10 +4691,10 @@ def create_app(
         **Every setting here is printed in the report of every run made under it.**
         That is the condition ADR-0025 admits them on: they change what a run
         *measured*, so a bench that could hold one quietly would be a bench whose
-        figures are not readable from its own artefact. The attacker's model and
-        temperature land in the provenance block, `T` and `k` in the adaptive
-        section, and the rule travels on every `TargetRun` beside the rate it
-        produced.
+        figures are not readable from its own artefact. The attacker's model, its
+        temperature and its reasoning effort land in the provenance block, `T` and
+        `k` in the adaptive section, and the rule travels on every `TargetRun`
+        beside the rate it produced.
 
         **Refused while a run is going**, and the refusal names the runs. A run
         awaiting approval has been shown an estimate built from the settings it was
@@ -4578,6 +4724,8 @@ def create_app(
             )
         _within("temperature", asked.temperature, TEMPERATURE_RANGE)
         _a_temperature_this_model_takes(asked.attacker_model, asked.temperature)
+        effort = _a_level_this_bench_offers(asked.reasoning_effort)
+        _a_reasoning_effort_this_model_takes(asked.attacker_model, effort)
         _within("turns_per_episode", asked.turns_per_episode, TURNS_RANGE)
         _within("episodes_per_family", asked.episodes_per_family, EPISODES_RANGE)
         _within("attempts_per_case", asked.attempts_per_case, ATTEMPTS_RANGE)
@@ -4585,6 +4733,7 @@ def create_app(
         declared = Instrumented(
             attacker_model=asked.attacker_model,
             temperature=asked.temperature,
+            reasoning_effort=effort,
             turns_per_episode=asked.turns_per_episode,
             episodes_per_family=asked.episodes_per_family,
             attempts_per_case=asked.attempts_per_case,
@@ -4593,7 +4742,9 @@ def create_app(
             attacker = (
                 SCRIPTED_ATTACKER
                 if asked.attacker_model == UNDECLARED_MODEL
-                else attacker_completion_for(asked.attacker_model, asked.temperature)
+                else attacker_completion_for(
+                    asked.attacker_model, asked.temperature, effort
+                )
             )
         except (KeyError, ValueError) as unusable:
             raise HTTPException(

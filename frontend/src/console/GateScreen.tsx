@@ -195,6 +195,13 @@ export function GateScreen() {
    * one may start. The library may have been taken by a terminal run in the
    * meantime, and `POST /gate-runs` would refuse a control this screen had drawn on
    * its own authority.
+   *
+   * **Kept under the React Compiler: the poll below.** Two `useEffect` dependency
+   * arrays name this, one of them the `POLL_SECONDS` loop, so an unmemoised reader
+   * has this screen polling a bench that holds a library lease several times a
+   * second. Compiled, the compiler hoists this clear out of the component — it
+   * closes over nothing — which is stabler than `useCallback` and not less; skipped,
+   * it does neither. See `vite.config.ts` for why that asymmetry decides it.
    */
   const readTheBench = useCallback(async () => {
     try {

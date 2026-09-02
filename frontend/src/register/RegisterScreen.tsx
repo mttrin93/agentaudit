@@ -148,6 +148,17 @@ export function RegisterScreen() {
   const [notes, setNotes] = useState<readonly NoteToPlant[]>([])
   const [unpaired, setUnpaired] = useState<readonly string[]>([])
 
+  /**
+   * **Kept under the compiler: eighteen cache slots.** This one's stake is render
+   * cost, not cadence — it feeds no dependency array. It is a prop, handed to all
+   * seven step components below, and compiled those components key **eighteen**
+   * cache slots on it. The state that makes it earn its place is the asymmetric one:
+   * the compiler skips per *function*, so the parent can be skipped while the
+   * children compile, and that is exactly the state this file was in until the
+   * `finally` clause in `issue` came out. A `declare` rebuilt by a skipped parent
+   * invalidates all eighteen on every keystroke in the form, with nothing on the
+   * wire changed and nothing looking different.
+   */
   const declare = useCallback((changed: Partial<Declarations>) => {
     setDeclarations((current) => ({ ...current, ...changed }))
   }, [])
@@ -249,9 +260,23 @@ export function RegisterScreen() {
       setRefusal('')
     } catch (unusable: unknown) {
       setRefusal(`${unusable}`)
-    } finally {
-      setBusy(false)
     }
+    // Cleared after the `try`, and deliberately not in a `finally`: the React
+    // Compiler does not lower a `finally` clause and skips the whole enclosing
+    // component when it meets one, which is this component — the one in this file
+    // holding state, and the one whose memo site above is load-bearing.
+    //
+    // The two shapes are the same behaviour *here*, and the qualification is the
+    // point: control reaches this line on both paths because neither arm returns
+    // and neither rethrows, and the `catch` arm is a single state setter that cannot
+    // throw. A `finally` would also survive a throwing `catch`; this does not. So
+    // nothing may be added to either arm that leaves early or can throw — put it
+    // here instead.
+    //
+    // Unguarded, and it has to be: `npm test` runs in node with no DOM by the
+    // spec's own choice, so there is no seam from which to observe `busy` clearing
+    // after a refusal, and buying jsdom to get one is what #18 forbids.
+    setBusy(false)
   }
 
   const request = registrationRequest(declarations)

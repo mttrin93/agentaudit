@@ -31,6 +31,42 @@
  * that goes on the wire, and what the app makes of a refusal — and none of that
  * needs a DOM. A jsdom environment would be a dependency bought so that a test
  * could assert on markup nobody reads.
+ *
+ * **The React Compiler is on, and it is not the Babel plugin.**
+ * `@vitejs/plugin-react` 6 carries the compiler as its own `compiler` option and
+ * runs it through `oxc-transform-react` — the Rust port — rather than through
+ * Babel: this plugin version has no `babel` option at all to hang
+ * `babel-plugin-react-compiler` off. So `compiler: true` plus that optional peer
+ * dependency installed is the whole enablement. The peer is pinned to an exact
+ * version rather than a caret, because `src/compiler.test.ts` asserts the shape of
+ * the code this compiler emits and a compiler that emitted a different shape would
+ * fail it.
+ *
+ * **The compiler skips, per function, in silence** — a function it cannot compile
+ * is left alone, the build stays green, and the optimisation is simply not there.
+ * So *enabled* and *compiling this file* are two facts and only the second one buys
+ * anything. The second one is asserted rather than assumed:
+ * `src/compiler.test.ts` runs the compiler's own transform over every source this
+ * app ships and fails on a file that comes back with a diagnostic or without the
+ * cache from `react/compiler-runtime`. The first build with the compiler on had one
+ * such file, so this is not a hypothetical.
+ *
+ * **That skip is also why three `useCallback`s survive here.** The compiler does
+ * memoise all three — checked, by compiling each one with the `useCallback` taken
+ * out — but it does so only where it compiles, and a `useCallback` is ordinary
+ * React that holds either way. Two of the three feed a `useEffect` that starts a
+ * two-second poll, where losing the memo restarts the poll on every render and puts
+ * extra HTTP on a bench that is mid-run; that is a change to what the backend sees,
+ * which is the one thing this work may not do. Each call site says which case it
+ * is and nothing more; the argument they share is this paragraph.
+ *
+ * **The Rules-of-React lint that the compiler's safety story leans on is oxlint's,
+ * not ESLint's.** `.oxlintrc.json` names all twenty of oxlint's React-compiler
+ * rules at `error`, and the app passes them with nothing suppressed; four were
+ * already errors through the `correctness` category. The division of labour is
+ * worth knowing: **lint owns the rules the compiler assumes, and the test above
+ * owns whether the compiler actually ran.** No lint rule catches the syntax that
+ * caused the one skip, which is why both exist.
  */
 
 import react from '@vitejs/plugin-react'
@@ -39,7 +75,7 @@ import { defineConfig } from 'vitest/config'
 const BENCH = process.env.AGENTAUDIT_API ?? 'http://127.0.0.1:8000'
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react({ compiler: true })],
   server: {
     proxy: {
       '/nonces': BENCH,

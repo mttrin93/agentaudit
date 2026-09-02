@@ -102,6 +102,13 @@ export function RunScreen() {
     theFiguresPresented(sessionStorage, runId),
   )
 
+  /**
+   * **Kept under the compiler: the poll below.** This is named in that effect's
+   * dependency array, so an unmemoised `read` restarts a two-second poll on every
+   * render — cadence the bench feels, not render cost. Compiled, the compiler emits
+   * this same cache keyed on `runId`; skipped, it emits nothing and this line is the
+   * only thing holding the identity. See `vite.config.ts` for why that matters.
+   */
   const read = useCallback(async (): Promise<RunProgress | null> => {
     try {
       const now = await runProgress(runId)

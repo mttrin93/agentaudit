@@ -32,6 +32,7 @@ from __future__ import annotations
 import re
 
 from backend.bench.adaptive.episode import AttackerTool
+from backend.bench.adaptive.tools import ToolInvocation
 from backend.bench.evaluator import Verdict
 
 _LOG_ENTRY = re.compile(r"^\s*\d+\.\s+(.*)$")
@@ -59,29 +60,37 @@ DESCRIPTION = (
 )
 
 
-def scripted_attacker(system_prompt: str, brief: str) -> str:
+def scripted_attacker(system_prompt: str, brief: str) -> ToolInvocation:
     """One tool call, decided from the brief alone.
 
     Stateless, because the brief carries the whole episode: the same discipline a
     real attacker is held to, and the reason the harness can be sure that context
     isolation is a property of the brief rather than of the model's manners.
+
+    A `ToolInvocation` and never prose. The stand-in reaches the loop through the
+    same seam a real attacker does, so it has to answer in the same currency: one
+    that emitted the retired text protocol would be test equipment exercising a
+    path the bench no longer has, which is the failure a stand-in is supposed to
+    make impossible rather than hide.
     """
     entries = _entries(brief)
     last = entries[-1] if entries else ""
 
     if f"— {Verdict.SUCCEEDED} —" in last:
-        return f"tool: {AttackerTool.PROPOSE_CASE}\nargument: {DESCRIPTION}"
+        return ToolInvocation(tool=AttackerTool.PROPOSE_CASE, argument=DESCRIPTION)
     if not entries:
-        return f"tool: {AttackerTool.RETRIEVE_PRECEDENT}"
+        return ToolInvocation(tool=AttackerTool.RETRIEVE_PRECEDENT)
     if last.startswith(AttackerTool.RUN_PROBE):
         if _worth_the_trace(entries, brief):
-            return f"tool: {AttackerTool.READ_TOOL_TRACE}"
-        return f"tool: {AttackerTool.CHECK_CANARY}"
+            return ToolInvocation(tool=AttackerTool.READ_TOOL_TRACE)
+        return ToolInvocation(tool=AttackerTool.CHECK_CANARY)
     if last.startswith(AttackerTool.READ_TOOL_TRACE):
-        return f"tool: {AttackerTool.CHECK_CANARY}"
+        return ToolInvocation(tool=AttackerTool.CHECK_CANARY)
 
     sent = sum(1 for entry in entries if entry.startswith(AttackerTool.RUN_PROBE))
-    return f"tool: {AttackerTool.RUN_PROBE}\nargument: {PROBES[sent % len(PROBES)]}"
+    return ToolInvocation(
+        tool=AttackerTool.RUN_PROBE, argument=PROBES[sent % len(PROBES)]
+    )
 
 
 def _entries(brief: str) -> list[str]:

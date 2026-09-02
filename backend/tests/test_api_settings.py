@@ -67,6 +67,8 @@ from backend.api.app import (
 from backend.api.report import UNDECLARED_MODEL, UNDECLARED_MODELS, ReportConfig
 from backend.api.runs import BenchConfig, BenchRuns, DeclaredGap, plan_for
 from backend.bench.adaptive.budget import DECLARED_ADAPTIVE_BUDGET, AdaptiveBudget
+from backend.bench.adaptive.episode import AttackerTool
+from backend.bench.adaptive.tools import ToolInvocation
 from backend.bench.library import Case, Family, LibraryVersion
 from backend.bench.payload import DeclaredModels
 from backend.bench.rule import DECLARED_RULE, GateRule
@@ -730,7 +732,8 @@ def test_the_stand_in_is_not_offered_but_the_current_setting_always_is(
     # credential, and a test that needed one would pass on a machine that has it and
     # fail in CI, which is a test about the environment.
     monkeypatch.setattr(
-        "backend.api.app.completion_for", lambda spec, temperature=None: _attacking
+        "backend.api.app.attacker_completion_for",
+        lambda spec, temperature=None: _attacking,
     )
     app = create_app(BenchConfig(cases=[]))
     with TestClient(app) as client:
@@ -758,9 +761,9 @@ def test_the_stand_in_is_not_offered_but_the_current_setting_always_is(
     assert UNDECLARED_MODEL not in [model["identifier"] for model in after]
 
 
-def _attacking(system_prompt: str, brief: str) -> str:
+def _attacking(system_prompt: str, brief: str) -> ToolInvocation:
     """A stand-in attacker client. Never called: nothing here starts a run."""
-    return "tool: check_canary"
+    return ToolInvocation(tool=AttackerTool.CHECK_CANARY)
 
 
 def test_a_family_switched_off_is_dropped_and_stated_as_not_run(

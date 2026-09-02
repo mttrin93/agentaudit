@@ -12,11 +12,17 @@ client would make "the target's model" and "the instrument's model" one setting,
 and the multi-model validity check would then move the instrument every time it
 moved the target — which would make its own result unreadable.
 
-Nothing here decides anything or is decided by anything: it returns text. Both
-instruments take a `Completion` as an argument rather than building one, so the
-constraints ADR-0004 holds in their signatures stay held (no precedent, no target
-identity, no endpoint of their own), and every test in the suite drives them with a
-stub instead of a network call.
+The adaptive layer's attacker is the third, and it is built here too — by
+`attacker_completion_for`, which is a separate function because it returns
+something else. An adjudicator answers in prose; an attacker answers with a
+`tool_calls` entry the provider filled in, which is a decision named from a closed
+enum rather than a shape read back out of an answer.
+
+Nothing here decides anything or is decided by anything: it returns what the model
+said. Every instrument takes its completion as an argument rather than building
+one, so the constraints ADR-0004 holds in their signatures stay held (no precedent,
+no target identity, no endpoint of their own), and every test in the suite drives
+them with a stub instead of a network call.
 """
 
 import functools
@@ -25,6 +31,12 @@ from enum import StrEnum
 
 from openai import OpenAI, omit
 
+from backend.bench.adaptive.attacker import AttackerCompletion
+from backend.bench.adaptive.tools import (
+    ATTACKER_TOOL_SCHEMAS,
+    ToolInvocation,
+    invocation_from,
+)
 from backend.bench.adjudication import Completion
 
 DEFAULT_OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
@@ -221,6 +233,66 @@ def _openrouter_completion(name: str, temperature: float | None = None) -> Compl
         return answered.choices[0].message.content or ""
 
     return complete
+
+
+def attacker_completion_for(
+    spec: str, temperature: float | None = None
+) -> AttackerCompletion:
+    """The adaptive attacker's model call, from the same configuration string.
+
+    A second builder rather than a flag on `completion_for`, because the two return
+    different things: the adjudicator answers in prose and the attacker answers with
+    a tool call. `AttackerCompletion` is declared apart from
+    `adjudication.Completion` precisely so one instrument can move without the
+    other (ADR-0011), and widening a shared builder to return either would put the
+    two back on one setting through the back door.
+    """
+    provider, _, name = spec.partition(":")
+    if not provider or not name:
+        raise ValueError(
+            f"a bench model configuration reads '<provider>:<model>', got {spec!r}"
+        )
+    match Provider(provider):
+        case Provider.OPENROUTER:
+            return _openrouter_attacker(name, temperature)
+
+
+def _openrouter_attacker(
+    name: str, temperature: float | None = None
+) -> AttackerCompletion:
+    # Built at configuration time for the reason `_openrouter_completion` is: a
+    # missing credential is a refusal now rather than at the first episode.
+    client = _client()
+
+    def attack(system_prompt: str, brief: str) -> ToolInvocation | None:
+        answered = client.chat.completions.create(
+            model=name,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": brief},
+            ],
+            # The five tools as the provider's own schema. OpenRouter passes
+            # `tool_calls` through from the underlying provider, so which tool was
+            # named and what its argument was are fields the model filled in — not
+            # a shape this bench asks for in prose and then cuts back out of an
+            # answer.
+            tools=list(ATTACKER_TOOL_SCHEMAS),
+            temperature=omit if temperature is None else temperature,
+        )
+        calls = answered.choices[0].message.tool_calls
+        # No call, or more than one, is the model failing to make *the* decision
+        # this step asks for. `None` both times: the attacker is told exactly one
+        # tool per turn, the loop can only run the first, and acting on the first
+        # of several would act on a decision the model made in parallel with — and
+        # therefore without — the result of the one it made beside it.
+        if calls is None or len(calls) != 1:
+            return None
+        called = calls[0]
+        if called.type != "function":
+            return None
+        return invocation_from(called.function.name, called.function.arguments)
+
+    return attack
 
 
 @functools.lru_cache(maxsize=1)

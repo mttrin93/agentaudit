@@ -23,6 +23,7 @@ from backend.api.app import BROKE_IT, NOT_CHECKABLE, create_app
 from backend.api.runs import BenchConfig, BenchRuns, RunRecord, RunStatus
 from backend.bench.adaptive.budget import AdaptiveBudget
 from backend.bench.adaptive.episode import AttackerTool, EpisodeOutcome
+from backend.bench.adaptive.tools import ToolInvocation
 from backend.bench.library import Case
 from backend.tests.test_api_runs import (
     Watched,
@@ -55,7 +56,7 @@ because one target cannot be both.
 """
 
 
-def two_probes_then_a_check(system_prompt: str, brief: str) -> str:
+def two_probes_then_a_check(system_prompt: str, brief: str) -> ToolInvocation:
     """Send the two probes, then ask the bench whether the objective is met.
 
     Stateless, reading the turn count off the brief the way `scripted.py` reads its
@@ -65,8 +66,8 @@ def two_probes_then_a_check(system_prompt: str, brief: str) -> str:
     """
     used = _turns_used(brief)
     if used < PROBES_SENT:
-        return f"tool: {AttackerTool.RUN_PROBE}\nargument: {PROBE_WORDING[used]}"
-    return f"tool: {AttackerTool.CHECK_CANARY}"
+        return ToolInvocation(tool=AttackerTool.RUN_PROBE, argument=PROBE_WORDING[used])
+    return ToolInvocation(tool=AttackerTool.CHECK_CANARY)
 
 
 def _turns_used(brief: str) -> int:

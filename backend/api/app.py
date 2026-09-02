@@ -159,7 +159,7 @@ filesystem and environment question::
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import replace
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
@@ -212,6 +212,7 @@ from backend.bench.completion import (
     ATTACKER_MODEL_ENV,
     DEFAULT_ATTACKER_TEMPERATURE,
     REFERENCE_MODEL_ENV,
+    attacker_completion_for,
     completion_for,
     declared_model,
     declared_turns_per_episode,
@@ -3901,11 +3902,40 @@ def declared_instrument(
     never there. The refusal names the variable, because the person who can set one
     is the person reading the traceback.
     """
+    return _declared(variable, completion_for, temperature)
+
+
+def declared_attacker(
+    variable: str, temperature: float | None = None
+) -> tuple[str, AttackerCompletion | None]:
+    """The same reading for the adaptive attacker, whose client is a different shape.
+
+    A sibling rather than an argument to the one above. `AttackerCompletion` returns
+    a tool call and `Completion` returns prose, and the two instruments are declared
+    apart precisely so one can move without the other (ADR-0011) — a single function
+    handing back either would be the shared setting that separation exists to
+    prevent. Everything else about the reading is identical, and is shared.
+    """
+    return _declared(variable, attacker_completion_for, temperature)
+
+
+def _declared[Instrument](
+    variable: str,
+    build: Callable[[str, float | None], Instrument],
+    temperature: float | None,
+) -> tuple[str, Instrument | None]:
+    """The identifier a report will print, and the client built from it.
+
+    The half `declared_instrument` and `declared_attacker` have in common: read the
+    variable, and either return a stated absence with no client or a declared string
+    with the client that string built. What differs is the builder, which is the
+    argument.
+    """
     declared = declared_model(variable)
     if declared is None:
         return UNDECLARED_MODEL, None
     try:
-        return declared, completion_for(declared, temperature)
+        return declared, build(declared, temperature)
     except (KeyError, ValueError) as unusable:
         raise RuntimeError(
             f"{variable}={declared!r}: {unusable}. {NAMED_BUT_UNUSABLE}"
@@ -3929,7 +3959,8 @@ def deployed_models() -> tuple[DeclaredModels, Completion | None, AttackerComple
     served to equipment rather than called from here, so it is declared and not
     built. The adjudicator and the adaptive attacker are both instruments this
     process calls, they are two settings on purpose (ADR-0011), and each arrives
-    through `declared_instrument` — which returns the identifier and the client
+    through `declared_instrument` or `declared_attacker` — which return the
+    identifier and the client
     together, so a run cannot be attacked by a model the provenance block does not
     name, and the block cannot name one that did not attack.
 
@@ -3942,7 +3973,7 @@ def deployed_models() -> tuple[DeclaredModels, Completion | None, AttackerComple
     """
     calibration = declared_model(REFERENCE_MODEL_ENV)
     adjudicating, adjudicator = declared_instrument(ADJUDICATOR_MODEL_ENV)
-    attacking, attacker = declared_instrument(
+    attacking, attacker = declared_attacker(
         ATTACKER_MODEL_ENV, temperature=DEFAULT_ATTACKER_TEMPERATURE
     )
     return (
@@ -4517,7 +4548,7 @@ def create_app(
             attacker = (
                 SCRIPTED_ATTACKER
                 if asked.attacker_model == UNDECLARED_MODEL
-                else completion_for(asked.attacker_model, asked.temperature)
+                else attacker_completion_for(asked.attacker_model, asked.temperature)
             )
         except (KeyError, ValueError) as unusable:
             raise HTTPException(

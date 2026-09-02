@@ -22,6 +22,7 @@ from pathlib import Path
 
 import pytest
 
+from backend.bench.adaptive.attacker import AttackerCompletion
 from backend.bench.adaptive.crossmodel import NotAnAdaptiveSwap
 from backend.bench.adaptive.crossmodel import compare as compare_adaptive
 from backend.bench.adaptive.discrimination import (
@@ -490,7 +491,8 @@ def test_the_entry_point_re_runs_the_library_on_a_second_model_and_records_both(
     """
     monkeypatch.setattr("scripts.swap.attest", lambda identity: BENCH_ATTESTATION)
     monkeypatch.setattr("scripts.swap.terminal_approval", lambda identity: CONFIRMING)
-    monkeypatch.setattr("scripts.swap.completion_for", _bench_stand_in)
+    monkeypatch.setattr("scripts.swap.completion_for", _adjudicator_stand_in)
+    monkeypatch.setattr("scripts.swap.attacker_completion_for", _attacker_stand_in)
     cases = tmp_path / "cases"
     shutil.copytree(CASES_DIR, cases)
 
@@ -677,15 +679,21 @@ def _reading(broken_on_trivial: int, turns: int | None) -> AdaptiveDiscriminatio
     )
 
 
-def _bench_stand_in(spec: str) -> Completion:
-    """The bench's two instruments, told apart by the name the run declared them by.
+def _adjudicator_stand_in(spec: str) -> Completion:
+    """The judged families' instrument, stubbed.
 
-    Two settings on purpose (ADR-0011), so a stand-in answering both the same way
-    would hide which one a record named.
+    Two builders because the entry point calls two, and they return different
+    things: prose from the adjudicator, a tool call from the attacker. Two
+    settings on purpose (ADR-0011).
     """
-    if spec == ATTACKER_STAND_IN:
-        return SCRIPTED_ATTACKER
+    assert spec == ADJUDICATOR_STAND_IN, spec
     return adjudicating(Verdict.SUCCEEDED)
+
+
+def _attacker_stand_in(spec: str) -> AttackerCompletion:
+    """The adaptive layer's attacker, stubbed by the deterministic stand-in."""
+    assert spec == ATTACKER_STAND_IN, spec
+    return SCRIPTED_ATTACKER
 
 
 def _imports_of(source: Path) -> Iterator[str]:

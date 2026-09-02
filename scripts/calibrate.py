@@ -51,6 +51,7 @@ from backend.bench.calibration import CalibrationResult, TargetRun, run_calibrat
 from backend.bench.completion import (
     DEFAULT_ADJUDICATOR_MODEL,
     DEFAULT_ATTACKER_MODEL,
+    attacker_completion_for,
     completion_for,
 )
 from backend.bench.contract import TargetConfig
@@ -174,7 +175,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         # Both built before the attestation, so a misconfigured instrument is a
         # refusal rather than a run that stops after spending something.
         adjudicator = completion_for(args.adjudicator_model)
-        attacker = completion_for(args.attacker_model)
+        attacker = attacker_completion_for(args.attacker_model)
     except (KeyError, ValueError) as unusable:
         print(f"No usable bench model: {unusable}")
         return EXIT_WITHHELD

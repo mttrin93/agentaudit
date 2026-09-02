@@ -88,6 +88,7 @@ from backend.bench.calibration import CalibrationResult, run_calibration
 from backend.bench.completion import (
     DEFAULT_ADJUDICATOR_MODEL,
     DEFAULT_ATTACKER_MODEL,
+    attacker_completion_for,
     completion_for,
 )
 from backend.bench.crossmodel import ModelReading, ModelSwap, NotASwap, compare
@@ -290,7 +291,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     try:
         adjudicator = completion_for(args.adjudicator_model)
-        attacker = completion_for(args.attacker_model)
+        attacker = attacker_completion_for(args.attacker_model)
     except (KeyError, ValueError) as unusable:
         print(f"No usable bench model: {unusable}")
         return EXIT_WITHHELD

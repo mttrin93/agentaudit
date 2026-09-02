@@ -61,7 +61,10 @@ from backend.bench.adaptive.layer import (
 from backend.bench.admission import NotAdmitted, admitted_library
 from backend.bench.applicability import applicable
 from backend.bench.calibration import PlantNonce
-from backend.bench.completion import DEFAULT_ATTACKER_MODEL, completion_for
+from backend.bench.completion import (
+    DEFAULT_ATTACKER_MODEL,
+    attacker_completion_for,
+)
 from backend.bench.contract import TargetConfig
 from backend.bench.library import Case, Family, LibraryVersion
 from backend.bench.measurability import contradicted_by_the_reply
@@ -337,7 +340,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         # Built before the attestation, so a missing credential is a refusal rather
         # than a run that stops after having sent something.
-        attacker: AttackerCompletion = completion_for(args.attacker_model)
+        attacker: AttackerCompletion = attacker_completion_for(args.attacker_model)
     except (KeyError, ValueError) as unusable:
         print(f"No usable attacker model: {unusable}")
         return EXIT_WITHHELD

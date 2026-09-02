@@ -22,6 +22,7 @@ from pathlib import Path
 
 import pytest
 
+from backend.bench.adaptive.attacker import AttackerCompletion
 from backend.bench.adaptive.scripted import SCRIPTED_ATTACKER
 from backend.bench.adjudication import Completion
 from backend.bench.calibration import CalibrationResult, TargetRun, run_calibration
@@ -841,7 +842,8 @@ def test_the_entry_point_writes_the_document_rather_than_only_being_able_to(
     """
     monkeypatch.setattr("scripts.gate.attest", lambda identity: BENCH_ATTESTATION)
     monkeypatch.setattr("scripts.gate.terminal_approval", lambda identity: CONFIRMING)
-    monkeypatch.setattr("scripts.gate.completion_for", _bench_stand_in)
+    monkeypatch.setattr("scripts.gate.completion_for", _adjudicator_stand_in)
+    monkeypatch.setattr("scripts.gate.attacker_completion_for", _attacker_stand_in)
     # Authored copies: this run stores a reading on every record it reads, and the
     # assertion below counts them, so the copy must not arrive carrying the series a
     # real gate run already wrote (`authored_library`).
@@ -950,16 +952,23 @@ ADJUDICATOR_STAND_IN = "the suite's stub — no model is reached"
 ATTACKER_STAND_IN = "backend/bench/adaptive/scripted.py — the deterministic stand-in"
 
 
-def _bench_stand_in(spec: str) -> Completion:
-    """The bench's two instruments, told apart by the name the run declared them by.
+def _adjudicator_stand_in(spec: str) -> Completion:
+    """The instrument that decides a judged family, stubbed.
 
-    `completion_for` builds both in the entry point and they are two settings on
-    purpose (ADR-0011), so a stand-in that answered both the same way would hide
-    which one a record named.
+    Two builders rather than one that reads the spec, because the entry point now
+    calls two: `completion_for` for the adjudicator and `attacker_completion_for`
+    for the attacker, which return different things. They are two settings on
+    purpose (ADR-0011), and a stand-in patched over one name only would leave the
+    other reaching a provider.
     """
-    if spec == ATTACKER_STAND_IN:
-        return SCRIPTED_ATTACKER
+    assert spec == ADJUDICATOR_STAND_IN, spec
     return adjudicating(Verdict.SUCCEEDED)
+
+
+def _attacker_stand_in(spec: str) -> AttackerCompletion:
+    """The adaptive layer's attacker, stubbed by the deterministic stand-in."""
+    assert spec == ATTACKER_STAND_IN, spec
+    return SCRIPTED_ATTACKER
 
 
 # --- The record beside the document ------------------------------------------

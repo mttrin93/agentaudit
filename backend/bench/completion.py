@@ -63,7 +63,14 @@ Measured against the declared adjudicator, a verdict comes back in 0.8 to 2.3
 seconds; the narrative judge writes prose and takes longer. This is a ceiling for the
 call that hangs, not a target for the call that works, so it is set for the second of
 those and not the first. The SDK retries twice inside it, so a stalled call costs
-three of these before it is named."""
+three of these before it is named.
+
+Sixty is the whole of the arithmetic here because nothing waits on the bench. The
+other two waits in this project are nested — the bench waits on a target endpoint
+and that endpoint waits on its own model — and there the inner one has to finish
+inside the outer, which `contract.DEFAULT_TIMEOUT` documents and
+`targets/reference/model.refuse_inverted_patience` enforces. This call sits outside
+that chain."""
 
 DEFAULT_ADJUDICATOR_MODEL = "openrouter:openai/gpt-4.1-mini"
 """The model that decides the two judged families, and what κ measured it at.

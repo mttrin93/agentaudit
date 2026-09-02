@@ -52,6 +52,21 @@ from typing import Any
 import httpx
 
 DEFAULT_TIMEOUT = 60.0
+"""How long one send waits for a target's reply. The outer wait of the chain.
+
+There are three waits between the bench and a model, and they are not
+independent. This one is the bench waiting on a target endpoint. Inside it, that
+endpoint waits on its own model — for a reference agent that is
+`backend/targets/reference/model.MODEL_PATIENCE_SECONDS`, held strictly under this
+number by `refuse_inverted_patience` so that a stalled reference agent is not
+still holding the wire after the bench has already named a `TIMEOUT` against it.
+The third, `completion.MODEL_TIMEOUT_SECONDS`, is the bench waiting on its own
+instrument and sits outside the chain: nothing waits on the bench.
+
+Sixty seconds, and the same reasoning at every one of the three — long enough that
+a slow answer still arrives, short enough that a stalled one is a failure somebody
+is told about.
+"""
 
 RATE_LIMITED_STATUS = 429
 """A quota, told apart from an outage: both are retried, and they end differently."""

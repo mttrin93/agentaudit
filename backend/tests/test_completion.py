@@ -93,7 +93,19 @@ class _Answering:
     def create(self, **asked: Any) -> Any:
         self.asked.append(asked)
         message = type("_Message", (), {"tool_calls": self.calls or None})()
-        choice = type("_Choice", (), {"message": message})()
+        # The stop reason the provider actually sends beside each of these: a model
+        # that called a tool stops for `tool_calls` and one that talked stops for
+        # `stop`. Both are complete, and the client checks before it reads
+        # (`backend/bench/unfinished.py`) — a stand-in that omitted the field would
+        # be asserting the reading of a response no provider returns.
+        choice = type(
+            "_Choice",
+            (),
+            {
+                "message": message,
+                "finish_reason": "tool_calls" if self.calls else "stop",
+            },
+        )()
         return type("_Answered", (), {"choices": [choice]})()
 
 

@@ -20,6 +20,7 @@ from enum import StrEnum
 
 from openai import OpenAI
 
+from backend.bench.unfinished import refuse_unfinished
 from backend.targets.reference.stub_models import stub_completion
 
 DEFAULT_OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
@@ -85,6 +86,14 @@ def _openrouter_completion(name: str, system_prompt: str, message: str) -> str:
             {"role": "user", "content": message},
         ],
     )
+    # Checked before the content is read, for the reason `backend/bench/unfinished`
+    # gives. A reference agent whose model was cut off at the token cap would hand
+    # the bench half a reply, and half a reply is scored: a refusal truncated
+    # before it refuses reads as an agent that said something else. Raised here
+    # rather than returned short, so this agent's server answers 5xx and the bench
+    # names a `TargetFailure` and records no attempt — an instrument failure kept
+    # off the axis that measures defences.
+    refuse_unfinished(name, completion.choices[0].finish_reason)
     return completion.choices[0].message.content or ""
 
 

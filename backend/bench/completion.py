@@ -38,6 +38,7 @@ from backend.bench.adaptive.tools import (
     invocation_from,
 )
 from backend.bench.adjudication import Completion
+from backend.bench.unfinished import refuse_unfinished
 
 DEFAULT_OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 
@@ -230,6 +231,11 @@ def _openrouter_completion(name: str, temperature: float | None = None) -> Compl
             # rather than a value to copy into the field that records a choice.
             temperature=omit if temperature is None else temperature,
         )
+        # Before `message` is read at all. A reply cut off at the token cap is a
+        # partial string, and `_verdict_in` cannot tell one from a short answer:
+        # a truncation that happened to carry a verdict word would decide a judged
+        # family on where the budget fell (`unfinished`, ADR-0004).
+        refuse_unfinished(name, answered.choices[0].finish_reason)
         return answered.choices[0].message.content or ""
 
     return complete
@@ -279,6 +285,12 @@ def _openrouter_attacker(
             tools=list(ATTACKER_TOOL_SCHEMAS),
             temperature=omit if temperature is None else temperature,
         )
+        # Same check, and it matters more here: a `tool_calls` array cut off at the
+        # cap is malformed JSON arriving where the structured path expects a
+        # decision. `tool_calls` is itself a *complete* stop reason — it is how
+        # this instrument answers — so what is refused is the truncated call, not
+        # the called tool.
+        refuse_unfinished(name, answered.choices[0].finish_reason)
         calls = answered.choices[0].message.tool_calls
         # No call, or more than one, is the model failing to make *the* decision
         # this step asks for. `None` both times: the attacker is told exactly one

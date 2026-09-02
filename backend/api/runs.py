@@ -45,14 +45,13 @@ and there would be nobody to answer. So the run starts on its own thread and the
 request rendezvouses with it at the interrupt. The cost is a thread per run
 awaiting an answer, which is the v1 the spec licensed; a queue is P1.
 
-**Nothing here reads the environment.** The price per call arrives in the request
-or the run is *not priced*: the caller's confirmation is the liability record, and
-a figure the bench filled in from its own configuration is a figure nobody agreed
-to. An unpriced run is a stated fact and never a zero. The signing key arrives the
-same way, in `BenchConfig.report`, and it is still true here that there is one line
-in this repository that reads `AGENTAUDIT_SIGNING_KEY` and it is in `signing.py` —
-what changed with ADR-0020 is that `app.py`'s factory *calls* that line when it was
-handed no configuration, and refuses to boot when it comes back empty.
+**What is left here is the service, and the three modules beside it are the rest.**
+`run_status.py` holds the vocabulary a run is described in, `run_config.py` what a
+run is measured with, `run_state.py` one run's record and the halt it waits at.
+This module drives a run through them, and it re-exports their names because
+`app.py`'s routes and the suite both import a run's vocabulary from
+`backend.api.runs` — the split moved the definitions and deliberately did not move
+the import surface (#14).
 
 **The artefact is built by the run, once, before the run is called completed.** A
 report assembled per request would be bytes that depend on when they were asked
@@ -66,660 +65,76 @@ from __future__ import annotations
 
 import threading
 import uuid
-from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field, replace
-from datetime import UTC, datetime
-from enum import StrEnum
-from typing import Protocol
+from dataclasses import replace
 
-from backend.api.report import ReportConfig, Unsigned, artefact_for
+from backend.api.report import Unsigned, artefact_for
+from backend.api.run_config import (
+    BenchConfig as BenchConfig,
+)
+from backend.api.run_config import (
+    Instrumented as Instrumented,
+)
+from backend.api.run_config import (
+    Instruments as Instruments,
+)
+from backend.api.run_config import (
+    PerRunInstruments as PerRunInstruments,
+)
+from backend.api.run_config import (
+    RunPlan as RunPlan,
+)
+from backend.api.run_config import (
+    plan_for as plan_for,
+)
+from backend.api.run_state import (
+    NeverPresented as NeverPresented,
+)
+from backend.api.run_state import (
+    NoLongerWaiting as NoLongerWaiting,
+)
+from backend.api.run_state import (
+    NonceNotIssued as NonceNotIssued,
+)
+from backend.api.run_state import (
+    PendingApproval as PendingApproval,
+)
+from backend.api.run_state import (
+    RunRecord as RunRecord,
+)
+from backend.api.run_state import (
+    RunsInFlight as RunsInFlight,
+)
+from backend.api.run_status import (
+    APPROVAL_WAIT_SECONDS as APPROVAL_WAIT_SECONDS,
+)
+from backend.api.run_status import (
+    FINISHED_WAIT_SECONDS as FINISHED_WAIT_SECONDS,
+)
+from backend.api.run_status import (
+    PRESENT_WAIT_SECONDS as PRESENT_WAIT_SECONDS,
+)
+from backend.api.run_status import (
+    DeclaredGap as DeclaredGap,
+)
+from backend.api.run_status import (
+    RunStatus as RunStatus,
+)
 from backend.bench.adaptive.attacker import AttackerCompletion
-from backend.bench.adaptive.budget import DECLARED_ADAPTIVE_BUDGET, AdaptiveBudget
-from backend.bench.adaptive.scripted import SCRIPTED_ATTACKER
-from backend.bench.adjudication import Completion
 from backend.bench.calibration import CalibrationResult, run_calibration
-from backend.bench.capability import ReasoningEffort
-from backend.bench.contract import TargetConfig, TargetFailure, TargetUnreachable
-from backend.bench.library import Case, Family, LibraryVersion, VerdictClass
-from backend.bench.payload import DeclaredModels, GateCitation
+from backend.bench.contract import TargetConfig, TargetUnreachable
+from backend.bench.library import Family, LibraryVersion
+from backend.bench.payload import GateCitation
 from backend.bench.registration import Attestation, issue_nonce
-from backend.bench.rule import DECLARED_RULE, GateRule
 from backend.bench.signing import SignedArtefact
 from backend.bench.usage import UsageLedger
 from backend.graph.approval import Approval, Approve
 from backend.graph.budget import (
     BudgetExceeded,
-    BudgetPayload,
     CallPrice,
-    Layer,
     RunBudget,
 )
 from backend.graph.runstate import RunState
 from backend.observability import TracedRun
-
-APPROVAL_WAIT_SECONDS = 3600.0
-"""How long a run waits at the interrupt for an answer that may never come.
-
-A halted run holds a thread and a checkpoint, so the wait is finite; it is an hour
-because the human it is waiting for has to read two figures and decide whether to
-spend them, and a limit short enough to catch somebody thinking would be a consent
-mechanism that answered on their behalf. What happens at the end of it is a *no*
-recorded as **unanswered** rather than as declined — nobody said no, nobody said
-anything — and either way nothing was sent and nothing was spent.
-"""
-
-PRESENT_WAIT_SECONDS = 30.0
-
-FINISHED_WAIT_SECONDS = 30.0
-"""How long a declining request waits for the worker to finish with the record.
-
-Generous for what it waits on: a declined run sends nothing, so the worker has only
-to carry the refusal back out of the graph. The bound exists so that a worker which
-somehow never finishes cannot hold an HTTP request open, not because the wait is
-expected to be long.
-"""
-"""How long `start` waits for the graph to reach its interrupt.
-
-Nothing has been sent to the target by then — the halt is ahead of registration —
-so this bounds a graph that never halted rather than a run that is working. A run
-that reaches it has failed to present an estimate, and a request that returned a
-`run_id` for one would be handing back a run nobody could ever confirm.
-"""
-
-
-class RunStatus(StrEnum):
-    """Where a run is, in the words the record keeps.
-
-    `DECLINED` and `UNANSWERED` are two states rather than one, on `approval.py`'s
-    own reasoning: a caller that treats them as the same loses the difference
-    between "refused by a human" and "awaiting one". `ABORTED` is separate from
-    `FAILED` for the same kind of reason — a run stopped by its own ceiling is the
-    budget working, and one stopped by a transport failure is not a result at all.
-    """
-
-    AWAITING_APPROVAL = "awaiting_approval"
-    DECLINED = "declined"
-    UNANSWERED = "unanswered"
-    RUNNING = "running"
-    COMPLETED = "completed"
-    REGISTRATION_REFUSED = "registration_refused"
-    ABORTED = "aborted"
-    FAILED = "failed"
-
-    @property
-    def in_flight(self) -> bool:
-        """Whether a run in this state is still going, or has stopped for good.
-
-        Asked by anything that has to tell *not yet* from *not ever*: a caller told
-        to poll a run that ended without a report would poll for the lifetime of the
-        process. Written as the two states a run can leave rather than as the six it
-        cannot, so that a seventh terminal state is terminal on the day it is added
-        rather than on the day somebody remembers this list.
-        """
-        return self in {RunStatus.AWAITING_APPROVAL, RunStatus.RUNNING}
-
-
-class DeclaredGap(StrEnum):
-    """Something the caller's own setup did not provide, and the family it costs.
-
-    The second surface of the concept `scripts/probe_target.py` keeps as
-    `OperatorGap`, and deliberately not `NotMeasurable`: that type is the library's
-    answer to a *case precondition* a target cannot meet, decided before an attempt
-    is spent. These are the caller's gaps — the bench cannot detect either of them,
-    no attempt is skipped for them, and the family is not run at all rather than
-    measured at zero. A family missing from a run with no reason beside it is a
-    reader guessing which of three answers it was.
-
-    Two enums rather than one shared one, and the duplication is the smaller cost.
-    `OperatorGap` says *pass `--adjudicator-model`* and *this was a
-    `--deterministic-only` run*: its prose names command-line flags, which is right
-    for the surface it was written for and wrong in an HTTP response. It also
-    carries two members about reading a rate that was measured, which is a thing
-    this surface does not do yet. Sharing them would mean rewriting a script's
-    user-facing text to fit a caller who is not at a terminal.
-    """
-
-    NO_ADJUDICATOR = "no_adjudicator"
-    NOTE_NOT_PLANTED = "note_not_planted"
-    NONCE_NOT_PLANTED = "nonce_not_planted"
-    FAMILY_SWITCHED_OFF = "family_switched_off"
-
-    def stated(self) -> str:
-        match self:
-            case DeclaredGap.NO_ADJUDICATOR:
-                return (
-                    "not run: this family reaches its verdict by adjudication and "
-                    "this bench has no adjudicating instrument configured. A "
-                    "family nothing can score is not attempted, so the estimate "
-                    "does not charge for it"
-                )
-            case DeclaredGap.NOTE_NOT_PLANTED:
-                return (
-                    "not run: this family needs a third-party note planted in "
-                    "content the target retrieves, and the caller declared it is "
-                    "not in place. Run without it, the family would report a clean "
-                    "zero that reads as a defence and is not one"
-                )
-            case DeclaredGap.NONCE_NOT_PLANTED:
-                return (
-                    "not run: this family extracts the registration nonce, and the "
-                    "caller started this run without planting it. A canary that is "
-                    "nowhere in the target cannot leak, so every attempt would "
-                    "report resisted against an attack that was never possible"
-                )
-            case DeclaredGap.FAMILY_SWITCHED_OFF:
-                return (
-                    "not run: this family was switched off for this bench, so no "
-                    "case in it was attempted and no episode opened against it. "
-                    "Nothing here is a reading about the target — a family that was "
-                    "not asked is not a family that held"
-                )
-
-
-@dataclass(frozen=True)
-class RunsInFlight(RuntimeError):
-    """An instrument was changed while a run was still going, and was refused.
-
-    Named rather than swallowed, and it names the runs: an operator told *not now*
-    with no way to see what is holding the lock has to guess whether to wait or to
-    decline something.
-    """
-
-    def __init__(self, run_ids: Sequence[str]) -> None:
-        super().__init__(
-            f"{len(run_ids)} run(s) still going — {', '.join(run_ids)}. A run "
-            "awaiting approval was shown an estimate built from the settings it was "
-            "declared with, and changing them now would make that confirmation a "
-            "statement about a different run (ADR-0007). Let them finish, or decline "
-            "them, and set this again"
-        )
-
-
-@dataclass(frozen=True)
-class Instruments:
-    """The two instrument clients one run is made with, bound to that run's ledger.
-
-    A pair rather than two returns, and the pairing is the point: both are built
-    from one call, against one `UsageLedger`, into two different layers of it. A
-    caller that could take the adjudicator without the attacker could bind half a
-    run's usage and leave the other half reporting into nothing, which is the state
-    #28 was about — a figure absent for a reason nobody stated.
-    """
-
-    adjudicator: Completion | None
-    attacker: AttackerCompletion
-
-
-class PerRunInstruments(Protocol):
-    """How a bench builds a fresh pair of instruments for one run's ledger.
-
-    **This exists because a sink is fixed when a client is built.**
-    `completion_for(..., usage=...)` binds its sink once, at configuration time, and
-    that happens before a run exists — so a bench that built its instruments at boot
-    had nothing to bind them to, and every run started over HTTP carried a ledger
-    that reported nothing (#28). The two ways out were a client whose sink can be
-    reassigned per run, and a client built per run; this is the second.
-
-    A process-global sink was not one of them. The API runs each run on its own
-    thread, so a slot the clients share would file one run's tokens under
-    another's — and a `ContextVar` silently drops every adjudicator call, because
-    the pool that decides a judged family does not propagate context (#10). Both
-    failures are invisible in the figure they corrupt, which is the argument for
-    the shape that cannot express them: one ledger, one build, one run.
-
-    **It takes the declared models rather than holding them.** The strings this
-    builds from are the ones `report.models` prints, read at the moment of the
-    build — so an attacker set through the console reaches the next run's client
-    and the provenance block from one record, and the pairing `declared_instrument`
-    makes at boot cannot come apart later (`BenchRuns.instrument`).
-    """
-
-    def __call__(self, models: DeclaredModels, usage: UsageLedger) -> Instruments: ...
-
-
-@dataclass(frozen=True)
-class BenchConfig:
-    """What every run through this API is measured with.
-
-    One record rather than arguments threaded through the routes, so that the
-    library a run is estimated against and the library it is run against are the
-    same object by construction. The declared rule and the declared adaptive
-    budget are the defaults for the same reason `RunBudget.declare` takes them: a
-    run held to numbers that were chosen for it is a run whose figures can be
-    checked against `rule.py` and `adaptive/budget.py` rather than against
-    whatever this module happened to pass.
-    """
-
-    cases: Sequence[Case]
-    rule: GateRule = DECLARED_RULE
-    adaptive: AdaptiveBudget = DECLARED_ADAPTIVE_BUDGET
-    attacker: AttackerCompletion = SCRIPTED_ATTACKER
-    """The adaptive layer's attacker, defaulting to the deterministic stand-in.
-
-    Same default as `run_calibration`, and for the same reason: the layer always
-    runs, and a bench with no model credential configured still spends the
-    operator's endpoint the way a real one would.
-
-    **A deployment that declared a model is handed one here.** The factory reads
-    `AGENTAUDIT_ATTACKER_MODEL` and builds the client beside the identifier that
-    goes into `report.models.attacking`, in one call, so the attacker a run is
-    made with and the model its provenance names cannot come apart
-    (`app.declared_instrument`). A caller that builds its own `BenchConfig` is
-    making both of those statements itself, and the stand-in is what it says when
-    it makes neither.
-    """
-
-    adjudicator: Completion | None = None
-    """The instrument that decides the two judged families, or `None`.
-
-    `None` by default, and the consequence is stated rather than absorbed: the
-    judged cases are not run, and their families are reported with the gap that
-    explains why. A run that reached its first judged attempt before discovering
-    it had no instrument would have spent the operator's budget on attempts
-    nothing can score.
-    """
-
-    report: ReportConfig = field(default_factory=ReportConfig)
-    """The key this bench signs a finished run's report with, and what it declares
-    beside the figures.
-
-    Its own record rather than three more fields here, because none of it changes
-    what a run does to a target: a bench with the default of every one of them
-    attempts the same suite and produces no artefact. What that costs is stated at
-    the route rather than absorbed — a run with no signed report is refused by name
-    (`report.py`).
-    """
-
-    families: frozenset[Family] = frozenset(Family)
-    """The failure families the next run covers. Every one of them, by default.
-
-    A declared input like the six in `Instrumented`, and the one an operator sets
-    per family rather than per number: a run that covers four families is a cheaper
-    run and a narrower reading, and both of those are the operator's to choose.
-
-    **A family switched off is *not run*, never measured at zero.** `plan_for` drops
-    its cases and records `DeclaredGap.FAMILY_SWITCHED_OFF`, so the report says the
-    family was not attempted — which is the same discipline `NotMeasurable` keeps for
-    a precondition and `OperatorGap` keeps for an unplanted note. A rate of zero over
-    no attempts is the reading this type exists to make unavailable (ADR-0004).
-
-    It reaches the adaptive layer without a second mechanism: an episode needs a
-    deterministic case for its family, and a family whose cases are gone has none, so
-    the layer opens no episode against it (`adaptive/layer.objectives_for`).
-    """
-
-    approval_wait_seconds: float = APPROVAL_WAIT_SECONDS
-
-    per_run_instruments: PerRunInstruments | None = None
-    """How this bench builds instruments for one run, or `None` for the pair above.
-
-    `None` says *this bench's instruments keep no usage record*, which is the
-    honest reading for a caller that handed in clients of its own: a stub
-    adjudicator has no provider to report a token count. The deployed factory
-    always supplies one, because a run started from the console is the run whose
-    figures an operator has no other way to see (#28).
-
-    Named as an alternative to the two fields above rather than replacing them. The
-    boot-built pair is what `plan_for` reads to decide whether the judged cases are
-    attempted at all, and it is what makes a model named and unbuildable a refusal
-    at boot instead of a discovery after an operator has confirmed a spend
-    (`app.declared_instrument`, `app.NAMED_BUT_UNUSABLE`).
-    """
-
-    def instruments_for(self, usage: UsageLedger) -> Instruments:
-        """This run's instruments, reporting into this run's ledger.
-
-        One ledger per run and one build per run: `run_calibration` refuses a ledger
-        that already holds calls, because a reused one would file the first run's
-        tokens under the second run's id, and two runs on two threads sharing a sink
-        would do it silently.
-
-        **A build that disagrees with the boot-time pair is refused rather than
-        run.** `plan_for` decided which cases this run may attempt from
-        `self.adjudicator` — before the run, before the estimate — so a builder that
-        handed back `None` here would leave a run attempting judged cases with no
-        instrument, and one that handed back a client where boot had none would mean
-        the operator was shown an estimate for a narrower run than the one that ran.
-        """
-        if self.per_run_instruments is None:
-            return Instruments(adjudicator=self.adjudicator, attacker=self.attacker)
-        built = self.per_run_instruments(self.report.models, usage)
-        if (built.adjudicator is None) != (self.adjudicator is None):
-            raise ValueError(
-                "this bench built a run an adjudicator its boot-time pair does not "
-                "agree about. The plan and the estimate an operator confirmed were "
-                "built from the pair at boot, so the two have to say the same thing "
-                "about whether the judged families run at all (ADR-0007)"
-            )
-        return built
-
-
-@dataclass(frozen=True)
-class RunPlan:
-    """The cases one run will actually attempt, and the families it will not.
-
-    Built per request rather than per bench, because one of the two gaps is a
-    statement the caller makes about their own content store and the other is a
-    property of this bench. They land in the same record because a reader of the
-    estimate needs to know what it covers, and the estimate covers what is here.
-    """
-
-    cases: tuple[Case, ...]
-    gaps: Mapping[Family, DeclaredGap]
-
-
-def plan_for(
-    config: BenchConfig, note_planted: bool, nonce_planted: bool = True
-) -> RunPlan:
-    """Which of the library's cases this run may attempt, and why the rest are out.
-
-    Selected on `Case.verdict_class` and on the family, never on the family name
-    alone for the judged half: the class is a field of the record for exactly this
-    reason (ADR-0013), so a case that moves between families cannot change which
-    instrument the run needed.
-    """
-    gaps: dict[Family, DeclaredGap] = {}
-    cases = list(config.cases)
-
-    if config.adjudicator is None:
-        judged = {
-            case.family for case in cases if case.verdict_class is VerdictClass.JUDGED
-        }
-        gaps.update(dict.fromkeys(judged, DeclaredGap.NO_ADJUDICATOR))
-        cases = [
-            case for case in cases if case.verdict_class is not VerdictClass.JUDGED
-        ]
-
-    if not note_planted:
-        injection = Family.INDIRECT_PROMPT_INJECTION
-        if any(case.family is injection for case in cases):
-            gaps[injection] = DeclaredGap.NOTE_NOT_PLANTED
-        cases = [case for case in cases if case.family is not injection]
-
-    # The same argument one family over. The registration nonce is the leakage
-    # canary — one planted value, two roles (ADR-0007) — so a run whose operator
-    # never planted it is a run whose leakage cases go after a string that is
-    # nowhere in the target. Thirty attempts would come back resisted and the
-    # report would read as a defence that was never tested.
-    # The operator's own choice, and it is a gap like the others rather than a
-    # silent narrowing: a family they switched off has to read as *not run* on the
-    # report, because a family absent with no reason beside it is a reader guessing
-    # which of three answers it was.
-    off = [family for family in Family if family not in config.families]
-    for family in off:
-        if any(case.family is family for case in cases):
-            gaps[family] = DeclaredGap.FAMILY_SWITCHED_OFF
-    cases = [case for case in cases if case.family in config.families]
-
-    if not nonce_planted:
-        leakage = Family.DATA_LEAKAGE
-        if any(case.family is leakage for case in cases):
-            gaps[leakage] = DeclaredGap.NONCE_NOT_PLANTED
-        cases = [case for case in cases if case.family is not leakage]
-
-    return RunPlan(cases=tuple(cases), gaps=gaps)
-
-
-class NonceNotIssued(ValueError):
-    """A run asked to start against a nonce this bench never issued.
-
-    The half of the authorisation guard that can be enforced before anything is
-    sent. It does not prove the target echoes the value — only the probe inside
-    the run can, and it runs after the halt — but it does prove the caller went
-    through registration rather than pointing the bench at an endpoint and
-    inventing a token.
-
-    Not raised for a run that declared the nonce unplanted: that run has waived the
-    proof this value carries and dropped the family it is the canary for, so there
-    is nothing left for it to be checked against (ADR-0007, as amended).
-    """
-
-    def __init__(self, nonce: str) -> None:
-        super().__init__(
-            "this bench never issued that nonce, so no run may start against it. "
-            "Register the target first: the bench issues the value, you plant it "
-            "in the target's configuration, and the run's own registration probe "
-            "checks that it comes back (ADR-0007)."
-            if nonce
-            else "a run has to name the nonce it was registered with, and this "
-            "request named none (ADR-0007)."
-        )
-
-
-class NeverPresented(RuntimeError):
-    """The graph did not reach its interrupt, so there is no estimate to confirm."""
-
-
-@dataclass
-class RunRecord:
-    """One run: what authorised it, what it was estimated at, and where it got to.
-
-    The budget, the plan and the run state are all held here rather than in the
-    thread's locals, because the ceiling the suite is held to has to be the one the
-    caller was shown — an estimate that has become separated from the run it was
-    presented for is an estimate nobody can check.
-    """
-
-    run_id: str
-    target: TargetConfig
-    attestation: Attestation
-    nonce: str
-    plan: RunPlan
-    budget: RunBudget
-    run_state: RunState
-    presented: BudgetPayload
-    proof_waived: bool = False
-    """The operator started this run without planting the nonce (ADR-0007, amended).
-
-    Held on the record because it decides two things and outlives both: the run still
-    sends its echo probe but is not stopped by a missing echo, and the leakage family
-    is dropped from the plan rather than measured against a value nobody planted. The
-    artefact says which of the two ways the run was authorised, and it says it from
-    what the registration recorded rather than from this field — this is the
-    declaration, and that is what the endpoint did.
-    """
-
-    recorded_at: datetime = field(default_factory=lambda: datetime.now(tz=UTC))
-    """When this run went on the record: the moment the attestation was taken and
-    the estimate declared.
-
-    Deliberately not *when the target was registered*. Registration is the nonce
-    echo (CONTEXT.md), and the echo probe is the run's first call on the operator's
-    endpoint — on the far side of the interrupt — so a run awaiting approval, a run
-    declined and a run nobody answered have no registration time at all, and a
-    field that claimed to be one would be empty for exactly the runs a list is most
-    useful for. This is the time the bench took responsibility for the run, which
-    every run has.
-
-    A wall clock in UTC, because it is read by somebody asking *which of these did I
-    start yesterday*. `RunState.started_at` is `time.monotonic()` and stays that
-    way: it exists so that the layer-ordering invariant is checkable (ADR-0010), and
-    a monotonic reading has no date in it.
-    """
-
-    status: RunStatus = RunStatus.AWAITING_APPROVAL
-    statement: str = (
-        "halted at the approval interrupt: nothing has been sent to the target "
-        "and nothing has been spent, and nothing will be until this estimate is "
-        "answered. The nonce is checked by the run's own registration probe, "
-        "which is the first call it makes — a target that does not echo it is "
-        "not attempted, unless the operator declared the proof waived when they "
-        "started this run"
-    )
-    confirmed_by: str = ""
-
-    finished: threading.Event = field(default_factory=threading.Event, repr=False)
-    """Set by the thread that ran this run, when it has finished writing to it.
-
-    A run has two threads that can reach its record — the worker, and whatever
-    request is asking about it — and exactly one of them may say what the run
-    *did*. This is how the other one knows to wait. It says the record is complete
-    and not that the run succeeded: an aborted run, a failed one and a declined one
-    all set it, because all three are the worker having nothing left to write.
-    """
-
-    result: CalibrationResult | None = None
-    report: SignedArtefact | Unsigned = field(default_factory=Unsigned)
-    """The signed report this run produced, or the reason it has none.
-
-    Built once, by the thread that ran the run, and read by every request for it:
-    what a recipient downloads has to be the bytes that were signed, and bytes
-    re-assembled per request are bytes nobody signed (#56).
-
-    One of two records rather than a nullable one, so *why there is no report* is
-    carried by the thing that stands in for it: `Unsigned` is served as that under
-    its own name, and it is never made good by serving an unsigned payload in its
-    place. It is not a failed run either — the suite ran and the target was
-    measured.
-    """
-
-    failure: TargetFailure | None = None
-    """The named transport outcome that stopped this run, if one did.
-
-    Kept as the enum the transport raised rather than folded into `statement`,
-    because the four the spec names are four different jobs for the person reading
-    the run and a reporting surface has to be able to name the one it got. `None`
-    for every run that was not stopped by the wire — and a failure here is never a
-    verdict, never an attempt and never a finding: `TargetUnreachable` is raised
-    precisely so that no counter has anywhere to put it.
-    """
-
-    @property
-    def spent(self) -> dict[Layer, int]:
-        """Calls spent, per layer and never summed.
-
-        Two counters, because a single blended figure hides which half of a run is
-        consuming the operator's budget — the same reason the estimate is two
-        figures (ADR-0007). `RunState.calls_spent` exists for reporting and is
-        deliberately not what a ceiling is read against.
-        """
-        return dict(self.run_state.spent)
-
-    def settle(self, status: RunStatus, statement: str) -> None:
-        """Move the run to its next state, and say in words what that state is."""
-        self.status = status
-        self.statement = statement
-
-
-class PendingApproval:
-    """The interrupt's two ends: the graph waits here, an HTTP request answers here.
-
-    This is the `Approve` seam and nothing more. The graph does not know it is
-    being answered over HTTP any more than it knows it is being answered at a
-    terminal, which is the property ADR-0007 asks for — the run does not proceed
-    because it *cannot* proceed, not because a code path chose not to.
-    """
-
-    def __init__(self, wait_seconds: float) -> None:
-        self._wait = wait_seconds
-        self._halted = threading.Event()
-        self._answered = threading.Event()
-        self._payload: BudgetPayload | None = None
-        self._answer: Approval | None = None
-        self._closed = False
-        self._lock = threading.Lock()
-
-    @property
-    def answered(self) -> bool:
-        """Whether a human ever answered. False for a run that timed out waiting."""
-        return self._answer is not None
-
-    def approve(self, presented: BudgetPayload) -> Approval:
-        """What the graph calls when it has halted. Blocks until somebody answers.
-
-        The payload is published before the wait, so the request that started the
-        run returns the figures the interrupt is holding rather than a recomputed
-        copy of them.
-
-        When the wait runs out this closes: an answer arriving afterwards has
-        nothing to answer, because the graph has already been told nobody did. The
-        close and the answer take the same lock, so a confirmation landing in that
-        instant is either taken or refused and never both.
-        """
-        self._payload = presented
-        self._halted.set()
-        answered = self._answered.wait(self._wait)
-        with self._lock:
-            if not answered or self._answer is None:
-                self._closed = True
-                return Approval(
-                    confirmed=False,
-                    identity="",
-                    reason=(
-                        "the approval interrupt was never answered, so the run "
-                        "never started"
-                    ),
-                )
-            return self._answer
-
-    def answer(self, approval: Approval) -> bool:
-        """Record the human's answer, if this interrupt is still waiting on one.
-
-        False when it is not — answered already, or closed because the wait ran
-        out. A caller that took that for a yes would be telling somebody their run
-        had started when the graph had already been told it would not.
-        """
-        with self._lock:
-            if self._closed or self._answer is not None:
-                return False
-            self._answer = approval
-            self._answered.set()
-            return True
-
-    def halted(self, timeout: float) -> BudgetPayload:
-        """The estimate the graph is holding, once it is holding one."""
-        if not self._halted.wait(timeout) or self._payload is None:
-            raise NeverPresented(
-                "the run reached no approval interrupt, so it has no estimate to "
-                "confirm. Nothing was sent"
-            )
-        return self._payload
-
-
-@dataclass(frozen=True)
-class Instrumented:
-    """The declared inputs of a run that the console may set, as one statement.
-
-    Six settings and a model identifier, and every one of them changes what a run
-    *measured* rather than how it looks. That is why they arrive together: a caller
-    that could set the turn budget without restating the attacker model could leave
-    a bench whose report names one instrument and whose episodes were run by
-    another, and the four settings of a run's provenance exist to make exactly that
-    unreadable (ADR-0004, ADR-0013).
-
-    **`attempts_per_case` is in a different class from the other four**, and
-    ADR-0025 argues the difference: the other four bound a layer scored on nothing
-    (ADR-0010), and this one is the scored denominator that ADR-0003 sets to give
-    `n = 30` per family. What the difference buys here is that a run at a lower
-    number is honest and is **not a gate result** —
-    `GateRule` travels on `TargetRun` and prints beside every figure, and
-    `scripts/gate.py` stays on `DECLARED_RULE` and takes no setting from this type.
-    """
-
-    attacker_model: str
-    """`<provider>:<model>`, or `UNDECLARED_MODEL` for the deterministic stand-in."""
-
-    temperature: float | None
-    """The attacker's sampling temperature, or `None` for the provider's own default.
-
-    `None` and a number are different declarations: one says *whatever the provider
-    does*, and a bench that wrote its own number into that field would be naming a
-    setting nobody chose.
-    """
-
-    reasoning_effort: ReasoningEffort | None
-    """How hard a reasoning attacker may think, or `None` for two different absences.
-
-    Beside the temperature because it is the second declared input of the same
-    instrument, and the two are not interchangeable: a model that takes one takes no
-    other, and two runs of one model at one temperature and different effort are two
-    different instruments (#5). `None` is *nothing declared* here, and a model with no
-    such setting is a fact the record states rather than a value this carries.
-    """
-
-    turns_per_episode: int
-    episodes_per_family: int
-    attempts_per_case: int
 
 
 class BenchRuns:
@@ -1000,22 +415,6 @@ class BenchRuns:
                 # own write, if it ever lands, says the same thing.
                 record.settle(RunStatus.DECLINED, _declined(approval.reason))
         return record
-
-
-class NoLongerWaiting(RuntimeError):
-    """An answer to an interrupt that is not waiting for one any more.
-
-    Refused rather than applied, whichever of the two it is. A second answer would
-    be consent recorded for a spend that is already happening; an answer arriving
-    after the wait ran out would be consent for a run the graph has already been
-    told nobody authorised.
-    """
-
-    def __init__(self, record: RunRecord) -> None:
-        super().__init__(
-            f"run {record.run_id} is {record.status} and is no longer waiting on "
-            "an answer. An interrupt is answered once"
-        )
 
 
 def _declined(reason: str) -> str:

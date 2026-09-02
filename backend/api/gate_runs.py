@@ -13,15 +13,6 @@ the thing ADR-0007 forbids, and the reason a gate run could not simply be spawne
 as a subprocess is that the terminal helper reads absent or piped input as a
 refusal, so a spawned one would answer no to all three statements and spend nothing.
 
-**A gate run is not a run, and nothing here is a `RunRecord`.** A run is one pass
-over one target and produces rates, intervals and bands about somebody's agent; a
-gate run is the whole library against three agents of this project's own
-construction and produces a decision about this bench (ADR-0018). They have
-different records, different statuses, different routes and no function in common
-that takes either: `GateRunRecord` and `RunRecord` never appear in one signature,
-which is ADR-0010's discipline applied to a new axis — if you find yourself
-widening one to accept both, stop.
-
 **It rewrites the case library, so it reads the library it writes to.** A gate run
 appends a `[[history]]` reading to every case record it reads and marks retired
 whatever the rule retires (`retirement.store`), and the series a retirement is
@@ -42,520 +33,102 @@ records: the two entry points exclude each other rather than only themselves. A
 second gate run is refused by name rather than queued — 830 calls behind an hour of
 waiting is not a request anybody meant to make.
 
-**The reference agents may be absent, and then this bench states it.** They are
-test equipment served by a different application (`backend/targets/reference`) and
-never reach a user, so a deployment that does not ship them cannot run a gate. The
-equipment is therefore a seam that can be *missing* — `shipped_agents` returns
-`None` when the module is not importable — and the console reads the refusal and
-offers no control rather than failing when one is pressed.
-
 **Nothing here reads a document.** The per-family figures a gate run produces —
 the three reference agents' rates and each family's `D` — are on the `GateResult`
 this module holds in memory, put there by `read_gate` over the attempts that were
 just made. A route that parsed the dated Markdown a command-line run leaves would
 break on a rewording, and a gate run started here has the figures already.
 
-**And it now writes two more things, on the way out and under the same lease.** Its
-own record as fields, into the library, because a gate run started here has no dated
-document for one to sit beside — which is what ADR-0021 recorded as *the two entry
-points leave different traces*. And the **gate citation** off that record, so the
-bench cites the gate run it just made rather than whatever a deployment declared
-([ADR-0023](../../docs/adr/0023-a-gate-run-updates-the-citation-it-earned.md)). The
-citation reaches `ReportConfig.gate` through `Cites` and through nothing else: a
-`GateCitation` in, nothing out, and no decision or record crossing in either
-direction.
+**The gate-run side is four modules and this is the service.**
+`gate_run_equipment.py` holds what a gate run is run with — the library directory,
+the gold sets, the three reference agents and the seam that may be missing;
+`gate_run_state.py` holds one gate run's record and the refusals in front of it,
+including why `GateRunRecord` and `RunRecord` never appear in one signature;
+`gate_run_writeback.py` holds the three writes a gate run leaves behind under its
+lease, the gate citation among them. This module starts one, halts it, answers it
+and drives it. The names the routes and the suite import from
+`backend.api.gate_runs` did not move (#14).
 """
 
 from __future__ import annotations
 
-import secrets
 import threading
 import uuid
-from collections.abc import Callable, Iterator, Sequence
-from contextlib import AbstractContextManager, ExitStack, contextmanager
-from dataclasses import dataclass, field
-from datetime import UTC, datetime
-from enum import StrEnum
+from contextlib import ExitStack
 from pathlib import Path
-from typing import Protocol
 
-from backend.api.runs import PRESENT_WAIT_SECONDS, BenchConfig, PendingApproval
-from backend.bench.admission import admitted_library
-from backend.bench.calibration import CalibrationResult, PlantNonce, run_calibration
-from backend.bench.cited import cite
-from backend.bench.contract import TargetConfig, TargetUnreachable
-from backend.bench.gate import GateResult, NotAGateRun, read_gate
-from backend.bench.gate_record import (
-    record_named,
-    recorded_gate_run,
-    write_the_record,
+# Re-exported, not merely imported: the definitions moved into the two modules
+# beside this one and the import surface stayed here. The redundant `X as X` is
+# what marks a re-export to mypy under `no_implicit_reexport`.
+from backend.api.gate_run_equipment import (
+    DEPLOYED_LIBRARY as DEPLOYED_LIBRARY,
 )
+from backend.api.gate_run_equipment import (
+    GOLDSET_DIR as GOLDSET_DIR,
+)
+from backend.api.gate_run_equipment import (
+    Equipment as Equipment,
+)
+from backend.api.gate_run_equipment import (
+    GateRunBench as GateRunBench,
+)
+from backend.api.gate_run_equipment import (
+    ServedAgents as ServedAgents,
+)
+from backend.api.gate_run_equipment import (
+    seeded_library as seeded_library,
+)
+from backend.api.gate_run_equipment import (
+    shipped_agents as shipped_agents,
+)
+from backend.api.gate_run_state import (
+    CannotRunAGate as CannotRunAGate,
+)
+from backend.api.gate_run_state import (
+    Cites as Cites,
+)
+from backend.api.gate_run_state import (
+    GateRunRecord as GateRunRecord,
+)
+from backend.api.gate_run_state import (
+    GateRunStatus as GateRunStatus,
+)
+from backend.api.gate_run_state import (
+    NoLongerWaiting as NoLongerWaiting,
+)
+from backend.api.gate_run_state import (
+    NotStartable as NotStartable,
+)
+from backend.api.gate_run_state import (
+    WrittenBack as WrittenBack,
+)
+from backend.api.gate_run_state import (
+    a_holder as a_holder,
+)
+from backend.api.gate_run_writeback import write_back
+from backend.api.run_config import BenchConfig
+from backend.api.run_state import PendingApproval
+from backend.api.run_status import PRESENT_WAIT_SECONDS
+from backend.bench.admission import admitted_library
+from backend.bench.calibration import run_calibration
+from backend.bench.contract import TargetUnreachable
+from backend.bench.gate import NotAGateRun, read_gate
 from backend.bench.goldset import load_gold_sets, measure_reliability
 from backend.bench.lease import LibraryBusy, held_by, holding_the_library
-from backend.bench.library import Case, LibraryVersion
-from backend.bench.payload import GateCitation
+from backend.bench.library import LibraryVersion
 from backend.bench.registration import Attestation
 from backend.bench.retirement import (
-    RetirementDecision,
     live_library,
-    readings_of,
-    store,
 )
 from backend.bench.usage import UsageLedger
 from backend.graph.approval import Approval, Approve
 from backend.graph.budget import (
     BudgetExceeded,
-    BudgetPayload,
     CallPrice,
-    Layer,
     RunBudget,
 )
 from backend.graph.runstate import RunState
 from backend.observability import TracedRun
-
-GOLDSET_DIR = Path(__file__).resolve().parents[1] / "goldset"
-"""The hand-labelled transcripts a judged family's κ is measured against.
-
-Read from the image rather than from the library's own directory, because a gold set
-is not a case: it is the reference a judged family's reliability is measured on and
-it is labelled before any user sees the bench (CONTEXT.md). A gate run writes to the
-case records and never to these.
-"""
-
-DEPLOYED_LIBRARY = Path("/var/lib/agentaudit/cases")
-"""Where a deployed bench keeps the case library a gate run may write to.
-
-**One declared path, outside the image, and it is a decision rather than a
-convenience.** A gate run's write-back is evidence: the decay series a retirement is
-re-derived from, and the retirement itself. Written inside the container it would be
-gone at the next redeploy, and a bench that had retired a case would come back with
-it live again and no record that it ever went — which is the state a reader of the
-library cannot detect. So the deployment mounts a volume here, `deployed_bench`
-seeds it once from the image's own admitted library if it is empty, and a bench with
-nothing mounted declares **no writable library** and runs no gate at all.
-
-Not read from the environment, deliberately: no module of this package is an
-environment reader (ADR-0020), and a path that could be pointed anywhere by a
-variable is a path a redeploy can silently change. It is a mount point, which is the
-one place a deployment already has to say something about storage.
-"""
-
-
-def seeded_library(mount: Path, seed: Path) -> Path | None:
-    """The mounted case library, seeded once from the image, or `None` if none is
-    mounted.
-
-    Three states and they are three different facts. **No mount** is a deployment
-    that declared no storage: it gets `None`, runs no gate, and says so — never a
-    silent write into the image. **An empty mount** is a first boot against a fresh
-    volume: the image's own admitted library is copied in once, because a bench whose
-    library is empty has nothing to run and nothing to serve. **A mount with records
-    in it** is the library this deployment has been accumulating, and it is left
-    exactly as it is — a seed written over a series would erase the decay history
-    every retirement is re-derived from, which is the one thing here that cannot be
-    recomputed.
-
-    Copied file by file rather than by any tree copy, so that what lands is case
-    records and nothing else: no lease left behind by a previous run, no document,
-    nothing that is not a `*.toml` this bench wrote itself.
-    """
-    if not mount.is_dir():
-        return None
-    if not any(mount.glob("*.toml")):
-        for record in sorted(seed.glob("*.toml")):
-            (mount / record.name).write_text(
-                record.read_text(encoding="utf-8"), encoding="utf-8"
-            )
-    return mount
-
-
-@dataclass(frozen=True)
-class ServedAgents:
-    """The three reference agents, served, and the roles they were served under.
-
-    The roles are three named fields rather than an order, for the reason
-    `read_gate` takes them as required keyword arguments: `D` is trivial minus
-    hardened and is not symmetric, so a call site that could pass them positionally
-    could invert the bench's central claim and report a broken instrument as a
-    working one.
-    """
-
-    targets: tuple[TargetConfig, ...]
-    plant: PlantNonce
-    trivial: str
-    weak: str
-    hardened: str
-
-    measured_the_field: bool
-    """Whether the model these three ran on was the field, or a stub fixture.
-
-    Answered by whatever served them, because that is what holds the `ModelConfig`,
-    and carried here so that the write-back can record it on every reading it stores
-    (ADR-0022). Not derived from the declared model string in this module: the answer
-    is a fact about a closed `Provider` enum which lives in `backend/targets/`, and
-    this module reaches that package through the equipment seam and an import that is
-    allowed to fail — never at module scope.
-
-    Required rather than defaulted, on the same terms as the three roles above: the
-    permissive answer is the one that lets the rule retire a case, so equipment that
-    could leave it out could retire a library on a run that spent nothing.
-    """
-
-
-Equipment = Callable[[], AbstractContextManager[ServedAgents]]
-"""How a gate run gets hold of the three reference agents while it runs.
-
-A callable that serves them and takes them down again, so that the equipment is a
-seam rather than an import: it can be missing, which is the case a deployment that
-ships no test equipment is in, and it can be substituted, which is how this is
-tested without a model.
-"""
-
-
-def shipped_agents(model: str) -> Equipment | None:
-    """The three reference agents this deployment ships, or `None` if it ships none.
-
-    The import is inside the function and its failure is an answer rather than an
-    error: `backend/targets/reference` is test equipment that never reaches a user,
-    so a build that leaves it out is a legitimate deployment which cannot run a gate
-    — and the console has to be able to say so rather than break on it.
-
-    `model` is the reference agents' declared model, off the record that declares it
-    (`DeclaredModels.calibration`), and never a literal here. The bearer token is
-    issued inside `served`, once per gate run, because these endpoints exist for the
-    length of one and a token minted at boot would outlive every run that used it.
-    """
-    try:
-        from backend.targets.reference.hardened import HARDENED
-        from backend.targets.reference.model import ModelConfig, measures_the_field
-        from backend.targets.reference.operator import nonce_planter
-        from backend.targets.reference.server import (
-            ReferenceConfig,
-            create_reference_app,
-        )
-        from backend.targets.reference.serving import serve
-        from backend.targets.reference.tools import DECLARED_TOOL_NAMES
-        from backend.targets.reference.trivial import TRIVIAL
-        from backend.targets.reference.weak import WEAK
-    except ImportError:
-        return None
-
-    @contextmanager
-    def served() -> Iterator[ServedAgents]:
-        """All three, on an ephemeral port, for the length of one gate run.
-
-        All three and never fewer: `D` is trivial minus hardened and monotonicity is
-        read across all three, so a gate on two agents is not a smaller gate but a
-        different and undeclared one. There is no argument here that could ask for a
-        subset.
-        """
-        auth_token = secrets.token_urlsafe(16)
-        app = create_reference_app(
-            ReferenceConfig(model=ModelConfig.parse(model), auth_token=auth_token)
-        )
-        with serve(app) as base_url:
-            yield ServedAgents(
-                measured_the_field=measures_the_field(ModelConfig.parse(model)),
-                targets=tuple(
-                    TargetConfig(
-                        name=agent.name,
-                        url=f"{base_url}/reference/{agent.name}/messages",
-                        auth_token=auth_token,
-                        agent_type="assistant",
-                        # The reference agents expose their tool calls and declare
-                        # the document tools, which is what makes scope creep and
-                        # halt defeat measurable against them at all (ADR-0004).
-                        exposes_tool_calls=True,
-                        declared_tools=DECLARED_TOOL_NAMES,
-                    )
-                    for agent in (TRIVIAL, WEAK, HARDENED)
-                ),
-                plant=nonce_planter(base_url),
-                trivial=TRIVIAL.name,
-                weak=WEAK.name,
-                hardened=HARDENED.name,
-            )
-
-    return served
-
-
-@dataclass(frozen=True)
-class GateRunBench:
-    """What a gate run on this bench needs, and the two ways it may be absent.
-
-    Its own record beside `BenchConfig` rather than four more fields on it, because
-    none of this is what a *run* is measured with: a bench that can serve every
-    route under `/runs` and cannot run a gate is a normal deployment, and a bench
-    that can run a gate has said two extra things about itself.
-
-    Both fields default to absent, which is what every bench in the test suite and
-    every bench that declared nothing is: a gate run is the one operation on this
-    surface that spends 830 calls and writes to the library, and it is not something
-    a deployment gets by omission.
-    """
-
-    library: Path | None = None
-    """The case library directory a gate run reads and writes back to.
-
-    A directory and not the loaded cases, because the write-back is per record: the
-    reading a retirement is re-derived from has to be on the case's own file
-    (`retirement.store`). `None` is a bench that runs no gate, and it is the honest
-    answer for a deployment with nothing durable to write to.
-    """
-
-    equipment: Equipment | None = None
-    """How the three reference agents are served, or `None` where they are absent.
-
-    Absent is not an error: they are test equipment that never reaches a user, so a
-    deployment can legitimately not ship them, and the console states it and offers
-    no start control.
-    """
-
-
-class NotStartable(StrEnum):
-    """Why a gate run may not start on this bench right now, as a name.
-
-    Four members and four different facts, and the caller is told which. Two are
-    about how the bench was built and two are about this moment — a screen that
-    could not tell them apart would offer *try again later* to an operator whose
-    deployment ships no reference agents, and *this deployment cannot* to one who is
-    merely second in the queue.
-    """
-
-    NO_REFERENCE_AGENTS = "no_reference_agents"
-    NO_WRITABLE_LIBRARY = "no_writable_library"
-    NO_ADJUDICATOR = "no_adjudicator"
-    ALREADY_IN_FLIGHT = "already_in_flight"
-
-    def stated(self) -> str:
-        """What this refusal means, and what would change it.
-
-        No fallback branch: a fifth member has to fail the typecheck rather than
-        print as a name with nothing said about it.
-        """
-        match self:
-            case NotStartable.NO_REFERENCE_AGENTS:
-                return (
-                    "this deployment does not ship the three reference agents, so "
-                    "there is nothing for a gate run to be decided over. They are "
-                    "test equipment that never reaches a user — the gate is the "
-                    "contrast between a hardened, a weak and a trivial agent of "
-                    "known construction — and a build that leaves them out is a "
-                    "legitimate deployment that cannot run a gate. The last gate "
-                    "run this bench cites was made where they are shipped, and the "
-                    "citation is still a fact about this instrument"
-                )
-            case NotStartable.NO_WRITABLE_LIBRARY:
-                return (
-                    "this bench has no case library it may write to, and a gate run "
-                    "writes: it appends a discrimination reading to every case "
-                    "record it reads and marks retired what the rule retires. A "
-                    "run whose write-back landed inside a container image would "
-                    "lose the series a retirement is re-derived from at the next "
-                    "redeploy, so a deployment declares the library at "
-                    f"{DEPLOYED_LIBRARY} and a deployment that declares none runs "
-                    "no gate"
-                )
-            case NotStartable.NO_ADJUDICATOR:
-                return (
-                    "this bench has no adjudicating instrument configured, and the "
-                    "gate is decided over six families of which two reach their "
-                    "verdicts by adjudication. Without one they are not fit to "
-                    "report and are excluded, which leaves four fit families and a "
-                    "gate that cannot be decided (ADR-0015) — 830 calls to reach an "
-                    "answer that was arithmetic before the first one was sent"
-                )
-            case NotStartable.ALREADY_IN_FLIGHT:
-                return (
-                    "a gate run already holds this case library, and one runs at a "
-                    "time on one library: it reads every case record and writes "
-                    "back to every one of them, so two overlapping runs would "
-                    "decide a retirement off a series missing a reading. Nothing "
-                    "has been sent and nothing has been spent. The holder is named "
-                    "on the lease"
-                )
-
-
-class CannotRunAGate(RuntimeError):
-    """A gate run that was asked for and may not happen, with the reason named.
-
-    Carries the `NotStartable` as well as the sentence, because the caller branches
-    on one and a person reads the other — and because two of the four are permanent
-    facts about the deployment while two are about right now.
-    """
-
-    def __init__(self, refusal: NotStartable, detail: str = "") -> None:
-        super().__init__(f"{refusal.stated()}{f'. {detail}' if detail else ''}")
-        self.refusal = refusal
-
-
-class GateRunStatus(StrEnum):
-    """Where a gate run is, in the words its own record keeps.
-
-    Not `RunStatus`, and the difference is not cosmetic. A run *completes* and has a
-    report; a gate run is **decided** and has an outcome — passed, failed or not
-    decided — and there is no member here that a run could be in and no member
-    there that a gate run could be in. Two enums, so nothing can hold either.
-    """
-
-    AWAITING_APPROVAL = "awaiting_approval"
-    DECLINED = "declined"
-    UNANSWERED = "unanswered"
-    RUNNING = "running"
-    DECIDED = "decided"
-    NOT_A_GATE_RUN = "not_a_gate_run"
-    ABORTED = "aborted"
-    FAILED = "failed"
-
-    @property
-    def in_flight(self) -> bool:
-        """Whether this gate run is still going, or has stopped for good."""
-        return self in {GateRunStatus.AWAITING_APPROVAL, GateRunStatus.RUNNING}
-
-
-class Cites(Protocol):
-    """The one edge from a gate run back onto the bench a run is measured with.
-
-    A gate run decides whether this instrument discriminates, and after ADR-0023 the
-    bench starts citing the one it just made. That is a write from the gate-run side
-    onto `ReportConfig.gate`, and it is narrowed to this: **a `GateCitation` in,
-    nothing out.** No `GateResult` crosses it, no decision, no per-family figure and
-    no record of either — so the widening ADR-0021 forbids is not available here, and
-    `BenchRuns` and `GateRunRecord` still never meet in one signature.
-
-    A callable rather than the bench itself for the same reason `Approve` is a
-    callable: what this module needs is the one operation, and holding the object
-    would give it every other one as well. `None` is a registry nobody wired a bench
-    to — the durable citation is still written into the library either way, and the
-    next process reads it (`bench/cited.py`, `app.deployed_bench`).
-    """
-
-    def __call__(self, citation: GateCitation) -> None: ...
-
-
-@dataclass(frozen=True)
-class WrittenBack:
-    """What one gate run wrote to the case library, and where it wrote it.
-
-    Kept on the record because the write-back is the half of a gate run that
-    outlives it: the decision is a fact about this bench right now, and the series
-    on the case records is what the *next* gate run reads. A run that stored nothing
-    says so with an empty tuple rather than by having no field.
-
-    **Three writes since ADR-0023, and all three are reported here.** The readings,
-    this gate run's own record as fields, and the citation the bench carries from now
-    on. The last of those is the one an operator has to be told about rather than be
-    able to look up, because it replaced something: `cited` is that sentence.
-    """
-
-    library: Path
-    readings: int
-    """Case records this run appended a reading to — one per case that ran."""
-
-    unread: tuple[str, ...]
-    """Cases no attempt was spent on, so no reading exists to store. Never a zero:
-    a case that did not run has no `D`."""
-
-    retired: tuple[str, ...]
-    """Cases the rule retired on this run, marked and kept and never deleted."""
-
-    record: str
-    """The file name this gate run's own record was written under, in that library.
-
-    The console's counterpart to the dated `.json` a command-line gate run leaves
-    beside its document: the figures as fields, in the library, so the citation
-    written next to it has somewhere to point (ADR-0023). Never overwritten by a
-    later gate run — the name carries this run's stamp — because the citation moving
-    is a choice of which record a report names and not a loss of the ones before it.
-    """
-
-    cited: str
-    """What citing this gate run did to the one this library cited before it.
-
-    On the record rather than only in a log, because the whole of what makes *the
-    last gate run wins* safe is that a replacement is announced: a failing gate run
-    displacing a passing citation is the case this field exists for
-    (`cited.Replaced.stated`).
-    """
-
-    def stated(self) -> str:
-        """The write-back as the record states it."""
-        retired = (
-            f"{len(self.retired)} case(s) marked retired: {', '.join(self.retired)}"
-            if self.retired
-            else "no case was retired: the rule needs two consecutive runs on one "
-            "model below the floor, and one run below it is not two"
-        )
-        return (
-            f"{self.readings} reading(s) appended to the case records in "
-            f"{self.library}, and {retired}. Marked and never deleted, because a "
-            f"case the field caught up with is evidence that the field moved. This "
-            f"run's own figures are in {self.record} beside them, and {self.cited}"
-        )
-
-
-@dataclass
-class GateRunRecord:
-    """One gate run: what authorised it, what it was estimated at, what it decided.
-
-    Deliberately not a `RunRecord`. There is no target on it and no report — the
-    subject is this bench — and `gate` holds a `GateResult`, which is the one thing
-    a target's record may never carry (ADR-0018). The budget, the run state and the
-    library it holds are all on the record for `RunRecord`'s reason: the ceiling the
-    run is held to has to be the one the operator was shown.
-    """
-
-    gate_run_id: str
-    attestation: Attestation
-    library: Path
-    cases: tuple[Case, ...]
-    agents: tuple[str, ...]
-    roles: tuple[str, str, str]
-    """The three agents' names in construction order: hardened, then weak, then trivial.
-
-    `agents` is whatever order the equipment served them in, which is the equipment's
-    business and is not an order anything may report in. This is the order the whole
-    bench reads the three in — cool to warm, floor to ceiling of the contrast, the
-    order `GateResult.rates` is built in — carried as three names because the record
-    holds names and the roles are the served equipment's own answer, never inferred
-    from a name.
-    """
-    budget: RunBudget
-    run_state: RunState
-    presented: BudgetPayload
-    recorded_at: datetime = field(default_factory=lambda: datetime.now(tz=UTC))
-    """When this gate run went on the record: the attestation taken, the estimate
-    declared, the library held. Before anything was served an attempt."""
-
-    status: GateRunStatus = GateRunStatus.AWAITING_APPROVAL
-    statement: str = (
-        "halted at the approval interrupt: nothing has been sent to a reference "
-        "agent, nothing has been spent, and not one case record has been written "
-        "to. None of that happens until this estimate is answered, and answering "
-        "anything but yes leaves the library exactly as it is"
-    )
-    confirmed_by: str = ""
-    gate: GateResult | None = None
-    """What this gate run decided, once it has. Every per-family figure a reader
-    needs is on it, in memory, put there by `read_gate` over the attempts that were
-    just made — never read back out of a document."""
-
-    written: WrittenBack | None = None
-
-    @property
-    def spent(self) -> dict[Layer, int]:
-        """Calls spent, per layer and never summed (ADR-0007, ADR-0010)."""
-        return dict(self.run_state.spent)
-
-    def settle(self, status: GateRunStatus, statement: str) -> None:
-        """Move the gate run to its next state, and say in words what that is."""
-        self.status = status
-        self.statement = statement
-
-
-def a_holder(attestation: Attestation, gate_run_id: str) -> str:
-    """Who the lease says is holding the library. A person and a gate run, both."""
-    return f"{attestation.identity}, gate run {gate_run_id} from the console"
 
 
 class BenchGateRuns:
@@ -755,16 +328,6 @@ class BenchGateRuns:
         return record
 
 
-class NoLongerWaiting(RuntimeError):
-    """An answer to a gate run's interrupt that is not waiting for one any more."""
-
-    def __init__(self, record: GateRunRecord) -> None:
-        super().__init__(
-            f"gate run {record.gate_run_id} is {record.status} and is no longer "
-            "waiting on an answer. An interrupt is answered once"
-        )
-
-
 def _declined(reason: str) -> str:
     stated = reason or "declined at the approval interrupt"
     return (
@@ -951,105 +514,11 @@ def _decide(
         return
 
     record.gate = gate
-    record.written = _write_back(record, result, gate, served, config, cites)
+    record.written = write_back(record, result, gate, served, config, cites)
     record.settle(
         GateRunStatus.DECIDED,
         (
             f"decided: {gate.decision.outcome}, confirmed by {record.confirmed_by}, "
             f"inside the ceiling that was confirmed. {record.written.stated()}"
         ),
-    )
-
-
-def _write_back(
-    record: GateRunRecord,
-    result: CalibrationResult,
-    gate: GateResult,
-    served: ServedAgents,
-    config: BenchConfig,
-    cites: Cites | None,
-) -> WrittenBack:
-    """Append this run's `D` to every case record it read, and retire what retires.
-
-    After the decision and never before it: what a case scored is stored whatever
-    the gate answered, and the rule that retires one is read over two runs rather
-    than over this one. Written to the case records by the run that measured them, so
-    the series a retirement is re-derived from is the case's own — and written under
-    the lease this gate run has held since before it read them.
-
-    The models are read off the record that declares them (`DeclaredModels`) rather
-    than named here: a reading stored under a model identifier this module invented
-    would be a decay series about a pair of models nobody declared (ADR-0012).
-
-    **Three writes, one critical section.** The readings, then this run's own record
-    as fields, then the citation that names it — all inside the lease this gate run
-    has held since before it read the library, so no second gate run can slip between
-    the readings and the citation that claims them (ADR-0021 condition 5, ADR-0023).
-    The order is the argument: a citation is a claim about a library at a version, and
-    the version it claims is the one the readings were just stored against.
-
-    **This is where a console gate run's figures become durable.** The record goes
-    into the library and the citation points at it there, which is where a
-    command-line run puts its record too: the citation carries the file name and every
-    reader resolves it against the library, so the library is the only directory a
-    cited record is reachable from (ADR-0023, amended — the command line wrote it
-    beside its document until then, and every judged rate was withheld for it). That
-    closes ADR-0021's own complaint that the two entry points leave different traces —
-    the trace is now the same record in the same kind of place, and what a console run
-    still lacks is the dated document.
-
-    **The in-process citation is the last thing and it is optional.** `cites` is the
-    one edge back onto the bench a run is measured with, and a registry wired to none
-    still leaves the library citing this gate run for the next process to read: the
-    difference between the two entry points is a restart, not a citation.
-    """
-    # One clock for the whole write-back: the date on every reading and the stamp on
-    # the record are the same moment, so a run that crossed midnight between them
-    # cannot store a series dated one day and a record dated the next.
-    stamped = datetime.now(tz=UTC)
-    runs = {run.target.name: run for run in result.target_runs}
-    history = readings_of(
-        record.cases,
-        hardened=runs[served.hardened],
-        weak=runs[served.weak],
-        trivial=runs[served.trivial],
-        model=config.report.models.calibration,
-        # Whether the run measured the field, from the equipment that served the
-        # agents rather than from the declared string: a reading taken on a stub
-        # fixture is stored, marked, and retires nothing (ADR-0022).
-        measured_the_field=served.measured_the_field,
-        ran_on=stamped.date(),
-        # The families the gate did not decide on. A reading from one is stored and
-        # the rule is not applied to it: retirement declines on a family the bench
-        # cannot vouch for (ADR-0016).
-        excluded=gate.decision.excluded_families,
-        adjudicator=config.report.models.adjudicating,
-    )
-    decisions: Sequence[RetirementDecision] = store(
-        record.library, history, config.rule
-    )
-    recorded = recorded_gate_run(
-        gate,
-        decided_at=stamped.isoformat(),
-        # No prose to point at: this entry point leaves the record and no document
-        # (ADR-0021), and the absence is typed rather than written as a sentence in a
-        # field a reader would follow as a path (ADR-0023).
-        document=None,
-        record=record_named(stamped),
-        # The instrument the κ figures on this record were measured on, so a target
-        # report can reuse them only where it adjudicates with the same model
-        # (`cited.the_reliability`, ADR-0004).
-        adjudicating_model=config.report.models.adjudicating,
-    )
-    write_the_record(recorded, record.library)
-    replaced = cite(recorded, record.library)
-    if cites is not None:
-        cites(replaced.now)
-    return WrittenBack(
-        library=record.library,
-        readings=len(history.readings),
-        unread=history.unread,
-        retired=tuple(decision.case_id for decision in decisions if decision.retires),
-        record=recorded.record,
-        cited=replaced.stated(),
     )

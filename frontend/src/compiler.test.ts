@@ -88,6 +88,25 @@ const sources = import.meta.glob<string>('./**/*.tsx', {
 })
 
 /**
+ * The hooks, which are `.ts` because they hold no JSX, read separately from the sweep.
+ *
+ * The sweep above is over `.tsx` on purpose: it asserts that every file this app
+ * *renders* is compiled, and `NOTHING_TO_COMPILE` below is what stops it passing by
+ * exemption. A glob over `.ts` as well would pull in every pure-logic module in the
+ * app, none of which has anything to compile, and that assertion would have to go.
+ *
+ * But a hook is exactly where a memoisation lives, so the roster further down has to
+ * be able to reach one. #14 moved `readTheBench` out of `GateScreen.tsx` and into
+ * `useGateRun.ts`, and this is how the roster still finds it. Named rather than
+ * globbed, so a hook added without a memoisation to assert is not silently swept in.
+ */
+const hooks = import.meta.glob<string>('./**/use*.ts', {
+  query: '?raw',
+  import: 'default',
+  eager: true,
+})
+
+/**
  * What the compiler made of one file: its diagnostics, whether it cached anything, and
  * the code it emitted.
  *
@@ -190,7 +209,7 @@ describe('the three memoisations the screens keep', () => {
       what: 'the run progress poll',
     },
     {
-      path: './console/GateScreen.tsx',
+      path: './console/useGateRun.ts',
       held: 'readTheBench',
       shape: 'hoisted',
       what: 'the gate run poll',
@@ -213,7 +232,7 @@ describe('the three memoisations the screens keep', () => {
 
   for (const { path, held, shape, what } of kept) {
     it(`holds ${what} ${shape} on \`${held}\``, () => {
-      const source = sources[path]
+      const source = sources[path] ?? hooks[path]
       expect(source).toBeDefined()
       const compiled = compile(path, source as string)
       expect(compiled.said).toEqual([])

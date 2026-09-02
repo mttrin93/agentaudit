@@ -116,6 +116,23 @@ from backend.tests.test_api_runs import Counted, Ledger
 from backend.tests.test_cited import a_passing_gate, a_record
 
 API_DIR = Path(__file__).resolve().parents[1] / "api"
+
+GATE_RUN_MODULES = (
+    "gate_runs.py",
+    "gate_run_equipment.py",
+    "gate_run_state.py",
+    "gate_run_writeback.py",
+)
+"""Every module of the gate-run side, which is what the source scans below scan.
+
+Three tests here assert things about the *text* of the gate-run code — that it never
+constructs an `Attestation`, that no name in it is a bypass, that it neither reads
+`report.gate` nor imports the renderer. Those claims were written when the side was
+one file. #14 split it into four, and a scan still pointed at `gate_runs.py` would
+have gone on passing while the property it guards moved out from under it — the
+quiet way a structural refactor weakens a test without failing it. So the list is
+here, once, and a new module on this side has to be added to it.
+"""
 CASES_DIR = Path(__file__).resolve().parents[1] / "cases"
 
 STATEMENT_FIELDS = (
@@ -347,6 +364,32 @@ def test_a_gate_run_cannot_start_with_any_one_statement_withheld(
     assert library_bytes(library) == before
 
 
+def test_the_list_of_gate_run_modules_is_every_module_of_the_gate_run_side() -> None:
+    """The roster the three scans below read, held to the files that are actually
+    there.
+
+    Without this the list is the weakest thing in the file: a fifth `gate_run_*`
+    module lands, nobody adds it, and all three scans go on passing over four files
+    while the property they guard lives in five. That is the same failure the roster
+    was written to fix, one level up — a scan that narrows silently — so the roster
+    itself is asserted rather than trusted.
+
+    Derived from the directory rather than from a second list, because a second list
+    would need a third test.
+    """
+    on_disk = {
+        source.name
+        for source in sorted(API_DIR.glob("*.py"))
+        if source.name == "gate_runs.py" or source.name.startswith("gate_run_")
+    }
+
+    assert set(GATE_RUN_MODULES) == on_disk, (
+        "the gate-run side has a module the source scans in this file do not read. "
+        "Add it to GATE_RUN_MODULES: a scan pointed at four files while the code "
+        "lives in five passes without asserting anything"
+    )
+
+
 def test_no_flag_or_setting_lets_a_gate_run_proceed_without_an_attestation() -> None:
     """The prohibition as a scan, because a flag is what this failure would look like.
 
@@ -362,7 +405,9 @@ def test_no_flag_or_setting_lets_a_gate_run_proceed_without_an_attestation() -> 
     A behavioural counterpart is above, parametrised over the three statements. This
     is the half that catches the *next* change rather than the current behaviour.
     """
-    source = (API_DIR / "gate_runs.py").read_text(encoding="utf-8")
+    source = "\n".join(
+        (API_DIR / module).read_text(encoding="utf-8") for module in GATE_RUN_MODULES
+    )
     tree = ast.parse(source)
 
     built = [
@@ -691,7 +736,11 @@ def test_the_equipment_is_absent_when_the_deployment_does_not_ship_it(
     monkeypatch.setitem(sys.modules, "backend.targets.reference.server", None)
 
     assert shipped_agents("stub:obedient") is None
-    assert shipped_agents.__module__ == "backend.api.gate_runs"
+    # The seam's defining module, named so that the answer cannot come from a second
+    # `shipped_agents` somewhere else. It moved with #14's split of `gate_runs.py`;
+    # the name is still importable from `backend.api.gate_runs`, which is what the
+    # routes read it as.
+    assert shipped_agents.__module__ == "backend.api.gate_run_equipment"
 
 
 def test_a_bench_with_no_writable_library_runs_no_gate() -> None:
@@ -1167,7 +1216,9 @@ def test_the_per_family_figures_come_from_the_run_and_not_from_a_document(
     # reaching the renderer or the script that writes it, and it imports neither —
     # which is the import-level form of the reason the spec dropped these figures
     # rather than parse them (spec §75).
-    imported = _imports_of(API_DIR / "gate_runs.py")
+    imported = {
+        name for module in GATE_RUN_MODULES for name in _imports_of(API_DIR / module)
+    }
     assert not [name for name in imported if name.startswith("scripts")]
     assert "backend.bench.rendering" not in imported
 
@@ -1331,7 +1382,7 @@ def test_the_citation_is_written_while_this_gate_run_still_holds_the_library(
         held.append((directory / LEASE_FILE).exists())
         return cite(record, directory)
 
-    monkeypatch.setattr("backend.api.gate_runs.cite", under_the_lease)
+    monkeypatch.setattr("backend.api.gate_run_writeback.cite", under_the_lease)
 
     with a_bench(library, attempts_per_case=2) as gating:
         body = started(gating)
@@ -1460,7 +1511,9 @@ def test_no_function_on_the_gate_run_side_reads_the_citation_the_bench_carries()
     asserted rather than assumed. A future reader of `report.gate` here would be
     reading a citation this module is one restart behind on.
     """
-    source = (API_DIR / "gate_runs.py").read_text(encoding="utf-8")
+    source = "\n".join(
+        (API_DIR / module).read_text(encoding="utf-8") for module in GATE_RUN_MODULES
+    )
     tree = ast.parse(source)
 
     read = [
@@ -1471,7 +1524,7 @@ def test_no_function_on_the_gate_run_side_reads_the_citation_the_bench_carries()
         and isinstance(node.value, ast.Attribute)
         and node.value.attr == "report"
     ]
-    assert read == [], "gate_runs.py reads report.gate, which it is behind on"
+    assert read == [], "the gate-run side reads report.gate, which it is behind on"
 
 
 def test_the_citation_reaches_the_bench_through_one_edge_and_nothing_else(

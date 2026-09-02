@@ -101,6 +101,7 @@ from backend.bench.retirement import (
     readings_of,
     store,
 )
+from backend.bench.usage import UsageLedger
 from backend.graph.approval import Approval, Approve
 from backend.graph.budget import (
     BudgetExceeded,
@@ -825,6 +826,23 @@ def _decide(
     # a signature drifting away from `Approve` is a typecheck failure here and not a
     # gate run that halts and never resumes.
     approve: Approve = pending.approve
+    # One ledger for this gate run, and the instruments built against it, on the
+    # thread this run happens on. A gate run started from the console is the case
+    # the figures matter most for — it is the expensive one, around 830 calls — and
+    # until #28 it was the one that carried none, because the clients were built at
+    # boot with nothing to report into.
+    ledger = UsageLedger()
+    try:
+        instruments = config.instruments_for(ledger)
+    except (KeyError, ValueError) as unusable:
+        record.settle(
+            GateRunStatus.FAILED,
+            (
+                f"this gate run's instruments could not be built: {unusable}. "
+                "Nothing was sent to the reference agents and nothing was spent"
+            ),
+        )
+        return
     try:
         result = run_calibration(
             cases=record.cases,
@@ -832,8 +850,12 @@ def _decide(
             attestation=record.attestation,
             plant_nonce=served.plant,
             approve=approve,
-            adjudicator=config.adjudicator,
-            attacker=config.attacker,
+            adjudicator=instruments.adjudicator,
+            attacker=instruments.attacker,
+            # The ledger those two report into. One per gate run, for the reason
+            # `run_calibration` refuses a reused one: a figure filed against the
+            # wrong run is worse than an absent one (ADR-0026).
+            usage=ledger,
             rule=config.rule,
             adaptive=config.adaptive,
             # The ceiling on the record, never one re-declared here: the operator
@@ -894,6 +916,12 @@ def _decide(
     # After the suite and only if it proceeded, so that a declined gate run spends
     # nothing at all — including on the bench's own instrument.
     gold_sets = load_gold_sets(GOLDSET_DIR, record.cases)
+    # The boot-built client and deliberately not this run's bound one (#28). These
+    # calls happen after `run_calibration` has returned, which is after it closed
+    # the run span and pushed the trace: a κ measurement recorded into the ledger
+    # here would be a figure the run holds and its trace cannot carry, and a total
+    # that disagrees with the trace beside it is worse than one absent from both
+    # (ADR-0026).
     adjudicator = config.adjudicator
     assert adjudicator is not None  # `why_not` refused the bench without one
     reliability = measure_reliability(gold_sets, adjudicator)

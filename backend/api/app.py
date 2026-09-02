@@ -193,6 +193,7 @@ from backend.api.runs import (
     BenchConfig,
     BenchRuns,
     Instrumented,
+    Instruments,
     NeverPresented,
     NoLongerWaiting,
     NonceNotIssued,
@@ -253,6 +254,7 @@ from backend.bench.signing import (
     public_key,
     signing_key,
 )
+from backend.bench.usage import UsageLedger
 from backend.bench.verification import (
     INTEGRITY_CLAIM,
     RE_DERIVABILITY_CLAIM,
@@ -3973,6 +3975,10 @@ def deployed_bench() -> BenchConfig:
         cases=admitted_library(library),
         adjudicator=adjudicator,
         attacker=attacker,
+        # The pair above proves the declared strings build, at boot, where a model
+        # named and unbuildable is still a refusal before anybody confirms a spend.
+        # This is how each run gets its own pair, bound to its own ledger (#28).
+        per_run_instruments=declared_instruments,
         adaptive=deployed_adaptive_budget(),
         report=ReportConfig(
             signing_key=key,
@@ -4111,6 +4117,69 @@ def _declared[Instrument](
         raise RuntimeError(
             f"{variable}={declared!r}: {unusable}. {NAMED_BUT_UNUSABLE}"
         ) from unusable
+
+
+def declared_instruments(models: DeclaredModels, usage: UsageLedger) -> Instruments:
+    """The instruments one run is made with, bound to that run's own ledger.
+
+    **Built per run, and this is the design choice #28 asked for in writing.** A
+    client's usage sink is fixed when the client is built, and this factory builds
+    its clients at boot — before any run exists — so every run started from the
+    console reported no tokens and no cost while the two scripts that build their
+    own reported both. The alternative was a client whose sink can be reassigned
+    once a run starts, and it was rejected: a reassignable slot is shared state
+    between runs that happen on separate threads, and the corruption it admits is
+    a figure filed against the wrong run, which no reader can see is wrong. A build
+    per run cannot express that. It is also nearly free — `completion._client` is
+    cached to one `OpenAI` for the process, so what is new per run is the closure
+    and the sink it holds, not a connection pool.
+
+    **The boot-time build stays, and it is what it was always for.** It is where a
+    model named and unbuildable is refused (`declared_instrument`,
+    `NAMED_BUT_UNUSABLE`), and that refusal belongs before an operator confirms a
+    spend rather than after — a run that discovered a bad model at its first judged
+    attempt would have attested, been shown an estimate, and had it confirmed
+    first. So the pair at boot is the proof the strings build, and this is the pair
+    that reports.
+
+    **Read off `DeclaredModels`, which is what the report prints.** Both halves of
+    each instrument — the identifier in the provenance block and the client that
+    runs — come out of one string here, on the same terms `declared_instrument`
+    pairs them at boot, so a console that moved the attacker moved both
+    (`BenchRuns.instrument`). An undeclared model is the same pair of absences it
+    is at boot: no adjudicator, and the deterministic stand-in for the attacker,
+    which reports nothing because it is not a model (`adaptive/scripted.py`).
+
+    The layers are the caller's declaration and never the wrapper's guess: the
+    adjudicator's tokens are the scored layer's and the attacker's are the adaptive
+    layer's, and a sink bound the other way round would put an adaptive figure
+    inside a scored one (ADR-0010, `usage.UsageLedger.for_layer`).
+    """
+    return Instruments(
+        adjudicator=(
+            None
+            if models.adjudicating == UNDECLARED_MODEL
+            # No temperature and no effort, which is what boot sends this one:
+            # `temperature_for(model, None)` is `None` for every model, so the two
+            # builds agree without this restating the resolution.
+            else completion_for(
+                models.adjudicating, usage=usage.for_layer(Layer.SCORED)
+            )
+        ),
+        attacker=(
+            SCRIPTED_ATTACKER
+            if models.attacking == UNDECLARED_MODEL
+            # The resolved pair off the record rather than re-resolved here, so the
+            # client this builds and the parameters the report names cannot drift:
+            # they are one reading, taken once, through `capability` (#4, #5).
+            else attacker_completion_for(
+                models.attacking,
+                models.attacking_temperature,
+                models.attacking_reasoning_effort,
+                usage=usage.for_layer(Layer.ADAPTIVE),
+            )
+        ),
+    )
 
 
 def deployed_models() -> tuple[DeclaredModels, Completion | None, AttackerCompletion]:

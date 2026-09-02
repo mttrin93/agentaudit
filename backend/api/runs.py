@@ -70,6 +70,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from enum import StrEnum
+from typing import Protocol
 
 from backend.api.report import ReportConfig, Unsigned, artefact_for
 from backend.bench.adaptive.attacker import AttackerCompletion
@@ -80,10 +81,11 @@ from backend.bench.calibration import CalibrationResult, run_calibration
 from backend.bench.capability import ReasoningEffort
 from backend.bench.contract import TargetConfig, TargetFailure, TargetUnreachable
 from backend.bench.library import Case, Family, LibraryVersion, VerdictClass
-from backend.bench.payload import GateCitation
+from backend.bench.payload import DeclaredModels, GateCitation
 from backend.bench.registration import Attestation, issue_nonce
 from backend.bench.rule import DECLARED_RULE, GateRule
 from backend.bench.signing import SignedArtefact
+from backend.bench.usage import UsageLedger
 from backend.graph.approval import Approval, Approve
 from backend.graph.budget import (
     BudgetExceeded,
@@ -234,6 +236,48 @@ class RunsInFlight(RuntimeError):
 
 
 @dataclass(frozen=True)
+class Instruments:
+    """The two instrument clients one run is made with, bound to that run's ledger.
+
+    A pair rather than two returns, and the pairing is the point: both are built
+    from one call, against one `UsageLedger`, into two different layers of it. A
+    caller that could take the adjudicator without the attacker could bind half a
+    run's usage and leave the other half reporting into nothing, which is the state
+    #28 was about — a figure absent for a reason nobody stated.
+    """
+
+    adjudicator: Completion | None
+    attacker: AttackerCompletion
+
+
+class PerRunInstruments(Protocol):
+    """How a bench builds a fresh pair of instruments for one run's ledger.
+
+    **This exists because a sink is fixed when a client is built.**
+    `completion_for(..., usage=...)` binds its sink once, at configuration time, and
+    that happens before a run exists — so a bench that built its instruments at boot
+    had nothing to bind them to, and every run started over HTTP carried a ledger
+    that reported nothing (#28). The two ways out were a client whose sink can be
+    reassigned per run, and a client built per run; this is the second.
+
+    A process-global sink was not one of them. The API runs each run on its own
+    thread, so a slot the clients share would file one run's tokens under
+    another's — and a `ContextVar` silently drops every adjudicator call, because
+    the pool that decides a judged family does not propagate context (#10). Both
+    failures are invisible in the figure they corrupt, which is the argument for
+    the shape that cannot express them: one ledger, one build, one run.
+
+    **It takes the declared models rather than holding them.** The strings this
+    builds from are the ones `report.models` prints, read at the moment of the
+    build — so an attacker set through the console reaches the next run's client
+    and the provenance block from one record, and the pairing `declared_instrument`
+    makes at boot cannot come apart later (`BenchRuns.instrument`).
+    """
+
+    def __call__(self, models: DeclaredModels, usage: UsageLedger) -> Instruments: ...
+
+
+@dataclass(frozen=True)
 class BenchConfig:
     """What every run through this API is measured with.
 
@@ -305,6 +349,49 @@ class BenchConfig:
     """
 
     approval_wait_seconds: float = APPROVAL_WAIT_SECONDS
+
+    per_run_instruments: PerRunInstruments | None = None
+    """How this bench builds instruments for one run, or `None` for the pair above.
+
+    `None` says *this bench's instruments keep no usage record*, which is the
+    honest reading for a caller that handed in clients of its own: a stub
+    adjudicator has no provider to report a token count. The deployed factory
+    always supplies one, because a run started from the console is the run whose
+    figures an operator has no other way to see (#28).
+
+    Named as an alternative to the two fields above rather than replacing them. The
+    boot-built pair is what `plan_for` reads to decide whether the judged cases are
+    attempted at all, and it is what makes a model named and unbuildable a refusal
+    at boot instead of a discovery after an operator has confirmed a spend
+    (`app.declared_instrument`, `app.NAMED_BUT_UNUSABLE`).
+    """
+
+    def instruments_for(self, usage: UsageLedger) -> Instruments:
+        """This run's instruments, reporting into this run's ledger.
+
+        One ledger per run and one build per run: `run_calibration` refuses a ledger
+        that already holds calls, because a reused one would file the first run's
+        tokens under the second run's id, and two runs on two threads sharing a sink
+        would do it silently.
+
+        **A build that disagrees with the boot-time pair is refused rather than
+        run.** `plan_for` decided which cases this run may attempt from
+        `self.adjudicator` — before the run, before the estimate — so a builder that
+        handed back `None` here would leave a run attempting judged cases with no
+        instrument, and one that handed back a client where boot had none would mean
+        the operator was shown an estimate for a narrower run than the one that ran.
+        """
+        if self.per_run_instruments is None:
+            return Instruments(adjudicator=self.adjudicator, attacker=self.attacker)
+        built = self.per_run_instruments(self.report.models, usage)
+        if (built.adjudicator is None) != (self.adjudicator is None):
+            raise ValueError(
+                "this bench built a run an adjudicator its boot-time pair does not "
+                "agree about. The plan and the estimate an operator confirmed were "
+                "built from the pair at boot, so the two have to say the same thing "
+                "about whether the judged families run at all (ADR-0007)"
+            )
+        return built
 
 
 @dataclass(frozen=True)
@@ -980,14 +1067,36 @@ def _run(record: RunRecord, config: BenchConfig, pending: PendingApproval) -> No
     # that a signature drifting away from `Approve` is a typecheck failure here
     # and not a run that halts and never resumes.
     approve: Approve = pending.approve
+    # One ledger for this run, and the instruments built against it — here, on this
+    # run's own thread, because the sink a client records through is fixed when the
+    # client is built and that used to happen at boot, before any run existed (#28).
+    # Built before `run_calibration` and so before the estimate this run halts on: a
+    # bench that could not build an instrument says so ahead of the confirmation,
+    # never after it (`app.NAMED_BUT_UNUSABLE`, ADR-0007).
+    ledger = UsageLedger()
+    try:
+        instruments = config.instruments_for(ledger)
+    except (KeyError, ValueError) as unusable:
+        record.settle(
+            RunStatus.FAILED,
+            (
+                f"this run's instruments could not be built: {unusable}. Nothing "
+                "was sent to the target and nothing was spent"
+            ),
+        )
+        return
     try:
         result = run_calibration(
             cases=record.plan.cases,
             targets=[record.target],
             attestation=record.attestation,
             approve=approve,
-            adjudicator=config.adjudicator,
-            attacker=config.attacker,
+            adjudicator=instruments.adjudicator,
+            attacker=instruments.attacker,
+            # The ledger those two report into, handed to the run that holds them.
+            # `run_calibration` refuses one that already holds calls, which is what
+            # keeps this a fresh one per run rather than a shared slot (ADR-0026).
+            usage=ledger,
             rule=config.rule,
             adaptive=config.adaptive,
             # The ceiling on the record, never one re-declared here: the operator

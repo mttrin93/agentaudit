@@ -28,9 +28,12 @@ uv run pytest -q              # tests
 uv run mypy                   # typecheck, strict
 uv run ruff check .           # lint
 uv run ruff format .          # format (CI runs --check)
+uv run pre-commit install     # once per clone: run the two Ruff checks pre-commit
 ```
 
-CI runs lint, format, typecheck and tests on every branch.
+CI runs lint, format, typecheck and tests on every branch. The pre-commit hooks
+are a local echo of CI's two Ruff steps and nothing more — they exist only on a
+clone where `pre-commit install` has been run, and CI stays the authority.
 
 ## Standing rules
 

@@ -1,0 +1,37 @@
+# Ruff's two CI steps, run before the commit exists rather than after it is
+# pushed. Nothing else belongs here: mypy and pytest stay in CI, because a hook
+# that takes a minute is a hook that gets `--no-verify`'d, and then the fast
+# ones stop running too.
+#
+# Both hooks go through scripts/ruff-hook.sh, which runs the Ruff that uv.lock
+# pins — read that file for why the version is not pinned here as well.
+#
+# Install with: uv run pre-commit install
+minimum_pre_commit_version: "4.0.0"
+
+repos:
+  - repo: local
+    hooks:
+      # `ruff check` reports and does not rewrite. No `--fix`: an autofix that
+      # rewrites logic is not a thing to apply between typing `commit` and the
+      # commit existing.
+      - id: ruff-check
+        name: ruff check .
+        entry: scripts/ruff-hook.sh check .
+        language: script
+        pass_filenames: false
+        always_run: true
+
+      # `ruff format` rewrites, and pre-commit fails the commit when a hook
+      # changed a file. That is the intended shape: the fix is mechanical and
+      # the diff is the author's to read and re-stage.
+      #
+      # CI's step is `ruff format --check .`; this one omits `--check` so the
+      # files are fixed rather than only named. The verdict is identical —
+      # a tree this hook leaves untouched is a tree `--check` passes.
+      - id: ruff-format
+        name: ruff format .
+        entry: scripts/ruff-hook.sh format .
+        language: script
+        pass_filenames: false
+        always_run: true

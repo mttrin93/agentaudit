@@ -22,6 +22,16 @@ dependencies = [
 [dependency-groups]
 dev = [
     "mypy>=1.14",
+    # Runs the Ruff hooks in .pre-commit-config.yaml. Installed with the dev
+    # group so `uv run pre-commit install` needs nothing else on the machine.
+    #
+    # Capped below 4.6.1: from that release pre-commit calls
+    # `git ls-files --deduplicate`, an option added in git 2.31, and it exits 3
+    # on anything older (Ubuntu 20.04 ships git 2.25). Verified by running
+    # `pre-commit run --all-files` on 4.0.1 through 4.6.2 against this tree:
+    # every version through 4.6.0 passes, 4.6.1 and 4.6.2 fail before reaching
+    # a hook. Raise the cap once the floor for git here is 2.31.
+    "pre-commit>=4.4.0,<4.6.1",
     "pytest>=9.1.1",
     "ruff>=0.14",
 ]

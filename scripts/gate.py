@@ -103,12 +103,15 @@ from dotenv import load_dotenv
 
 from backend.bench.admission import NotAdmitted, admitted_library
 from backend.bench.calibration import CalibrationResult, run_calibration
+from backend.bench.capability import temperature_for
 from backend.bench.cited import cite
 from backend.bench.completion import (
     DEFAULT_ADJUDICATOR_MODEL,
     DEFAULT_ATTACKER_MODEL,
+    DEFAULT_ATTACKER_TEMPERATURE,
     attacker_completion_for,
     completion_for,
+    declared_reasoning_effort,
 )
 from backend.bench.contract import TargetConfig
 from backend.bench.gate import GateResult, NotAGateRun, read_gate
@@ -122,6 +125,7 @@ from backend.bench.gate_record import (
 from backend.bench.goldset import load_gold_sets, measure_reliability
 from backend.bench.lease import LibraryBusy, holding_the_library
 from backend.bench.library import Case
+from backend.bench.payload import DeclaredModels
 from backend.bench.retirement import live_library, readings_of, store
 from backend.bench.rule import DECLARED_RULE
 from backend.bench.scorer import GateOutcome
@@ -299,7 +303,19 @@ def run_the_gate(args: argparse.Namespace) -> int:
         print(f"The gate cannot run against this library:\n{unusable}")
         return EXIT_WITHHELD
 
-    print_declared(cases, model, args, len(gold_sets), library)
+    try:
+        # Before anything is printed and long before anything is sent: the two
+        # sampling settings this run will be made at, resolved the way the app path
+        # resolves them, and refused here if the pairing cannot be had at all
+        # (`declared_instruments`). A misconfigured instrument is a refusal ahead of
+        # the attestation, which is the side of it every other refusal in this
+        # command lands on.
+        models = declared_instruments(args)
+    except ValueError as unusable:
+        print(f"No usable sampling configuration: {unusable}")
+        return EXIT_WITHHELD
+
+    print_declared(cases, model, models, len(gold_sets), library)
 
     # No usage sink on these two, and the reason is this script's shape: the
     # adjudicator built here serves the run *and* the reliability measurement
@@ -312,7 +328,17 @@ def run_the_gate(args: argparse.Namespace) -> int:
         # Both built before the attestation, so a misconfigured instrument is a
         # refusal rather than a run that stops after spending something.
         adjudicator = completion_for(args.adjudicator_model)
-        attacker = attacker_completion_for(args.attacker_model)
+        # The attacker at the settings the record above states, and not at the
+        # provider's defaults: a gate run that dropped a declared reasoning effort
+        # would run its adaptive layer at a configuration nobody chose, and diverge
+        # from the app path every other run goes through (#5, #23). The same two
+        # values reach the request and the document, off one `DeclaredModels`, so
+        # the document cannot state a setting the request did not carry.
+        attacker = attacker_completion_for(
+            args.attacker_model,
+            temperature=models.attacking_temperature,
+            reasoning_effort=models.attacking_reasoning_effort,
+        )
     except (KeyError, ValueError) as unusable:
         print(f"No usable bench model: {unusable}")
         return EXIT_WITHHELD
@@ -429,7 +455,7 @@ def run_the_gate(args: argparse.Namespace) -> int:
         result,
         library,
         Path(args.record),
-        args,
+        models,
         retirement_section(history, decisions, library),
         # The record goes into the library, beside the citation rendered from it and
         # inside the same lease as the readings: the citation names the file and every
@@ -479,7 +505,7 @@ def record_run(
     result: CalibrationResult,
     cases: Sequence[Case],
     directory: Path,
-    args: argparse.Namespace,
+    models: DeclaredModels,
     retirement: str = "",
     *,
     record_into: Path,
@@ -515,6 +541,14 @@ def record_run(
     reads either file back — a figure recovered from prose would break on a
     rewording, and there is no second arithmetic for the two to differ over.
 
+    **The instruments arrive as `DeclaredModels` rather than as the parsed command
+    line.** What the document says about them is what a target's report says about
+    them — the three identifiers and, under the attacker, the two settings in
+    `capability`'s own sentences — so the two artefacts cannot describe one
+    configuration in two vocabularies (#4, #5, #23). It also narrows what this writer
+    can reach: an `argparse.Namespace` is every flag this command has, and the only
+    ones a document may state are the ones on this record.
+
     **No payload text, on either side.** The scored half holds counts, intervals and
     the rule; the adaptive half holds prose route descriptions and the statistics.
     A route that beat a target is a working unpublished exploit and stays in the
@@ -536,17 +570,27 @@ def record_run(
         # The instrument the κ figures on this record were measured on, so a target
         # report can reuse them only where it adjudicates with the same model
         # (`cited.the_reliability`, ADR-0004).
-        adjudicating_model=args.adjudicator_model,
+        adjudicating_model=models.adjudicating,
     )
     path.write_text(
         "\n".join(
             (
                 f"# Gate run — {stamped:%Y-%m-%d %H:%M:%S} UTC",
                 "",
-                f"- reference agents: `{args.model}`",
-                f"- adjudicating model: `{args.adjudicator_model}` "
-                "(judged families only)",
-                f"- attacking model: `{args.attacker_model}` (adaptive layer only)",
+                f"- reference agents: `{models.calibration}`",
+                f"  - sampling: {NO_SAMPLING_TO_DECLARE}",
+                f"- adjudicating model: `{models.adjudicating}` (judged families only)",
+                f"  - sampling: {NO_SAMPLING_TO_DECLARE}",
+                f"- attacking model: `{models.attacking}` (adaptive layer only)",
+                # The two settings under the instrument they belong to, in the words
+                # a target's report gives them and never folded into one line: two
+                # runs of one model at one temperature and different reasoning effort
+                # are two different instruments (#5). They are nested under the line
+                # that carries the layer qualifier, because they are the adaptive
+                # layer's settings and they decide nothing the gate decides
+                # (ADR-0010).
+                f"  - sampling: {models.temperature_stated()}",
+                f"  - reasoning: {models.reasoning_effort_stated()}",
                 f"- confirmed by: {result.approval.identity}",
                 # Where the same run is in fields. A relative link rather than a
                 # copy of the file: one record, in the library the citation reads it
@@ -614,6 +658,71 @@ def exit_code(gate: GateResult) -> int:
             return EXIT_NOT_DECIDED
 
 
+NO_SAMPLING_TO_DECLARE = (
+    "this bench declares no sampling for this instrument — no temperature and no "
+    "reasoning effort were declared, and neither was sent, because there is no "
+    "setting on this bench to declare one with. Not a choice left unmade: the choice "
+    "was never offered (ADR-0025)"
+)
+"""What this document says about the two instruments that have no sampling setting.
+
+The reference agents and the adjudicator, and it is said rather than left blank for
+the reason every other absence in this project is said: a reader cannot tell an
+unstated setting from an unavailable one, and a gate document that printed nothing
+would leave them to guess which (ADR-0004, ADR-0017).
+
+Not one of `capability`'s four sentences, and deliberately not worded like them.
+Those are claims about what a *provider* accepts or about what this bench's table
+holds; this is a claim about this bench's own control surface, which is a third kind
+of fact. `payload.DeclaredModels` carries the same absence by carrying no field for
+those two instruments — the same answer, in the place a signed report gives it.
+"""
+
+
+def declared_instruments(args: argparse.Namespace) -> DeclaredModels:
+    """The three models this run is made under, and the attacker's two settings.
+
+    The same type a target's report prints its provenance block from
+    (`payload.DeclaredModels`), rather than a second record of the same three
+    identifiers: the two artefacts then state one run's instruments in one wording,
+    and the four statements a sampling setting has — a value, none declared, none
+    accepted, and no line in the table for this model — are the report's own four
+    rather than a parallel set invented here (#4, #5).
+
+    **Resolved the way the app path resolves it, and refused where it cannot be
+    resolved.** The temperature reaching the attacker is `DEFAULT_ATTACKER_TEMPERATURE`
+    — the bench's own number and nobody's choice — so a model that accepts none takes
+    none through `capability.temperature_for`, and the record then says *this model
+    accepts no temperature* rather than naming a value the request never carried. The
+    reasoning effort is the other direction: there is no default for it, so an effort
+    here is one a deployment declared, and an effort declared against a model with no
+    such setting is refused rather than dropped — which is what
+    `completion.ATTACKER_REASONING_EFFORT_ENV` says it is for, and what a run about to
+    ask a human to attest to a spend deserves. The refusal is `DeclaredModels`' own
+    `__post_init__`, so it is the type refusing and not a check this script keeps.
+
+    **The reference agents' model is not resolved here, on purpose.** Their client
+    composes no temperature and no reasoning effort at all
+    (`targets/reference/model.complete`), so there is nothing declared for this to
+    record — and the reference agents are the constructed instrument the bands are cut
+    from (ADR-0014), so giving them a sampling setting would move every rate the bench
+    calibrates against. What the document says about them instead is
+    `NO_SAMPLING_TO_DECLARE`.
+    """
+    return DeclaredModels(
+        calibration=args.model,
+        adjudicating=args.adjudicator_model,
+        attacking=args.attacker_model,
+        attacking_temperature=temperature_for(
+            args.attacker_model, DEFAULT_ATTACKER_TEMPERATURE
+        ),
+        # Unresolved on purpose, unlike the temperature: `reasoning_effort_for` would
+        # drop an effort a deployment declared, and this is the entry point where
+        # dropping it silently was the fault (#23).
+        attacking_reasoning_effort=declared_reasoning_effort(),
+    )
+
+
 def reference_targets(base_url: str, auth_token: str) -> list[TargetConfig]:
     """All three reference agents, described the way any target is described."""
     return [
@@ -635,7 +744,7 @@ def reference_targets(base_url: str, auth_token: str) -> list[TargetConfig]:
 def print_declared(
     cases: Sequence[Case],
     model: ModelConfig,
-    args: argparse.Namespace,
+    models: DeclaredModels,
     gold_sets: int,
     library: Sequence[Case],
 ) -> None:
@@ -644,10 +753,24 @@ def print_declared(
     The instruments, the library and the rule, in front of the operator ahead of the
     attestation — so that the bar is read before the result exists rather than after
     it (spec story 46).
+
+    **The settings, and not only the identifiers.** A model name is not a
+    configuration: the same attacker at two reasoning efforts is two instruments, and
+    an operator about to attest to a spend is shown which one they are about to spend
+    it on. Each is a sentence rather than a value, so the absences stay four
+    statements and not one blank (`DeclaredModels`, #4, #5).
     """
     print(f"reference agent model: {model}")
-    print(f"adjudicating model:    {args.adjudicator_model}  (judged families only)")
-    print(f"attacking model:       {args.attacker_model}  (adaptive layer only)")
+    print(f"  sampling:            {NO_SAMPLING_TO_DECLARE}")
+    print(f"adjudicating model:    {models.adjudicating}  (judged families only)")
+    print(f"  sampling:            {NO_SAMPLING_TO_DECLARE}")
+    print(f"attacking model:       {models.attacking}  (adaptive layer only)")
+    # Under the instrument they are settings of, and under the one line that carries
+    # the layer qualifier: these are the adaptive layer's settings, they decide
+    # nothing the gate decides, and nothing here may read as though they did
+    # (ADR-0010).
+    print(f"  sampling:            {models.temperature_stated()}")
+    print(f"  reasoning:           {models.reasoning_effort_stated()}")
     print(f"cases loaded:          {len(cases)} live of {len(library)} written")
     print(f"gold sets loaded:      {gold_sets}")
     print(f"attempts per case:     {DECLARED_RULE.attempts_per_case}")

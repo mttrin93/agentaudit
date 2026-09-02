@@ -12,7 +12,6 @@ The invariant these tests exist for is the one that has no natural home in eithe
 to fail a working bench, and a lucky one must not pass a broken one.
 """
 
-import argparse
 import ast
 import itertools
 import json
@@ -26,12 +25,21 @@ from backend.bench.adaptive.attacker import AttackerCompletion
 from backend.bench.adaptive.scripted import SCRIPTED_ATTACKER
 from backend.bench.adjudication import Completion
 from backend.bench.calibration import CalibrationResult, TargetRun, run_calibration
+from backend.bench.capability import (
+    NO_TEMPERATURE_ACCEPTED,
+    PRESUMED_NO_REASONING_EFFORT,
+    ReasoningEffort,
+)
 from backend.bench.cited import (
     CITED_GATE_RUN,
     citation_of,
     cite,
     the_citation,
     the_reliability,
+)
+from backend.bench.completion import (
+    ATTACKER_REASONING_EFFORT_ENV,
+    DEFAULT_ATTACKER_TEMPERATURE,
 )
 from backend.bench.evaluator import Verdict
 from backend.bench.gate import GateResult, NotAGateRun, read_gate
@@ -45,6 +53,7 @@ from backend.bench.library import (
     load_library,
 )
 from backend.bench.measurability import NotMeasurable
+from backend.bench.payload import DeclaredModels
 from backend.bench.rule import DECLARED_RULE, GateRule
 from backend.bench.scorer import (
     ExclusionReason,
@@ -70,6 +79,7 @@ from scripts.console import EXIT_WITHHELD
 from scripts.gate import (
     EXIT_GATE_FAILED,
     EXIT_NOT_DECIDED,
+    NO_SAMPLING_TO_DECLARE,
     WrittenRun,
     exit_code,
     main,
@@ -605,7 +615,7 @@ def test_a_terminal_gate_run_leaves_a_library_that_can_publish_its_kappa(
     # And the reliability behind the citation is reachable from the library alone,
     # which is all a booting bench is given.
     read_back = the_reliability(cases)
-    assert read_back.adjudicating_model == _declared_models().adjudicator_model
+    assert read_back.adjudicating_model == _declared_models().adjudicating
     assert {
         family: reading.kappa for family, reading in read_back.measured.items()
     } == {
@@ -614,7 +624,7 @@ def test_a_terminal_gate_run_leaves_a_library_that_can_publish_its_kappa(
     }
     # The guard still holds: these figures are about one adjudicator and reach a
     # report only where that is the adjudicator (ADR-0004).
-    assert read_back.for_adjudicator(_declared_models().adjudicator_model)
+    assert read_back.for_adjudicator(_declared_models().adjudicating)
     assert not read_back.for_adjudicator("openrouter:another/model")
 
 
@@ -965,8 +975,17 @@ def _adjudicator_stand_in(spec: str) -> Completion:
     return adjudicating(Verdict.SUCCEEDED)
 
 
-def _attacker_stand_in(spec: str) -> AttackerCompletion:
-    """The adaptive layer's attacker, stubbed by the deterministic stand-in."""
+def _attacker_stand_in(
+    spec: str,
+    temperature: float | None = None,
+    reasoning_effort: ReasoningEffort | None = None,
+) -> AttackerCompletion:
+    """The adaptive layer's attacker, stubbed by the deterministic stand-in.
+
+    It takes the two sampling settings because the entry point passes them (#23), and
+    a stand-in whose signature was narrower than the builder's would be a stand-in
+    that could only be called the way the bug called it.
+    """
     assert spec == ATTACKER_STAND_IN, spec
     return SCRIPTED_ATTACKER
 
@@ -1401,12 +1420,204 @@ def test_the_exit_code_tells_a_failed_gate_from_one_that_was_not_decided() -> No
     assert (exit_code(undecided), undecided.stops_the_build) == (EXIT_NOT_DECIDED, True)
 
 
-def _declared_models() -> argparse.Namespace:
-    """The three model settings a run records, as the entry point holds them."""
-    return argparse.Namespace(
-        model="stub:obedient",
-        adjudicator_model="the suite's stub",
-        attacker_model="the scripted stand-in",
+# --- The sampling a gate run declares ----------------------------------------
+#
+# A model identifier is not a configuration. The same attacker at two reasoning
+# efforts is two instruments, so a gate document that named the model and not the
+# settings was a document nobody can re-derive a pass or a fail from — and the gate
+# built its attacker from the string alone, so the effort a deployment declared was
+# honoured by the console and dropped here (#23).
+
+REASONING_ATTACKER = "openrouter:openai/gpt-5"
+"""A declared row in the capability table: takes an effort, takes no temperature."""
+
+PRESUMED_ATTACKER = "openrouter:anthropic/claude-sonnet-4"
+"""No line in the capability table, so the standard chat set is presumed."""
+
+
+def _built(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, object, object]]:
+    """Every attacker this run built, with the two settings it was built at.
+
+    The builder's arguments rather than its return, because what is being asserted is
+    that the settings reached the request: a stand-in that ignored them would satisfy
+    a test written over the attacker it handed back.
+    """
+    built: list[tuple[str, object, object]] = []
+
+    def build(
+        spec: str,
+        temperature: float | None = None,
+        reasoning_effort: ReasoningEffort | None = None,
+    ) -> AttackerCompletion:
+        built.append((spec, temperature, reasoning_effort))
+        return SCRIPTED_ATTACKER
+
+    monkeypatch.setattr("scripts.gate.attacker_completion_for", build)
+    monkeypatch.setattr(
+        "scripts.gate.completion_for", lambda spec: adjudicating(Verdict.SUCCEEDED)
+    )
+    return built
+
+
+def _declaring(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, attacker: str, effort: str = ""
+) -> tuple[list[tuple[str, object, object]], int]:
+    """A gate run declared with that attacker and that effort, stopped at consent.
+
+    It reaches the instruments and no further: nothing is patched over `attest`, and
+    a run nobody is watching answers no three times and spends nothing (ADR-0007).
+    Which is exactly the reach this needs — the settings are resolved, printed and
+    built with before the attestation, and that is the property under test.
+    """
+    monkeypatch.setenv(ATTACKER_REASONING_EFFORT_ENV, effort)
+    built = _built(monkeypatch)
+    code = main(
+        [
+            "--identity",
+            "bench engineer, sampling test",
+            "--model",
+            "stub:obedient",
+            "--attacker-model",
+            attacker,
+            "--cases",
+            str(authored_library(tmp_path / "cases")),
+            "--record",
+            str(tmp_path),
+        ]
+    )
+    return built, code
+
+
+def test_a_gate_run_builds_its_attacker_at_the_declared_reasoning_effort(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The fault this ticket is mostly about: the declaration reaching the request.
+
+    `AGENTAUDIT_ATTACKER_REASONING_EFFORT` was read by `backend/api/` and by nothing
+    else, so a deployment that declared an effort got it honoured by the console and
+    silently dropped by the gate — the adaptive layer of the run that decides whether
+    the bench is trusted ran at a configuration nobody chose. Asserted over the
+    builder's arguments, because that is where the divergence was.
+
+    The temperature is `None` beside it and that is the resolution, not a second
+    absence: this attacker accepts no explicit temperature, so the bench's own
+    `DEFAULT_ATTACKER_TEMPERATURE` is resolved away through
+    `capability.temperature_for` rather than sent and refused (#4).
+    """
+    built, code = _declaring(monkeypatch, tmp_path, REASONING_ATTACKER, "high")
+
+    assert built == [(REASONING_ATTACKER, None, ReasoningEffort.HIGH)], (
+        "the gate built its attacker without the effort its deployment declared. "
+        "The console honours it and the gate has to make the same run"
+    )
+    # Nothing was sent: the run reached its instruments and withheld at the
+    # attestation, which is the side of it a misconfiguration has to land on.
+    assert code == EXIT_WITHHELD
+    assert "gate run" not in capsys.readouterr().out
+
+
+def test_a_gate_run_states_both_settings_before_it_asks_for_anything(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """What the operator reads before they attest: the settings, each as a sentence.
+
+    The four statements a sampling setting has are kept apart here as they are in a
+    target's report — a value, none declared, none accepted, and no line in the table
+    for this model — and this run is declared with an attacker of the fourth kind,
+    because that is the one a blank would misreport as the third: *this model has no
+    reasoning effort* is a claim about a provider and a presumption is a claim about
+    this bench's own table (#5, ADR-0017).
+    """
+    _, code = _declaring(monkeypatch, tmp_path, PRESUMED_ATTACKER)
+
+    printed = capsys.readouterr().out
+    assert code == EXIT_WITHHELD
+    assert PRESUMED_NO_REASONING_EFFORT in printed
+    assert "no line in the capability table" in printed
+    # A number this bench chose, printed as declared rather than left to a reader to
+    # infer from the provider's documentation.
+    assert f"temperature {DEFAULT_ATTACKER_TEMPERATURE}" in printed
+    # And the two instruments the bench declares no sampling for say so, rather than
+    # leaving a reader to guess whether a setting was unstated or unavailable.
+    assert printed.count(NO_SAMPLING_TO_DECLARE) == 2
+
+
+def test_an_effort_the_attacking_model_has_no_setting_for_is_refused_before_consent(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A misconfigured instrument is a refusal, and it is on this side of the ask.
+
+    #4's precedent: a pairing the provider will reject is refused on the strength of
+    the declared table, at configuration time, rather than discovered at the first
+    episode of a run whose budget is already moving. The proof is that no attacker was
+    built at all — a refusal after the instrument exists is a refusal that has already
+    let the run start.
+    """
+    built, code = _declaring(monkeypatch, tmp_path, PRESUMED_ATTACKER, "high")
+
+    printed = capsys.readouterr().out
+    assert code == EXIT_WITHHELD
+    assert not built
+    assert "No usable sampling configuration" in printed
+    assert "has no such setting" in printed
+    # Ahead of everything: the rule was not printed, no instrument was built, and
+    # nothing was asked of the operator.
+    assert "the decision rule as applied" not in printed
+
+
+def test_the_gate_document_states_the_settings_under_the_instrument_they_belong_to(
+    gate_run: CalibrationResult, tmp_path: Path
+) -> None:
+    """The document a person reads, and where in it the two settings land.
+
+    Under the attacking model, which is the line that carries `(adaptive layer only)`,
+    and never in the scored-layer section: they are the adaptive layer's settings and
+    they decide nothing the gate decides, so a reader may not meet them among the
+    figures that do (ADR-0010).
+
+    In the report's own words, because they come off the report's own type: a gate
+    document that worded the same absence differently would be two artefacts
+    describing one configuration in two vocabularies (#4, #5).
+    """
+    models = replace(
+        _declared_models(),
+        attacking=REASONING_ATTACKER,
+        attacking_reasoning_effort=ReasoningEffort.LOW,
+    )
+
+    written = record_run(
+        _gate(gate_run.target_runs),
+        gate_run,
+        load_library(CASES_DIR),
+        tmp_path,
+        models,
+        record_into=tmp_path / "cases",
+    ).document.read_text(encoding="utf-8")
+
+    assert f"- attacking model: `{REASONING_ATTACKER}` (adaptive layer only)" in written
+    assert f"  - sampling: {models.temperature_stated()}" in written
+    assert f"  - reasoning: {models.reasoning_effort_stated()}" in written
+    # The temperature is the model's own absence and not an unmade choice, and the
+    # document says which — the distinction a blank field destroys.
+    assert NO_TEMPERATURE_ACCEPTED in written
+    assert "reasoning effort low — declared" in written
+    # And nothing about the adaptive layer's configuration reached the section that
+    # decides the gate.
+    assert "reasoning" not in _scored_block(written)
+
+
+def _declared_models() -> DeclaredModels:
+    """The three model settings a run records, as the entry point holds them.
+
+    The report's own type since #23, not this suite's copy of it: the gate document
+    and a target's provenance block state one run's instruments in one wording, and a
+    helper that built its own record would be free to drift from the one the entry
+    point passes.
+    """
+    return DeclaredModels(
+        calibration="stub:obedient",
+        adjudicating="the suite's stub",
+        attacking="the scripted stand-in",
     )
 
 

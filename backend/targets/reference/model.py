@@ -15,6 +15,7 @@ The ``stub`` provider resolves to the deterministic models in `stub_models`.
 
 import functools
 import os
+import time
 from dataclasses import dataclass
 from enum import StrEnum
 
@@ -22,6 +23,7 @@ from openai import OpenAI
 
 from backend.bench.contract import DEFAULT_RETRY
 from backend.bench.unfinished import refuse_unfinished
+from backend.bench.usage import ASK_FOR_COST, DISCARDED, UsageSink, usage_from
 from backend.targets.reference.stub_models import stub_completion
 
 DEFAULT_OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
@@ -154,24 +156,53 @@ def measures_the_field(config: ModelConfig) -> bool:
             return False
 
 
-def complete(config: ModelConfig, system_prompt: str, message: str) -> str:
+def complete(
+    config: ModelConfig,
+    system_prompt: str,
+    message: str,
+    usage: UsageSink = DISCARDED,
+) -> str:
     """One turn from the configured model: a system prompt and a message in,
-    text out."""
+    text out.
+
+    **What the provider said about the call goes to `usage`, beside the text.** The
+    return stays a string, because the agent's reply contract is
+    `{reply, tool_trace}` and nothing about a token count belongs on the wire back
+    to the bench (`bench/contract.py`, ADR-0026). The sink is the agent's own, and
+    its records carry no layer — which half of a run asked for this turn is not a
+    fact anything on this side of the contract holds
+    (`usage.LAYER_IS_NOT_A_TARGETS_FACT`).
+
+    **The stub reports nothing and is not made to.** A deterministic stand-in has
+    no provider, so it has no figures, and inventing some would put a measurement
+    of the field's cost behind a model `measures_the_field` already answers `False`
+    for (ADR-0022).
+    """
     match config.provider:
         case Provider.STUB:
             return stub_completion(config.name, system_prompt, message)
         case Provider.OPENROUTER:
-            return _openrouter_completion(config.name, system_prompt, message)
+            return _openrouter_completion(config.name, system_prompt, message, usage)
 
 
-def _openrouter_completion(name: str, system_prompt: str, message: str) -> str:
+def _openrouter_completion(
+    name: str, system_prompt: str, message: str, usage: UsageSink = DISCARDED
+) -> str:
+    started = time.monotonic()
     completion = _openrouter_client().chat.completions.create(
         model=name,
         messages=[
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": message},
         ],
+        # The router reports what the call cost only when the request asks, and
+        # this is the ask (`usage.ASK_FOR_COST`).
+        extra_body=ASK_FOR_COST,
     )
+    # Before the refusal below, so that a reply cut off at the token cap is still a
+    # recorded spend: this agent's server answers 5xx for it and the bench records
+    # no attempt, and neither of those makes the tokens unspent.
+    usage.record(usage_from(completion, name, time.monotonic() - started))
     # Checked before the content is read, for the reason `backend/bench/unfinished`
     # gives. A reference agent whose model was cut off at the token cap would hand
     # the bench half a reply, and half a reply is scored: a refusal truncated

@@ -71,12 +71,18 @@ incidental:
 **Token counts.** The admitted list of #112 names call counts and token counts per
 layer. Calls are here, from `RunState.spent`, which is the figure the bench enforces
 its two ceilings against. Tokens are not, and the reason is this module's own second
-rule: nothing in the bench measures a token today — the target contract returns
-`{reply, tool_trace}` with no usage, and `completion.py` discards the usage the
-provider returns. A token field populated here would be a figure whose only source
-was the sink, which is exactly what "never the authority for a figure" forbids. The
-bench learns to count tokens first, in the run, where a report can print them; then
-this module carries what the run holds.
+rule: a token field whose only source was the sink is exactly what "never the
+authority for a figure" forbids, so the bench had to learn to count tokens first, in
+the run, where a report can print them.
+
+**It now does, and that is not yet a licence to emit them.** `bench/usage.py` keeps
+what the provider returned about every model call the bench makes — tokens in and
+out, reasoning tokens, the router's own cost, the stop reason and the generation id,
+bucketed per layer and absent rather than zero (#9). So the source is no longer the
+sink. What is still missing is the permission: ADR-0026 declares these fields absent
+*with a reason*, and adding a member to `Field` amends that ADR rather than
+implementing it. The amendment is #10's, agreed before the enum grows, and until
+then `Field` stays exactly as long as the ADR says it is.
 """
 
 from __future__ import annotations

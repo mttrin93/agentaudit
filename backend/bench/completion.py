@@ -27,6 +27,7 @@ them with a stub instead of a network call.
 
 import functools
 import os
+import time
 from enum import StrEnum
 
 from openai import OpenAI, omit
@@ -46,6 +47,7 @@ from backend.bench.capability import (
     accepts_temperature,
 )
 from backend.bench.unfinished import refuse_unfinished
+from backend.bench.usage import ASK_FOR_COST, DISCARDED, UsageSink, usage_from
 
 DEFAULT_OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 
@@ -251,6 +253,7 @@ def completion_for(
     spec: str,
     temperature: float | None = None,
     reasoning_effort: ReasoningEffort | None = None,
+    usage: UsageSink = DISCARDED,
 ) -> Completion:
     """The bench's model call, from a `<provider>:<model>` configuration string.
 
@@ -258,6 +261,16 @@ def completion_for(
     can record and print. Parsed against a closed set of providers, like every other
     enumeration in the bench: an unrecognised provider fails here rather than at the
     first call.
+
+    **`usage` is where the provider's own figures go, and it is beside the return
+    and not in it.** `Completion` stays `(system_prompt, message) -> str`: a judge or
+    an adjudicator that could see a token count or a cost is an instrument whose
+    verdict is no longer derivable from the record a reader holds (ADR-0004), so the
+    record travels to a sink the caller bound to a layer
+    (`UsageLedger.for_layer`) and never through the signature that decides. The
+    default is `DISCARDED` and it is named rather than `None`, so a caller that keeps
+    no usage says so instead of leaving a reader to wonder whether a sink was
+    forgotten.
     """
     provider, _, name = spec.partition(":")
     if not provider or not name:
@@ -266,13 +279,14 @@ def completion_for(
         )
     match Provider(provider):
         case Provider.OPENROUTER:
-            return _openrouter_completion(name, temperature, reasoning_effort)
+            return _openrouter_completion(name, temperature, reasoning_effort, usage)
 
 
 def _openrouter_completion(
     name: str,
     temperature: float | None = None,
     reasoning_effort: ReasoningEffort | None = None,
+    usage: UsageSink = DISCARDED,
 ) -> Completion:
     # The client is built here rather than on the first call, so a missing
     # credential is a refusal at configuration time. A run that reached its first
@@ -283,6 +297,7 @@ def _openrouter_completion(
     client = _client()
 
     def complete(system_prompt: str, message: str) -> str:
+        started = time.monotonic()
         answered = client.chat.completions.create(
             model=name,
             messages=[
@@ -300,7 +315,16 @@ def _openrouter_completion(
             reasoning_effort=(
                 omit if reasoning_effort is None else reasoning_effort.value
             ),
+            # The router reports what the call cost only when the request asks,
+            # and this is the ask (`usage.ASK_FOR_COST`).
+            extra_body=ASK_FOR_COST,
         )
+        # Recorded before the reply is ruled on, and that order is deliberate: a
+        # truncated call cost the operator its tokens all the same, and the one
+        # call whose finish reason a reader most wants is the one that did not
+        # finish. Usage is not an `Attempt` and records none — `refuse_unfinished`
+        # still raises on the next line and no numerator moves (`unfinished`).
+        usage.record(usage_from(answered, name, time.monotonic() - started))
         # Before `message` is read at all. A reply cut off at the token cap is a
         # partial string, and `_verdict_in` cannot tell one from a short answer:
         # a truncation that happened to carry a verdict word would decide a judged
@@ -315,6 +339,7 @@ def attacker_completion_for(
     spec: str,
     temperature: float | None = None,
     reasoning_effort: ReasoningEffort | None = None,
+    usage: UsageSink = DISCARDED,
 ) -> AttackerCompletion:
     """The adaptive attacker's model call, from the same configuration string.
 
@@ -324,6 +349,11 @@ def attacker_completion_for(
     `adjudication.Completion` precisely so one instrument can move without the
     other (ADR-0011), and widening a shared builder to return either would put the
     two back on one setting through the back door.
+
+    `usage` is the same sink on the same terms, and the caller binds it to
+    `Layer.ADAPTIVE` — an attacker's tokens counted into the scored layer's total
+    would be an adaptive figure inside a scored one, which is the arithmetic
+    ADR-0010 exists to prevent.
     """
     provider, _, name = spec.partition(":")
     if not provider or not name:
@@ -332,13 +362,14 @@ def attacker_completion_for(
         )
     match Provider(provider):
         case Provider.OPENROUTER:
-            return _openrouter_attacker(name, temperature, reasoning_effort)
+            return _openrouter_attacker(name, temperature, reasoning_effort, usage)
 
 
 def _openrouter_attacker(
     name: str,
     temperature: float | None = None,
     reasoning_effort: ReasoningEffort | None = None,
+    usage: UsageSink = DISCARDED,
 ) -> AttackerCompletion:
     # Built at configuration time for the reason `_openrouter_completion` is: a
     # missing credential is a refusal now rather than at the first episode.
@@ -347,6 +378,7 @@ def _openrouter_attacker(
     client = _client()
 
     def attack(system_prompt: str, brief: str) -> ToolInvocation | None:
+        started = time.monotonic()
         answered = client.chat.completions.create(
             model=name,
             messages=[
@@ -363,7 +395,14 @@ def _openrouter_attacker(
             reasoning_effort=(
                 omit if reasoning_effort is None else reasoning_effort.value
             ),
+            # The router reports what the call cost only when the request asks,
+            # and this is the ask (`usage.ASK_FOR_COST`).
+            extra_body=ASK_FOR_COST,
         )
+        # Recorded before the reply is ruled on, for the reason
+        # `_openrouter_completion` gives: an episode that ended in a truncated tool
+        # call still spent what it spent.
+        usage.record(usage_from(answered, name, time.monotonic() - started))
         # Same check, and it matters more here: a `tool_calls` array cut off at the
         # cap is malformed JSON arriving where the structured path expects a
         # decision. `tool_calls` is itself a *complete* stop reason — it is how

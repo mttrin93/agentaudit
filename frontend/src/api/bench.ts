@@ -420,7 +420,19 @@ export interface ReportProvenance {
     recorded_at: string
     statements: string[]
   }
-  models: { calibration: string; adjudicating: string; attacking: string }
+  models: {
+    calibration: string
+    adjudicating: string
+    attacking: string
+    /** The attacker's sampling temperature, or `null` for two different absences. */
+    attacking_temperature: number | null
+    /**
+     * Which of the three the null is — nobody declared one, or the model accepts
+     * none. The number field cannot carry the difference, so the document states
+     * it and this app prints the statement rather than interpreting the value.
+     */
+    attacking_temperature_stated: string
+  }
   library: { cases: number; digest: string; stated: string }
   /** Per layer, as the record keeps them. Nothing adds these two. */
   calls_spent: Record<string, number>

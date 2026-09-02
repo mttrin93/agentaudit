@@ -30,6 +30,7 @@ from pathlib import Path
 import pytest
 
 from backend.bench.assembler import ControlStatus, FamilyEntry, ScannedControl
+from backend.bench.capability import NO_TEMPERATURE_ACCEPTED
 from backend.bench.contract import DeclaredControl
 from backend.bench.library import Family
 from backend.bench.measurability import NotMeasurable
@@ -52,6 +53,7 @@ from backend.bench.reproducibility import Reproducibility
 from backend.bench.scorer import Band, GateOutcome
 from backend.tests.test_payload import (
     FORBIDDEN_IN_A_KEY,
+    MODELS,
     a_payload,
     a_provenance,
     a_result,
@@ -241,6 +243,35 @@ def test_the_document_says_whether_control_of_the_endpoint_was_proved_or_declare
     assert CONTROL_PROVED not in declared
     assert "declared, and not proved" in declared
     assert "does not establish" in CONTROL_DECLARED
+
+
+def test_the_document_says_which_of_the_three_temperatures_the_attacker_ran_at() -> (
+    None
+):
+    """The sampling line beside the attacker's identifier, and it is one of three.
+
+    Two of them read as an absence in the payload's number field — nobody declared
+    one, and the model accepts none — and a document that printed the number and
+    stopped would leave a reader unable to tell which. The third is a value somebody
+    chose. Inside the rendering, and so inside the digest the signature covers.
+    """
+    undeclared = render(a_payload())
+    unavailable = render(
+        a_payload(
+            provenance=replace(
+                a_provenance(),
+                models=replace(MODELS, attacking="openrouter:openai/gpt-5-mini"),
+            )
+        )
+    )
+
+    assert "no temperature declared" in undeclared
+    assert NO_TEMPERATURE_ACCEPTED not in undeclared
+
+    # The whole sentence, because it is the load-bearing half: *the choice was
+    # unavailable, not unmade* is the distinction a number field cannot carry.
+    assert NO_TEMPERATURE_ACCEPTED in unavailable
+    assert "the choice was unavailable, not unmade" in unavailable
 
 
 # --- Two claims, printed together (ADR-0017) ---------------------------------

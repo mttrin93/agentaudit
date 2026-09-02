@@ -69,6 +69,7 @@ from backend.api.runs import BenchConfig, BenchRuns, DeclaredGap, plan_for
 from backend.bench.adaptive.budget import DECLARED_ADAPTIVE_BUDGET, AdaptiveBudget
 from backend.bench.adaptive.episode import AttackerTool
 from backend.bench.adaptive.tools import ToolInvocation
+from backend.bench.capability import accepts_temperature
 from backend.bench.library import Case, Family, LibraryVersion
 from backend.bench.payload import DeclaredModels
 from backend.bench.rule import DECLARED_RULE, GateRule
@@ -697,6 +698,96 @@ def test_a_setting_outside_its_range_is_refused_rather_than_clamped() -> None:
     assert answered.status_code == 422
     assert "temperature=9.5" in answered.json()["detail"]
     assert after["tuning"]["temperature"] is None
+
+
+A_MODEL_THAT_TAKES_NO_TEMPERATURE = "openrouter:openai/gpt-5-mini"
+"""On the offered list, and the model #4 was filed for.
+
+Named rather than searched for, so this test says which model it is about; that it
+is still on the list, and still one that accepts none, is asserted below.
+"""
+
+
+def test_a_temperature_a_model_rejects_is_refused_when_it_is_set(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Told in front of the estimate, not sixty calls into a run.
+
+    The capability is declared (`bench/capability.py`), so the refusal costs no call
+    — which is the whole of #4: the provider used to answer this question at the
+    first episode, after the operator had attested and confirmed a spend.
+
+    Refused rather than dropped, on the reasoning `_within` refuses a number out of
+    range: a bench that quietly sent no temperature would print the setting in a
+    provenance block as though the request had carried it (ADR-0004, ADR-0025).
+    """
+    monkeypatch.setattr(
+        "backend.api.app.attacker_completion_for",
+        lambda spec, temperature=None: _attacking,
+    )
+    assert A_MODEL_THAT_TAKES_NO_TEMPERATURE in [
+        identifier for identifier, _ in ATTACKER_MODELS
+    ]
+    assert not accepts_temperature(A_MODEL_THAT_TAKES_NO_TEMPERATURE)
+
+    app = create_app(BenchConfig(cases=[]))
+    with TestClient(app) as client:
+        refused = client.put(
+            BENCH_TUNING_ROUTE,
+            json={
+                "attacker_model": A_MODEL_THAT_TAKES_NO_TEMPERATURE,
+                "temperature": 0.4,
+                "turns_per_episode": 8,
+                "episodes_per_family": 2,
+                "attempts_per_case": 10,
+            },
+        )
+        after = client.get(BENCH_SETTINGS_ROUTE).json()["tuning"]
+
+    assert refused.status_code == 422
+    detail = refused.json()["detail"]
+    assert "temperature=0.4" in detail
+    assert A_MODEL_THAT_TAKES_NO_TEMPERATURE in detail
+    # Nothing was set: not the temperature, and not the model beside it. A refused
+    # request leaves the bench on the instrument it was on.
+    assert after["temperature"] is None
+    [chosen] = [model for model in after["attacker_models"] if model["chosen"]]
+    assert chosen["identifier"] == UNDECLARED_MODEL
+
+
+def test_a_model_that_takes_no_temperature_can_be_set_without_one(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """And the run made under it reads as *this model takes none*, never as 0.0.
+
+    The other half of the refusal above, and the one that makes the family usable at
+    all: leaving the field empty is available, it is what the console sends for an
+    untouched slider, and the provenance block states which of the two absences it
+    is (`DeclaredModels.temperature_stated`).
+    """
+    monkeypatch.setattr(
+        "backend.api.app.attacker_completion_for",
+        lambda spec, temperature=None: _attacking,
+    )
+    app = create_app(BenchConfig(cases=[]))
+    with TestClient(app) as client:
+        answered = client.put(
+            BENCH_TUNING_ROUTE,
+            json={
+                "attacker_model": A_MODEL_THAT_TAKES_NO_TEMPERATURE,
+                "temperature": None,
+                "turns_per_episode": 8,
+                "episodes_per_family": 2,
+                "attempts_per_case": 10,
+            },
+        )
+        models = cast(BenchRuns, app.state.bench).config.report.models
+
+    assert answered.status_code == 200
+    assert answered.json()["tuning"]["temperature"] is None
+    assert models.attacking == A_MODEL_THAT_TAKES_NO_TEMPERATURE
+    assert models.attacking_temperature is None
+    assert "accepts no temperature" in models.temperature_stated()
 
 
 def test_the_block_says_a_run_below_the_declared_rule_is_not_a_gate_result() -> None:

@@ -206,6 +206,11 @@ from backend.bench.adaptive.episode import AdaptiveEpisode, EpisodeOutcome
 from backend.bench.adaptive.scripted import SCRIPTED_ATTACKER
 from backend.bench.adjudication import Completion
 from backend.bench.admission import admitted_library
+from backend.bench.capability import (
+    NO_TEMPERATURE_ACCEPTED,
+    accepts_temperature,
+    temperature_for,
+)
 from backend.bench.cited import the_citation, the_reliability
 from backend.bench.completion import (
     ADJUDICATOR_MODEL_ENV,
@@ -3011,6 +3016,32 @@ def _within(named: str, value: float | None, bounds: tuple[float, float]) -> Non
         )
 
 
+def _a_temperature_this_model_takes(model: str, temperature: float | None) -> None:
+    """Refuse a temperature the model rejects, at the moment it is set.
+
+    In front of the estimate rather than sixty calls into a run. The capability is
+    declared, so this is answerable without spending a call to find out
+    (`bench/capability.py`), and the operator who typed the number is the person told
+    it cannot be had — which is the one thing the old arrangement could not do: the
+    provider's refusal arrived at the first episode, after an attestation and a
+    confirmed spend.
+
+    Refused rather than dropped, on `_within`'s reasoning one step further: a bench
+    that quietly sent no temperature would print the setting in a provenance block as
+    though the request had carried it (ADR-0004, ADR-0025). Leaving the field empty
+    is available and means something of its own.
+    """
+    if temperature is None or accepts_temperature(model):
+        return
+    raise HTTPException(
+        status_code=422,
+        detail=(
+            f"{model} accepts no temperature, so temperature={temperature} was not "
+            f"set. {NO_TEMPERATURE_ACCEPTED}"
+        ),
+    )
+
+
 BENCH_TUNING_ROUTE = "/bench/settings/tuning"
 """Where the declared inputs of the next run are set. The one write on this bench.
 
@@ -3935,7 +3966,13 @@ def _declared[Instrument](
     if declared is None:
         return UNDECLARED_MODEL, None
     try:
-        return declared, build(declared, temperature)
+        # Resolved against the capability table rather than sent as declared. The
+        # temperature reaching here is the *bench's* own default and not an
+        # operator's choice, so a model that accepts none takes none and the record
+        # says which of the two absences that is (`capability.temperature_for`, #4).
+        # A deployment that declared a GPT-5-family attacker used to boot cleanly
+        # and fail at the first episode of the first run.
+        return declared, build(declared, temperature_for(declared, temperature))
     except (KeyError, ValueError) as unusable:
         raise RuntimeError(
             f"{variable}={declared!r}: {unusable}. {NAMED_BUT_UNUSABLE}"
@@ -3984,7 +4021,14 @@ def deployed_models() -> tuple[DeclaredModels, Completion | None, AttackerComple
             # Declared even when the model is not: the temperature a run was sampled
             # at is a condition of that run, and a bench that left it unstated would
             # be repeatable only by whoever knows what the provider defaults to.
-            attacking_temperature=DEFAULT_ATTACKER_TEMPERATURE,
+            #
+            # Through the same resolution the client above was built with, so the
+            # record and the request agree: a model that accepts no temperature
+            # records `None`, which `temperature_stated` prints as *this model takes
+            # none* rather than as nothing declared (#4).
+            attacking_temperature=temperature_for(
+                attacking, DEFAULT_ATTACKER_TEMPERATURE
+            ),
         ),
         adjudicator,
         attacker or SCRIPTED_ATTACKER,
@@ -4533,6 +4577,7 @@ def create_app(
                 ),
             )
         _within("temperature", asked.temperature, TEMPERATURE_RANGE)
+        _a_temperature_this_model_takes(asked.attacker_model, asked.temperature)
         _within("turns_per_episode", asked.turns_per_episode, TURNS_RANGE)
         _within("episodes_per_family", asked.episodes_per_family, EPISODES_RANGE)
         _within("attempts_per_case", asked.attempts_per_case, ATTEMPTS_RANGE)

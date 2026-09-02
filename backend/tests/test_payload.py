@@ -215,6 +215,11 @@ def test_the_provenance_block_says_how_this_was_made_and_what_it_cost_per_layer(
         "calibration": "openrouter:openai/gpt-4.1-nano",
         "adjudicating": "openrouter:openai/gpt-4.1-mini",
         "attacking": "openrouter:openai/gpt-4.1-mini",
+        # Beside the identifier and never folded into it, and the sentence beside
+        # the value: an absent temperature is two different facts about a run and
+        # the value alone cannot say which (#4, ADR-0025).
+        "attacking_temperature": None,
+        "attacking_temperature_stated": MODELS.temperature_stated(),
     }
     assert block["library"] == {
         "cases": 18,
@@ -226,6 +231,55 @@ def test_the_provenance_block_says_how_this_was_made_and_what_it_cost_per_layer(
     # the run spent the operator's budget (ADR-0007).
     assert block["calls_spent"] == {"scored": 181, "adaptive": 96}
     assert set(block["calls_spent"]) == {layer.value for layer in Layer}
+
+
+def test_a_temperature_undeclared_and_a_model_that_takes_none_are_two_statements() -> (
+    None
+):
+    """The three readings a provenance block has to keep apart, and it keeps them.
+
+    `attacking_temperature` is `None` in two of the three, and a reader cannot
+    recover which happened from a blank: *nobody declared one* is a fact about
+    whoever configured the bench, and *this model accepts none* is a fact about the
+    instrument. Printing 0.0 for the second would be worse still — a report naming a
+    setting the request could not have carried (ADR-0004).
+    """
+    undeclared = MODELS.temperature_stated()
+    declared = replace(MODELS, attacking_temperature=0.0).temperature_stated()
+    unavailable = replace(
+        MODELS, attacking="openrouter:openai/gpt-5-mini"
+    ).temperature_stated()
+
+    assert len({undeclared, declared, unavailable}) == 3
+    assert "no temperature declared" in undeclared
+    assert "0.0" in declared
+    assert "accepts no temperature" in unavailable
+    # And the sentence travels in the document rather than being left to a reader of
+    # this test: the block prints whichever of the three is true.
+    named = document(
+        a_payload(
+            provenance=replace(
+                a_provenance(),
+                models=replace(MODELS, attacking="openrouter:openai/gpt-5-mini"),
+            )
+        )
+    )["provenance"]["models"]
+    assert named["attacking_temperature"] is None
+    assert named["attacking_temperature_stated"] == unavailable
+
+
+def test_a_temperature_recorded_against_a_model_that_accepts_none_is_refused() -> None:
+    """The invariant the type carries, and the reason it is on the type.
+
+    A declared input printed in a report is the input the run actually ran under. A
+    record naming 0.0 against a model that rejects the parameter describes a request
+    nobody made, and the clients refuse to compose one — so a `DeclaredModels` that
+    could hold the pairing would be the one route by which a report says it anyway.
+    """
+    with pytest.raises(ValueError, match="accepts none"):
+        replace(
+            MODELS, attacking="openrouter:openai/gpt-5-mini", attacking_temperature=0.0
+        )
 
 
 def test_a_provenance_block_that_names_one_layers_spending_is_refused() -> None:

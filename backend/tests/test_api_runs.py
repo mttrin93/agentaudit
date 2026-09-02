@@ -50,6 +50,7 @@ from backend.bench.calibration import run_calibration
 from backend.bench.completion import (
     ADJUDICATOR_MODEL_ENV,
     ATTACKER_MODEL_ENV,
+    DEFAULT_ATTACKER_TEMPERATURE,
     REFERENCE_MODEL_ENV,
     TURNS_PER_EPISODE_ENV,
 )
@@ -764,6 +765,84 @@ def test_a_deployment_declaring_no_attacker_runs_the_stand_in_and_states_it(
     # ceiling still over it. Undeclared is an instrument absent, never a layer off.
     assert config.cases
     assert config.adaptive == DECLARED_ADAPTIVE_BUDGET
+
+
+A_MODEL_THAT_TAKES_NO_TEMPERATURE = "openrouter:openai/gpt-5-mini"
+"""A declared attacker from the GPT-5 family, which accepts no explicit
+temperature (`bench/capability.py`)."""
+
+
+def _refusing_a_temperature(
+    spec: str, temperature: float | None = None
+) -> AttackerCompletion:
+    """An attacker client that refuses a temperature the way the provider would.
+
+    Stood in for the real client rather than for the table, so what is under test is
+    the request the factory composes: this is the GPT-5 error, at the seam the boot
+    used to sail through and the first episode used to hit.
+    """
+    assert temperature is None, temperature
+    return _attacking
+
+
+def test_a_deployment_declaring_an_attacker_that_takes_no_temperature_boots_and_runs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The fault #4 was filed for: the bench's own default meets a model that
+    refuses it.
+
+    `DEFAULT_ATTACKER_TEMPERATURE` is 0.0 and always declared, because a report with
+    a field for it must not read *not declared* for a run nobody chose a default for.
+    Sent to a GPT-5-family model it is an error — which the bench used to discover at
+    the first call of a run, after the operator's budget had started moving.
+
+    Resolved against the declared table instead: no temperature reaches the client,
+    and the record says the model accepts none rather than printing 0.0 as though a
+    choice had been made and honoured (ADR-0004).
+    """
+    _declaring_nothing(monkeypatch)
+    monkeypatch.setenv(SIGNING_KEY_VARIABLE, encoded_private(generate()))
+    monkeypatch.setenv(ATTACKER_MODEL_ENV, A_MODEL_THAT_TAKES_NO_TEMPERATURE)
+    monkeypatch.setattr(
+        "backend.api.app.attacker_completion_for", _refusing_a_temperature
+    )
+
+    config = cast(BenchRuns, create_app().state.bench).config
+
+    assert config.attacker is _attacking
+    models = config.report.models
+    assert models.attacking == A_MODEL_THAT_TAKES_NO_TEMPERATURE
+    # Not 0.0, and not a blank a reader has to interpret: `None` beside a model that
+    # accepts none is one of the three statements a provenance block keeps apart.
+    assert models.attacking_temperature is None
+    assert "accepts no temperature" in models.temperature_stated()
+
+
+def test_a_declared_attacker_that_takes_a_temperature_is_still_sent_the_default(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The other side of the resolution, and the reason it is not a dropped default.
+
+    A bench that stopped sending temperatures altogether would pass the test above
+    and lose the declared input: the attacker is sampled at zero on purpose, and a
+    run whose temperature reads *not declared* is a run nobody can repeat the
+    conditions of.
+    """
+    _declaring_nothing(monkeypatch)
+    monkeypatch.setenv(SIGNING_KEY_VARIABLE, encoded_private(generate()))
+    monkeypatch.setenv(ATTACKER_MODEL_ENV, AN_ATTACKING_MODEL)
+    sent: list[float | None] = []
+
+    def _recording(spec: str, temperature: float | None = None) -> AttackerCompletion:
+        sent.append(temperature)
+        return _attacking
+
+    monkeypatch.setattr("backend.api.app.attacker_completion_for", _recording)
+
+    config = cast(BenchRuns, create_app().state.bench).config
+
+    assert sent == [DEFAULT_ATTACKER_TEMPERATURE]
+    assert config.report.models.attacking_temperature == DEFAULT_ATTACKER_TEMPERATURE
 
 
 @pytest.mark.parametrize("variable", [ATTACKER_MODEL_ENV, ADJUDICATOR_MODEL_ENV])

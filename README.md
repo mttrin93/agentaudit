@@ -333,6 +333,15 @@ of every run made under it:
 - the adaptive attacker's model (five to choose from) and its temperature
 - turns per episode, episodes per family, attempts per case
 
+Not every model takes every parameter, and the bench knows which before it
+calls one: capability is declared per model in `backend/bench/capability.py` and
+consulted before a request is composed. Setting a temperature on a model that
+accepts none — the GPT-5 family samples at the provider's default and errors on
+an explicit one — is refused at the moment you set it, in front of the estimate,
+rather than at the first call of a run. The report then says which of three
+things happened: a temperature you chose, none declared, or a model that accepts
+none.
+
 One warning worth repeating: `attempts_per_case` is the denominator of every
 rate. The declared value is 10. A run at a lower number is honest, but it is not
 a gate result and nothing may compare it to one.

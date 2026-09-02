@@ -38,6 +38,7 @@ from backend.bench.adaptive.tools import (
     invocation_from,
 )
 from backend.bench.adjudication import Completion
+from backend.bench.capability import TemperatureNotAccepted, accepts_temperature
 from backend.bench.unfinished import refuse_unfinished
 
 DEFAULT_OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
@@ -216,6 +217,7 @@ def _openrouter_completion(name: str, temperature: float | None = None) -> Compl
     # credential is a refusal at configuration time. A run that reached its first
     # judged attempt before discovering it had no instrument would already have
     # spent the operator's budget on attempts nothing can score.
+    _refuse_a_temperature_this_model_will_not_take(name, temperature)
     client = _client()
 
     def complete(system_prompt: str, message: str) -> str:
@@ -268,6 +270,7 @@ def _openrouter_attacker(
 ) -> AttackerCompletion:
     # Built at configuration time for the reason `_openrouter_completion` is: a
     # missing credential is a refusal now rather than at the first episode.
+    _refuse_a_temperature_this_model_will_not_take(name, temperature)
     client = _client()
 
     def attack(system_prompt: str, brief: str) -> ToolInvocation | None:
@@ -305,6 +308,25 @@ def _openrouter_attacker(
         return invocation_from(called.function.name, called.function.arguments)
 
     return attack
+
+
+def _refuse_a_temperature_this_model_will_not_take(
+    name: str, temperature: float | None
+) -> None:
+    """Refuse here, on the declared table, rather than at the first call.
+
+    The parameter is not dropped and the call is not attempted. Dropping it would
+    make a report name a sampling temperature the request never carried, which is
+    the one thing a declared input may not do (ADR-0004, ADR-0025); attempting it
+    would put the discovery after the operator has attested and confirmed a spend,
+    which is the fault `capability` exists to move earlier.
+
+    A caller holding a *default* rather than a choice resolves it through
+    `capability.temperature_for` first and records which declaration it made. What
+    reaches here with a number is a number somebody chose.
+    """
+    if temperature is not None and not accepts_temperature(name):
+        raise TemperatureNotAccepted(name, temperature)
 
 
 @functools.lru_cache(maxsize=1)

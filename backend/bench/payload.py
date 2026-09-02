@@ -66,6 +66,7 @@ from backend.bench.assembler import (
     ScannedControl,
     TargetResult,
 )
+from backend.bench.capability import NO_TEMPERATURE_ACCEPTED, accepts_temperature
 from backend.bench.library import ExternalId, LibraryVersion
 from backend.bench.published import UntestedCategory
 from backend.bench.registration import AttestationRecord
@@ -283,11 +284,60 @@ class DeclaredModels:
     a declaration too — *whatever the provider does* — and a bench that wrote its own
     number there would be naming a setting nobody chose.
 
+    **`None` is now two statements, and `temperature_stated` says which.** A model
+    that accepts no temperature (`capability`) was never offered the choice, and a
+    run against one has to read as *this model takes none* rather than as *nobody
+    declared one* — the first is a fact about the instrument and the second is a fact
+    about whoever configured it. A number here on such a model is refused outright,
+    below: the request could not have carried it.
+
     Deliberately not carried for the other two instruments. The adjudicator and the
     reference agents are settings of a deployment, and this bench offers no control
     over their sampling: a field that could only ever read `None` would be a report
     implying a choice that was never available.
     """
+
+    def __post_init__(self) -> None:
+        """Refuse a temperature the attacking model could not have been sent.
+
+        The invariant ADR-0004 needs and the reason this is a `__post_init__` rather
+        than a check in a caller: a declared input printed in a report is the input
+        the run actually ran under, so a record naming 0.0 against a model that
+        rejects the parameter is a document describing a request nobody made. The
+        clients refuse the same pairing at configuration time (`completion`), and a
+        deployment resolving its own default does it through
+        `capability.temperature_for` — this is the type saying so, once, for every
+        route that builds one.
+        """
+        if self.attacking_temperature is not None and not accepts_temperature(
+            self.attacking
+        ):
+            raise ValueError(
+                f"{self.attacking} was recorded at temperature="
+                f"{self.attacking_temperature}, and it accepts none. "
+                f"{NO_TEMPERATURE_ACCEPTED}"
+            )
+
+    def temperature_stated(self) -> str:
+        """The attacker's sampling temperature as a report says it — one of three.
+
+        Three statements and never a blank: a number somebody chose, a provider
+        default nobody overrode, and a model that offered no choice at all. A reader
+        cannot recover which of the last two happened from an empty field, and the
+        difference is what ticket #4 exists to keep (ADR-0004, ADR-0025).
+        """
+        if not accepts_temperature(self.attacking):
+            return NO_TEMPERATURE_ACCEPTED
+        if self.attacking_temperature is None:
+            return (
+                "no temperature declared — the provider's own default, whatever "
+                "that is. An absence somebody left, and not a number this bench "
+                "chose on their behalf"
+            )
+        return (
+            f"sampled at temperature {self.attacking_temperature} — declared, and "
+            "the value the request carried"
+        )
 
 
 @dataclass(frozen=True)
@@ -698,6 +748,11 @@ def _provenance(payload: TargetPayload) -> dict[str, Any]:
             "calibration": provenance.models.calibration,
             "adjudicating": provenance.models.adjudicating,
             "attacking": provenance.models.attacking,
+            # Beside the identifier and never folded into it, and the sentence
+            # beside the value: the value alone cannot say whether an absent
+            # temperature was undeclared or unavailable (ADR-0025, #4).
+            "attacking_temperature": provenance.models.attacking_temperature,
+            "attacking_temperature_stated": provenance.models.temperature_stated(),
         },
         "library": {
             "cases": provenance.library.cases,

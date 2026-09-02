@@ -583,6 +583,7 @@ def _how_the_run_was_made(body: Mapping[str, Any]) -> Section:
             "families, and the one κ is measured on.",
             f"- **{models['attacking']}** — the adaptive layer's model, and the "
             "adaptive layer's only. It decides nothing that is scored.",
+            f"  - Sampling: {models['attacking_temperature_stated']}.",
             "",
             "### The library these attempts came from",
             "",

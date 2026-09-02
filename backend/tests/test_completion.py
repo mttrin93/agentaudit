@@ -18,6 +18,7 @@ from collections.abc import Iterator
 from typing import Any
 
 import pytest
+from openai import omit
 from openai.types.chat import ChatCompletionMessageFunctionToolCall
 from openai.types.chat.chat_completion_message_function_tool_call import Function
 
@@ -25,9 +26,11 @@ from backend.bench import completion
 from backend.bench.adaptive.attacker import AttackerCompletion
 from backend.bench.adaptive.episode import AttackerTool
 from backend.bench.adaptive.tools import ToolInvocation
+from backend.bench.capability import TemperatureNotAccepted, temperature_for
 from backend.bench.completion import (
     MODEL_TIMEOUT_SECONDS,
     attacker_completion_for,
+    completion_for,
 )
 
 
@@ -189,3 +192,59 @@ def test_an_answer_carrying_two_tool_calls_is_no_decision(
     )
 
     assert _attacking(client, monkeypatch)("a system prompt", "a brief") is None
+
+
+A_REASONING_SPEC = "openrouter:openai/gpt-5-mini"
+"""On the console's own list of attackers, and the model #4 was filed for: it
+samples at the provider's default and errors on an explicit `temperature`."""
+
+
+def test_a_model_that_accepts_no_temperature_is_sent_no_temperature(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Asserted over the request, because the request is what the provider refused.
+
+    `omit` and not `None`: the SDK sends the key when it holds a value, and a
+    `temperature: null` on the wire is the parameter being sent. The baseline is
+    asserted in the same breath, so a client that simply stopped sending
+    temperatures — which would pass the first half — fails the second.
+    """
+    client = _Answering(_a_call("check_canary", "{}"))
+    monkeypatch.setattr(completion, "_client", lambda: client)
+
+    # Through the resolution a deployment uses, from the same declared default: the
+    # end-to-end of #4 is that `DEFAULT_ATTACKER_TEMPERATURE` reaches one of these
+    # models as a value and the other as no parameter at all.
+    for spec in (A_REASONING_SPEC, AN_ATTACKING_SPEC):
+        attacker_completion_for(spec, temperature_for(spec, 0.0))(
+            "a system prompt", "a brief"
+        )
+
+    reasoning, baseline = client.asked
+    assert reasoning["temperature"] is omit
+    assert baseline["temperature"] == 0.0
+
+
+@pytest.mark.parametrize("build", [completion_for, attacker_completion_for])
+def test_a_temperature_a_model_rejects_is_refused_before_any_call_is_made(
+    build: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """At configuration time, on the declared table, and nothing goes on the wire.
+
+    Both builders, because the two instruments compose their own requests and a
+    guard that held for one of them would be a bench where the adjudicator still
+    discovers this at the first judged attempt.
+
+    Refused rather than dropped: a client that quietly sent no temperature would let
+    a provenance block print the setting as though the request had carried it, which
+    is the one thing a declared input may not do (ADR-0004). A caller holding a
+    default rather than a choice resolves it through `capability.temperature_for`.
+    """
+    client = _Answering(_a_call("check_canary", "{}"))
+    monkeypatch.setattr(completion, "_client", lambda: client)
+
+    with pytest.raises(TemperatureNotAccepted) as refused:
+        build(A_REASONING_SPEC, 0.0)
+
+    assert "openai/gpt-5-mini" in str(refused.value)
+    assert client.asked == []

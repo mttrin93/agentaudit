@@ -255,6 +255,8 @@ export const SERVED: TargetReport = {
     "models": {
       "adjudicating": "openrouter:openai/gpt-4.1-mini",
       "attacking": "openrouter:openai/gpt-4.1-mini",
+      "attacking_temperature": null,
+      "attacking_temperature_stated": "no temperature declared \u2014 the provider's own default, whatever that is. An absence somebody left, and not a number this bench chose on their behalf",
       "calibration": "openrouter:openai/gpt-4.1-nano"
     },
     "rule": {

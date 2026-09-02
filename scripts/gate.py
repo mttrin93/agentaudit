@@ -301,6 +301,13 @@ def run_the_gate(args: argparse.Namespace) -> int:
 
     print_declared(cases, model, args, len(gold_sets), library)
 
+    # No usage sink on these two, and the reason is this script's shape: the
+    # adjudicator built here serves the run *and* the reliability measurement
+    # below (`measure_reliability`), which is not part of the run. A sink bound
+    # here would file κ's calls under the run's scored layer, which is a figure
+    # that quietly means something else — so this run's ledger stays empty and its
+    # trace carries no token figure, which is the honest reading of *nothing was
+    # recorded* (`bench/usage.py`, ADR-0026).
     try:
         # Both built before the attestation, so a misconfigured instrument is a
         # refusal rather than a run that stops after spending something.

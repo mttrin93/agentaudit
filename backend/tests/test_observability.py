@@ -21,6 +21,7 @@ import os
 import threading
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
+from decimal import Decimal
 from pathlib import Path
 
 import pytest
@@ -32,13 +33,17 @@ from opentelemetry.sdk.trace.export.in_memory_span_exporter import (
 
 from backend import observability
 from backend.api.app import create_app
+from backend.bench.adaptive.attacker import AttackerCompletion
 from backend.bench.adaptive.precedent import DURABLE_PRECEDENT
+from backend.bench.adaptive.scripted import SCRIPTED_ATTACKER
+from backend.bench.adaptive.tools import ToolInvocation
 from backend.bench.adjudication import Completion
 from backend.bench.calibration import CalibrationResult, run_calibration
 from backend.bench.contract import TargetFailure, TargetUnreachable
 from backend.bench.evaluator import Verdict
 from backend.bench.library import Case
 from backend.bench.signing import SIGNING_KEY_VARIABLE, encoded_private, generate
+from backend.bench.usage import ModelUsage, UsageLedger
 from backend.graph.budget import Layer
 from backend.observability import (
     API_KEY_VARIABLE,
@@ -123,6 +128,140 @@ def traced_calibration(
         return result, list(exporter.get_finished_spans())
 
 
+A_REPORTED_COST = Decimal("0.000123")
+REPORTED_INPUT_TOKENS = 1_101
+REPORTED_OUTPUT_TOKENS = 37
+REPORTED_REASONING_TOKENS = 11
+"""What one stood-in provider response says it consumed.
+
+Figures rather than a live call, and the reason is what these tests are about: the
+trace carries what the run's ledger holds, so a real router would be proving
+OpenRouter's accounting rather than this module's emission — and it would put an
+attack payload on somebody's wire to do it (ADR-0026, `bench/usage.py`).
+"""
+
+
+def a_reported_call(reported: bool = True) -> ModelUsage:
+    """One model call as `usage.usage_from` would have read it off a response.
+
+    `reported=False` is the provider that returned no usage block at all, which is
+    the call a layer's total is missing and the reason a total says how many of
+    those there were (`usage.NO_TOKEN_COUNTS_REPORTED`).
+    """
+    return ModelUsage(
+        requested_model="openrouter:openai/gpt-4.1-mini",
+        latency_seconds=0.25,
+        input_tokens=REPORTED_INPUT_TOKENS if reported else None,
+        output_tokens=REPORTED_OUTPUT_TOKENS if reported else None,
+        reasoning_tokens=REPORTED_REASONING_TOKENS if reported else None,
+        provider_cost=A_REPORTED_COST if reported else None,
+    )
+
+
+class Reporting:
+    """An instrument's usage, recorded into one layer of a run's ledger.
+
+    Under a lock and counting its own calls, because a judged case's adjudications
+    are decided on a pool while the next messages go out (`attacker.py`) — two
+    threads reaching the same stand-in is the ordinary case here and not an edge.
+
+    `every_call=False` reports on one call in three, which is the partial total a
+    reader has to be able to see is partial. One in three rather than one in two,
+    because a layer where half the calls reported is a layer whose shortfall and
+    whose coverage are the same number — and a test that cannot tell those apart
+    would pass on a trace emitting either.
+    """
+
+    def __init__(
+        self, ledger: UsageLedger, layer: Layer, every_call: bool = True
+    ) -> None:
+        self._sink = ledger.for_layer(layer)
+        self._every_call = every_call
+        self._lock = threading.Lock()
+        self.calls = 0
+
+    def record(self) -> None:
+        with self._lock:
+            self.calls += 1
+            reported = self._every_call or self.calls % 3 == 1
+        self._sink.record(a_reported_call(reported))
+
+
+def adjudicating(usage: Reporting) -> Completion:
+    """An adjudicator that reports what it consumed, beside the verdict it returns.
+
+    Beside and never inside: `Completion` stays `(system_prompt, message) -> str`,
+    because an instrument that could see a token count is one whose verdict is no
+    longer derivable from the record a reader holds (ADR-0004).
+    """
+
+    def complete(system_prompt: str, message: str) -> str:
+        usage.record()
+        return f"verdict: {Verdict.RESISTED}"
+
+    return complete
+
+
+def attacking(usage: Reporting) -> AttackerCompletion:
+    """The adaptive attacker, reporting into the adaptive layer and no other."""
+
+    def attack(system_prompt: str, brief: str) -> ToolInvocation | None:
+        usage.record()
+        return SCRIPTED_ATTACKER(system_prompt, brief)
+
+    return attack
+
+
+def a_run_that_reports_usage(
+    judged: Case,
+    deterministic: Case,
+    every_call: bool = True,
+    trace: TracedRun = A_RUN,
+) -> tuple[CalibrationResult, list[ReadableSpan]]:
+    """A run over both layers whose instruments report what the provider said.
+
+    Two cases, because both layers have to consume something: the judged one calls
+    the adjudicator, and the adaptive layer runs over the families this run holds a
+    deterministic case for.
+
+    The ledger is built here and handed to `run_calibration` for the reason that
+    function states — the sink an instrument records through is fixed when the
+    client is built, which is before a run exists, so the caller that built the
+    instruments is the one that holds the ledger they were bound to.
+    """
+    ledger = UsageLedger()
+    with recording() as exporter, reference_target() as reference:
+        result = run_calibration(
+            cases=[judged, deterministic],
+            targets=[reference.target],
+            attestation=BENCH_ATTESTATION,
+            plant_nonce=reference.plant_nonce,
+            approve=CONFIRMING,
+            adjudicator=adjudicating(Reporting(ledger, Layer.SCORED, every_call)),
+            attacker=attacking(Reporting(ledger, Layer.ADAPTIVE, every_call)),
+            usage=ledger,
+            trace=trace,
+        )
+        return result, list(exporter.get_finished_spans())
+
+
+TOKEN_AND_COST_FIELDS = (
+    Field.INPUT_TOKENS_SCORED,
+    Field.INPUT_TOKENS_ADAPTIVE,
+    Field.OUTPUT_TOKENS_SCORED,
+    Field.OUTPUT_TOKENS_ADAPTIVE,
+    Field.REASONING_TOKENS_SCORED,
+    Field.REASONING_TOKENS_ADAPTIVE,
+    Field.PROVIDER_COST_SCORED,
+    Field.PROVIDER_COST_ADAPTIVE,
+    Field.CALLS_WITHOUT_TOKENS_SCORED,
+    Field.CALLS_WITHOUT_TOKENS_ADAPTIVE,
+    Field.CALLS_WITHOUT_COST_SCORED,
+    Field.CALLS_WITHOUT_COST_ADAPTIVE,
+)
+"""Every field a run's usage can put on a span, named once for the absence test."""
+
+
 def fields_of(spans: Sequence[ReadableSpan]) -> set[str]:
     """Every attribute name the given spans carry."""
     return {key for span in spans for key in (span.attributes or {})}
@@ -152,6 +291,7 @@ def strings_in(spans: Sequence[ReadableSpan]) -> list[str]:
 
 def test_the_emitted_fields_are_exactly_the_declared_allowlist(
     leakage_case: Case,
+    wrongful_commitment_case: Case,
 ) -> None:
     """Every member of `Field` is written by something, and nothing else is written.
 
@@ -161,12 +301,16 @@ def test_the_emitted_fields_are_exactly_the_declared_allowlist(
     something it does not, which is how somebody comes to conclude a run had no
     retries from a field nothing writes.
 
-    The union is taken over three runs because no single run can produce all of
-    them: a run carries a run id or a gate run id and never both (ADR-0018), and a
-    healthy endpoint never shows an error class.
+    The union is taken over four runs because no single run can produce all of
+    them: a run carries a run id or a gate run id and never both (ADR-0018), a
+    healthy endpoint never shows an error class, and a run whose instruments were
+    built with no usage sink reports no tokens — which is a fourth run here rather
+    than a relaxation of the assertion, because *declared and never emitted* is
+    half of what this test is for.
     """
     _, ordinary = traced_calibration(leakage_case)
     _, gate = traced_calibration(leakage_case, trace=A_GATE_RUN)
+    _, reporting = a_run_that_reports_usage(wrongful_commitment_case, leakage_case)
 
     with (
         recording() as exporter,
@@ -183,7 +327,9 @@ def test_the_emitted_fields_are_exactly_the_declared_allowlist(
             )
         failed = list(exporter.get_finished_spans())
 
-    assert fields_of(ordinary + gate + failed) == {field.value for field in Field}
+    assert fields_of(ordinary + gate + reporting + failed) == {
+        field.value for field in Field
+    }
 
 
 def test_the_allowlist_reaches_the_sink_under_the_prefix_the_sink_reads(
@@ -290,6 +436,132 @@ def test_calls_are_emitted_per_layer_and_no_field_sums_them(
         if isinstance(value, int)
     ]
     assert scored + adaptive not in emitted
+
+
+def test_tokens_and_cost_are_emitted_per_layer_and_no_field_sums_them(
+    wrongful_commitment_case: Case, leakage_case: Case
+) -> None:
+    """The figures the run's ledger holds, per layer, with nothing holding a total.
+
+    `CALLS_SCORED`'s shape, one floor down and for the same reason: a token is the
+    same kind of number as a call, so a blended figure is the arithmetic ADR-0010
+    exists to prevent — and the trace is the one surface with no type to stop it.
+    The prohibition is over the emitted *values* as much as the field names, so the
+    two layers' sums are looked for among everything the trace said.
+
+    Compared against `result.usage`, which is the authority for these figures: the
+    trace agreeing with the run is the whole of what "never the authority for a
+    figure" leaves it able to do (ADR-0026).
+    """
+    result, spans = a_run_that_reports_usage(wrongful_commitment_case, leakage_case)
+    [root] = [span for span in spans if span.name == Span.RUN]
+    attributes = root.attributes or {}
+
+    scored = result.usage.totals_in(Layer.SCORED)
+    adaptive = result.usage.totals_in(Layer.ADAPTIVE)
+    assert scored.calls and adaptive.calls, (
+        "a run one layer of which made no model call proves nothing here"
+    )
+    assert attributes[Field.INPUT_TOKENS_SCORED] == scored.input_tokens
+    assert attributes[Field.OUTPUT_TOKENS_SCORED] == scored.output_tokens
+    assert attributes[Field.REASONING_TOKENS_SCORED] == scored.reasoning_tokens
+    assert attributes[Field.PROVIDER_COST_SCORED] == str(scored.provider_cost)
+    assert attributes[Field.INPUT_TOKENS_ADAPTIVE] == adaptive.input_tokens
+    assert attributes[Field.OUTPUT_TOKENS_ADAPTIVE] == adaptive.output_tokens
+    assert attributes[Field.REASONING_TOKENS_ADAPTIVE] == adaptive.reasoning_tokens
+    assert attributes[Field.PROVIDER_COST_ADAPTIVE] == str(adaptive.provider_cost)
+
+    said = strings_in(spans)
+    for one, other in (
+        (scored.input_tokens, adaptive.input_tokens),
+        (scored.output_tokens, adaptive.output_tokens),
+        (scored.reasoning_tokens, adaptive.reasoning_tokens),
+    ):
+        assert one is not None and other is not None
+        assert str(one + other) not in said, "a blended token total reached the trace"
+    assert scored.provider_cost is not None and adaptive.provider_cost is not None
+    blended = scored.provider_cost + adaptive.provider_cost
+    assert str(blended) not in said, "a blended cost reached the trace"
+
+
+def test_a_layer_that_reported_no_tokens_emits_no_figure_rather_than_a_zero(
+    leakage_case: Case,
+) -> None:
+    """Absent rather than zero, which is what ADR-0026 said before there was a source.
+
+    A run whose instruments were built with no usage sink is the ordinary case for
+    the suite and for a deployment that has not wired one: its ledger reports
+    nothing, and a `0` on the span would be a figure the bench invented and then
+    joined to a run id. Nothing is emitted — not the totals, and not the shortfall
+    counts that qualify them, because zero missing out of zero is a statement about
+    a total that is not there.
+    """
+    result, spans = traced_calibration(leakage_case)
+    emitted = fields_of(spans)
+
+    for figure in TOKEN_AND_COST_FIELDS:
+        assert figure.value not in emitted, (
+            f"{figure} was emitted for a run with no ledger"
+        )
+    for layer in Layer:
+        totals = result.usage.totals_in(layer)
+        assert totals.input_tokens is None and totals.provider_cost is None
+
+
+def test_a_partial_total_says_how_many_of_the_layers_calls_it_is_missing(
+    wrongful_commitment_case: Case, leakage_case: Case
+) -> None:
+    """A total summed over half the calls understates the layer, and says so.
+
+    The failure this guards is a reader taking a floor for a fact: every provider
+    behind the router fills in a different subset of the usage block, so a layer
+    whose total covers some of its calls is the normal case and not an edge
+    (`usage.LayerTotals`). The shortfall is an absolute count of the layer's own
+    model calls and never a share of `CALLS_SCORED`, which counts messages to a
+    target and is a different population.
+    """
+    result, spans = a_run_that_reports_usage(
+        wrongful_commitment_case, leakage_case, every_call=False
+    )
+    [root] = [span for span in spans if span.name == Span.RUN]
+    attributes = root.attributes or {}
+
+    scored = result.usage.totals_in(Layer.SCORED)
+    missing = scored.calls - scored.calls_reporting_tokens
+    assert missing, "a layer every call of which reported tokens proves nothing here"
+    assert not scored.every_call_reported_tokens()
+    assert attributes[Field.CALLS_WITHOUT_TOKENS_SCORED] == missing
+    assert missing != scored.calls_reporting_tokens, (
+        "a layer whose shortfall equals its coverage cannot tell the two apart"
+    )
+    assert attributes[Field.CALLS_WITHOUT_COST_SCORED] == (
+        scored.calls - scored.calls_reporting_cost
+    )
+    assert (
+        attributes[Field.CALLS_WITHOUT_TOKENS_SCORED] != attributes[Field.CALLS_SCORED]
+    ), "the shortfall is a count of the bench's own model calls, not of sends"
+
+
+def test_the_cost_a_trace_carries_is_the_decimal_the_provider_named(
+    wrongful_commitment_case: Case, leakage_case: Case
+) -> None:
+    """A string, because the one conversion this figure may not take is `float`.
+
+    `float("0.0000123")` is a binary expansion of a number the provider stated in
+    decimal, and a cost this bench records has to be the cost the provider named
+    (`usage._reported_decimal`). A span attribute may hold a float, which is exactly
+    why the type this one is emitted as has a test.
+    """
+    result, spans = a_run_that_reports_usage(wrongful_commitment_case, leakage_case)
+    [root] = [span for span in spans if span.name == Span.RUN]
+    attributes = root.attributes or {}
+    exact = result.usage.totals_in(Layer.SCORED).provider_cost
+    assert exact is not None
+
+    emitted = attributes[Field.PROVIDER_COST_SCORED]
+    assert isinstance(emitted, str)
+    assert emitted == str(exact)
+    assert Decimal(emitted) == exact
 
 
 def test_the_two_layers_positions_are_emitted_under_their_own_fields(
@@ -867,6 +1139,7 @@ def test_the_writers_are_exactly_these_and_every_one_of_them_exists() -> None:
     """
     assert set(observability.WRITERS) == {
         "Field",
+        "Value",
         "Span",
         "TraceConfig",
         "TracedRun",

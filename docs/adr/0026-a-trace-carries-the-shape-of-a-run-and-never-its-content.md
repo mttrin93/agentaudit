@@ -1,8 +1,19 @@
 ---
 status: accepted
+amended: 2026-09-02, on the token and cost fields
 ---
 
 # A trace carries the shape of a run and never its content
+
+> **Amended on the token and cost fields.** The paragraph on token counts below
+> declared them absent *with the condition under which they would stop being
+> absent*: that the bench learn to count them in the run first, where a report can
+> print them and a reader can check them. It has (`backend/bench/usage.py`), so the
+> condition is met and the fields are on the allowlist. The amendment moves that one
+> paragraph and grows the allowlist by twelve members, every one of them per layer.
+> Nothing else changes, and the three things a trace is not are untouched: the
+> figures are read off the run's own ledger, no field sums the two layers, and a run
+> whose ledger reported nothing emits no figure rather than a zero.
 
 A run is 180 scored calls plus retries and judge calls, plus up to 96 adaptive calls;
 a gate run is around 830. When a family comes back all-zero the operator has two
@@ -45,10 +56,12 @@ Six parts, and the second is the one the other five exist to protect.
    `observability.Field` enumerates every attribute a span may carry: the run id or
    gate run id; family, case id and attempt index; episode index and turn; which
    graph node ran; calls spent per layer; the verdict and its class; the retry count
-   and the error class; the three instruments' model identifiers; and the endpoint
-   hash. Everything else is excluded by not being on the list. A denylist over trace
-   content goes stale the first time somebody adds a node, and the failure direction
-   is irreversible.
+   and the error class; the three instruments' model identifiers; the endpoint
+   hash; and — as of the amendment above — tokens read, written and reasoned and the
+   provider's own cost, per layer, each total beside a count of how many of the
+   layer's model calls it is missing. Everything else is excluded by not being on
+   the list. A denylist over trace content goes stale the first time somebody adds a
+   node, and the failure direction is irreversible.
 
 4. **The default LangGraph tracer is rejected.** It captures inputs and outputs
    verbatim, so the first traced run would send the attack payloads, the target's
@@ -153,18 +166,42 @@ denominator goes, in the one surface with no type to stop it. So `EPISODE_INDEX`
 `TURN` are their own fields, and a test asserts neither appears on the other layer's
 spans.
 
-**Token counts are absent, and absent rather than zero.** The admitted list names
-call counts *and token counts* per layer. Calls are emitted, from `RunState.spent`,
-which is the figure the two ceilings are enforced against. Tokens are not, because
-nothing in the bench measures one: the target contract returns `{reply, tool_trace}`
-with no usage, and `completion.py` discards the usage the provider returns. A token
-field populated here would be a figure whose only source was the sink — which is
-exactly what *never the authority for a figure* forbids, arrived at from the other
-direction. The bench learns to count tokens first, in the run, where a report can
-print them and a reader can check them; then the trace carries what the run holds.
-This is the same reasoning the README already gives for optional task M1, and it is
-why a field that could only ever read zero is not on the allowlist: a declared field
-nothing writes tells a reader a trace carries something it does not.
+**Token counts were absent, and the condition for adding them has now been met.**
+The admitted list names call counts *and token counts* per layer. Calls were emitted
+from the start, from `RunState.spent`, which is the figure the two ceilings are
+enforced against. Tokens were not, because nothing in the bench measured one: the
+target contract returns `{reply, tool_trace}` with no usage, and `completion.py`
+read one field off a provider response and dropped the rest. A token field populated
+then would have been a figure whose only source was the sink — which is exactly what
+*never the authority for a figure* forbids, arrived at from the other direction. So
+the paragraph named its own exit: **the bench learns to count tokens first, in the
+run, where a report can print them and a reader can check them; then the trace
+carries what the run holds.**
+
+**It does now, and this is the amendment.** `bench/usage.py` keeps every fact a
+provider returned about a model call, bucketed per layer and absent rather than zero,
+and a run holds the ledger its instruments were built to report into
+(`CalibrationResult.usage`). The trace copies that ledger's per-layer totals onto the
+run's root span. Four properties carry the amendment, and each is the reason the
+addition is not a softening:
+
+- **Per layer, and no field sums them.** `UsageLedger` offers `totals_in(layer)` and
+  no `totals()`, and there is no thirteenth field holding a blend. A token is the
+  same kind of number as a call, so the field shape is `CALLS_SCORED`'s
+  ([ADR-0010](./0010-two-layers-in-one-run-the-adaptive-layer-is-never-scored.md)).
+- **Still absent rather than zero.** A layer whose providers reported nothing emits
+  no figure at all — not a `0`, which would be a number the bench invented and then
+  joined to a run id. A run whose instruments were built with no sink is exactly that
+  case and is the ordinary one for a deployment that has not wired them.
+- **A partial total says so.** Providers behind the router fill in different subsets
+  of the usage block, so each total carries a count of the layer's model calls it is
+  missing. Zero says the figure is whole; anything else says it is a floor.
+- **Still never the authority for a figure.** The run holds the ledger and the trace
+  copies it. Nothing reads a token count back out of the sink, and the provider's cost
+  is not the consent estimate: money is declared, never guessed
+  (`graph/budget.py`), and what the router charged the bench for its own instrument
+  calls may not overwrite `not priced` or stand beside the `≤` figures as though it
+  were one of them.
 
 ## Considered options
 

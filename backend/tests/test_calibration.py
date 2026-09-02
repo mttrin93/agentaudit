@@ -18,6 +18,7 @@ from backend.bench.calibration import run_calibration
 from backend.bench.evaluator import Verdict
 from backend.bench.library import Case, Family
 from backend.bench.rule import DECLARED_RULE
+from backend.bench.usage import ModelUsage, UsageLedger
 from backend.graph.budget import Layer
 from backend.graph.runstate import Position
 from backend.tests.conftest import (
@@ -203,3 +204,54 @@ def test_the_run_state_records_position_successes_and_calls_spent(
     # a suite's cost read off `calls_spent` would move every time the attacker
     # had a longer episode.
     assert run_state.spent_in(Layer.SCORED) == attempts + 1
+
+
+def test_a_run_holds_its_own_usage_ledger_and_a_second_run_starts_empty(
+    leakage_case: Case,
+) -> None:
+    """One ledger per run, and a run given none gets one of its own.
+
+    The figures a run consumed are on its own result rather than only in a sink,
+    because a token count whose only reader was the tracer would be the thing
+    ADR-0026 forbids arrived at from the other side. A run whose instruments were
+    built with no sink holds an empty ledger — which reports nothing and never
+    reports zero (`usage.NO_TOKEN_COUNTS_REPORTED`).
+    """
+    first = calibrate(leakage_case)
+    second = calibrate(leakage_case)
+
+    assert first.usage is not second.usage
+    for layer in Layer:
+        assert first.usage.totals_in(layer).input_tokens is None
+        assert first.usage.totals_in(layer).provider_cost is None
+
+
+def test_a_ledger_that_already_holds_calls_belongs_to_another_run_and_is_refused(
+    leakage_case: Case,
+) -> None:
+    """The cross-run leak, refused where a run knows it is starting.
+
+    A caller that reused one ledger across two runs would file the first run's
+    tokens under the second run's id, and a figure on the wrong run is worse than
+    an absent one. Refused rather than reset, because clearing somebody's ledger
+    would destroy the record it was keeping.
+    """
+    used = UsageLedger()
+    used.for_layer(Layer.SCORED).record(
+        ModelUsage(
+            requested_model="openrouter:openai/gpt-4.1-mini", latency_seconds=1.0
+        )
+    )
+
+    with reference_target() as reference:
+        with pytest.raises(ValueError) as refused:
+            run_calibration(
+                cases=[leakage_case],
+                targets=[reference.target],
+                attestation=BENCH_ATTESTATION,
+                plant_nonce=reference.plant_nonce,
+                approve=CONFIRMING,
+                usage=used,
+            )
+
+    assert "already holds model calls" in str(refused.value)

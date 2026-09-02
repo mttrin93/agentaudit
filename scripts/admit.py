@@ -194,6 +194,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     if models is None:
         return EXIT_WITHHELD
 
+    # No usage sink on this one. `measure_on` runs once per model and this client
+    # serves both, and a ledger belongs to one run (`run_calibration` refuses a
+    # reused one) — so binding one would need a client per run rather than per
+    # invocation. The ledger of each run stays empty, which reports nothing rather
+    # than zero.
     try:
         adjudicator = completion_for(args.adjudicator_model)
     except (KeyError, ValueError) as unusable:

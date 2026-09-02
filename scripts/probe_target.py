@@ -60,6 +60,7 @@ from backend.bench.contract import TargetConfig
 from backend.bench.library import Case, Family, VerdictClass
 from backend.bench.rule import DECLARED_RULE
 from backend.bench.scorer import Rate
+from backend.bench.usage import UsageLedger
 from backend.graph.budget import BudgetExceeded, Layer, RunBudget
 from backend.graph.runstate import Attempt
 from scripts.console import (
@@ -231,6 +232,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         return EXIT_WITHHELD
 
+    # One ledger for this run, built before the instrument that reports into it:
+    # a client's sink is fixed when the client is built, which is before the run
+    # exists (`run_calibration`). A deterministic-only probe builds no adjudicator
+    # and its ledger stays empty, which is a run that reported no tokens rather
+    # than one that consumed none.
+    ledger = UsageLedger()
     adjudicator: Completion | None = None
     adjudicator_model: str | None = None
     if not args.deterministic_only:
@@ -242,7 +249,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             # Before the attestation: a run that reached its first judged attempt
             # before discovering it had no instrument would already have spent the
             # operator's budget on attempts nothing can score.
-            adjudicator = completion_for(spec)
+            adjudicator = completion_for(spec, usage=ledger.for_layer(Layer.SCORED))
         except (KeyError, ValueError) as unusable:
             print(
                 f"No usable adjudicating model: {unusable}. Pass a working "
@@ -307,6 +314,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             plant_nonce=interactive_planter(),
             approve=terminal_approval(attestation.identity),
             adjudicator=adjudicator,
+            usage=ledger,
             budget=RunBudget.declare(cases=cases, targets=[target], price=call_price),
             # A probe is not a gate run: it decides nothing about the bench, so it
             # traces under the run id field (ADR-0018). No record holds the id, so

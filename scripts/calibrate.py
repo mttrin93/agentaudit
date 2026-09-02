@@ -58,6 +58,7 @@ from backend.bench.contract import TargetConfig
 from backend.bench.library import Case, Family, VerdictClass
 from backend.bench.rule import DECLARED_RULE
 from backend.bench.scorer import discrimination
+from backend.bench.usage import UsageLedger
 from backend.graph.budget import BudgetExceeded, Layer, RunBudget
 from backend.targets.reference.hardened import HARDENED
 from backend.targets.reference.model import ModelConfig
@@ -171,11 +172,22 @@ def main(argv: Sequence[str] | None = None) -> int:
         return EXIT_WITHHELD
     auth_token = secrets.token_urlsafe(16)
 
+    # One ledger for this run, and the two instruments below are built to report
+    # into it. Bound here rather than inside the run because the sink an instrument
+    # records through is fixed when its client is built, which is before a run
+    # exists (`usage.UsageLedger.for_layer`, `run_calibration`). Which layer a sink
+    # belongs to is the caller's to declare: an attacker's tokens counted into the
+    # scored layer would be an adaptive figure inside a scored one (ADR-0010).
+    ledger = UsageLedger()
     try:
         # Both built before the attestation, so a misconfigured instrument is a
         # refusal rather than a run that stops after spending something.
-        adjudicator = completion_for(args.adjudicator_model)
-        attacker = attacker_completion_for(args.attacker_model)
+        adjudicator = completion_for(
+            args.adjudicator_model, usage=ledger.for_layer(Layer.SCORED)
+        )
+        attacker = attacker_completion_for(
+            args.attacker_model, usage=ledger.for_layer(Layer.ADAPTIVE)
+        )
     except (KeyError, ValueError) as unusable:
         print(f"No usable bench model: {unusable}")
         return EXIT_WITHHELD
@@ -210,6 +222,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 approve=terminal_approval(attestation.identity),
                 adjudicator=adjudicator,
                 attacker=attacker,
+                usage=ledger,
                 budget=RunBudget.declare(
                     cases=cases, targets=targets, price=call_price
                 ),

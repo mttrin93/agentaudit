@@ -40,6 +40,7 @@ the adjudicator.
 from collections import defaultdict
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
+from typing import Final
 
 from backend.bench.adaptive.attacker import AttackerCompletion
 from backend.bench.adaptive.budget import DECLARED_ADAPTIVE_BUDGET, AdaptiveBudget
@@ -67,6 +68,7 @@ from backend.bench.registration import (
 )
 from backend.bench.rule import DECLARED_RULE, GateRule
 from backend.bench.scorer import Rate, failure_rate
+from backend.bench.usage import LayerTotals, UsageLedger
 from backend.graph.approval import ApprovalOutcome, Approve, run_under_approval
 from backend.graph.budget import Layer, RunBudget
 from backend.graph.runstate import Attempt, RunState
@@ -74,6 +76,7 @@ from backend.observability import (
     Field,
     Span,
     TracedRun,
+    Value,
     disable_inherited_tracing,
     flush,
     traced,
@@ -233,6 +236,103 @@ class CalibrationResult:
     it — and because an empty `target_runs` means two different things depending
     on which way this went."""
 
+    usage: UsageLedger = field(default_factory=UsageLedger)
+    """What the provider said about every model call this run's instruments made.
+
+    On the result, so the figures a trace carries are figures the *run* holds: a
+    token count whose only reader was the sink would be the one thing ADR-0026
+    forbids, arrived at from the other side. Empty for a run whose instruments were
+    built with no sink — which is a run that reported no tokens and never a run that
+    consumed none (`usage.NO_TOKEN_COUNTS_REPORTED`).
+
+    Per layer and never summed, because `UsageLedger` offers no way to sum it
+    (ADR-0010).
+    """
+
+
+@dataclass(frozen=True)
+class _UsageFields:
+    """Which fields one layer's tokens and cost are emitted under.
+
+    A record per layer rather than a name composed from `Layer` at the call site:
+    a field name assembled at runtime is a field the allowlist cannot be read off,
+    and the whole of `Field` being greppable is what makes a diff of it reviewable
+    (ADR-0026).
+    """
+
+    input_tokens: Field
+    output_tokens: Field
+    reasoning_tokens: Field
+    provider_cost: Field
+    calls_without_tokens: Field
+    calls_without_cost: Field
+
+
+_USAGE_FIELDS: Final[Mapping[Layer, _UsageFields]] = {
+    Layer.SCORED: _UsageFields(
+        input_tokens=Field.INPUT_TOKENS_SCORED,
+        output_tokens=Field.OUTPUT_TOKENS_SCORED,
+        reasoning_tokens=Field.REASONING_TOKENS_SCORED,
+        provider_cost=Field.PROVIDER_COST_SCORED,
+        calls_without_tokens=Field.CALLS_WITHOUT_TOKENS_SCORED,
+        calls_without_cost=Field.CALLS_WITHOUT_COST_SCORED,
+    ),
+    Layer.ADAPTIVE: _UsageFields(
+        input_tokens=Field.INPUT_TOKENS_ADAPTIVE,
+        output_tokens=Field.OUTPUT_TOKENS_ADAPTIVE,
+        reasoning_tokens=Field.REASONING_TOKENS_ADAPTIVE,
+        provider_cost=Field.PROVIDER_COST_ADAPTIVE,
+        calls_without_tokens=Field.CALLS_WITHOUT_TOKENS_ADAPTIVE,
+        calls_without_cost=Field.CALLS_WITHOUT_COST_ADAPTIVE,
+    ),
+}
+"""One layer, one set of fields, and no entry that spans both.
+
+There is no `total` key here and no function that would build one. A blended token
+figure is the arithmetic ADR-0010 exists to prevent, and the enforcement is the
+same as `UsageLedger`'s: the shape that would hold it does not exist, so a caller
+who wanted one would have to write the sum in the open.
+"""
+
+
+def _tokens_and_cost(layer: Layer, ledger: UsageLedger) -> dict[Field, Value]:
+    """One layer's figures as span attributes, and nothing where it has none.
+
+    **Absent rather than zero**, which is what ADR-0026 said about these fields
+    when there was no source for them and is still the right reading now there is:
+    a layer whose providers reported no counts did not consume nothing, and a `0`
+    on a span is the figure a reader is least able to question.
+
+    The shortfall counts travel with the totals and only with them
+    (`usage.LayerTotals`): a sum over the calls that reported something understates
+    a layer where some call reported nothing, and a reader who cannot see how many
+    calls are missing from it cannot tell an understatement from a fact. A layer
+    that reported nothing therefore emits no shortfall either — zero missing out of
+    zero is not a statement about a total that is not there.
+
+    The cost goes on as a string. `Decimal` is not a span `Value`, and `float` is
+    the one conversion this figure may not take: a cost the bench records has to be
+    the cost the provider named, and `float("0.0000123")` is a binary expansion of
+    it (`usage._reported_decimal`).
+    """
+    totals: LayerTotals = ledger.totals_in(layer)
+    names = _USAGE_FIELDS[layer]
+    emitted: dict[Field, Value] = {}
+    if totals.input_tokens is not None:
+        emitted[names.input_tokens] = totals.input_tokens
+    if totals.output_tokens is not None:
+        emitted[names.output_tokens] = totals.output_tokens
+    if totals.reasoning_tokens is not None:
+        emitted[names.reasoning_tokens] = totals.reasoning_tokens
+    if totals.input_tokens is not None or totals.output_tokens is not None:
+        emitted[names.calls_without_tokens] = (
+            totals.calls - totals.calls_reporting_tokens
+        )
+    if totals.provider_cost is not None:
+        emitted[names.provider_cost] = str(totals.provider_cost)
+        emitted[names.calls_without_cost] = totals.calls - totals.calls_reporting_cost
+    return emitted
+
 
 def run_calibration(
     cases: Sequence[Case],
@@ -247,6 +347,7 @@ def run_calibration(
     adaptive: AdaptiveBudget = DECLARED_ADAPTIVE_BUDGET,
     budget: RunBudget | None = None,
     run_state: RunState | None = None,
+    usage: UsageLedger | None = None,
     planted_nonces: Mapping[str, str] | None = None,
     proof_waived: bool = False,
     trace: TracedRun | None = None,
@@ -271,6 +372,22 @@ def run_calibration(
     run is over. It must count against the same ceiling the run is held to, and a
     state that counts against another one is refused: a run whose counter and whose
     limit disagree is a run with no limit.
+
+    `usage` is the ledger this run's instruments were built to report into, and it
+    is the caller's argument for the same reason `budget` is one: the sink an
+    instrument records through is fixed when the client is built
+    (`completion_for(..., usage=...)`), and that happens before the run exists. So
+    the caller that built the instruments is the only thing that could have bound
+    them, and it hands in the ledger they were bound to. It defaults to a fresh
+    empty one — a run whose instruments keep no usage holds a ledger that reported
+    nothing, which is a fact and not a missing field, and the trace says so by
+    emitting no token figure rather than a zero.
+
+    **A ledger that already holds calls is refused.** One ledger per run, and the
+    failure it guards is the one that matters: a caller reusing a ledger across two
+    runs would put the first run's tokens in the second run's trace, and a figure
+    on the wrong run is worse than no figure at all. It is checked here because this
+    is the one place that knows a run is starting.
 
     `planted_nonces` is for a target whose nonce was issued before the run began.
     The bench issues the value and the operator plants it by hand, and over HTTP
@@ -315,6 +432,14 @@ def run_calibration(
     declared = budget or RunBudget.declare(
         cases=cases, targets=targets, rule=rule, adaptive=adaptive
     )
+    ledger = usage if usage is not None else UsageLedger()
+    if any(ledger.recorded_in(layer) for layer in Layer) or ledger.untagged():
+        raise ValueError(
+            "the ledger handed in already holds model calls, so it is some other "
+            "run's. One ledger per run: a reused one would report the first run's "
+            "tokens under the second run's id, and a figure filed against the "
+            "wrong run is worse than an absent one (ADR-0026)"
+        )
     state = run_state or RunState(budget=declared, library=LibraryVersion.of(cases))
     if state.budget != declared:
         raise ValueError(
@@ -380,6 +505,13 @@ def run_calibration(
                     {
                         Field.CALLS_SCORED: state.spent_in(Layer.SCORED),
                         Field.CALLS_ADAPTIVE: state.spent_in(Layer.ADAPTIVE),
+                        # Tokens and cost from the ledger, in two separate readings
+                        # and merged nowhere: `totals_in` is the only reading
+                        # `UsageLedger` offers and there is no `totals()` to be
+                        # tempted by (ADR-0010, #9). A layer whose providers
+                        # reported nothing contributes no key here at all.
+                        **_tokens_and_cost(Layer.SCORED, ledger),
+                        **_tokens_and_cost(Layer.ADAPTIVE, ledger),
                     }
                 )
     finally:
@@ -395,6 +527,7 @@ def run_calibration(
         target_runs=tuple(target_runs),
         budget=declared,
         approval=approval,
+        usage=ledger,
     )
 
 

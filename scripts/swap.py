@@ -289,6 +289,10 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     print_declared(cases, models, args, len(gold_sets))
 
+    # No usage sink on these two. One build serves several runs here — the whole
+    # library on a model, then `admit.measure_on` twice — and a ledger is one run's
+    # (`run_calibration` refuses a reused one). Binding one would need a client per
+    # run, which is a change to `measure_on`'s contract and not this ticket's.
     try:
         adjudicator = completion_for(args.adjudicator_model)
         attacker = attacker_completion_for(args.attacker_model)

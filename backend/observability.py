@@ -66,23 +66,25 @@ incidental:
   the variable is not a guard, so `disable_inherited_tracing` runs at the top of
   every run and at the top of the factory.
 
-## What is deliberately absent
+## Tokens and cost, and the order in which they arrived
 
-**Token counts.** The admitted list of #112 names call counts and token counts per
-layer. Calls are here, from `RunState.spent`, which is the figure the bench enforces
-its two ceilings against. Tokens are not, and the reason is this module's own second
-rule: a token field whose only source was the sink is exactly what "never the
-authority for a figure" forbids, so the bench had to learn to count tokens first, in
-the run, where a report can print them.
+**They are here now, and the order they arrived in is the argument.** The admitted
+list of #112 named call counts *and* token counts per layer. Calls came first, from
+`RunState.spent`, which is the figure the bench enforces its two ceilings against.
+Tokens could not, and the reason was this module's own second rule: a token field
+whose only source was the sink is exactly what "never the authority for a figure"
+forbids. So the bench learned to count tokens in the run first (`bench/usage.py`,
+#9) and the trace now copies what the run holds — the totals of a
+`usage.UsageLedger` a run's instruments were built to report into, read one layer at
+a time and never summed (ADR-0026 as amended by #10, ADR-0010).
 
-**It now does, and that is not yet a licence to emit them.** `bench/usage.py` keeps
-what the provider returned about every model call the bench makes — tokens in and
-out, reasoning tokens, the router's own cost, the stop reason and the generation id,
-bucketed per layer and absent rather than zero (#9). So the source is no longer the
-sink. What is still missing is the permission: ADR-0026 declares these fields absent
-*with a reason*, and adding a member to `Field` amends that ADR rather than
-implementing it. The amendment is #10's, agreed before the enum grows, and until
-then `Field` stays exactly as long as the ADR says it is.
+**What is still deliberately absent.** No total over both layers, and no field for
+the calls a *target* made behind the contract: a reference agent's own model calls
+belong to no layer of the bench (`usage.LAYER_IS_NOT_A_TARGETS_FACT`), so the run has
+nothing to say about them and a trace that guessed would be guessing into the one
+surface with no type to stop it. And an outputs field, a reply field or a tool-call
+field: a tool name and its argument are the adaptive attacker's composed probe, which
+is content — `NODE` and `TURN` are the shape of a tool call and are already here.
 """
 
 from __future__ import annotations
@@ -194,6 +196,71 @@ class Field(StrEnum):
     budget and because the two ceilings of ADR-0007 are enforced independently. A
     field that added them would be the one figure ADR-0010 exists to keep apart,
     reconstituted in a sink.
+    """
+
+    INPUT_TOKENS_SCORED = "agentaudit.tokens.input.scored"
+    INPUT_TOKENS_ADAPTIVE = "agentaudit.tokens.input.adaptive"
+    OUTPUT_TOKENS_SCORED = "agentaudit.tokens.output.scored"
+    OUTPUT_TOKENS_ADAPTIVE = "agentaudit.tokens.output.adaptive"
+    REASONING_TOKENS_SCORED = "agentaudit.tokens.reasoning.scored"
+    REASONING_TOKENS_ADAPTIVE = "agentaudit.tokens.reasoning.adaptive"
+    """Tokens read and written, per layer, and there is no field holding a sum.
+
+    Eight fields where four would have been shorter, for the reason `CALLS_SCORED`
+    and `CALLS_ADAPTIVE` are two: a token is the same kind of number as a call, so
+    a blended total is the same arithmetic ADR-0010 forbids — reconstituted in a
+    sink, where nothing types it. Read off `bench/usage.UsageLedger.totals_in`,
+    one layer at a time, which is the only reading that module offers (#9).
+
+    Reasoning tokens are their own pair rather than folded into the output count,
+    because a model that reasons bills them separately and the run holds them
+    separately. Absent where the layer reported none, which for a chat model is
+    the normal state and not a zero (`usage.NO_REASONING_TOKENS_REPORTED`).
+
+    **A layer that reported nothing emits none of these.** Absent rather than
+    zero, which is what ADR-0026 said about these fields before there was a source
+    for them and is still the honest reading now that there is: a provider that
+    reported no counts is not a layer that consumed nothing.
+    """
+
+    PROVIDER_COST_SCORED = "agentaudit.cost.provider.scored"
+    PROVIDER_COST_ADAPTIVE = "agentaudit.cost.provider.adaptive"
+    """What the router said the layer's own calls cost, per layer, as a string.
+
+    A string and not a float, because the figure a bench records has to be the
+    figure the provider named and `float("0.0000123")` is a binary expansion of it
+    (`usage._reported_decimal`). Per layer for the reason the token fields are.
+
+    **This is not the operator's bill and never the consent estimate.** The
+    estimate is priced from what the operator declared about their own endpoint
+    (`graph/budget.py`: money is declared, never guessed); this is what the
+    provider charged the bench for its own instrument calls, after the fact. A
+    reader who added the two would be adding a quote to a receipt, which is why
+    the field name says whose cost it is.
+    """
+
+    CALLS_WITHOUT_TOKENS_SCORED = "agentaudit.calls.without_tokens.scored"
+    CALLS_WITHOUT_TOKENS_ADAPTIVE = "agentaudit.calls.without_tokens.adaptive"
+    CALLS_WITHOUT_COST_SCORED = "agentaudit.calls.without_cost.scored"
+    CALLS_WITHOUT_COST_ADAPTIVE = "agentaudit.calls.without_cost.adaptive"
+    """How many of the layer's model calls the total beside it is missing.
+
+    A total summed over the calls that reported something understates a layer where
+    some provider reported nothing, and a reader who cannot see that cannot tell an
+    understatement from a fact (`usage.LayerTotals`). Zero says the total covers
+    every model call the layer made; anything else says the figure is a floor.
+
+    **Not a share of `CALLS_SCORED`.** That field counts messages this bench sent to
+    a *target*, retries included; these count the bench's own instrument calls, which
+    is a different population with a different denominator — so the shortfall is
+    stated as its own absolute count rather than left to be divided by a figure that
+    is not about the same thing. Emitted only where the layer has a total to qualify,
+    and nothing here divides anything.
+
+    There is deliberately no third pair for reasoning tokens. Its shortfall would
+    count the layer's models that do not reason rather than a gap in a total, which
+    is a different question wearing the same shape
+    (`usage.NO_REASONING_TOKENS_REPORTED`).
     """
 
     VERDICT = "agentaudit.verdict"
@@ -776,6 +843,7 @@ WRITERS: Final = MappingProxyType(
     {
         "Field": Field,
         "Span": Span,
+        "Value": Value,
         "TraceConfig": TraceConfig,
         "TracedRun": TracedRun,
         "Recorder": Recorder,
@@ -796,6 +864,11 @@ WRITERS: Final = MappingProxyType(
     }
 )
 """Everything a consumer of this module may import. Writers, and no reader.
+
+`Value` is on the list as of #10 and is the one entry that emits nothing: a call
+site that builds an attribute map in a helper has to be able to name the type of a
+value, and a type alias returns nothing at all — which is the property this list
+exists to hold. `Field` was already here on the same terms.
 
 Declared as a value rather than left as a docstring claim, because the constraint it
 carries is the one that keeps a trace from becoming the authority for a figure: there

@@ -346,9 +346,10 @@ export function LandingScreen() {
  * are reachable from either, the run is named on the report, and a row with two links
  * makes a reader choose between them before they have read anything.
  *
- * The order is the route's, most recent first, and nothing is filtered:
- * an artefact whose signature did not verify is the one an engineer most needs to see,
- * and its own line says how it settled.
+ * The order is the route's, most recent first, and nothing is filtered: an artefact
+ * whose signature did not verify is the one an engineer most needs to see, so it is on
+ * the list. How it settled is not on the line — the three results are on the screen the
+ * name links to, all three named, on every artefact.
  */
 function Artefacts({ reading }: { reading: ArtefactsReading }) {
   if (!reading.listed) {
@@ -364,17 +365,16 @@ function Artefacts({ reading }: { reading: ArtefactsReading }) {
         <li key={artefact.id}>
           <Link to={artefact.reportPath}>{artefact.target}</Link>
           {/*
-            The word only when it is not *verified*.
-            A verified artefact is the case this list has nothing to add about, and one
-            that did not verify is the whole reason the list exists — so the line for it
-            is the one that carries a word. Nothing is inferred from silence that is not
-            also written down: the artefact's own screen names all three results on every
-            artefact, verified ones included (ADR-0017), and that screen is one click
-            along the name at the head of this line.
+            No word for how it settled, on any line.
+
+            A word here was one outcome out of three, on the lines that did not verify,
+            with nothing said on the ones that did — a reader had to know that silence
+            meant *verified* to read the list at all, which is an inference off a screen
+            and not off a check. The three results are named individually on the
+            artefact's own screen, verified ones included (ADR-0017), and that screen is
+            one click along the name at the head of this line. `settledInAWord` is still
+            built and still tested; no screen prints it.
           */}
-          {artefact.verification.settled === 'verified' ? null : (
-            <span className="not-to-send">{artefact.settledInAWord}</span>
-          )}
           <code>{artefact.id}</code>
         </li>
       ))}

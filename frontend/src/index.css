@@ -1444,18 +1444,6 @@ code {
 }
 
 /*
- * The word an artefact that did not verify carries, and the only reason a line on this
- * list is longer than the others.
- *
- * Not coloured. No verdict, band or rate is coloured anywhere in this console
- * (ADR-0005), and *did not verify* is the outcome of a check on the evidence — read as
- * a red mark it would be read as a judgement on the target instead.
- */
-.not-to-send {
-  font-weight: 600;
-}
-
-/*
  * The runs on the record, as a table — the only table in this stylesheet.
  *
  * Everywhere else two figures are set as two blocks, on the argument that a table of

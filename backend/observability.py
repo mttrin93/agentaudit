@@ -371,6 +371,10 @@ Sampling is over the trace and not the span, so a sampled-out run emits nothing
 rather than a run with holes in it — a partial trace is a run whose missing spans
 read as steps that did not happen. The Article 12 log does not sample whatever this
 is set to.
+
+That the run is the trace is why `start` opens `Span.RUN` as a root span whatever is
+current: a run opened as some other span's child would be sampled by that span's
+flag, and this fraction would be a setting the run did not obey (#29).
 """
 
 INHERITED_TRACING_VARIABLES: Final = (
@@ -813,6 +817,17 @@ def start(
     current, which is its case, and is never made current itself. Nothing nests under
     an attempt, which is true of the bench as well as of the trace.
 
+    `Span.RUN` is opened as a root span, whatever is current when it is. A run is a
+    trace and `SAMPLE_VARIABLE` samples traces, so the declared fraction decides
+    whether a run is traced — and `ParentBased` asks its ratio sampler only about a
+    *root* span, following the parent's sampled flag for anything else. A run opened
+    as somebody's child would therefore be traced or dropped by inheritance, at
+    whatever fraction that trace was sampled at, which is not the reading
+    `SAMPLE_VARIABLE` says it is. No path reaches this with a span current today —
+    each run holds its own thread and a thread's context starts empty — so this is
+    the property made structural rather than a bug fixed: the guarantee was resting
+    on the accident that nothing has yet called a run in line (#29).
+
     Never raises. A sink that has gone away mid-run leaves the run untouched, which
     is the third of the three things a trace is not.
     """
@@ -824,9 +839,12 @@ def start(
     # must be raised in the face of whoever wrote it, and a sink that is down must
     # not be.
     attributes = _attributes(fields)
+    # An empty context is how the SDK is told there is no parent. `None` would mean
+    # "whatever is current", which is the reading this line exists to refuse.
+    parent = otel_context.Context() if name is Span.RUN else None
     try:
         span = provider.get_tracer(SERVICE).start_span(
-            name.value, attributes=attributes
+            name.value, context=parent, attributes=attributes
         )
         token = (
             otel_context.attach(otel_trace.set_span_in_context(span))

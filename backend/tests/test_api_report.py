@@ -55,7 +55,7 @@ from backend.bench.verification import (
     ReDerivationOutcome,
     SignatureOutcome,
 )
-from backend.tests.conftest import ADJUDICATING
+from backend.tests.conftest import ADJUDICATING, stop_every_run
 from backend.tests.test_api_runs import (
     a_request,
     registered,
@@ -121,7 +121,10 @@ def completed(
         )
         settled(record)
         assert record.status is RunStatus.COMPLETED, record.statement
-        yield Served(client=client, record=record, run_id=run_id)
+        try:
+            yield Served(client=client, record=record, run_id=run_id)
+        finally:
+            stop_every_run(client)
 
 
 class Served:
@@ -451,6 +454,9 @@ def test_a_run_that_has_not_completed_is_a_named_outcome_rather_than_a_partial_r
         nonce = registered(client, watched)
         started = client.post("/runs", json=a_request(watched.target, nonce)).json()
         response = client.get(f"/report/{started['run_id']}")
+        # The halt this test deliberately left open, answered before the test ends
+        # and not sixty seconds into the next one (#29).
+        stop_every_run(client)
 
     detail = response.json()["detail"]
     assert response.status_code == 409

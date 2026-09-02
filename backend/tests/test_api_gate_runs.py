@@ -110,6 +110,7 @@ from backend.tests.conftest import (
     AUTH_TOKEN,
     BENCH_ATTESTATION,
     authored_library,
+    stop_every_run,
 )
 from backend.tests.test_api_runs import Counted, Ledger
 from backend.tests.test_cited import a_passing_gate, a_record
@@ -245,12 +246,19 @@ def a_bench(
         ),
     )
     with TestClient(app) as client:
-        yield Gating(
-            client=client,
-            gates=cast(BenchGateRuns, app.state.gate_runs),
-            runs=cast(BenchRuns, app.state.bench),
-            library=library if library is not None else Path("/nowhere"),
-        )
+        try:
+            yield Gating(
+                client=client,
+                gates=cast(BenchGateRuns, app.state.gate_runs),
+                runs=cast(BenchRuns, app.state.bench),
+                library=library if library is not None else Path("/nowhere"),
+            )
+        finally:
+            # See `api` in `test_api_runs.py`: a gate run left at its interrupt
+            # outlives the test that started it and runs in another one's window
+            # (#29). A gate run holds the library's lease as well, so a leaked one
+            # is also a library the next gate run may not write to.
+            stop_every_run(client)
 
 
 def a_gate_request(

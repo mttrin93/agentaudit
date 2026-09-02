@@ -11,6 +11,8 @@ that supplied consent by default would make the halt invisible in exactly the
 tests that are supposed to demonstrate it.
 """
 
+import threading
+import time
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
@@ -18,6 +20,9 @@ from datetime import date
 from pathlib import Path
 
 import pytest
+from fastapi.testclient import TestClient
+from opentelemetry import context as otel_context
+from opentelemetry import trace as otel_trace
 
 from backend.bench.adaptive import precedent
 from backend.bench.adaptive.precedent import DURABLE_PRECEDENT
@@ -392,6 +397,158 @@ def precedent_elsewhere(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
     elsewhere = tmp_path / "precedent" / "findings.json"
     monkeypatch.setattr(precedent, "DEFAULT_STORE_PATH", elsewhere)
     monkeypatch.setattr(DURABLE_PRECEDENT.store, "path", elsewhere)
+
+
+RUN_THREADS: tuple[str, ...] = ("agentaudit-run-", "agentaudit-gate-run-")
+"""How `runs.py` and `gate_runs.py` name the thread one run happens on.
+
+Read here so that a run left going is findable by the suite. The names are the
+registries' own (`threading.Thread(name=...)`), and a gate run's thread is named
+separately because a gate run is not a run — neither prefix covers the other.
+"""
+
+A_RUN_HAS_STOPPED = 2.0
+"""How long a run thread is given to be gone once its test is over.
+
+Not zero, because a run that settled its record a microsecond before the assertion
+is still unwinding its own stack and is not a leak. Two seconds rather than a
+minute, because the leak this catches holds a thread for `approval_wait_seconds` —
+sixty of them in this suite — and a grace long enough to cover that would be a
+guard that passes.
+"""
+
+IN_FLIGHT: frozenset[str] = frozenset({"awaiting_approval", "running"})
+"""The two statuses a run can leave, in the words the routes put on the wire
+(`RunStatus.in_flight`)."""
+
+LISTINGS: tuple[tuple[str, str, str], ...] = (
+    ("/runs", "runs", "run_id"),
+    ("/gate-runs", "gate_runs", "gate_run_id"),
+)
+"""Where the two kinds of run are listed, the field the rows are under, and what
+each row calls its id. A gate run is not a run and its route says so (ADR-0023),
+so the two are named separately here rather than derived from one another."""
+
+
+def stop_every_run(client: TestClient) -> None:
+    """Answer every halt this test left open, and wait for the run to stop.
+
+    A test that starts a run over HTTP and asserts on the *start* response leaves a
+    worker waiting `approval_wait_seconds` for an answer nobody is going to give —
+    sixty seconds, well into whichever test comes next. That run then attacks its
+    reference agent and emits spans, in another test's window and into another
+    test's sink: it is how
+    `test_every_attempt_is_recorded_with_tracing_off_on_and_sampled_to_nothing`
+    came to read spans it never made, and why it failed on roughly one full-suite
+    run in three while passing every time on its own (#29).
+
+    Declined rather than approved, and through the same route an operator answers
+    on: nothing has been sent to the target at the halt, so this ends the run
+    without spending a call on anybody's endpoint (ADR-0007).
+    """
+    deadline = time.monotonic() + 30.0
+    while time.monotonic() < deadline:
+        in_flight = [
+            (route, str(row[identifier]), row["status"])
+            for route, field, identifier in LISTINGS
+            for row in _rows(client, route, field)
+            if row["status"] in IN_FLIGHT
+        ]
+        if not in_flight:
+            return
+        for route, run_id, status in in_flight:
+            if status == "awaiting_approval":
+                client.post(
+                    f"{route}/{run_id}/approval",
+                    json={
+                        "confirmed": False,
+                        "identity": "the suite",
+                        "reason": "the test that started this run is over",
+                    },
+                )
+        time.sleep(0.02)
+    raise AssertionError("a run this test started is still going 30 seconds later")
+
+
+def _rows(client: TestClient, route: str, field: str) -> list[dict[str, str]]:
+    """One listing, or nothing at all where this bench does not serve it."""
+    listing = client.get(route)
+    if listing.status_code != 200:
+        return []
+    rows: list[dict[str, str]] = listing.json()[field]
+    return rows
+
+
+def _run_threads() -> list[threading.Thread]:
+    """Every thread a bench run is happening on, right now."""
+    return [
+        thread
+        for thread in threading.enumerate()
+        if thread.name.startswith(RUN_THREADS) and thread.is_alive()
+    ]
+
+
+@pytest.fixture(autouse=True)
+def no_run_left_running() -> Iterator[None]:
+    """No test may leave a bench run going after it.
+
+    Autouse, and it fails the test that leaked rather than the test that met the
+    consequences — which is the whole reason it is here rather than in the test that
+    was failing. A run that outlives its test keeps calling a target, keeps writing
+    to a run record and keeps emitting spans, in somebody else's window; the sink is
+    a module global, so the spans land in whatever sink is installed by the time they
+    are made (#29).
+
+    `stop_every_run` is the answer to it at the call sites that start runs. This is
+    the guard that says when one was missed.
+
+    Only the runs *this* test started are its business. A run leaked by an earlier
+    test is still going while this one runs, and blaming both would bury the one
+    line that names the leak under a page of tests that did nothing wrong — which
+    is the same mistake as the failure this guard exists to explain.
+    """
+    already = {id(thread) for thread in _run_threads()}
+    yield
+    lingering = [thread for thread in _run_threads() if id(thread) not in already]
+    for thread in lingering:
+        thread.join(A_RUN_HAS_STOPPED)
+    still_going = sorted(thread.name for thread in lingering if thread.is_alive())
+    if still_going:
+        pytest.fail(
+            f"this test left {len(still_going)} bench run(s) going: {still_going}. "
+            "A run that outlives its test attacks a target, writes a record and "
+            "emits spans in another test's window and into another test's sink "
+            "(#29). Answer the halt and wait for the run: `stop_every_run`"
+        )
+
+
+@pytest.fixture(autouse=True)
+def no_span_left_current() -> Iterator[None]:
+    """No test may hand the next test a span to be a child of.
+
+    Autouse and unconditional, for the reason `precedent_elsewhere` is: the damage
+    is done to a *later* test and is invisible in the one that caused it. Every span
+    a later test opens becomes a child of the leak, so it goes to the leaked span's
+    trace and is sampled by the leaked span's flag rather than by the fraction the
+    later test declared. A run is safe from that by construction — `start` opens
+    `Span.RUN` as a root span — and nothing else is: the tree a reader reads would
+    be nested under a span from another test entirely (#29, ADR-0026).
+
+    Fails the test that leaked rather than the test that inherited, which is the
+    whole point of putting it here, and restores the context on the way out so that
+    one leak is one failure instead of a cascade of them.
+    """
+    entered = otel_context.get_current()
+    yield
+    current = otel_trace.get_current_span().get_span_context()
+    if current.is_valid:
+        otel_context.attach(entered)
+        pytest.fail(
+            "this test left a span current. Every span the next test opens "
+            "would be a child of it, in the leaked span's trace and sampled by "
+            "the leaked span's flag (#29): end every span this test starts, and "
+            "detach in the reverse order of attach"
+        )
 
 
 @dataclass(frozen=True)

@@ -85,6 +85,7 @@ from backend.tests.conftest import (
     a_budget,
     a_target,
     some_cases,
+    stop_every_run,
 )
 from backend.tests.flaky_target import IMPATIENT, flaky_target
 
@@ -295,7 +296,14 @@ def api(
         )
     )
     with TestClient(app) as client:
-        yield client, cast(BenchRuns, app.state.bench)
+        try:
+            yield client, cast(BenchRuns, app.state.bench)
+        finally:
+            # Every halt this test left open, answered on the way out. A run left
+            # waiting for an answer holds its thread for `approval_wait_seconds`
+            # and then attacks its target in whichever test is running by then,
+            # emitting spans into whichever sink is installed by then (#29).
+            stop_every_run(client)
 
 
 def a_request(

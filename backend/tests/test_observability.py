@@ -872,6 +872,42 @@ def test_every_attempt_is_recorded_with_tracing_off_on_and_sampled_to_nothing(
     assert emitted and not dropped
 
 
+def test_a_run_is_sampled_by_the_declared_fraction_and_never_by_a_span_it_is_under(
+    leakage_case: Case,
+) -> None:
+    """`sample=0.0` emits nothing, whatever else is current when the run starts.
+
+    `ParentBased` asks its ratio sampler only about a *root* span and follows the
+    parent's sampled flag for anything else. So a run opened as some other span's
+    child is traced or dropped by inheritance, at whatever fraction that trace was
+    sampled at — and `SAMPLE_VARIABLE` would be a setting the run did not obey,
+    against the property its docstring states. `start` opens `Span.RUN` as a root
+    span for that reason, and this is the assertion that says so.
+
+    No production path reaches a run with a span current today: each run holds its
+    own thread and a thread's context starts empty (`runs.py`, `gate_runs.py`). The
+    span is made current here by hand, because a property that rests on nothing
+    calling a run in line is a property held by an accident (#29).
+    """
+    with recording():
+        ambient = observability.start(Span.RUN)
+        try:
+            with recording(sample=0.0) as exporter, reference_target() as reference:
+                run_calibration(
+                    cases=[leakage_case],
+                    targets=[reference.target],
+                    attestation=BENCH_ATTESTATION,
+                    plant_nonce=reference.plant_nonce,
+                    approve=CONFIRMING,
+                    trace=A_RUN,
+                )
+                dropped = list(exporter.get_finished_spans())
+        finally:
+            ambient.end()
+
+    assert not dropped
+
+
 def test_a_run_that_aborted_still_pushes_its_trace_before_the_process_moves_on(
     leakage_case: Case,
 ) -> None:

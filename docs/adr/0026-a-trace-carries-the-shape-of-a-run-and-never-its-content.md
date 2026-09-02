@@ -127,7 +127,7 @@ wrote it; a sink that is unreachable must not be. A bench that lost 180 paid cal
 because a container was restarting would be a bench whose observability cost more
 than it explained.
 
-## Four properties of the implementation that carry the decision
+## Five properties of the implementation that carry the decision
 
 - **The tracer provider is private to the module.** `set_tracer_provider` is called
   nowhere in this repository. A global provider is a sink that any library in the
@@ -152,6 +152,16 @@ than it explained.
   a `finally`, and `run_calibration` flushes in one: the run that stopped is the run
   whose trace is worth having, and both the spans and the push have to survive the
   exception that stopped it.
+- **A run is a trace, so its run span is a root span.** `AGENTAUDIT_TRACE_SAMPLE`
+  samples traces and not spans, so a sampled-out run emits nothing rather than a run
+  with holes in it. `ParentBased` asks its ratio sampler only about a root span and
+  follows the parent's sampled flag for anything else — so a run opened as some other
+  span's child would be traced or dropped by inheritance, at whatever fraction that
+  trace was sampled at, and the declared fraction would be a setting the run did not
+  obey. `start` opens `Span.RUN` in an empty context for that reason. Nothing calls a
+  run with a span current today, because each run holds its own thread and a thread's
+  context starts empty; the property is written into the code rather than left to that
+  (#29).
 - **Span names are a closed set too.** A name is emitted data as much as an attribute
   is, and a name assembled from a case id or a target's name would be the allowlist
   bypassed through the one part of a span nobody thinks of as a field.

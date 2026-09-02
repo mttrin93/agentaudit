@@ -47,6 +47,7 @@ import { describe, expect, it } from 'vitest'
 import type { BenchGate, DeclaredRule, GateCitation } from '../api/bench'
 import screen from './GateScreen.tsx?raw'
 import attestation from './GateAttestation.tsx?raw'
+import cards from './GateCards.tsx?raw'
 import decision from './GateDecision.tsx?raw'
 import estimate from './GateEstimate.tsx?raw'
 import progress from './GateProgress.tsx?raw'
@@ -64,9 +65,33 @@ import hook from './useGateRun.ts?raw'
  * structural refactor weakens a test without failing it. So the whole screen is read,
  * and a new file on this side has to be added here.
  */
-const component = [screen, hook, startBlock, attestation, estimate, progress, decision].join(
-  '\n',
-)
+const parts: Readonly<Record<string, string>> = {
+  './GateScreen.tsx': screen,
+  './useGateRun.ts': hook,
+  './GateStart.tsx': startBlock,
+  './GateAttestation.tsx': attestation,
+  './GateEstimate.tsx': estimate,
+  './GateProgress.tsx': progress,
+  './GateCards.tsx': cards,
+  './GateDecision.tsx': decision,
+}
+
+const component = Object.values(parts).join('\n')
+
+/**
+ * Every file in this directory that the gate screen is made of, globbed.
+ *
+ * The list above is written out so that the scan reads a known set rather than
+ * whatever happens to be on disk. That only holds while the two agree, and nothing
+ * would have said so: an eighth file lands, nobody adds it, and the scan goes on
+ * passing over seven while what it guards lives in eight. So the roster is asserted
+ * against the directory, which is the assertion the list itself cannot make.
+ */
+const onDisk = import.meta.glob<string>('./{Gate*,useGateRun}.{ts,tsx}', {
+  query: '?raw',
+  import: 'default',
+  eager: true,
+})
 import { gateScreen, REFERENCE_AGENTS, type GateBlock } from './gate'
 import { startControl, type StartControl } from './gaterun'
 
@@ -298,6 +323,13 @@ describe('the one control this screen adds, and no second one', () => {
     // And nothing at all where this app has not been told yet, which is a third
     // state: a control drawn on a guess would be a control the bench then refuses.
     expect(block(gateScreen(CERTIFIED, null), 'start').start).toBeNull()
+  })
+
+  it('reads every file the gate screen is made of', () => {
+    // The roster the scan below reads, held to the files that are actually there.
+    // #14 split this screen into eight files; a scan pointed at seven of them would
+    // assert nothing about the eighth and would not say so.
+    expect(Object.keys(parts).sort()).toEqual(Object.keys(onDisk).sort())
   })
 
   it('can make a gate run’s two writes in the component and no others', () => {

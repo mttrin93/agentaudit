@@ -14,6 +14,10 @@ fields and the citation points at it there, so that the bench cites the gate run
 just made rather than whatever a deployment declared
 ([ADR-0023](../../docs/adr/0023-a-gate-run-updates-the-citation-it-earned.md)).
 
+`write_back` is public rather than private-with-an-underscore because it crosses a
+module boundary: a name two modules share is part of a surface, and spelling that as
+`_write_back` would have been a private name imported from somewhere else.
+
 **The citation reaches `ReportConfig.gate` through `Cites` and through nothing
 else**: a `GateCitation` in, nothing out, and no decision or record crossing in
 either direction. `cite` is called here and nowhere else on this side, which is why
@@ -39,7 +43,7 @@ from backend.bench.gate_record import (
 from backend.bench.retirement import RetirementDecision, readings_of, store
 
 
-def _write_back(
+def write_back(
     record: GateRunRecord,
     result: CalibrationResult,
     gate: GateResult,

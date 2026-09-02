@@ -364,6 +364,32 @@ def test_a_gate_run_cannot_start_with_any_one_statement_withheld(
     assert library_bytes(library) == before
 
 
+def test_the_list_of_gate_run_modules_is_every_module_of_the_gate_run_side() -> None:
+    """The roster the three scans below read, held to the files that are actually
+    there.
+
+    Without this the list is the weakest thing in the file: a fifth `gate_run_*`
+    module lands, nobody adds it, and all three scans go on passing over four files
+    while the property they guard lives in five. That is the same failure the roster
+    was written to fix, one level up — a scan that narrows silently — so the roster
+    itself is asserted rather than trusted.
+
+    Derived from the directory rather than from a second list, because a second list
+    would need a third test.
+    """
+    on_disk = {
+        source.name
+        for source in sorted(API_DIR.glob("*.py"))
+        if source.name == "gate_runs.py" or source.name.startswith("gate_run_")
+    }
+
+    assert set(GATE_RUN_MODULES) == on_disk, (
+        "the gate-run side has a module the source scans in this file do not read. "
+        "Add it to GATE_RUN_MODULES: a scan pointed at four files while the code "
+        "lives in five passes without asserting anything"
+    )
+
+
 def test_no_flag_or_setting_lets_a_gate_run_proceed_without_an_attestation() -> None:
     """The prohibition as a scan, because a flag is what this failure would look like.
 

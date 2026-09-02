@@ -139,6 +139,49 @@ def test_every_section_states_its_own_reproducibility_and_three_read_the_payload
         )
 
 
+# --- The golden digest: one document, pinned to the byte ---------------------
+
+GOLDEN_ONE_FAMILY = "257b0e3fbe011e1a879f08a2222126a225da4b700abb09ea84cab835b90af0b7"
+"""The sha256 of `_one_family()`'s rendering, written down.
+
+**A tripwire, and it is deliberately a strict one.** Every other assertion in this
+file reads the document the renderer just produced, so all of them stay green
+against a renderer that changed what it emits — which is exactly the change ADR-0017
+says must move every digest. Nothing in this repository pinned a byte until #14
+needed to prove that splitting the renderer into a package changed none, and a proof
+that lives only in a transcript is a proof the next reader cannot re-run.
+
+**What a failure here means.** Either the rendering changed and the change was not
+intended — a refactor that was supposed to be a move — or it changed on purpose, and
+then this constant is updated in the same diff as the wording that moved it, which is
+the point: a digest changing is a fact with an author. It is not a signature and no
+issued signature depends on it (ADR-0017); changing the renderer stays free, and
+changing it by accident does not.
+"""
+
+
+def test_the_rendering_of_one_deterministic_payload_is_byte_for_byte_what_it_was() -> (
+    None
+):
+    """One fixed payload, one fixed document, one written-down digest.
+
+    The golden fixture the acceptance criteria of a structural change ask for. It
+    asserts the digest rather than the text because the digest is the thing bound
+    into the payload and covered by the signature, and because a diff of a
+    twenty-kilobyte document tells a reviewer nothing a hash does not.
+    """
+    markdown = render(_one_family())
+
+    assert digest(markdown) == GOLDEN_ONE_FAMILY, (
+        "the rendering of a fixed payload changed. If that was intended, update "
+        "GOLDEN_ONE_FAMILY in this diff and say what moved; if it was not, this is "
+        "a renderer that emits a different document than it did (ADR-0017)"
+    )
+    # And the digest is over the document's own UTF-8 bytes, so the constant above is
+    # checkable by hand against the file a run publishes.
+    assert digest(markdown) == hashlib.sha256(markdown.encode("utf-8")).hexdigest()
+
+
 # --- The binding: the digest is inside the payload, before any signature ------
 
 

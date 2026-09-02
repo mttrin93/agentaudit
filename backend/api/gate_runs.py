@@ -105,7 +105,7 @@ from backend.api.gate_run_state import (
 from backend.api.gate_run_state import (
     a_holder as a_holder,
 )
-from backend.api.gate_run_writeback import _write_back
+from backend.api.gate_run_writeback import write_back
 from backend.api.run_config import BenchConfig
 from backend.api.run_state import PendingApproval
 from backend.api.run_status import PRESENT_WAIT_SECONDS
@@ -514,7 +514,7 @@ def _decide(
         return
 
     record.gate = gate
-    record.written = _write_back(record, result, gate, served, config, cites)
+    record.written = write_back(record, result, gate, served, config, cites)
     record.settle(
         GateRunStatus.DECIDED,
         (

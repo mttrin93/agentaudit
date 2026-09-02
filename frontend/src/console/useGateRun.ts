@@ -1,24 +1,22 @@
 /**
  * The gate screen's state, so that the screen itself is markup.
  *
- * ADR-0021 lets the console start a gate run, and this screen is the whole of what
- * that looks like. Since #14's split it is markup and nothing else: every piece of
- * state, every effect and every request lives in `useGateRun`, and the blocks are
- * components of their own — `GateStart`, `GateAttestation`, `GateEstimate`,
- * `GateProgress`, `GateDecision`. What is left here is the one thing that could not
- * move: the order the blocks appear in, and which of them a stage draws.
+ * ADR-0021 lets the console start a gate run, and everything the browser has to hold
+ * to do that is here: what this bench cites, whether another gate run may start, the
+ * run this screen started, and where it has got to. #14 lifted it out of
+ * `GateScreen.tsx`, which now draws it and decides nothing.
  *
- * **Three absences are three different sentences.** A bench that did not answer for
- * its gate, a bench that holds no record of one, and a screen that has not read yet
- * are distinguished on the page, because none of them is a gate that failed and an
- * operator acting on the wrong one acts wrongly.
+ * **Three absences are three different sentences**, and keeping them apart is the
+ * reason this holds three pieces of state rather than one. A bench that did not
+ * answer for its gate, a bench that holds no record of one, and a screen that has not
+ * read yet are three facts, and none of them is a gate that failed — a single failure
+ * field would report the first as the second and put a broken bench on the page.
  *
- * **The control is handed over at every stage** and `going` is what greys it out. It
- * used to be passed only while the stage was idle, which is why it vanished after a
- * run was decided.
- *
- * `railIcons.tsx` explains why a drawing on this screen is `aria-hidden` and why no
- * card loses a fact without it.
+ * **`held.start` is the bench's answer and never this hook's.** Whether another gate
+ * run may start depends on a lease on the library that no browser can see, so it is
+ * asked — and asked again at the one moment it can have changed, when a run this
+ * hook was watching stops. `ourRunIsGoing` is the separate, smaller fact this hook
+ * does own: that a run *it* started is still going.
  */
 
 import {

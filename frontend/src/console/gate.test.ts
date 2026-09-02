@@ -45,7 +45,28 @@
 import { describe, expect, it } from 'vitest'
 
 import type { BenchGate, DeclaredRule, GateCitation } from '../api/bench'
-import component from './GateScreen.tsx?raw'
+import screen from './GateScreen.tsx?raw'
+import attestation from './GateAttestation.tsx?raw'
+import decision from './GateDecision.tsx?raw'
+import estimate from './GateEstimate.tsx?raw'
+import progress from './GateProgress.tsx?raw'
+import startBlock from './GateStart.tsx?raw'
+import hook from './useGateRun.ts?raw'
+
+/**
+ * Every file the gate screen is made of, read as one text.
+ *
+ * The scan below asserts what this screen can and cannot *do* — two writes, no form,
+ * no `fetch` of its own, every button a `type="button"`. That claim was written when
+ * the screen was one file. #14 split it into a hook and five component files, and a
+ * scan still pointed at `GateScreen.tsx` would have gone on passing while the
+ * buttons and the writes it guards moved out from under it: the quiet way a
+ * structural refactor weakens a test without failing it. So the whole screen is read,
+ * and a new file on this side has to be added here.
+ */
+const component = [screen, hook, startBlock, attestation, estimate, progress, decision].join(
+  '\n',
+)
 import { gateScreen, REFERENCE_AGENTS, type GateBlock } from './gate'
 import { startControl, type StartControl } from './gaterun'
 

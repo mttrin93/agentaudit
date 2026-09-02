@@ -55,5 +55,8 @@ select = ["E", "F", "I", "UP", "B"]
 
 [tool.mypy]
 python_version = "3.12"
-files = ["backend", "scripts"]
+# `frontend/e2e` is Python too: the browser walkthrough's harness serves the API and
+# the reference agents, and a test harness that boots the product typechecks on the
+# same terms the product does.
+files = ["backend", "scripts", "frontend/e2e"]
 strict = true

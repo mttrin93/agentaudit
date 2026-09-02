@@ -25,12 +25,23 @@
  * run (ADR-0021) — and it is named separately for that reason: it is not reachable
  * by proxying `/bench`, and it should not become reachable by widening one.
  *
- * **The tests run in node and there is no browser here.** The spec expects these
- * screens to be driven by hand, and three screens do not justify a browser-driver
- * harness. What is automated is the logic behind them — the guard rules, the body
- * that goes on the wire, and what the app makes of a refusal — and none of that
- * needs a DOM. A jsdom environment would be a dependency bought so that a test
- * could assert on markup nobody reads.
+ * **The tests here run in node, and the one browser test does not run here.**
+ * `vitest` covers the logic behind the screens — the guard rules, the body that goes
+ * on the wire, and what the app makes of a refusal — and none of that needs a DOM,
+ * so there is still no jsdom environment: it would be a dependency bought so that a
+ * test could assert on markup nobody reads. What changed with #19 is that there is
+ * now one test that reads the markup a person reads, and it drives a real browser
+ * rather than a simulated one: `playwright.config.ts`, `frontend/e2e/`, and
+ * `npm run e2e`. It is a separate runner with a separate config because it needs two
+ * servers and a browser download, and `include` below keeps the two apart by
+ * construction: the `src` tree's `.test.ts` files are vitest's, and the `.spec.ts`
+ * under `e2e/` is Playwright's.
+ *
+ * **The dev server below is what that walkthrough serves the app with**, and the
+ * proxy is why. A previewed build would answer nothing under `/runs`: the six
+ * prefixes are proxied for `server` and there is no `preview.proxy` beside them,
+ * and adding one to make a test's life easier is the shape of change this docstring
+ * spends its first paragraph arguing against.
  *
  * **The React Compiler is on, and it is not the Babel plugin.**
  * `@vitejs/plugin-react` 6 carries the compiler as its own `compiler` option and

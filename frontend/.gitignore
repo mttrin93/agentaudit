@@ -11,3 +11,19 @@ dist
 # Vite's local overrides, which are one machine's and not this project's.
 *.local
 *.log
+
+# Where the reference agents the browser walkthrough attacks are listening. Written
+# by frontend/e2e/harness.py once they are up and deleted when it stops: an ephemeral
+# port is a fact about one running process and never about this project.
+e2e/served.json
+
+# Playwright's own output. The report and the traces are one run's artefacts, and a
+# failed run's trace is read where it was produced.
+test-results
+playwright-report
+
+# The public half of the key pair the walkthrough signs with, written by
+# frontend/e2e/harness.py for one run and deleted when it stops. The committed key is
+# keys/agentaudit-signing.pub and this is never that: a per-run key belongs to one
+# process, and a private half is written nowhere at all.
+e2e/dev-signing.pub

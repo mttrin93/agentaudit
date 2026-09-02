@@ -80,8 +80,68 @@ jobs:
       - name: Typecheck and build
         run: npm run build
 
-      # The screens themselves are driven by hand, per the spec. What runs here
-      # is what a person cannot check faster than a test can: the guard rules
-      # and the body that goes on the wire. No browser is involved.
+      # What runs here is what a person cannot check faster than a test can: the
+      # guard rules and the body that goes on the wire. No browser is involved in
+      # this job — the one that is, is `walkthrough` below, and it is a third job
+      # for the reason this is a second one.
       - name: Test
         run: npm test
+
+  # The product end to end, once, in a browser. Its own job because it is the one
+  # thing in this pipeline that needs both toolchains at the same time plus a
+  # browser download: folding it into `check` would make a Python failure wait on
+  # npm, and folding it into `frontend` would make a TypeScript failure wait on a
+  # `uv sync`. It is also the slowest, and the split is what keeps the other two
+  # answering at the speed they answer now.
+  #
+  # **What it costs: 52 seconds, measured.** `uv sync --locked` and `npm ci` come off
+  # the cache in under two, the Chromium download is 25 of the 52 and is the single
+  # largest item, and the walkthrough itself is 14 — the run it drives is one family
+  # at the declared attempts per case, thirty-one calls against a stub, and the
+  # verifier over the three files it produced. Against a ten-minute timeout that is
+  # room to spare, and the number to watch if this job ever grows a second test is
+  # the browser download rather than the walk. Chromium only, and no `firefox` or
+  # `webkit`: one walkthrough answers one question and it is not a question about
+  # browser differences.
+  #
+  # **What it spends: nothing.** `frontend/e2e/harness.py` deletes every variable
+  # the factory reads before calling it and refuses to serve while
+  # `observability.trace_config` can still see a sink, so the bench under test
+  # declares no models, reaches no provider and exports no span. The target is a
+  # reference agent this job started, served on a stub model.
+  walkthrough:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v10.0.1
+        with:
+          enable-cache: true
+
+      - name: Install the project
+        run: uv sync --all-groups --locked
+
+      - name: Install Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install the app
+        run: npm ci
+        working-directory: frontend
+
+      # Pinned by `package-lock.json` like everything else: `playwright install`
+      # downloads the build this exact `@playwright/test` expects, so a green run
+      # here is the browser a local run used. `--with-deps` installs the system
+      # libraries Chromium needs on a bare runner.
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+        working-directory: frontend
+
+      - name: Walkthrough
+        run: npm run e2e
+        working-directory: frontend

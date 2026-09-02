@@ -1,0 +1,220 @@
+"""The two servers one browser walkthrough needs, and the environment it needs them in.
+
+Started by Playwright as a `webServer` and killed by it at the end of the run. It
+serves the bench's own API on a fixed port — the port `playwright.config.ts` points
+the Vite dev server's proxy at — and one set of reference agents on an ephemeral one,
+then writes what the test cannot know in advance to `served.json` beside this file: the
+endpoint to type into the registration form, the route to plant the nonce on, and the
+key the report it produces will verify against.
+
+**The environment is emptied before the factory reads it, and that is the whole point
+of this file.** `create_app` points the process at whatever trace sink the environment
+declares and builds whatever models it names, and this repository's `.env` declares a
+real sink and three real models. A walkthrough started from an engineer's own shell
+would publish prompts and replies to that sink and could spend on that provider. So
+every variable the factory reads is deleted here before it is called, and the one that
+is set is a signing key generated in this process: no endpoint, no API key, no model
+slug, and a bench that declares no models runs the deterministic stand-in attacker and
+attempts no judged case (`app.deployed_models`, `adaptive/scripted.py`).
+
+**The pair is generated per run, and the private half is written nowhere.** It exists
+in this process's environment for as long as the process does and in no file, which is
+the posture ADR-0020 asks for. The public half is written — `scripts.verify` pins a key
+file and the walkthrough's last leg runs it — and it is written beside this harness and
+deleted when it stops. `signing.generate` is reached directly rather than through
+`scripts/keygen`, whose other two jobs are writing the *committed* public half and
+refusing to replace it: no path in this file names
+`keys/agentaudit-signing.pub`, and none can be pointed at it by editing an argument.
+
+**Nothing here is reachable from the bench.** It is test equipment under
+`frontend/e2e/`, it is imported by no module of `backend/` or `scripts/`, and the run
+it makes possible goes through the same routes an operator's run goes through: there is
+no shortcut past the attestation, the nonce echo or the approval interrupt, and the run
+is shortened only by the two declared-input routes the console already writes to
+(ADR-0025).
+"""
+
+import json
+import os
+import sys
+from pathlib import Path
+
+PUBLIC_KEY = Path(__file__).resolve().parent / "dev-signing.pub"
+"""Where the public half of the walkthrough's key pair is written, for one run.
+
+The pair is generated in this process and the private half stays in this process's
+environment. The public half has to reach a second process — `scripts.verify` is how a
+recipient checks an artefact, and it pins a key file — so it is written here, next to
+the walkthrough that reads it, and deleted when the harness stops.
+
+**Never `keys/agentaudit-signing.pub`.** That file is the published key whose
+fingerprint the README carries, every signature ever issued under it verifies against
+it, and `scripts/keygen` refuses to replace it. Nothing in this file names it: the pair
+is reached through `signing.generate` rather than through the script, so a path in this
+harness cannot be pointed at the committed key by editing an argument.
+"""
+
+REPOSITORY = Path(__file__).resolve().parents[2]
+"""The repository root, put on the import path below.
+
+A script run as `python frontend/e2e/harness.py` gets its own directory as `sys.path[0]`
+and not the working directory, so `import backend` fails however sensible the working
+directory is. The suite never meets this because pytest reads `pythonpath = ["."]` out
+of `pyproject.toml`; a script has no such file to read, and a green local run on a
+machine whose virtualenv happens to hold the project is not evidence that a fresh
+checkout works — CI's first run of this job proved that by failing on this line.
+
+Inserted rather than appended, and at import rather than inside `main`, so the path is
+in place before any import statement in this file can run.
+"""
+
+sys.path.insert(0, str(REPOSITORY))
+
+SERVED = Path(__file__).resolve().parent / "served.json"
+"""Where the reference agents' address is left for the test to read.
+
+A file rather than a port agreed in advance, because `serving.serve` binds an
+ephemeral port and a walkthrough that pinned one would fail on a machine already
+using it. Written after the agents are up, so a test that reads it reads a live
+address.
+"""
+
+API_PORT_VARIABLE = "AGENTAUDIT_E2E_API_PORT"
+"""The port the API is served on, set by `playwright.config.ts`.
+
+Fixed rather than ephemeral because a second process needs it before this one starts:
+the Vite dev server proxies the bench's six prefixes to it, and its configuration is
+read at startup.
+"""
+
+FACTORY_VARIABLES = (
+    "AGENTAUDIT_TRACE_ENDPOINT",
+    "AGENTAUDIT_TRACE_API_KEY",
+    "AGENTAUDIT_TRACE_PROJECT",
+    "AGENTAUDIT_TRACE_SAMPLE",
+    "AGENTAUDIT_REFERENCE_MODEL",
+    "AGENTAUDIT_ADJUDICATOR_MODEL",
+    "AGENTAUDIT_ATTACKER_MODEL",
+    "AGENTAUDIT_ATTACKER_REASONING_EFFORT",
+    "AGENTAUDIT_TURNS_PER_EPISODE",
+    "OPENROUTER_API_KEY",
+    "OPENROUTER_BASE_URL",
+)
+"""Every variable this walkthrough refuses to inherit, deleted before the factory runs.
+
+The four trace variables are the sink; the four model variables are what would be
+called; the two OpenRouter ones are the credential a call would be billed against.
+Deleted rather than overridden with something harmless, because a harmless value is
+still a value the factory reads and reports, and the run is supposed to describe a
+bench that declared none of them.
+
+The langchain switches are not listed: `observability.INHERITED_TRACING_VARIABLES`
+holds those and `create_app` turns them off itself (ADR-0026). One module knows what
+is on the far end of a sink and this is not it.
+"""
+
+STUB_MODEL = "stub:obedient"
+"""The model the reference agents are served on. No network and no provider.
+
+`obedient` hands its whole configuration to anyone who writes to it, so the nonce
+planted in it comes back on the registration probe and comes back again to the
+data-leakage payloads. Deterministic in both places, which is what a walkthrough that
+must not race a model needs.
+"""
+
+AUTH_TOKEN = "walkthrough-auth-token"
+"""What the served agents expect in `Authorization: Bearer …`, and so what the form is
+filled in with. A credential for a process this file started, and it is typed into the
+browser: a walkthrough that left the field empty would not exercise the one field on
+that form that carries somebody's secret."""
+
+AGENT = "trivial"
+"""Which of the three agents is registered: the one with no defences.
+
+The walkthrough is about the console's path and not about a defence, and `trivial` is
+the agent whose verdicts are settled by the payload rather than by a control — so the
+report the last leg opens has a finding in it every time.
+"""
+
+
+def main() -> int:
+    """Serve the agents, serve the bench, and block until Playwright kills us."""
+    port = os.environ.get(API_PORT_VARIABLE, "").strip()
+    if not port:
+        print(f"{API_PORT_VARIABLE} is not set: playwright.config.ts sets it")
+        return 2
+
+    # The imports come first and the environment is emptied after them, and that
+    # order is load-bearing. Importing `backend.api.app` reaches `deepeval`, which
+    # calls `load_dotenv()` on import: this repository's `.env` — the real sink and
+    # the three real models — is in `os.environ` by the time the import statement
+    # returns, whatever the shell held before it. Emptying first and importing
+    # second would put every one of them back.
+    import uvicorn
+
+    from backend.api.app import create_app
+    from backend.bench.signing import (
+        SIGNING_KEY_VARIABLE,
+        encoded_private,
+        generate,
+        public_pem,
+    )
+    from backend.observability import trace_config
+    from backend.targets.reference.model import ModelConfig
+    from backend.targets.reference.server import ReferenceConfig, create_reference_app
+    from backend.targets.reference.serving import serve
+
+    for variable in FACTORY_VARIABLES:
+        os.environ.pop(variable, None)
+
+    # Asked of the module that owns the answer rather than inferred from the list
+    # above. A sink variable renamed or added would leave this walkthrough exporting
+    # spans to somebody's real project and nothing would say so, so the harness
+    # refuses to serve instead of trusting its own list (ADR-0026).
+    if trace_config() is not None:
+        print(
+            "this environment still declares a trace sink after "
+            f"{', '.join(FACTORY_VARIABLES)} were removed. A browser walkthrough "
+            "must not publish prompts and replies to a real project: refusing to "
+            "serve until observability.trace_config reads nothing"
+        )
+        return 2
+
+    key = generate()
+    os.environ[SIGNING_KEY_VARIABLE] = encoded_private(key)
+    PUBLIC_KEY.write_bytes(public_pem(key.public_key()))
+
+    agents = create_reference_app(
+        ReferenceConfig(model=ModelConfig.parse(STUB_MODEL), auth_token=AUTH_TOKEN)
+    )
+    with serve(agents) as base_url:
+        SERVED.write_text(
+            json.dumps(
+                {
+                    "target_url": f"{base_url}/reference/{AGENT}/messages",
+                    "plant_url": f"{base_url}/reference/{AGENT}/nonce",
+                    "auth_token": AUTH_TOKEN,
+                    "name": AGENT,
+                    "pubkey": str(PUBLIC_KEY),
+                },
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        # One line, so that a webServer Playwright is still waiting on can be told
+        # apart from one that failed before it bound. A CI run of this job timed out
+        # on a silent wait, which is the failure this print is for.
+        print(f"reference agents at {base_url}; the bench on port {port}", flush=True)
+        try:
+            uvicorn.run(
+                create_app(), host="127.0.0.1", port=int(port), log_level="warning"
+            )
+        finally:
+            SERVED.unlink(missing_ok=True)
+            PUBLIC_KEY.unlink(missing_ok=True)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -11,8 +11,8 @@ reads it, and two things are forbidden from being able to.
 long-term-memory requirement with this store while answering short-term memory with
 the run state, so a per-process store would be the same lifetime twice under two
 names: `InMemoryStore` would satisfy every word of the table row and none of its
-meaning. So the store a run uses is `JsonFileStore`, whose authority is a file, and
-`RecordedPrecedents` below is a test double (ADR-0019).
+meaning. So the store a run uses is `PrecedentDatabase`, whose authority is a
+SQLite file, and `RecordedPrecedents` below is a test double (ADR-0019, ADR-0029).
 
 **The namespace is single-tenant, and there is no tenant segment in it.**
 `PRECEDENT_NAMESPACE` is two elements long and neither of them identifies a user,
@@ -46,9 +46,10 @@ git-ignored, because a finding is about someone else's agent (ADR-0008).
 from __future__ import annotations
 
 import json
-from collections.abc import Iterable, Sequence
+import sqlite3
+from collections.abc import Iterable, Iterator, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass
-from datetime import UTC, datetime
 from hashlib import sha256
 from pathlib import Path
 from typing import Any, Protocol
@@ -56,13 +57,12 @@ from typing import Any, Protocol
 from langgraph.store.base import (
     BaseStore,
     GetOp,
-    Item,
+    ListNamespacesOp,
     Op,
-    PutOp,
     Result,
-    SearchItem,
     SearchOp,
 )
+from langgraph.store.sqlite import SqliteStore
 
 from backend.bench.judge import Finding
 from backend.bench.library import Family, VerdictClass
@@ -77,17 +77,49 @@ retrieval is a Sprint 4 row in PLAN §11 and a blocker before user two; until it
 exists, the honest shape is a namespace a reader can see has no tenant in it.
 """
 
-DEFAULT_STORE_PATH = Path(__file__).resolve().parents[3] / "precedent" / "findings.json"
-"""Where the store's file is, at the top of the repository and ignored by git.
+PRECEDENT_DIRECTORY = Path(__file__).resolve().parents[3] / "precedent"
+"""The directory the store lives in, and `.gitignore` ignores it as a directory.
+
+A directory rather than a file name, so the ignore rule covers everything written
+beside the database — SQLite's own `-wal` and `-shm` sidecars, a backup, an export,
+an editor's swap file. None of them may become the first finding about a real target
+this repository carries (ADR-0008).
+"""
+
+DEFAULT_STORE_PATH = PRECEDENT_DIRECTORY / "findings.sqlite"
+"""Where the store's database is, at the top of the repository and ignored by git.
 
 One location and no environment override. A configurable path is a path that can
 be configured into a tracked directory, and the acceptance criterion here is that
 no finding about anybody's agent is ever committed — which is a property of *the*
-location or of none (ADR-0008). A test asks git whether this path is ignored.
+location or of none (ADR-0008). A test asks git whether this path is ignored, and
+asks it of the sidecars too.
+"""
 
-Its own directory so the ignore rule covers a directory rather than a file name: a
-second file written beside this one — a backup, an export, an editor's swap — must
-not become the first finding about a real target this repository carries.
+LEGACY_STORE_PATH = PRECEDENT_DIRECTORY / "findings.json"
+"""The document the store used to be, kept as a name so the drop can be said aloud.
+
+Nothing reads it. A clone that has one holds four hand-typed seeds and no recorded
+finding — the store was machine-local and git-ignored, so there was nothing else it
+could hold — and re-seeding is one command against the new backend. Named rather
+than migrated so that `seed_precedent.py` can tell an operator whose seeds have
+stopped being read that they have, which is the one way this decision could
+otherwise look like an oversight (ADR-0029).
+"""
+
+WRITE_WAIT_SECONDS = 15.0
+"""Seconds a connection waits for another to finish writing before giving up.
+
+Stated rather than inherited, because two of the arguments below rest on it: a
+second writer *waits* on SQLite's busy handler rather than failing, and `_migrated`
+lets the loser of a schema race wait and then find nothing to do. Both are claims
+about this number, and Python's implicit five seconds is not a number anybody here
+chose.
+
+Fifteen because the thing being waited out is one small transaction against a local
+file — one insert, or five DDL statements on a cold database — so a wait this long
+means something is wrong rather than busy, and a run should hear about it. It is not
+a limit on how long a batch takes; it is how long one contends.
 """
 
 RETRIEVAL_LIMIT = 20
@@ -119,21 +151,22 @@ class JudgedPrecedent(ValueError):
         )
 
 
-class NoFilterOperators(NotImplementedError):
-    """A comparison filter was asked of a store that compares for equality only.
-
-    Named for the reason `NoVectorIndex` is: a comparison a caller believes ran and
-    did not is a silently wrong answer, and this store's one filter is the family.
-    """
-
-
 class NoVectorIndex(NotImplementedError):
-    """A natural-language search was asked of a store that has no index.
+    """A natural-language search was asked of a store with no embedding model.
 
-    Refused rather than answered with an unranked list. `BaseStore.search` takes a
-    `query` whose support "depends on your store implementation", and a store that
-    returned everything in recency order for a semantic query would be answering a
-    question it did not understand.
+    Refused rather than answered with an unranked list, and the refusal is now
+    load-bearing in a way it was not while the backend was a document. `SqliteStore`
+    *can* rank by meaning — it takes an `index` config and reaches `sqlite-vec` —
+    but only against an embedding model, and with none configured its search drops
+    the `query` and returns the same recency-ordered rows a query-less search would
+    (`_prepare_batch_search_queries` takes the vector branch on `op.query and
+    self.index_config`). So the delegate answers a semantic question with a list it
+    did not rank, which is exactly the silently wrong answer this name exists to
+    turn into a stack trace.
+
+    Configuring that index is the alternative, and ADR-0029 records why it lost. The
+    refusal that used to sit beside this one, `NoFilterOperators`, is gone for the
+    mirror-image reason recorded there.
     """
 
 
@@ -236,24 +269,36 @@ class PrecedentStore(Protocol):
         ...
 
 
-class JsonFileStore(BaseStore):
-    """A `BaseStore` whose authority is a JSON file, re-read on every batch.
+class PrecedentDatabase(BaseStore):
+    """A `BaseStore` whose authority is a SQLite file, opened for one batch.
 
-    The file is the state and this object holds none: every `batch` loads it,
-    applies the operations and writes it back, so two store objects against one
-    path cannot disagree and a process that dies mid-run loses nothing that was
-    written before it. That is a slow design and a correct one at this size — a
-    single tenant's findings, read once per family per run.
+    The rows, the SQL and the migration statements are
+    `langgraph.store.sqlite.SqliteStore`'s, from the package the approval
+    checkpointer already depends on. What is left here is where the database is, what
+    pragma it is opened under, *when* the schema is applied, and one refusal — and
+    the store this replaced was 150 lines of document rewriting whose defect was that
+    every write was a whole-file rewrite (#36, ADR-0029).
 
-    A database-backed store was the alternative, and ADR-0019's considered options
-    record why it lost and when to revisit it. What that leaves here is the claim
-    resting on the interface and the lifetime rather than on the backend's brand.
+    **The file is the state and this object holds none — not even a connection.**
+    Every batch opens one, applies the operations and closes it, so two store
+    objects against one path cannot disagree and `DURABLE_PRECEDENT` stays a
+    module-level object with no open handle in it. That is the *opposite* of the
+    answer ADR-0028 reached one file over, where the connection belongs to the
+    `ApprovalRun`; ADR-0029 records why the two differ, and the short version is
+    that a halt is answered by a thread that did not open it and a precedent lookup
+    is not.
 
-    Two operations are refused rather than approximated: a semantic `query`, which
-    would need an index this store has no dependency for, and a filter operator
-    (`{"$gt": ...}`), which would let a caller believe a comparison ran that did
-    not. Everything a precedent lookup needs — a namespace prefix and an equality
-    filter on the family — is supported.
+    A semantic `query` is refused rather than approximated (`NoVectorIndex`), and
+    refused before a connection is opened, so a refused search leaves no database
+    behind. An operator filter is not refused any more: SQLite runs the comparison,
+    which was the whole of the old refusal's argument.
+
+    **Reading a store nothing has written answers without creating one.** Opening a
+    database runs the schema, so a lookup would otherwise leave a file where there
+    was none — and *reading precedent is not an event in the store's history*. That
+    claim is older than this backend and `test_adaptive_attacker.py` has always
+    asserted it: a corpus that recorded who looked would be a record of lookups
+    rather than of what failed.
     """
 
     __slots__ = ("path",)
@@ -262,136 +307,200 @@ class JsonFileStore(BaseStore):
         self.path = path if path is not None else DEFAULT_STORE_PATH
 
     def batch(self, ops: Iterable[Op]) -> list[Result]:
-        held = self._read()
-        results: list[Result] = []
-        wrote = False
-        for op in ops:
-            if isinstance(op, GetOp):
-                results.append(_found(held, op.namespace, op.key))
-            elif isinstance(op, SearchOp):
-                results.append(_searched(held, op))
-            elif isinstance(op, PutOp):
-                held = _applied(held, op)
-                wrote = True
-                results.append(None)
-            else:
-                raise NotImplementedError(
-                    f"{type(op).__name__} is not supported. This store holds one "
-                    "namespace, so enumerating them answers a question nobody "
-                    "asked, and a paginated wildcard matcher over a single "
-                    "namespace is machinery with no caller"
+        asked = list(ops)
+        for op in asked:
+            if isinstance(op, SearchOp) and op.query is not None:
+                raise NoVectorIndex(
+                    f"{op.query!r} is a natural-language query and this store has "
+                    "no embedding model. A precedent lookup filters on the family "
+                    "and orders by recency; it does not rank by meaning, and the "
+                    "backend would answer this with a list it had not ranked"
                 )
-        if wrote:
-            self._write(held)
-        return results
+        if _reads_only(asked) and not self.path.exists():
+            return [None if isinstance(op, GetOp) else [] for op in asked]
+        with self._opened() as store:
+            return store.batch(asked)
 
     async def abatch(self, ops: Iterable[Op]) -> list[Result]:
-        """The same file, applied on the same thread.
+        """The same database, on the same thread.
 
-        No async file layer, deliberately: an implementation that awaited nothing
-        while claiming to be asynchronous would be a lie in a signature. The graph
-        is free to await this; what it awaits is one small synchronous read.
+        Still no async layer, and the reason has changed shape rather than gone
+        away: an implementation that awaited nothing while claiming to be
+        asynchronous would be a lie in a signature, and the package this delegates
+        to now ships an `AsyncSqliteStore` that would make the signature true. It
+        would also introduce an event loop to hold a precedent lookup, which is the
+        second concurrency model ADR-0028 declined to add for the checkpoint and
+        declines again here. The graph is free to await this; what it awaits is one
+        small synchronous batch against a local file.
         """
         return self.batch(list(ops))
 
-    def _read(self) -> list[Item]:
-        if not self.path.exists():
-            return []
-        records: Any = json.loads(self.path.read_text(encoding="utf-8"))
-        return [
-            Item(
-                value=record["value"],
-                key=record["key"],
-                namespace=tuple(record["namespace"]),
-                created_at=record["created_at"],
-                updated_at=record["updated_at"],
-            )
-            for record in records
-        ]
+    @contextmanager
+    def _opened(self) -> Iterator[SqliteStore]:
+        """This batch's connection, closed with the batch that opened it.
 
-    def _write(self, held: Sequence[Item]) -> None:
+        `isolation_level=None` because `SqliteStore` issues its own `BEGIN` and
+        `COMMIT` around every cursor it opens, and Python's implicit transaction
+        handling would be a second transaction manager over the same connection —
+        the same choice `SqliteStore.from_conn_string` makes, which is not used here
+        only because it cannot be told where to put the file's parent directory.
+
+        `check_same_thread` is left at its default, which is where ADR-0028's
+        checkpointer could not leave it: this connection is opened, used and closed
+        inside one call, so the stricter setting is free and would catch a future
+        caller that tried to hold one open across threads.
+
+        WAL, and it outlives the connection because the journal mode is written into
+        the file's header. Two bench runs are two OS threads (`api/runs.py`), so two
+        findings can be filed at once, and one reader should not block behind
+        another's write.
+
+        **`_enable_wal` and `_migrated` are what make a connection per batch safe**,
+        and neither is here for tidiness: `SqliteStore` is written to be one
+        long-lived object, and ADR-0029 records which two of its behaviours are unsafe
+        when it is not, what each of these answers, and what it measured. With both
+        removed, six threads against one cold database failed 14 runs in 20 — a
+        figure the ADR qualifies, because contention depends on the machine.
+
+        `SqliteStore.setup()` still runs on the delegate's own first use and finds the
+        version already current, which is what makes leaving it alone safe — and is
+        why `_migrated` has to *apply* the schema rather than check it.
+        """
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.path.write_text(
-            json.dumps([item.dict() for item in held], indent=2, sort_keys=True) + "\n",
-            encoding="utf-8",
+        connection = sqlite3.connect(
+            self.path, isolation_level=None, timeout=WRITE_WAIT_SECONDS
         )
+        try:
+            _enable_wal(connection)
+            _migrated(connection)
+            yield SqliteStore(connection)
+        finally:
+            connection.close()
 
 
-def _found(held: Sequence[Item], namespace: tuple[str, ...], key: str) -> Item | None:
-    for item in held:
-        if item.namespace == namespace and item.key == key:
-            return item
-    return None
+def _reads_only(ops: Sequence[Op]) -> bool:
+    """Whether that batch would write nothing, so an absent database can stay absent.
+
+    Named against the three read operations rather than against `PutOp`, because the
+    shortcut has to answer for every op in the batch and a `BaseStore` op this store
+    has never seen must fall through to the delegate rather than be assumed harmless.
+    """
+    return all(isinstance(op, GetOp | SearchOp | ListNamespacesOp) for op in ops)
 
 
-def _applied(held: Sequence[Item], op: PutOp) -> list[Item]:
-    """The store's contents with one put or one delete applied."""
-    kept = [
-        item
-        for item in held
-        if not (item.namespace == op.namespace and item.key == op.key)
-    ]
-    if op.value is None:
-        return kept
-    existing = _found(held, op.namespace, op.key)
-    now = datetime.now(UTC)
-    return [
-        *kept,
-        Item(
-            value=op.value,
-            key=op.key,
-            namespace=op.namespace,
-            created_at=existing.created_at if existing is not None else now,
-            updated_at=now,
-        ),
-    ]
+SCHEMA: Sequence[str] = SqliteStore.MIGRATIONS
+"""The delegate's schema, so that this module decides *when* it is applied.
+
+Read off `SqliteStore.MIGRATIONS` rather than copied out, because *what* the schema
+is stays the delegate's business and only the locking is ours. Why the locking has
+to be ours — `setup()` reads the applied version and then inserts it with no
+transaction around the pair — is ADR-0029's, along with the measurement that
+licensed taking it over: with the delegate applying its own schema, six threads
+against one cold database failed 5 runs in 12 and eight processes lost 26 batches. The
+ADR qualifies those counts; what they support is *fails often*, not a rate.
+"""
 
 
-def _searched(held: Sequence[Item], op: SearchOp) -> list[SearchItem]:
-    if op.query is not None:
-        raise NoVectorIndex(
-            f"{op.query!r} is a natural-language query and this store has no "
-            "index. A precedent lookup filters on the family and orders by "
-            "recency; it does not rank by meaning"
+_CONTENDED = frozenset({sqlite3.SQLITE_BUSY, sqlite3.SQLITE_LOCKED})
+"""The two error codes that mean *another connection has it*, and nothing else does."""
+
+
+def _enable_wal(connection: sqlite3.Connection) -> None:
+    """Put that database in WAL, and never fail a batch over the journal mode.
+
+    Asked before told, because the mode is written into the file's header: it
+    outlives the connection, so only the first open of a new database has anything
+    to do, and setting a mode a database is already in is a write attempt for no
+    reason at all.
+
+    The failure swallowed here is the one pragma the busy timeout does not cover.
+    Changing the journal mode needs an exclusive lock, it cannot be taken inside a
+    transaction, and SQLite returns `SQLITE_BUSY` for it **without** consulting the
+    busy handler — so several processes opening a database that does not exist yet
+    will collide, and it is the only thing left that did (measured: eight processes
+    released from a barrier onto a cold database, ADR-0029).
+
+    Losing that race costs nothing and failing on it costs a run. The mode is a
+    property of the *file*, so whichever connection wins sets it for every connection
+    after, and a loser that carried on has a database another process just put in WAL.
+    Enabling it is an optimisation; refusing to file a finding because an optimisation
+    was already being applied is not a trade this store makes.
+
+    Swallowed on the error *code* and not on the exception type, so that the one
+    contention this tolerates cannot stand in for a database that will not open at
+    all: anything but a lock is re-raised here rather than carried into `_migrated`,
+    which would report it from a stranger place.
+    """
+    [mode] = connection.execute("PRAGMA journal_mode").fetchone()
+    if str(mode).lower() == "wal":
+        return
+    try:
+        connection.execute("PRAGMA journal_mode=WAL")
+    except sqlite3.OperationalError as contended:
+        if contended.sqlite_errorcode not in _CONTENDED:
+            raise
+
+
+def _migrated(connection: sqlite3.Connection) -> None:
+    """Bring that connection's database up to `SCHEMA`, once and under a write lock.
+
+    Checked twice, and the first check is why every read is not a writer: the common
+    case is a database already at the current version, which costs two `SELECT`s
+    against `sqlite_master` and the migration table and takes no lock at all. Only a
+    connection that finds the schema behind opens `BEGIN IMMEDIATE` — SQLite's own
+    writer lock, which a second connection waits on rather than failing, and which is
+    the mechanism WAL exists to make cheap — and re-reads the version inside it, so
+    the loser of the race applies nothing instead of applying everything twice.
+
+    `execute` and never `executescript`, deliberately twice over. `executescript`
+    commits the transaction out from under itself, which is why wrapping
+    `SqliteStore.setup()` in `BEGIN IMMEDIATE` was not available as the fix; and it
+    would accept a multi-statement migration silently, where `execute` raises
+    `ProgrammingError` if a future release of the package ships one. A dependency
+    upgrade that changes the shape of the schema should fail loudly here rather than
+    apply half of it.
+    """
+    if _schema_version(connection) >= len(SCHEMA) - 1:
+        return
+    connection.execute("BEGIN IMMEDIATE")
+    try:
+        connection.execute(
+            "CREATE TABLE IF NOT EXISTS store_migrations (v INTEGER PRIMARY KEY)"
         )
-    matched = [
-        item
-        for item in held
-        if item.namespace[: len(op.namespace_prefix)] == op.namespace_prefix
-        and _passes(item.value, op.filter)
-    ]
-    matched.sort(key=lambda item: (item.updated_at, item.key), reverse=True)
-    window = matched[op.offset : op.offset + op.limit]
-    return [
-        SearchItem(
-            namespace=item.namespace,
-            key=item.key,
-            value=item.value,
-            created_at=item.created_at,
-            updated_at=item.updated_at,
-        )
-        for item in window
-    ]
-
-
-def _passes(value: dict[str, Any], wanted: dict[str, Any] | None) -> bool:
-    if not wanted:
-        return True
-    for field, expected in wanted.items():
-        if isinstance(expected, dict):
-            raise NoFilterOperators(
-                f"{field}={expected!r} is an operator filter and this store "
-                "compares for equality only. A comparison a caller believes ran "
-                "and did not is worse than a refusal"
+        applied = _schema_version(connection)
+        for version, statement in enumerate(SCHEMA):
+            if version <= applied:
+                continue
+            connection.execute(statement)
+            connection.execute(
+                "INSERT INTO store_migrations (v) VALUES (?)", (version,)
             )
-        if value.get(field) != expected:
-            return False
-    return True
+        connection.execute("COMMIT")
+    except BaseException:
+        connection.execute("ROLLBACK")
+        raise
+
+
+def _schema_version(connection: sqlite3.Connection) -> int:
+    """The highest migration this database has, or -1 if it has no schema at all.
+
+    Two reads and no `CREATE TABLE IF NOT EXISTS`, so that asking the question on a
+    database that is already migrated cannot take a write lock: the fast path above
+    runs on every batch, and a fast path that wrote would put every reader behind
+    every writer and give up what WAL was enabled for.
+    """
+    named = connection.execute(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'store_migrations'"
+    ).fetchone()
+    if named is None:
+        return -1
+    row = connection.execute("SELECT max(v) FROM store_migrations").fetchone()
+    return -1 if row is None or row[0] is None else int(row[0])
 
 
 @dataclass(frozen=True)
 class DurablePrecedents:
-    """The precedent store a run uses: deterministic findings, in a file.
+    """The precedent store a run uses: deterministic findings, in a database.
 
     A thin reading of a `BaseStore` rather than a store of its own, so the two
     prohibitions live in one place. `record` is the only way in and it goes
@@ -399,8 +508,8 @@ class DurablePrecedents:
     only way out and it returns the filed prose.
     """
 
-    store: JsonFileStore
-    """The file-backed store, annotated as one.
+    store: PrecedentDatabase
+    """The database-backed store, annotated as one.
 
     Narrower than `BaseStore` on purpose. ADR-0019 point 2 says `InMemoryStore` may
     not be the production backend, and a field typed `BaseStore` would accept one
@@ -418,7 +527,7 @@ class DurablePrecedents:
         because a caller asking for the store should not have to know that the
         thing behind it is a file.
         """
-        return cls(store=JsonFileStore(path))
+        return cls(store=PrecedentDatabase(path))
 
     def record(self, finding: Finding) -> Precedent:
         """File one deterministic finding, and refuse a judged one."""
@@ -458,12 +567,12 @@ that a run reads the real store without being handed one — which is the whole 
 what phase 6a's second half changes, since `retrieve_precedent` had the store's
 interface from #16 and an empty stand-in behind it.
 
-Shared rather than constructed per run, and safe to share because `JsonFileStore`
-holds no state: the file is the authority and every batch re-reads it, so two
-callers against this object cannot disagree any more than two objects against the
-file could. A run that wants a different location says so, which is what every
-test does and what a second tenant would need long before it needed a constructor
-argument (PLAN §11).
+Shared rather than constructed per run, and safe to share because
+`PrecedentDatabase` holds no state — not even a connection: the file is the
+authority and every batch opens its own, so two callers against this object cannot
+disagree any more than two objects against the file could (ADR-0029). A run that
+wants a different location says so, which is what every test does and what a second
+tenant would need long before it needed a constructor argument (PLAN §11).
 
 **A gate run reads it too, and nothing it decides can move.** The file is
 machine-local and git-ignored, so an instrument that read it into a scored figure

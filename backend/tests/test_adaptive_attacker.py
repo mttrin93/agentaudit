@@ -349,8 +349,8 @@ not have appeared anyway.
 
 
 def durable_store(at: Path) -> DurablePrecedents:
-    """The file-backed store a run reads, at a location this test owns."""
-    return DurablePrecedents.at(at / "precedent" / "findings.json")
+    """The database-backed store a run reads, at a location this test owns."""
+    return DurablePrecedents.at(at / "precedent" / "findings.sqlite")
 
 
 def stocked_store(at: Path) -> DurablePrecedents:
@@ -542,7 +542,7 @@ def test_a_run_against_an_empty_store_is_a_valid_run(
     assert {episode.outcome for episode in episodes} == {EpisodeOutcome.BROKEN}
     shown = "\n".join(recording.seen)
     assert f"no precedent recorded against {Family.DATA_LEAKAGE} yet" in shown
-    assert not (tmp_path / "precedent" / "findings.json").exists(), (
+    assert not (tmp_path / "precedent" / "findings.sqlite").exists(), (
         "a lookup wrote the store's file. Reading precedent is not an event in "
         "the store's history, and a run that filed one by reading would make the "
         "corpus a record of who looked rather than of what failed"

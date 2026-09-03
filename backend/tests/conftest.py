@@ -376,9 +376,52 @@ def a_finding(
     return Finding.of(attempt, narrative)
 
 
+def _precedent_at(patch: pytest.MonkeyPatch, elsewhere: Path) -> None:
+    """Point every route to the precedent store at that database.
+
+    Three routes, and each one is needed. The declared store object is reached
+    through the path it holds rather than replaced, because `run_calibration`,
+    `run_adaptive_layer` and `run_episode` bound it as a default argument when they
+    were imported and rebinding the module name would not reach them.
+    `DEFAULT_STORE_PATH` is patched as well, so a store any code builds mid-test
+    with `DurablePrecedents.at()` lands here too. And `LEGACY_STORE_PATH` is
+    patched because `seed_precedent.py` asks whether the document the store used to
+    be is still there (#36) — a question about the engineer's own working copy, and
+    a suite whose output depends on the machine it runs on.
+    """
+    patch.setattr(precedent, "DEFAULT_STORE_PATH", elsewhere)
+    patch.setattr(precedent, "LEGACY_STORE_PATH", elsewhere.with_suffix(".json"))
+    patch.setattr(DURABLE_PRECEDENT.store, "path", elsewhere)
+
+
+@pytest.fixture(scope="session", autouse=True)
+def precedent_elsewhere_for_the_session(
+    tmp_path_factory: pytest.TempPathFactory,
+) -> Iterator[None]:
+    """The redirection below, from a scope a module-scoped fixture cannot escape.
+
+    **Session-scoped, and it has to be**, for the reason `checkpoints_elsewhere`
+    gives: a function-scoped patch is not in place while a module-scoped fixture is
+    being built, so `test_gate.py`'s `gate_run` — 540 attempts with the adaptive
+    layer behind them — was the one run in the suite that wrote its findings into
+    the working copy, quietly, because the location is git-ignored (ADR-0008).
+
+    Both layers, rather than this one alone. One database for the whole session is
+    the shape a process actually runs in, and it is the wrong shape for a *test*:
+    precedent accumulates by design, so a finding one test filed would be precedent
+    the next test's attacker reads, and the suite's result would depend on its
+    order. So this one covers the whole session and `precedent_elsewhere` moves the
+    store again for every test inside it.
+    """
+    patch = pytest.MonkeyPatch()
+    _precedent_at(patch, tmp_path_factory.mktemp("precedent") / "findings.sqlite")
+    yield
+    patch.undo()
+
+
 @pytest.fixture(autouse=True)
 def precedent_elsewhere(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """No test reads or writes the store a real run uses.
+    """No test reads or writes the store a real run uses, and none reads another's.
 
     Autouse and unconditional, because the default of `run_calibration` is the
     durable store from 6a and the suite runs the adaptive layer in a dozen places:
@@ -386,18 +429,12 @@ def precedent_elsewhere(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
     runs had filed — a suite whose result depends on the machine it runs on — and a
     test that recorded one would put a finding about somebody else's agent in the
     working copy (ADR-0008). Pointed at `tmp_path` rather than disabled, so what the
-    tests exercise is the file-backed store rather than a stand-in for it.
+    tests exercise is the database-backed store rather than a stand-in for it.
 
-    Both ends are redirected, and they have to be. The declared store object is
-    reached through the file it holds rather than replaced, because
-    `run_calibration`, `run_adaptive_layer` and `run_episode` bound it as a default
-    argument when they were imported and rebinding the module name would not reach
-    them; `DEFAULT_STORE_PATH` is patched as well, so a store any code builds
-    mid-test with `DurablePrecedents.at()` lands here too.
+    A fresh database per test, which is the isolation the session-scoped fixture
+    above cannot give and does not try to.
     """
-    elsewhere = tmp_path / "precedent" / "findings.json"
-    monkeypatch.setattr(precedent, "DEFAULT_STORE_PATH", elsewhere)
-    monkeypatch.setattr(DURABLE_PRECEDENT.store, "path", elsewhere)
+    _precedent_at(monkeypatch, tmp_path / "precedent" / "findings.sqlite")
 
 
 @pytest.fixture(scope="session", autouse=True)

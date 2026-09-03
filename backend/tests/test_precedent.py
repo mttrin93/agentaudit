@@ -1,12 +1,22 @@
 """The precedent store: durable, deterministic-only, and unreachable from two
 instruments.
 
-Four claims are tested here and they fail in different ways.
+The claims tested here fail in different ways, and the count is deliberately not
+stated: the concurrency pair below joined the list at #36 and the next backend
+decision may add another.
 
 **Durability** is the whole content of ADR-0019, so the test that matters writes a
 finding, drops the store object, builds a new one against the same path, and reads
 the finding back. A round trip through one object would pass against
 `InMemoryStore`, which is the outcome the ADR exists to forbid.
+
+**It survives concurrent writers**, which is new with the SQLite backend (ADR-0029)
+and is the one thing here no single-threaded test can say. Two tests, because there
+are two hazards: six threads against one cold database, and then eight separate
+processes, which is the shape the journal-mode pragma fails in and the shape a lock
+inside this process could never have covered. Both are probabilistic guards on a
+race, so both are sized — `WRITERS`, `PROCESSES` and their write counts record what
+it took to make a regression show reliably rather than occasionally.
 
 **Deterministic findings only** (ADR-0004) is enforced on `Finding.verdict_class`,
 which is copied off the attempt, so the refusal cannot be defeated by a caller who
@@ -33,19 +43,31 @@ reached the model at all.
 """
 
 import ast
+import sqlite3
 import subprocess
+import sys
+import threading
+import time
 from collections.abc import Iterator
+from contextlib import closing
 from pathlib import Path
 from typing import get_type_hints
 
 import pytest
+from langgraph.store.sqlite import SqliteStore
 
+from backend.bench.adaptive import precedent
 from backend.bench.adaptive.precedent import (
     DEFAULT_STORE_PATH,
+    DURABLE_PRECEDENT,
+    LEGACY_STORE_PATH,
+    PRECEDENT_DIRECTORY,
     PRECEDENT_NAMESPACE,
+    RETRIEVAL_LIMIT,
     DurablePrecedents,
-    JsonFileStore,
     JudgedPrecedent,
+    NoVectorIndex,
+    PrecedentDatabase,
 )
 from backend.bench.adaptive.precedent import __doc__ as PRECEDENT_DOC
 from backend.bench.library import Family, VerdictClass
@@ -65,7 +87,13 @@ PRECEDENT_SOURCE = BACKEND / "bench" / "adaptive" / "precedent.py"
 
 @pytest.fixture
 def store_file(tmp_path: Path) -> Path:
-    return tmp_path / "precedent" / "findings.json"
+    """This test's own store, under a directory that is not there yet.
+
+    Not there yet on purpose, the reason `test_approval_checkpoints.database` gives:
+    the store creates its parent, and a fixture that pre-made it would hide a
+    backend that could only open a database beside an existing directory.
+    """
+    return tmp_path / "precedent" / "findings.sqlite"
 
 
 def answering(
@@ -109,6 +137,107 @@ def test_a_finding_outlives_the_store_object_that_wrote_it(store_file: Path) -> 
     )
     assert recovered.case_id == "data-leakage-001"
     assert recovered.external_id == "LLM02:2026"
+
+
+READ_BACK = """
+import sys
+from pathlib import Path
+
+from backend.bench.adaptive.precedent import DurablePrecedents
+from backend.bench.library import Family
+
+[found] = DurablePrecedents.at(Path(sys.argv[1])).for_family(Family.DATA_LEAKAGE)
+print(found.case_id)
+print(found.failure)
+print(found.remediation)
+print(found.external_id)
+"""
+"""A reader, as a program, because ADR-0019 point 4 says *in a new process*.
+
+The test below writes the finding and this reads it back — so what crosses is the
+file and nothing else: no object, no import-time cache, no module state the writer
+left behind. A round trip inside one interpreter cannot say that, which is why the
+ticket's definition of done spells the process out.
+"""
+
+
+def test_a_finding_outlives_the_process_that_wrote_it(store_file: Path) -> None:
+    """ADR-0019 point 4, at the one boundary that cannot be faked.
+
+    The test above drops the store *object* and rebuilds it, which is the claim the
+    ADR states; this drops the whole interpreter. Both are needed and the second is
+    the stronger: a store that had quietly kept its contents in a module-level cache
+    would satisfy the first and fail this.
+    """
+    DurablePrecedents.at(store_file).record(a_finding())
+
+    reader = subprocess.run(
+        [sys.executable, "-c", READ_BACK, str(store_file)],
+        cwd=REPOSITORY,
+        capture_output=True,
+        text=True,
+        timeout=A_WRITER_HAS_FINISHED,
+    )
+
+    assert reader.returncode == 0, (
+        f"a new process could not read the finding back:\n{reader.stderr}"
+    )
+    assert reader.stdout.splitlines() == [
+        "data-leakage-001",
+        "The reply carried the configured secret back out.",
+        "Filter the configured secret out of every outbound reply.",
+        "LLM02:2026",
+    ]
+
+
+def test_a_finding_is_a_row_and_the_store_is_a_database(store_file: Path) -> None:
+    """The shape on disk, which is what #36 changed and the only place it shows.
+
+    Read off the file rather than through `for_family`, because every assertion
+    this file makes through the interface passed against the JSON store that
+    rewrote the whole document on every batch — the interface is what did **not**
+    change. What did is that a finding is now one row that an insert appends, so
+    the claim is about the bytes and has to be asserted against them.
+
+    The header rather than the suffix: a store that wrote JSON into a file called
+    `.sqlite` would satisfy a name and nothing else.
+    """
+    DurablePrecedents.at(store_file).record(a_finding())
+
+    assert store_file.read_bytes().startswith(b"SQLite format 3\x00")
+    with closing(sqlite3.connect(store_file)) as connection:
+        [(rows,)] = connection.execute("SELECT count(*) FROM store").fetchall()
+    assert rows == 1, (
+        f"{rows} rows hold one finding. The record is a row, so one finding is "
+        "one insert rather than a document rewritten around it"
+    )
+
+
+def test_a_lookup_against_a_store_nothing_wrote_creates_no_database(
+    store_file: Path,
+) -> None:
+    """Reading precedent is not an event in the store's history.
+
+    Older than this backend — `test_adaptive_attacker.py` has asserted it since the
+    store had one caller — and the backend is what put it at risk: opening a database
+    runs the schema, so a lookup would leave a file where there was none. A corpus
+    that recorded who looked would be a record of lookups rather than of what failed.
+
+    It is also what keeps the two refusals' assertions meaningful: `exists()` only
+    means "nothing was written" while a read cannot write.
+    """
+    store = DurablePrecedents.at(store_file)
+
+    assert store.for_family(Family.DATA_LEAKAGE) == ()
+
+    assert not store_file.exists(), (
+        f"a lookup created {store_file.name}. Reading is not a write, and a store "
+        "whose file appears when it is read cannot say by its own existence that "
+        "a finding was ever filed"
+    )
+    assert not store_file.parent.exists() or not any(store_file.parent.iterdir()), (
+        "a lookup left something beside the database it did not create"
+    )
 
 
 def test_two_runs_accumulate_and_one_run_recorded_twice_does_not(
@@ -159,6 +288,271 @@ def test_a_lookup_answers_for_one_family_and_not_for_the_others(
     assert store.for_family(Family.DISCLOSURE_DENIAL) == ()
 
 
+WRITERS = 6
+CALLS_EACH = 20
+"""How many threads hammer one store, and how many batches each one sends.
+
+Six rather than two, and released from a barrier below, because the window the
+schema race lives in is the **first** batch against a database that is not there
+yet: after the migrations are applied every later `setup()` reads the version and
+inserts nothing. Two threads racing one cold start is a coin flip that passes on a
+quiet machine; six arriving together is not. The calls after the first are what
+proves the store still works once the schema is settled.
+"""
+
+
+def test_concurrent_writers_against_one_store_do_not_race_on_its_schema(
+    store_file: Path,
+) -> None:
+    """Two runs filing findings at once, which is what `api/runs.py` makes ordinary.
+
+    Every run gets its own OS thread, so this is not a stress test of an unlikely
+    path — it is the second run. What it would catch and why the store has code of
+    its own for it is ADR-0029; what this asserts is that six writers against one
+    cold database all finish and all of their rows survive.
+
+    Threads rather than a stand-in, for the reason `test_approval_checkpoints.py`
+    drives two threads at one graph: a store that works from the convenient side is
+    what every other test in this file already proves.
+    """
+    failures: list[BaseException] = []
+    # Released together, because the race is on the cold start: every writer has to
+    # be inside its first batch while the database still has no schema.
+    together = threading.Barrier(WRITERS)
+
+    def filing(tag: str) -> None:
+        store = PrecedentDatabase(store_file)
+        together.wait()
+        try:
+            for call in range(CALLS_EACH):
+                store.put(
+                    PRECEDENT_NAMESPACE,
+                    f"{tag}-{call}",
+                    {"family": str(Family.DATA_LEAKAGE), "call": call},
+                )
+                store.search(PRECEDENT_NAMESPACE, limit=RETRIEVAL_LIMIT)
+        except BaseException as raised:  # noqa: BLE001 — the assertion is the report
+            failures.append(raised)
+
+    writers = [
+        threading.Thread(target=filing, args=(f"writer-{index}",))
+        for index in range(WRITERS)
+    ]
+    for writer in writers:
+        writer.start()
+    for writer in writers:
+        writer.join()
+
+    assert not failures, (
+        f"{len(failures)} of {WRITERS} concurrent writers failed, first "
+        f"{type(failures[0]).__name__}: {failures[0]}. Two runs file findings at "
+        "once whenever two runs are going, and a store that raises under that "
+        "loses a whole run rather than a write"
+    )
+    filed = PrecedentDatabase(store_file).search(
+        PRECEDENT_NAMESPACE, limit=WRITERS * CALLS_EACH
+    )
+    assert len(filed) == WRITERS * CALLS_EACH, (
+        f"{len(filed)} of {WRITERS * CALLS_EACH} writes survived, so one writer's "
+        "batch dropped another's rather than queueing behind it"
+    )
+
+
+PROCESSES = 8
+WRITES_EACH = 40
+"""How many separate processes cold-start one database, and how many rows each files.
+
+Separate processes rather than threads, because the two hazards below are the ones a
+thread lock cannot reach: `SqliteStore.setup()` racing itself, and the journal-mode
+pragma, which SQLite refuses without consulting the busy handler. Released from a
+file the parent creates, for the reason the barrier above exists — the window is the
+cold start, and interpreter startup jitter alone is enough to miss it.
+"""
+
+WRITER = """
+import sys, time
+from pathlib import Path
+
+from backend.bench.adaptive.precedent import PRECEDENT_NAMESPACE, PrecedentDatabase
+
+tag, database, gate, writes = sys.argv[1], Path(sys.argv[2]), Path(sys.argv[3]), int(
+    sys.argv[4]
+)
+store = PrecedentDatabase(database)
+Path(f"{gate}.{tag}").write_text("ready", encoding="utf-8")
+while not gate.exists():
+    time.sleep(0.005)
+for call in range(writes):
+    store.put(PRECEDENT_NAMESPACE, f"{tag}-{call}", {"family": "data_leakage"})
+"""
+"""One writer, as a program, because a second *process* is what this asks about.
+
+`seed_precedent.py` and `scripts/gate.py` are separate processes an operator runs by
+hand, so a run going while one of those writes is not a synthetic scenario — it is
+the one shape of concurrency the bench's own thread-per-run does not cover.
+"""
+
+
+def test_separate_processes_cold_starting_one_store_do_not_race_on_it(
+    store_file: Path,
+) -> None:
+    """The half of ADR-0029's concurrency that no lock inside this process can hold.
+
+    `seed_precedent.py` and `scripts/gate.py` are separate processes an operator runs
+    by hand, so a run going while one of those writes is real. Two of the delegate's
+    behaviours fail in exactly this window and ADR-0029 says which and why
+    `_enable_wal` and `_migrated` exist; what this asserts is that eight processes
+    cold-starting one database all finish and all of their rows survive.
+
+    The contention is sized rather than chosen: at four processes and a dozen writes
+    each, breaking the journal-mode guard went red one run in four, and at these
+    numbers it goes red every run.
+    """
+    gate = store_file.parent.parent / "go"
+    writers = [
+        subprocess.Popen(
+            [
+                sys.executable,
+                "-c",
+                WRITER,
+                f"p{index}",
+                str(store_file),
+                str(gate),
+                str(WRITES_EACH),
+            ],
+            cwd=REPOSITORY,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        for index in range(PROCESSES)
+    ]
+    _released(gate, writers)
+
+    complaints = [
+        writer.communicate(timeout=A_WRITER_HAS_FINISHED)[1]
+        for writer in writers
+        if writer.wait(timeout=A_WRITER_HAS_FINISHED) != 0
+    ]
+
+    assert not complaints, (
+        f"{len(complaints)} of {PROCESSES} processes failed against one cold "
+        f"database. First:\n{complaints[0]}"
+    )
+    filed = PrecedentDatabase(store_file).search(
+        PRECEDENT_NAMESPACE, limit=PROCESSES * WRITES_EACH
+    )
+    assert len(filed) == PROCESSES * WRITES_EACH
+
+
+A_WRITER_HAS_FINISHED = 60.0
+"""How long one writer process is given to do its writes and exit.
+
+Generous, because the wait is not what is under test: a writer queueing behind
+another for up to `precedent.WRITE_WAIT_SECONDS` is the behaviour being asked for,
+and a limit tight enough to catch that would fail the test for the thing it exists
+to prove.
+"""
+
+WRITERS_HAVE_GATHERED = 30.0
+"""How long the parent waits for every writer to reach the gate before giving up.
+
+Its own number rather than the one above, because it measures something else — eight
+interpreters starting — and because a test that hung here would otherwise be
+indistinguishable from one waiting on a lock.
+"""
+
+
+def _released(gate: Path, writers: list[subprocess.Popen[str]]) -> None:
+    """Wait until every writer says it is ready, then let them all go at once."""
+    deadline = time.monotonic() + WRITERS_HAVE_GATHERED
+    while len(list(gate.parent.glob(f"{gate.name}.*"))) < len(writers):
+        if time.monotonic() > deadline:
+            for writer in writers:
+                writer.kill()
+            raise AssertionError(
+                f"only {len(list(gate.parent.glob(f'{gate.name}.*')))} of "
+                f"{len(writers)} writers reached the gate"
+            )
+        time.sleep(0.01)
+    gate.write_text("go", encoding="utf-8")
+
+
+# --- What it refuses, and what the backend would have answered ---------------
+
+
+def test_a_semantic_query_is_refused_before_a_database_is_opened(
+    store_file: Path,
+) -> None:
+    """`NoVectorIndex` survived the change of backend, and moved earlier in it.
+
+    Refused before the connection rather than inside the batch, so a caller that
+    asked a question this store cannot answer has not left a database behind as a
+    side effect of being told no.
+    """
+    store = PrecedentDatabase(store_file)
+
+    with pytest.raises(NoVectorIndex, match="no embedding model"):
+        store.search(PRECEDENT_NAMESPACE, query="how did the last one leak?")
+
+    assert not store_file.exists(), (
+        "a refused query created the database it refused to read, so being told "
+        "no writes to disk"
+    )
+
+
+def test_the_backend_would_answer_that_query_with_a_list_it_had_not_ranked(
+    store_file: Path,
+) -> None:
+    """Why the refusal above is load-bearing rather than a leftover.
+
+    The old refusal rested on an absence — a JSON document could not rank by
+    meaning, so the alternative to refusing was returning nothing. The new one
+    rests on the delegate's behaviour: `SqliteStore` takes the vector branch on
+    `op.query and self.index_config`, and with no index configured it drops the
+    query and returns the same recency-ordered rows. A `score` of `None` on every
+    item is the delegate saying it ranked nothing.
+
+    Asserted against the dependency because that behaviour is the reason this
+    repository has code of its own here: if a future release of
+    `langgraph-checkpoint-sqlite` starts refusing a query it cannot rank, this
+    test fails and the wrapper's own refusal has become the leftover.
+    """
+    DurablePrecedents.at(store_file).record(a_finding())
+
+    with closing(sqlite3.connect(store_file, isolation_level=None)) as connection:
+        delegate = SqliteStore(connection)
+        answered = delegate.search(PRECEDENT_NAMESPACE, query="anything at all")
+
+    assert [item.value["case_id"] for item in answered] == ["data-leakage-001"]
+    assert [item.score for item in answered] == [None]
+
+
+def test_an_operator_filter_runs_the_comparison_rather_than_being_refused(
+    store_file: Path,
+) -> None:
+    """`NoFilterOperators` is gone, and this is what took its place.
+
+    It refused a `{"$gt": ...}` filter on the argument that a comparison a caller
+    believes ran and did not is worse than a refusal. SQLite runs the comparison,
+    so the argument expired with the backend — and a refusal kept past its reason
+    is machinery a reader has to reverse-engineer. What replaces it is this: the
+    comparison, run, against a store that has two records to sort.
+    """
+    store = DurablePrecedents.at(store_file)
+    store.record(a_finding(case_id="data-leakage-001", reason="The first one."))
+    store.record(a_finding(case_id="data-leakage-002", reason="The second one."))
+
+    compared = store.store.search(
+        PRECEDENT_NAMESPACE, filter={"case_id": {"$gt": "data-leakage-001"}}
+    )
+
+    assert [item.value["failure"] for item in compared] == ["The second one."], (
+        "the operator filter did not compare. A store that answered this with "
+        "both records, or with none, is the silently wrong answer the refusal it "
+        "replaced existed to prevent"
+    )
+
+
 # --- Deterministic findings only ---------------------------------------------
 
 
@@ -196,13 +590,17 @@ def test_the_stored_record_names_no_target(store_file: Path) -> None:
     # shown a target name (`JudgeBrief.about`, asserted in `test_judge.py`).
     DurablePrecedents.at(store_file).record(a_finding())
 
-    written = store_file.read_text(encoding="utf-8")
-    assert "The reply carried the configured secret back out." in written, (
+    # The database's bytes rather than its rows, and read as bytes because a
+    # database is not text: what is asserted is that the target's name is nowhere
+    # in the file, which a query against the one table this store writes could not
+    # say — a stray column, an index or a freed page would all be outside it.
+    written = store_file.read_bytes()
+    assert b"The reply carried the configured secret back out." in written, (
         "nothing was written, so this test would pass against a store that "
         "records nothing at all"
     )
-    assert PRECEDENT_TARGET not in written
-    assert "invalid" not in written
+    assert PRECEDENT_TARGET.encode("utf-8") not in written
+    assert b"invalid" not in written
 
 
 # --- `suggest_remediation` reads it ------------------------------------------
@@ -314,8 +712,8 @@ def test_the_store_a_run_uses_cannot_be_the_in_memory_double() -> None:
     # And the field is annotated narrowly, so the substitution is a type error
     # before it is a test failure — the pattern the repository uses everywhere the
     # invariant can be carried by a type rather than by a rule.
-    assert get_type_hints(DurablePrecedents)["store"] is JsonFileStore
-    assert isinstance(DurablePrecedents.at().store, JsonFileStore)
+    assert get_type_hints(DurablePrecedents)["store"] is PrecedentDatabase
+    assert isinstance(DurablePrecedents.at().store, PrecedentDatabase)
 
 
 # --- Single-tenant, and git-ignored ------------------------------------------
@@ -329,23 +727,110 @@ def test_the_namespace_is_single_tenant_and_the_module_says_so() -> None:
     assert "single-tenant" in (PRECEDENT_DOC or "")
 
 
-def test_the_store_location_is_ignored_by_git() -> None:
-    # ADR-0008: a finding is about somebody else's agent, so the repository never
-    # carries one. Asked of git rather than of `.gitignore`'s text, because what
-    # decides whether a file would be committed is git's answer and not a pattern
-    # that looks right.
+@pytest.mark.parametrize(
+    "name",
+    ["findings.sqlite", "findings.sqlite-wal", "findings.sqlite-shm", "findings.json"],
+)
+def test_the_store_and_its_sidecars_are_ignored_by_git(name: str) -> None:
+    """ADR-0008: a finding is about somebody else's agent, so the repository never
+    carries one.
+
+    Asked of git rather than of `.gitignore`'s text, because what decides whether a
+    file would be committed is git's answer and not a pattern that looks right.
+
+    The sidecars are parametrised rather than assumed covered by the database's own
+    name, for the reason `test_approval_checkpoints.py` gives about the other SQLite
+    file in the tree: WAL writes two files beside it, and a journal holding a finding
+    must not be the one thing the ignore rule missed. The old JSON document is in the
+    list too — a clone that ran the bench before #36 still has one, and it is still
+    somebody else's agent failing.
+
+    Built from `PRECEDENT_DIRECTORY` rather than from `DEFAULT_STORE_PATH`, because
+    `conftest.py` redirects the store and never the directory: reading the location
+    off the module inside a test would ask git about a temporary path.
+    """
     if not (REPOSITORY / ".git").exists():
         pytest.skip("not a git checkout, so git's own answer cannot be asked for")
 
+    path = PRECEDENT_DIRECTORY / name
     checked = subprocess.run(
-        ["git", "check-ignore", "-q", str(DEFAULT_STORE_PATH)],
+        ["git", "check-ignore", "-q", str(path)],
         cwd=REPOSITORY,
         check=False,
     )
     assert checked.returncode == 0, (
-        f"{DEFAULT_STORE_PATH} is not ignored by git, so the next run's findings "
-        "about a real target are one `git add` away from being published"
+        f"{path} is not ignored by git, so the next run's findings about a real "
+        "target are one `git add` away from being published"
     )
+
+
+def live_store_paths() -> tuple[Path, ...]:
+    """Every route to the store, as it stands at the moment of the call.
+
+    Three of them, because `conftest._precedent_at` redirects three and a redirection
+    that missed one would leave a route into the working copy. Read off the module
+    rather than off the names this file imported, because the fixture patches the
+    module and an imported constant answers with the value it had at import — which
+    is the real location, and is what the git questions above rely on.
+    """
+    return (
+        precedent.DEFAULT_STORE_PATH,
+        precedent.LEGACY_STORE_PATH,
+        DURABLE_PRECEDENT.store.path,
+    )
+
+
+@pytest.fixture(scope="module")
+def store_at_module_setup() -> tuple[Path, ...]:
+    """The same three routes, read while a *module-scoped* fixture is being built.
+
+    Captured here because this is the window the defect lived in. pytest builds a
+    higher-scoped fixture before a function-scoped one, so `conftest.precedent_
+    elsewhere` — autouse, and function-scoped until now — was not in place when
+    `test_gate.py`'s module-scoped `gate_run` was constructed: 540 attempts with
+    the adaptive layer behind them, and the one run in the suite that filed its
+    findings into the working copy. Reported by #35's agent and left for #36,
+    because #36 is the change that touches the store this escaped into.
+    """
+    return live_store_paths()
+
+
+def test_no_test_writes_the_store_a_real_run_would_use() -> None:
+    """The autouse fixture in `conftest.py`, asserted rather than trusted."""
+    for live in live_store_paths():
+        assert REPOSITORY not in live.parents, (
+            f"the suite is writing findings to {live}, inside the working copy. A "
+            "test does not touch the store a real run uses (ADR-0008)"
+        )
+
+
+def test_a_module_scoped_fixture_is_inside_the_redirection_too(
+    store_at_module_setup: tuple[Path, ...],
+) -> None:
+    """The same claim, asked from the scope the function-scoped patch did not reach.
+
+    The test above passes whatever the fixture's scope is, because by the time a
+    test body runs a function-scoped patch is in place. This one is the assertion
+    that has to be made from higher up, and it is why `precedent_elsewhere` is a
+    session-scoped redirection with a per-test one inside it.
+    """
+    for live in store_at_module_setup:
+        assert REPOSITORY not in live.parents, (
+            f"a module-scoped fixture was built with the store pointing at {live}. "
+            "Every run such a fixture starts files its findings in the working "
+            "copy, quietly, because the location is git-ignored"
+        )
+
+
+def test_the_ignored_names_are_the_files_the_store_actually_writes() -> None:
+    """The drift guard on the list above, which is literal names.
+
+    Asked because the parametrised names and the constants are two statements of
+    one fact, and a store moved to a third file name would leave the test above
+    passing about a location nothing writes to.
+    """
+    assert DEFAULT_STORE_PATH == PRECEDENT_DIRECTORY / "findings.sqlite"
+    assert LEGACY_STORE_PATH == PRECEDENT_DIRECTORY / "findings.json"
 
 
 # --- Reading the import graph -----------------------------------------------

@@ -19,9 +19,11 @@ wheels/
 .deepeval-cache.json
 
 # The precedent store: deterministic findings about somebody else's agent, kept
-# durable across restarts (ADR-0019) and never committed (ADR-0008). A directory
-# rather than a file name, so an export or an editor's swap file beside it cannot
-# become the first finding about a real target this repository carries.
+# durable across restarts (ADR-0019) in a SQLite database (ADR-0029) and never
+# committed (ADR-0008). A directory rather than a file name, because SQLite writes
+# `-wal` and `-shm` sidecars beside the database — and so that an export, an editor's
+# swap file, or the JSON document the store was until #36 cannot become the first
+# finding about a real target this repository carries.
 /precedent/
 
 # The lease a gate run holds on a case library while it writes back to it

@@ -227,14 +227,18 @@ episode's log, and every probe opens a fresh session, so your agent's own memory
 is not part of the route either
 ([ADR-0011](./docs/adr/0011-the-adaptive-attacker-is-label-blind.md)).
 
-**Long-term is a file**, `precedent/findings.json`, so it outlives the process
-([ADR-0019](./docs/adr/0019-long-term-memory-that-does-not-survive-a-restart-is-not-long-term.md)).
-One entry per deterministic finding — the family, what failed, and how to fix
+**Long-term is a database**, `precedent/findings.sqlite`, so it outlives the
+process
+([ADR-0019](./docs/adr/0019-long-term-memory-that-does-not-survive-a-restart-is-not-long-term.md),
+[ADR-0029](./docs/adr/0029-the-precedent-store-is-a-database-and-the-connection-belongs-to-the-batch.md)).
+One row per deterministic finding — the family, what failed, and how to fix
 it — and no target identity at all, because redaction defends a single lookup and
 not a corpus. Retrieval is an equality filter on the family, most recent first,
-capped at 20; there are no embeddings and nothing scores relevance. The attacker
-is shown the failure prose only — the remediation half is withheld from it and
-goes to the report. The store is git-ignored and never committed.
+capped at 20; there are no embeddings and nothing scores relevance, and a
+natural-language query is refused rather than answered with a list nothing
+ranked. The attacker is shown the failure prose only — the remediation half is
+withheld from it and goes to the report. The store is git-ignored and never
+committed.
 
 ## Try it
 

@@ -34,19 +34,25 @@ was closed hands it the defence with the weakness.
 **It writes through the store rather than through `DurablePrecedents`.** That type's
 one way in is `record`, which takes a `Finding` and refuses a judged one, and widening
 it to accept typed prose would put a second door in the wall it exists to be. This
-script holds the file the same way the store does and writes records the store can
+script holds the database the same way the store does and writes rows the store can
 read back.
+
+**A clone that seeded the old store has to re-seed.** The store was a JSON document
+until #36 and is a SQLite database now; nothing imports the old file, because its only
+possible contents were the four sentences below (ADR-0029). So this script names the
+file it has stopped reading, once, where an operator wondering where their seeds went
+would see it.
 """
 
 import argparse
 import sys
 from collections.abc import Sequence
 
+from backend.bench.adaptive import precedent
 from backend.bench.adaptive.precedent import (
-    DEFAULT_STORE_PATH,
     PRECEDENT_NAMESPACE,
-    JsonFileStore,
     Precedent,
+    PrecedentDatabase,
 )
 from backend.bench.library import Family
 
@@ -140,18 +146,18 @@ figure and a wider stated limit that a typed sentence would inherit neither of
 (ADR-0004, `Precedent.of`)."""
 
 
-def seeded(store: JsonFileStore, seeds: Sequence[Precedent] = SEEDS) -> int:
+def seeded(store: PrecedentDatabase, seeds: Sequence[Precedent] = SEEDS) -> int:
     """Write every seed and return how many the store then holds under this id.
 
     Idempotent, and not by checking: `Precedent.key` is a digest of the record, so
-    running this twice writes the same keys and the file does not grow.
+    running this twice writes the same keys and the table does not grow.
     """
     for seed in seeds:
         store.put(PRECEDENT_NAMESPACE, seed.key, seed.stored())
     return len(held(store))
 
 
-def held(store: JsonFileStore) -> list[Precedent]:
+def held(store: PrecedentDatabase) -> list[Precedent]:
     """Every entry in the store, seeded or recorded, most recently filed first."""
     return [
         Precedent.read(item.value)
@@ -162,10 +168,10 @@ def held(store: JsonFileStore) -> list[Precedent]:
     ]
 
 
-def cleared(store: JsonFileStore, seeds: Sequence[Precedent] = SEEDS) -> int:
+def cleared(store: PrecedentDatabase, seeds: Sequence[Precedent] = SEEDS) -> int:
     """Delete the seeded entries and leave anything a run filed alone.
 
-    By key rather than by emptying the file: a store that had recorded findings in
+    By key rather than by emptying the table: a store that had recorded findings in
     it would lose them, and this script has no business deleting evidence.
     """
     for seed in seeds:
@@ -187,8 +193,24 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    store = JsonFileStore()
-    print(f"precedent store: {DEFAULT_STORE_PATH}")
+    store = PrecedentDatabase()
+    # Read off the store rather than off `DEFAULT_STORE_PATH`, so the line names the
+    # database this run actually writes to. The suite redirects the store, and a
+    # banner that disagreed with its own file would be the first line an operator
+    # checked before disbelieving the rest.
+    print(f"precedent store: {store.path}")
+    # Through the module rather than off an imported name, for the reason
+    # `conftest.precedent_elsewhere` gives about the store itself: a `from … import`
+    # binds at import time, so a suite that redirected the module attribute could not
+    # reach this line and every run of this script would ask the engineer's own
+    # working copy a question.
+    if precedent.LEGACY_STORE_PATH.exists():
+        print(
+            f"note: {precedent.LEGACY_STORE_PATH} is the store this one replaced "
+            "and is no longer read (#36, ADR-0029). Re-seed rather than import it "
+            "— its only possible contents were the sentences in this script — and "
+            "delete it once you have."
+        )
 
     if args.list:
         _print(held(store))

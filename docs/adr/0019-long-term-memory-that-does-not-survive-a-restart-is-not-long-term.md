@@ -1,8 +1,19 @@
 ---
 status: accepted
+amended_by: 0029-the-precedent-store-is-a-database-and-the-connection-belongs-to-the-batch.md
 ---
 
 # Long-term memory that does not survive a restart is not long-term memory
+
+> **Amended by [ADR-0029](./0029-the-precedent-store-is-a-database-and-the-connection-belongs-to-the-batch.md).**
+> One of the six points below was reversed rather than kept: the store is a SQLite
+> database, not a JSON document. The *condition* point 3 states is what licensed the
+> change — the claim rests on the interface and the lifetime, not on the backend's
+> brand, and both are unchanged — and the dependency it weighed arrived anyway, for
+> the checkpointer, in a package that ships a `BaseStore` too. Points 1, 2, 4, 5 and 6
+> stand as written and are what ADR-0029 is measured against. The two passages
+> affected are marked where they appear; nothing here is deleted, because what this
+> file claimed was true when it was written and is why ADR-0029 exists.
 
 Phase 6a builds the precedent store, and PLAN §10 answers a requirement with it in as many words:
 
@@ -16,7 +27,7 @@ The two halves of that answer would then be the same half twice. Run state is pe
 
 1. **The precedent store is durable across process restarts.** A finding written by one run is readable by the next one, in a new process, after a reboot.
 2. **`InMemoryStore` is a test double and never the store a run uses.** It is the right thing for a unit test and it may not be the production backend.
-3. **Backed by a file.** If no durable backend is available without a dependency out of proportion to a single tenant's findings, a small `BaseStore` implementation over JSON is the honest answer — the claim rests on the **interface** and the lifetime, not on the backend's brand.
+3. **Backed by a file.** If no durable backend is available without a dependency out of proportion to a single tenant's findings, a small `BaseStore` implementation over JSON is the honest answer — the claim rests on the **interface** and the lifetime, not on the backend's brand. *[Amended by [ADR-0029](./0029-the-precedent-store-is-a-database-and-the-connection-belongs-to-the-batch.md): the durable backend became available without a dependency — `langgraph-checkpoint-sqlite`, installed for the checkpointer, ships a SQLite `BaseStore` — so the condition resolved the other way. Still one file, still the interface and the lifetime.]*
 4. **Durability is tested across a restart, and that test is the whole content of the claim.** Write, drop the store object, construct a new one against the same location, read the finding back.
 5. **The namespace is single-tenant and says so**, so cross-tenant isolation is a visible absence rather than an assumed presence. It is a named P1 blocker for user two, not a silent one.
 6. **Precedent is user data and is never committed.** The store's location is ignored by git, on the disclosure posture of [ADR-0008](./0008-repo-disclosure-posture.md): findings describe someone else's agent failing.
@@ -36,7 +47,7 @@ There is also a plainer reason, independent of any requirement. **Precedent's on
 ## Considered options
 
 - **`InMemoryStore`, documented as ephemeral.** Cheapest, and it fails the claim. If the store is ephemeral then PLAN §10's table row is wrong, and the honest repair would be to withdraw the long-term-memory claim rather than to footnote it away. Withdrawing it costs one of four medium optional tasks; building a durable store costs a file.
-- **Add a database-backed Store — `langgraph-checkpoint-sqlite`, Postgres.** `langgraph.checkpoint.sqlite` is not currently installed. A dependency, a schema and a lifecycle for a single tenant's findings is out of proportion now, and it is the right answer at P1 when cross-tenant isolation arrives and brings a real query surface with it. Revisit there, with the isolation requirement in hand rather than guessed at.
+- **Add a database-backed Store — `langgraph-checkpoint-sqlite`, Postgres.** `langgraph.checkpoint.sqlite` is not currently installed. A dependency, a schema and a lifecycle for a single tenant's findings is out of proportion now, and it is the right answer at P1 when cross-tenant isolation arrives and brings a real query surface with it. Revisit there, with the isolation requirement in hand rather than guessed at. *[Revisited earlier and for a different reason — [ADR-0029](./0029-the-precedent-store-is-a-database-and-the-connection-belongs-to-the-batch.md). The dependency stopped being one, because [ADR-0028](./0028-the-approval-checkpoint-outlives-the-process.md) installed the package for the approval checkpointer and it ships `langgraph.store.sqlite.SqliteStore` beside the saver; the schema became the package's; the lifecycle stayed one file in one ignored directory. Postgres is still deferred to P1 on exactly this paragraph's reasoning.]*
 - **Keep precedent in the case records, which are already durable data files.** Rejected on what the two things are. The case library is the **instrument** — public, versioned by a digest, the same for every user. A finding is about **someone else's agent** and can never be public. Putting them in one place would conflate the thing being measured with the thing measuring, and would put user data inside the digest the library's version is computed over, so a finding would change the library version.
 - **Rebuild precedent from the run records on each start.** Plausible, since runs are recorded. Rejected as a store that is really a cache with extra steps: it makes the retrieval path depend on every historical run document being present and parseable, and it answers "is this durable?" with "only as long as nobody prunes the reports."
 

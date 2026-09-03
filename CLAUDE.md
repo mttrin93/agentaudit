@@ -16,6 +16,7 @@ Do not restate these here — read them.
 | What the bench measures and what it has measured | [docs/validation.md](./docs/validation.md) |
 | The build spec — the bench, through the gate | [docs/specs/pre-web-bench.md](./docs/specs/pre-web-bench.md) |
 | The build spec — the signed report and its delivery | [docs/specs/signed-report-and-delivery.md](./docs/specs/signed-report-and-delivery.md) |
+| The build spec — the elective family tier | [docs/specs/elective-family-tier.md](./docs/specs/elective-family-tier.md) |
 
 Terms in CONTEXT.md are load-bearing arithmetic, not synonyms. An **attempt** is
 the unit of the denominator; a turn is not an attempt.

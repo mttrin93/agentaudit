@@ -24,11 +24,29 @@ _Avoid_: failed, bypassed, broken
 
 ### The units of testing
 
-These three are distinct, and the distinction is load-bearing arithmetic.
+**Family**, **case** and **attempt** are three distinct things, and the distinction
+is load-bearing arithmetic. So is the one between a **family** and an **elective
+family**.
 
 **Family**:
-One of six kinds of failure the bench tests for. A category, not a test.
+One of six kinds of failure the bench tests for. A category, not a test. Still six, and
+deliberately: a kind of failure the bench can be asked for that is not one of the six is
+an **elective family**, which is the term below and a different word on purpose.
 _Avoid_: category, class, attack type, vector
+
+**Elective family**:
+A kind of failure the bench can be asked to test that is **not** one of the six. Measured
+by the **gate** exactly as a **family** is — the three reference agents, a `D`, the same
+floor, a **decay series** on each of its cases — and never counted in the gate's
+decision ([ADR-0035](./docs/adr/0035-the-elective-family-tier-is-never-gate-deciding.md)).
+Named apart from **family** for the reason an **episode** is named apart from an
+**attempt**: `Family` is the type both of the gate's counts are defined over, so a value
+that could be assigned into it would be a family in a denominator ADR-0015 fixed at six.
+The distinction is carried by the type and not by a flag, which is why `ElectiveFamily`
+is its own closed set. An elective family that has held the floor for three consecutive
+gate runs on **the field** becomes *eligible to enter the six*; entry is a
+library-version event a human declares before a run, and never something a counter does.
+_Avoid_: using **family** for one, seventh family, optional family, extra family
 
 **Case**:
 One executable test belonging to a family, consisting of a payload and the criterion that decides its verdict — a success condition, or, for a judged family, the semantic question stated on the record. Three cases per family as authored; a family the admission gate has grown holds more, and the count is read off the library rather than declared.
@@ -151,6 +169,20 @@ by a precondition unmet before any attempt is spent, which today means a target
 that does not expose its tool calls. A target the bench never measured must stay
 distinguishable from one that resisted everything.
 _Avoid_: not applicable, skipped, unknown, n/a, zero
+
+**Not requested**:
+An **elective family** a run was not asked to test — the fifth of the absences a
+report keeps apart, and never a rate of zero. Nothing was attempted, so nobody could
+not answer and no case was missing: the tier holds the family and this run did not ask.
+The **run** is what is *skipped* — *skipping is never advantageous* is a statement
+about runs — and the family is what is *not requested*; the two words are kept apart
+because one is about a gate run's scope and the other about a family's outcome in it.
+Carried as its own block in the artefact, never inside the measured figures, which are
+keyed on the six; printed in the **gate document** for a gate run and in the report's
+per-family section for a target run, beside the declared request it is the complement
+of. It and that request are the whole of what a target report says about the tier — an
+elective family's `D` is a fact about the bench (ADR-0018).
+_Avoid_: using it for **not measurable**, deselected, disabled, opted out, n/a
 
 **Finding**:
 A verdict plus its narrative — reason, article, external identifier, remediation, exposure type. Produced by the scored layer only; the adaptive layer produces an **adaptive finding**, which is a different thing and is named differently on purpose.

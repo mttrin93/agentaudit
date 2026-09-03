@@ -1,4 +1,4 @@
-"""The artefact: stable bytes, counts behind every figure, and four absences.
+"""The artefact: stable bytes, counts behind every figure, and five absences.
 
 Most of this file asserts what the payload does **not** contain, because ADR-0005,
 ADR-0008 and ADR-0018 are decisions about what may not travel, and a prohibition on
@@ -42,8 +42,10 @@ from backend.bench.assembler import (
 )
 from backend.bench.capability import ReasoningEffort
 from backend.bench.contract import DeclaredControl, Transcript
+from backend.bench.elective import ElectiveSelection
 from backend.bench.library import (
     Case,
+    ElectiveFamily,
     ExternalId,
     Family,
     LibraryVersion,
@@ -504,7 +506,7 @@ def test_no_field_totals_averages_or_ranks_across_families() -> None:
     assert _without_the_entries(one) == _without_the_entries(two)
 
 
-# --- Four absences, and none of them is a rate of zero -----------------------
+# --- Five absences, and none of them is a rate of zero -----------------------
 
 
 def test_a_judged_family_below_the_kappa_floor_is_absent_with_its_reason_present() -> (
@@ -613,6 +615,105 @@ def test_a_family_the_target_could_not_answer_reads_apart_from_a_rate_of_zero() 
     assert body["declared"]["defeated"] == []
     assert body["declared"]["absent"][0]["control"] == "scope_limit"
     assert "not declared" in body["declared"]["absent"][0]["stated"]
+
+
+def test_a_family_this_run_was_not_asked_for_is_the_fifth_absence() -> None:
+    # The fifth kind of nothing, and it is none of the other four. Not a coverage
+    # gap, which is a published category no case reaches; not `not_measurable`,
+    # where the target could not answer; not `withheld`, where the instrument was
+    # measured and found wanting; not an absent declared control. This run asked the
+    # elective tier for one family and not the other two, and the document says so
+    # for each of them (ADR-0035).
+    body = document(
+        a_payload(
+            result=replace(
+                a_result(),
+                elective=ElectiveSelection(
+                    requested=(ElectiveFamily.MEMORY_POISONING,)
+                ),
+            )
+        )
+    )
+
+    assert [one["family"] for one in body["elective"]["not_requested"]] == [
+        "direct_prompt_injection",
+        "pii_leakage",
+    ]
+    for one in body["elective"]["not_requested"]:
+        assert set(one) == {"family", "stated"}
+        assert one["family"] in one["stated"]
+        assert "not requested" in one["stated"]
+
+    # The declared request travels beside the absences, because a run that asked for
+    # every elective family produces none of them and a document that then said
+    # nothing about the tier would be indistinguishable from one made before the
+    # tier existed (ADR-0025's rule for a declared input).
+    assert body["elective"]["requested"] == ["memory_poisoning"]
+    assert "memory_poisoning" in body["elective"]["requested_stated"]
+
+    # And a *requested* elective family is named nowhere at all. The tier's D is a
+    # claim about the bench and this artefact is about a target (ADR-0018), and
+    # `MeasuredSection` is keyed on `Family`, so there is no field in this document
+    # one could arrive in: what the report says about an elective family is that it
+    # was not asked for, or nothing.
+    #
+    # Asserted over the document's own values rather than by counting substrings of
+    # the serialised bytes: `direct_prompt_injection` sits inside
+    # `indirect_prompt_injection`, so a containment check reports #49's family as
+    # present in every report that measured the indirect one.
+    asked_for_everything = document(
+        a_payload(
+            result=replace(
+                a_result(),
+                elective=ElectiveSelection(requested=tuple(ElectiveFamily)),
+            )
+        )
+    )
+    figures = {
+        key: value for key, value in asked_for_everything.items() if key != "elective"
+    }
+    named = set(_strings(figures))
+    assert not named & {family.value for family in ElectiveFamily}
+    assert Family.INDIRECT_PROMPT_INJECTION.value in named
+
+    # And what the elective block itself carries for a requested family is its name
+    # and nothing else — no rate, no interval, no band, no D.
+    assert asked_for_everything["elective"]["requested"] == [
+        family.value for family in ElectiveFamily
+    ]
+    assert asked_for_everything["elective"]["not_requested"] == []
+
+
+def test_the_five_absences_are_five_lists_and_no_family_is_in_two_of_them() -> None:
+    # A reader tells the five apart without reading a footnote, which needs them to
+    # be five keys rather than one "not tested" list this module decided were the
+    # same thing.
+    body = document(
+        a_payload(
+            result=replace(
+                a_result(
+                    not_measurable={
+                        Family.HALT_DEFEAT: NotMeasurable.NO_TOOL_CALL_VISIBILITY
+                    }
+                ),
+                elective=ElectiveSelection(),
+            )
+        )
+    )
+
+    absences = {
+        "withheld": [one["family"] for one in body["measured"]["withheld"]],
+        "not_measurable": [one["family"] for one in body["measured"]["not_measurable"]],
+        "not_requested": [one["family"] for one in body["elective"]["not_requested"]],
+        "coverage_gaps": [one["category"] for one in body["coverage_gaps"]],
+        "untested_categories": [
+            one["identifier"] for one in body["untested_categories"]
+        ],
+    }
+
+    assert all(named for named in absences.values())
+    named = [name for listed in absences.values() for name in listed]
+    assert len(named) == len(set(named))
 
 
 # --- Two claims, one enum (ADR-0017) ----------------------------------------
@@ -845,6 +946,22 @@ def _without_the_entries(body: dict[str, Any]) -> dict[str, Any]:
         key: value for key, value in body["measured"].items() if key != "deterministic"
     }
     return {**body, "measured": measured}
+
+
+def _strings(node: Any) -> list[str]:
+    """Every string in the document — every key, and every string value.
+
+    Exact strings rather than a substring search over the serialised bytes, because
+    one family's wire name can sit inside another's and a containment check would
+    then report a family the document never mentions.
+    """
+    if isinstance(node, dict):
+        return list(node) + [
+            found for value in node.values() for found in _strings(value)
+        ]
+    if isinstance(node, list):
+        return [found for value in node for found in _strings(value)]
+    return [node] if isinstance(node, str) else []
 
 
 def _key_order(node: Any, path: str = "") -> list[tuple[str, list[str]]]:

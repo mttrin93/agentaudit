@@ -262,7 +262,7 @@ def _sections_of(body: Mapping[str, Any]) -> tuple[Section, ...]:
         _general_description(body),
         _how_the_run_was_made(body),
         _controls(body["declared"]),
-        _figures(body["measured"]),
+        _figures(body["measured"], body["elective"]),
         _not_tested_at_all(body["coverage_gaps"], body["untested_categories"]),
         _adaptive(body["adaptive"]),
         _lifecycle(),

@@ -1,4 +1,4 @@
-"""The document a human reads: Annex IV order, its own digest, and four absences.
+"""The document a human reads: Annex IV order, its own digest, and five absences.
 
 Three of the assertions here are structural rather than example-based, and they are
 the ones worth reading:
@@ -37,7 +37,8 @@ from backend.bench.capability import (
     ReasoningEffort,
 )
 from backend.bench.contract import DeclaredControl
-from backend.bench.library import Family
+from backend.bench.elective import ElectiveSelection
+from backend.bench.library import ElectiveFamily, Family
 from backend.bench.measurability import NotMeasurable
 from backend.bench.payload import TargetPayload, canonical_bytes, document, figures
 from backend.bench.rendering import (
@@ -142,7 +143,7 @@ def test_every_section_states_its_own_reproducibility_and_three_read_the_payload
 
 # --- The golden digest: one document, pinned to the byte ---------------------
 
-GOLDEN_ONE_FAMILY = "48598c88498037e530436c856d619476fe334f8d8406f2db2215e07d2488aea0"
+GOLDEN_ONE_FAMILY = "26e56959888980396d8cb4d24f254187788117045383e53f3fb573f5f53f4b97"
 """The sha256 of `_one_family()`'s rendering, written down.
 
 **A tripwire, and it is deliberately a strict one.** Every other assertion in this
@@ -167,6 +168,14 @@ read off the attempts that ran and printed with each family's figures instead
 ([ADR-0033](../../docs/adr/0033-an-admitted-route-is-written-into-the-library.md)).
 Both are wording in the rule block, which is the part of a document that says what
 bar the figures were measured against, and both moved on purpose.
+
+Moved a third time, by #43, and this one is a new block rather than a rewording:
+section 4 gained the elective tier's declared selection and the fifth absence — the
+elective families the run was not asked to test — under one heading beside the four
+already there
+([ADR-0035](../../docs/adr/0035-the-elective-family-tier-is-never-gate-deciding.md)).
+Every report gains it, because the tier is declared and a run that requested nothing
+from it is a run whose figures are the six and says so.
 """
 
 
@@ -641,7 +650,7 @@ def test_the_band_is_stated_by_construction_and_names_no_reference_agent() -> No
         assert Band(band).stated() not in text
 
 
-# --- Four absences, and none of them a rate of zero -------------------------
+# --- Five absences, and none of them a rate of zero -------------------------
 
 
 def test_a_withheld_family_is_named_with_its_reading_and_never_with_its_rate() -> None:
@@ -687,6 +696,53 @@ def test_a_family_that_could_not_be_measured_reads_apart_from_a_rate_of_zero() -
         assert not re.search(r"rate \d", line), f"{line} reads as a rate"
     assert "This is not a rate of zero" in text
     assert NotMeasurable.NO_TOOL_CALL_VISIBILITY.stated() in text
+
+
+def test_a_family_this_run_was_not_asked_for_is_the_fifth_absence_on_the_page() -> None:
+    # The fifth absence, printed in its own block beside the other four rather than
+    # merged into a single "not tested" list — a family absent for five different
+    # reasons is five different statements (ADR-0035).
+    payload = a_payload(
+        result=replace(
+            a_result(),
+            elective=ElectiveSelection(requested=(ElectiveFamily.MEMORY_POISONING,)),
+        )
+    )
+    text = render(payload)
+    elective = document(payload)["elective"]
+
+    assert [one["family"] for one in elective["not_requested"]] == [
+        "direct_prompt_injection",
+        "pii_leakage",
+    ]
+    for one in elective["not_requested"]:
+        assert f"- {one['stated']}." in text
+    assert "### The elective families, requested and not" in text
+
+    # The request prints too, so a run that asked for every elective family — which
+    # produces no absence at all — still says what it was asked.
+    assert elective["requested_stated"] in text
+    assert "memory_poisoning" in elective["requested_stated"]
+
+    asked_for_all = a_payload(
+        result=replace(
+            a_result(), elective=ElectiveSelection(requested=tuple(ElectiveFamily))
+        )
+    )
+    everything = render(asked_for_all)
+    assert document(asked_for_all)["elective"]["not_requested"] == []
+    assert "Every elective family the bench declares was requested" in everything
+
+    # And no figure for any of them on either page. Matched against the shapes this
+    # renderer actually prints a figure in — `rate 0.40`, `D = 0.85`, `**Band —` —
+    # rather than the bare words, because the absence's own sentence says "no rate,
+    # no interval and no band" and a word search would read that as three figures.
+    for page in (text, everything):
+        for line in page.splitlines():
+            if any(family.value in line for family in ElectiveFamily):
+                assert not re.search(r"rate \d|D = \d|\*\*Band", line), (
+                    f"{line} carries a figure for an elective family"
+                )
 
 
 # --- Nothing reaches across two families (ADR-0005, D12) --------------------

@@ -41,6 +41,18 @@ checklist asks about and they did not declare, are two further absences and are
 reported as themselves. None of the four is a rate of zero, and a reader can tell
 which they are looking at without reading a footnote.
 
+**And a fifth, for a family nobody asked for.** An elective family this run was not
+requested to test is `not_requested` under `elective` — the bench holds a tier for
+it, nothing was attempted, and nobody could not answer
+([ADR-0035](../../docs/adr/0035-the-elective-family-tier-is-never-gate-deciding.md)).
+It travels beside the request it is the complement of, and the two together are the
+whole of what this document says about the tier: **a name and never a figure.** An
+elective family's `D` is a claim about the bench and this artefact is about a target
+(ADR-0018), and `MeasuredSection` is keyed on `Family`, so there is no field here one
+could arrive in — which is what makes "a family whose discriminating power was never
+measured may not print in a signed report" a property of the shape rather than a
+check somebody performs.
+
 **No payload text, anywhere** (ADR-0008). Attempts are not serialised, only the
 counts over them; episode transcripts and proposals are not serialised at all, only
 the prose description the adaptive section already holds. Case **ids** appear where
@@ -75,6 +87,7 @@ from backend.bench.capability import (
     accepts_temperature,
     capabilities_of,
 )
+from backend.bench.elective import ElectiveSelection
 from backend.bench.library import ExternalId, LibraryVersion
 from backend.bench.published import UntestedCategory
 from backend.bench.registration import AttestationRecord
@@ -165,6 +178,56 @@ class Withheld:
             f"({self.agreements} of {self.transcripts} transcripts agreed) is below "
             f"the declared floor of {self.floor:.2f}. The attempts were made and the "
             "rate is recorded; it is not published (ADR-0015)"
+        )
+
+
+@dataclass(frozen=True)
+class NotRequested:
+    """One elective family this run was not asked to test.
+
+    The **fifth kind of nothing**, and it is none of the other four
+    ([ADR-0035](../../docs/adr/0035-the-elective-family-tier-is-never-gate-deciding.md)).
+    A `CoverageGap` and an `UntestedCategory` are categories nobody tests at all; a
+    `not_measurable` family is one the target could not answer; a `Withheld` family
+    is one whose instrument was measured and found wanting. This one is a family the
+    bench holds a tier for and this run did not ask for — nothing was attempted, and
+    nobody could not answer.
+
+    It carries no figure and there is nothing for it to carry: an elective family's
+    `D` is a claim about the bench and a report is about a target (ADR-0018), and
+    `MeasuredSection` is keyed on `Family`, so there is no field in this document one
+    could arrive in.
+    """
+
+    family: str
+
+    @classmethod
+    def over(cls, selection: ElectiveSelection) -> tuple["NotRequested", ...]:
+        """The absences one selection produces, derived rather than supplied.
+
+        In the discipline `Withheld.of` already follows: a renderer that had to be
+        *told* which families to name is one where forgetting to ask prints nothing,
+        and this is the one absence whose whole content is that nobody asked.
+        """
+        return tuple(cls(family=family.value) for family in selection.not_requested)
+
+    def stated(self) -> str:
+        """The line the report prints in place of a figure it has none of.
+
+        **The word *gate* does not appear in it**, and that is ADR-0018 rather than
+        brevity: this document is about a target, the vocabulary of the gate belongs
+        to the bench, and the one line of a target report that may name it is the `D`
+        line that says in the same breath what it is. So the sentence says what the
+        absence costs the reader — nothing — without borrowing the bench's words for
+        it, and where the tier's own figures live is stated in ADR-0035.
+        """
+        return (
+            f"{self.family}: not requested — this run was not asked to test this "
+            "elective family, so no attempt was made against it and it has no rate, "
+            "no interval and no band. Its absence takes nothing off the figures "
+            "above: this bench's discriminating power on an elective family is a "
+            "fact about the bench, stated where the bench states its own figures "
+            "and never here (ADR-0035, ADR-0018)"
         )
 
 
@@ -618,12 +681,38 @@ def document(payload: TargetPayload) -> dict[str, Any]:
         "declared": _declared(payload.result.declared),
         "adaptive": _adaptive(payload.result.adaptive),
         "coverage_gaps": [_gap(gap) for gap in payload.result.coverage_gaps],
+        "elective": _elective(payload.result.elective),
         "untested_categories": [
             _untested(category) for category in payload.result.untested_categories
         ],
         "provenance": _provenance(payload),
         "rendered_sha256": payload.rendered_sha256,
         "key_id": payload.key_id,
+    }
+
+
+def _elective(selection: ElectiveSelection) -> dict[str, Any]:
+    """The tier as a target report carries it: a declared input and a fifth absence.
+
+    **Both halves, because either alone lies by omission.** The absences are the
+    fifth kind of nothing and are the reason this block exists at all; but a run that
+    requested every elective family produces none of them, and a document that then
+    said nothing about the tier would leave a reader unable to tell it from a run made
+    before the tier existed. So the request travels too — a declared input of the run,
+    on the terms ADR-0025 states for every other one: the departure travels with the
+    artefact rather than staying in the console that offered it.
+
+    **And no figure on either half.** What an elective family measured is a claim
+    about the bench and this artefact is about a target (ADR-0018), so what a
+    *requested* family gets here is its name and nothing else.
+    """
+    return {
+        "requested": [family.value for family in selection.requested],
+        "requested_stated": selection.requested_stated(),
+        "not_requested": [
+            {"family": one.family, "stated": one.stated()}
+            for one in NotRequested.over(selection)
+        ],
     }
 
 

@@ -274,7 +274,7 @@ Question 4 must be asked in the first conversation, not at hour 30. Track A also
 
 | Work | Article |
 |---|---|
-| The elective family tier — `ASI05` and `ASI06`, selectable at gate and target runs. Below | 15 |
+| The elective family tier — declared, gate-measured and never gate-deciding. Landed as ADR-0035 and a spec of its own; the families it holds are Group G's. Below | 15 |
 | Negative coverage derived for the GenAI LLM list too — the agentic half is done. Below | 15 |
 | Agent-to-agent attacks — one agent manipulates another (`ASI07`) | 15 |
 | Lifecycle runs, with an alert when a band moves | 9 |
@@ -284,7 +284,14 @@ Question 4 must be asked in the first conversation, not at hour 30. Track A also
 | Annex IV as the report table of contents | 11 |
 
 **The elective family tier.** Decided 2026-08-20 and recorded here so it is not
-re-derived. The ADR is blocked on #43 and the spec waits for a phase of its own. This
+re-derived. **Since 2026-09-03 the tier itself is built**: the block on #43 lifted when
+[ADR-0022](./docs/adr/0022-the-retirement-window-is-two-readings-of-one-model.md)
+answered the retirement-window question, and the decision is now
+[ADR-0035](./docs/adr/0035-the-elective-family-tier-is-never-gate-deciding.md) with a
+spec of its own ([elective-family-tier.md](./docs/specs/elective-family-tier.md)). What
+is left of this row is the families, which are Group G's three rather than the two named
+below. Everything under this heading is the reasoning the ADR was written from, kept
+because it is where the shape was decided. This
 absorbs two rows the table used to carry apart — *new families to close declared
 coverage gaps* and *plugin UI to enable and disable families* — because they are one
 design: a family the operator can switch off is only safe once the tier it belongs to
@@ -296,7 +303,11 @@ spent its whole argument proving those must stay fixed counts, and a seventh fam
 the denominator either re-opens that or forces the hour-30 threshold move ADR-0003
 exists to prevent. New families arrive *beside* the six, never among them.
 
-*Two elective families, both deterministic.* `ASI05` unexpected code execution and
+*Two elective families, both deterministic.* **Superseded on the choice, not on the
+shape.** #42 selected `ASI06` memory poisoning, `LLM01` direct prompt injection and
+`LLM02` PII leakage, all three canary-checked and deterministic, so the reasoning below
+still holds and `ASI05` is a candidate no ticket builds (ADR-0035, considered options).
+`ASI05` unexpected code execution and
 `ASI06` memory and context poisoning, from OWASP Top 10 for Agentic Applications 2026
 — identifiers `ASI01`–`ASI10`, published 2025-12-09, and a **different list** from the
 `LLM0x:2026` identifiers §4 carries. Both reach a verdict by canary check, so neither
@@ -320,24 +331,25 @@ was about to fail, and one invariant closes that reading:
 
 > Skipping an elective family can never be advantageous.
 
-Two halves, and only one is free today. A skipped run must not count toward the streak
-that promotes an elective family into the six, so skipping buys no progress. And a
-skipped run must not reset the retirement window, so skipping buys no protection —
-which currently falls out of `decide_retirement` reading `history[-2:]` positionally,
-since a family that did not run writes no `GateReading` and the readings either side of
-the gap are already adjacent. **This is the open question, and the reason the ADR is
-blocked on #43:** that issue makes the window provenance-aware, and once a filter stands
-in front of it, transparency across a gap becomes a choice inside the filter rather than
-a consequence of adjacency. The invariant is ADR-0015's monotone-non-improving property
-read one level down, and it should be tested as an invariant rather than left as a
-remark.
+Two halves, and only one was free when this was written. A skipped run must not count
+toward the streak that promotes an elective family into the six, so skipping buys no
+progress. And a skipped run must not reset the retirement window, so skipping buys no
+protection — which used to fall out of `decide_retirement` reading `history[-2:]`
+positionally, since a family that did not run writes no `GateReading` and the readings
+either side of the gap are already adjacent. **That was the open question, and both
+halves are now tests.** ADR-0035 reads the promotion streak over a ledger of gate runs
+where a skip is a `Skipped` that stops the count, and the retirement window stays
+transparent across the gap by decision rather than by adjacency — stated in
+`retirement.window_of` where the model filter ADR-0022 put in front of it now lives. The
+invariant is ADR-0015's monotone-non-improving property read one level down.
 
 *A fifth kind of nothing.* `payload.py` keeps four absences apart and states that a
 reader must tell them apart without reading a footnote. A deselected family is **not
 requested** — not a coverage gap, which nobody tests at all, and not `NotMeasurable`,
 where the target could not answer. It is typed like the others, and the gate document
 names the elective families a run did not request, on the discipline of ADR-0015 §6,
-where the exclusion prints in the decision.
+where the exclusion prints in the decision. Built: `payload.NotRequested`, its own key
+in the artefact and its own heading in section 4 of every report.
 
 *The cost is test equipment, not cases.* Neither capability exists on the reference
 agents: `backend/targets/reference/tools.py` wires document tools and out-of-scope tools
@@ -356,7 +368,8 @@ library-version event that re-declares the gate rule *before* the run rather tha
 it. Without a route in, the interesting attacks accumulate in the tier nobody has to
 pass while the six drift toward trigger 1. The number of runs is deliberately not
 declared here — a threshold first written in a planning table is a threshold nobody
-argued for.
+argued for. It is three, argued in ADR-0035 and declared in `elective.PROMOTION_RUNS`,
+which is outside `GateRule` for the reason `T` and `k` are outside it.
 
 **Negative coverage, derived rather than stated — the agentic half is done.**
 `published.py` holds the transcribed copy of `ASI01`–`ASI10` and subtracts the

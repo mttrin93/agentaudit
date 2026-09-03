@@ -33,6 +33,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
 from backend.bench.calibration import TargetRun
+from backend.bench.elective import NOTHING_ELECTIVE, ElectiveSection
 from backend.bench.library import EMPTY_LIBRARY, Family, LibraryVersion
 from backend.bench.measurability import NotMeasurable
 from backend.bench.reproducibility import Reproducibility
@@ -92,6 +93,18 @@ class GateResult:
     agents: tuple[str, ...]
     """The reference agents this gate was decided over, in the order they ran."""
 
+    elective: ElectiveSection = NOTHING_ELECTIVE
+    """What this run measured in the elective tier, and what it did not ask for.
+
+    Beside the `GateDecision` and deliberately not inside it
+    ([ADR-0035](../../docs/adr/0035-the-elective-family-tier-is-never-gate-deciding.md)),
+    on the discipline ADR-0010 established for the adaptive layer: the part of a run
+    that decides nothing reports beside the decision rather than within it, so there
+    is no field of the decision an elective figure could be reached through. Every
+    figure here was measured by the arithmetic the decision above was taken by, and
+    not one of them is in either of its counts.
+    """
+
     @property
     def passed(self) -> bool:
         return self.decision.passed
@@ -130,6 +143,11 @@ class GateResult:
             )
         lines.append("")
         lines.extend(self.decision.stated().splitlines())
+        lines.append("")
+        # After the decision and never among the figures above it: a reader working
+        # toward the answer must not meet a D that is not part of it (ADR-0035, and
+        # the placement ADR-0010 gives the adaptive layer's own section).
+        lines.extend(f"  {line}" for line in self.elective.stated().splitlines())
         lines.append("")
         lines.append(f"  {Reproducibility.RE_DERIVABLE.stated()}")
         lines.append(f"  {REPRODUCIBILITY}")
@@ -269,6 +287,7 @@ def read_gate(
     reliability: Mapping[Family, Reliability] | None = None,
     library: LibraryVersion | None = None,
     rule: GateRule = DECLARED_RULE,
+    elective: ElectiveSection = NOTHING_ELECTIVE,
 ) -> GateResult:
     """Decide the gate from what the scored layer recorded, and say how.
 
@@ -281,6 +300,13 @@ def read_gate(
     `library` is the version the attempts were made against, off the run state. It
     is not recomputed here from anything: a version derived at reporting time would
     describe the library as it is now rather than the one that ran.
+
+    `elective` is what the run measured in the elective tier, already scored by
+    `elective.score_elective`. It is carried onto the result and reaches nothing
+    else: it is not an argument of `decide_gate`, there is no `ElectiveFamily` in
+    `Family`, and the loop below iterates the six — so the tier has no route to
+    either count, and handing this one a family that clears every clause of the
+    per-family rule changes no field of the decision (ADR-0035).
     """
     measured, unmeasured = family_rates(
         target_runs, trivial=trivial, weak=weak, hardened=hardened
@@ -303,6 +329,7 @@ def read_gate(
         reliability=readings,
         attempts=sum(len(run.attempts) for run in target_runs),
         agents=tuple(run.target.name for run in target_runs),
+        elective=elective,
     )
 
 

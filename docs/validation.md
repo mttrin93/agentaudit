@@ -29,6 +29,13 @@ on the citation itself, which is the block every signed report carries. What is 
 claimed is that the library is a constant — it never was, since a case can retire — and
 what is new is that a run can move it.
 
+**Since #43 a family can be measured by the gate without being decided over, and none
+is.** The elective tier is declared and the gate rule is untouched: `family_count` is
+still six, both counts are still fixed, and an elective family's reading enters neither
+([ADR-0035](./adr/0035-the-elective-family-tier-is-never-gate-deciding.md)). Every gate
+result in this document was decided over the same six families, and the section below
+records that no elective family has ever been measured at all.
+
 **Since #39 a cross-model admission count can include a route an earlier run
 measured.** The admission gate remembers the counts it read — never its decision, which
 is re-derived from them under the declared rule on every run
@@ -124,6 +131,47 @@ What follows from that, and what does not:
   every swap recorded below ran the eighteen authored cases, and each one records the
   library version it ran, so a future reading against a grown library is
   distinguishable from these rather than comparable to them by assumption.
+
+### No elective family has ever been measured (#43)
+
+**The elective family tier is declared, and every gate run this document records asked
+it for nothing.** `ElectiveFamily` holds three members, the library holds no case in any
+of them, and no `D`, no interval, no ordering and no promotion streak has ever been read
+for one. The tier's rules, its types and both halves of the *skipping is never
+advantageous* invariant are exercised in the suite on constructed readings and nowhere
+else ([ADR-0035](./adr/0035-the-elective-family-tier-is-never-gate-deciding.md)).
+
+What follows from that, and what does not:
+
+- **"Gate-measured" is a claim about a rule, not a reading.** The bar an elective family
+  faces is `scorer.separation` — the declared `D ≥ 0.4` with the two intervals apart —
+  and it is the *same function* `score_family` reads, so there is one implementation of
+  the condition rather than one and a copy. What nobody has watched is an elective
+  family clear it, or fail it, on a real gate run.
+- **"Never gate-deciding" is the tested half, and it is the half that matters more.** A
+  reading that clears every clause of the per-family rule moves neither of the gate's
+  counts, asserted by deciding one gate run twice and comparing the whole decision; and
+  the records the decision is built from are annotated over the six alone, asserted
+  directly, so a widening fails a test rather than passing quietly. Each was driven red
+  on purpose.
+- **Every gate result below was decided over six families and would be decided over six
+  today.** No number in `rule.py` moved, and the printed rule says nothing about the
+  tier — so a future gate run that requested an elective family stays comparable with
+  these rather than being a different measurement wearing the same name.
+- **Every target report now carries the tier's declared selection and a fifth absence
+  naming three families no run has yet been able to request.** That is honest and it is
+  not a measurement: the block says what this run was asked of the tier and what it was
+  not, and until #48 the answer is *nothing* and *all three* on every run.
+- **"A family whose discriminating power was never measured may not print in a signed
+  report" holds because there is nowhere for any elective figure to print.**
+  `MeasuredSection` is keyed on `Family`, so a report carries a name and never a
+  reading — measured or not. That is stronger than the rule asks and it is why no
+  measurement-linked check exists that could be forgotten. It is also, today, vacuous:
+  there are no readings.
+- **The promotion streak can be read and cannot yet be recovered.** It is read over a
+  ledger of gate runs holding one family-level `ElectiveReading` each, and no gate run
+  record on disk carries one for a ledger to be assembled from. The record gains those
+  fields with the first family that produces one.
 
 ---
 

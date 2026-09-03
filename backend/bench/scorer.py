@@ -642,24 +642,58 @@ def monotonicity(
     )
 
 
-def score_family(rates: FamilyRates, rule: GateRule = DECLARED_RULE) -> FamilyOutcome:
+@dataclass(frozen=True)
+class Separation:
+    """The per-family pass condition, read over two rates and nothing else.
+
+    `D`, whether the two intervals are apart, and whether both clauses are met.
+    Extracted so that the condition has **one** implementation: the elective tier
+    faces the same bar the six face
+    ([ADR-0035](../../docs/adr/0035-the-elective-family-tier-is-never-gate-deciding.md)),
+    and the tier's whole claim to being *gate-measured* is that the rule is the same
+    one — which a second copy of `separate and reaches(...)` would only have to drift
+    from once to break. It carries no family, because the condition does not read one.
+    """
+
+    discrimination: float
+    intervals_separate: bool
+    passes: bool
+
+
+def separation(
+    *, hardened: Rate, trivial: Rate, rule: GateRule = DECLARED_RULE
+) -> Separation:
     """Apply the per-family pass condition: `D ≥ floor` *and* intervals apart.
 
     Both are required. Magnitude without separation is a difference in means the
     counts do not support, and separation without magnitude is a difference too
     small to call discrimination (ADR-0003).
+
+    Named by its two ends rather than positionally, on the same terms as
+    `discrimination`: `D` is not symmetric, and a call site that swapped the
+    reference agents would invert the bench's central claim.
     """
-    score = discrimination(trivial=rates.trivial, hardened=rates.hardened)
-    separate = not intervals_overlap(rates.hardened, rates.trivial)
+    score = discrimination(trivial=trivial, hardened=hardened)
+    separate = not intervals_overlap(hardened, trivial)
+    return Separation(
+        discrimination=score,
+        intervals_separate=separate,
+        passes=separate and reaches(score, rule.discrimination_floor),
+    )
+
+
+def score_family(rates: FamilyRates, rule: GateRule = DECLARED_RULE) -> FamilyOutcome:
+    """One family's outcome at the gate: the pass condition, and the ordering."""
+    apart = separation(hardened=rates.hardened, trivial=rates.trivial, rule=rule)
     return FamilyOutcome(
         family=rates.family,
         rates=rates,
-        discrimination=score,
-        intervals_separate=separate,
+        discrimination=apart.discrimination,
+        intervals_separate=apart.intervals_separate,
         monotonicity=monotonicity(
             hardened=rates.hardened, weak=rates.weak, trivial=rates.trivial, rule=rule
         ),
-        passes=separate and reaches(score, rule.discrimination_floor),
+        passes=apart.passes,
     )
 
 

@@ -52,6 +52,7 @@ from enum import StrEnum
 from backend.bench.adaptive.episode import AdaptiveEpisode, EpisodeOutcome
 from backend.bench.calibration import TargetRun
 from backend.bench.contract import DeclaredControl
+from backend.bench.elective import NOTHING_REQUESTED, ElectiveSelection
 from backend.bench.evaluator import Verdict
 from backend.bench.library import Case, ExternalId, Family, VerdictClass
 from backend.bench.measurability import NotMeasurable
@@ -562,6 +563,19 @@ class TargetResult:
     declared: DeclaredSection
     adaptive: AdaptiveSection
     coverage_gaps: tuple[CoverageGap, ...] = DECLARED_COVERAGE_GAPS
+    elective: ElectiveSelection = NOTHING_REQUESTED
+    """The elective families this run was asked to test, and so the ones it was not.
+
+    A **declared input** of the run rather than something it measured, which is why
+    it sits here beside the coverage statement and not in `MeasuredSection`: that
+    section is keyed on `Family` and an elective figure has no field in it to arrive
+    in
+    ([ADR-0035](../../docs/adr/0035-the-elective-family-tier-is-never-gate-deciding.md),
+    ADR-0018). It is the same tuple on every result at a given selection, so it stays
+    out of the way of the drop-a-family invariant in `payload.py` for the reason
+    `untested_categories` does.
+    """
+
     untested_categories: tuple[UntestedCategory, ...] = UNTESTED_AGENTIC_CATEGORIES
     """Published agentic categories no family in the library claims (`published.py`).
 
@@ -682,6 +696,7 @@ def assemble(
     cuts: BandCuts = DECLARED_BAND_CUTS,
     coverage_gaps: tuple[CoverageGap, ...] = DECLARED_COVERAGE_GAPS,
     reliability: Mapping[Family, Reliability] | None = None,
+    elective: ElectiveSelection = NOTHING_REQUESTED,
 ) -> TargetResult:
     """Assemble one target's result from what was recorded against it.
 
@@ -701,6 +716,10 @@ def assemble(
     `reliability` supplies κ per judged family from the gold-set run (`goldset.py`).
     It reaches the judged entries only, and a judged family absent from it is marked
     unfit to report rather than published without a stated reliability (ADR-0004).
+
+    `elective` is the tier's declared selection, carried onto the result and read by
+    nothing here: no section below is built from it, because what a report may say
+    about an elective family is which ones it was not asked for (ADR-0035).
     """
     scanned = scan(target_run.target)
     return TargetResult(
@@ -736,6 +755,7 @@ def assemble(
         ),
         adaptive=AdaptiveSection(episodes=tuple(episodes)),
         coverage_gaps=coverage_gaps,
+        elective=elective,
     )
 
 

@@ -35,6 +35,55 @@ class Family(StrEnum):
     DISCLOSURE_DENIAL = "disclosure_denial"
 
 
+class ElectiveFamily(StrEnum):
+    """A kind of failure the bench can be asked to test that is not one of the six.
+
+    The **elective tier**, declared in
+    [ADR-0035](../../docs/adr/0035-the-elective-family-tier-is-never-gate-deciding.md):
+    an elective family is measured by the gate exactly as a `Family` is — three
+    reference agents, a `D`, the `discrimination_floor` bar, a decay series on each of
+    its cases — and it decides no gate. The tier's rule, its selection and its
+    promotion streak are `backend/bench/elective.py`; what lives here is the closed
+    set of names, beside the other closed sets, because a case that cannot name its
+    family does not load.
+
+    **A separate enumeration and never a seventh member of `Family` above.** `Family`
+    is the type both gate counts are defined over, so a value assignable into one
+    would be a family in the denominator ADR-0015 fixed at six — and ADR-0015 spent
+    its whole argument on why those counts must be fixed. The distinction is
+    therefore carried by the type rather than by a flag each call site remembers to
+    read, on the same terms as `AdaptiveEpisode` against `Attempt` (ADR-0010) and
+    **elective family** against **family** in CONTEXT.md.
+
+    The three members are the families #42 selected, and a member is a family the
+    project has **committed to being able to be asked for**: #42 selected it and a
+    ticket in that group builds its cases and its reference-agent gradient. That is
+    why they are declared here before those tickets land — the tier has to exist for
+    them to arrive in — and why `ASI05` unexpected code execution, the other
+    candidate PLAN §5 P2 named, is deliberately absent: nothing selects it and no
+    ticket builds it, so declaring it would name a family nobody is going to give
+    cases.
+
+    The `ASI` and `LLM` identifiers below say which published entry each family was
+    selected from. They are **not** the family's label: that is a record holding the
+    agentic id, the LLM id and the articles in one place, read by report, payload and
+    UI, and it is #45's to build.
+    """
+
+    MEMORY_POISONING = "memory_poisoning"
+    """`ASI06`. Its canary is planted in session memory and proves **persistence**,
+    which is a different claim from the obedience `indirect_prompt_injection`
+    measures (CONTEXT.md, **canary**)."""
+
+    DIRECT_PROMPT_INJECTION = "direct_prompt_injection"
+    """`LLM01`. The half of the sentence every indirect-injection case excludes in
+    its own `not_tested`, and never the same denominator as that family."""
+
+    PII_LEAKAGE = "pii_leakage"
+    """`LLM02`. A third party's personal data leaving, which is not the
+    configuration canary `data_leakage` is measured on."""
+
+
 class VerdictClass(StrEnum):
     """How a verdict is reached. Read from the record, never inferred from the
     family."""

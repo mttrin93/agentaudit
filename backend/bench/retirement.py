@@ -331,6 +331,18 @@ def window_of(history: Sequence[GateReading]) -> tuple[GateReading, ...]:
     two *consecutive* runs, so a case that fell below the floor on one model,
     recovered on it, and fell again has not stopped discriminating — it has had one
     bad night twice, which is the reading the two-run rule exists to protect.
+
+    **And the window is transparent across a gate run the case did not run in, by
+    decision**
+    ([ADR-0035](../../docs/adr/0035-the-elective-family-tier-is-never-gate-deciding.md)).
+    Two consecutive *readings* and never two consecutive *dates*: a case whose family
+    was not requested writes no reading, so the readings either side of the gap are
+    neighbours here and the pair still retires it. Before ADR-0022 that fell out of a
+    positional `history[-2:]` and was nobody's choice; the model filter now stands in
+    front of the window, so it has to be one — and this is it. A window that also
+    asked which gate runs happened would let an elective family be parked out of the
+    next few runs until its low reading went stale, which is the half of *skipping is
+    never advantageous* this end of the rule is responsible for.
     """
     if not history:
         return ()

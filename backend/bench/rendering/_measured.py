@@ -8,10 +8,10 @@ reader will act on is printed here, beside the counts it came from.
 
 **Nothing here reaches across two families** (ADR-0005, D12). No count of families,
 no rate over a run, no figure this module computes at all: every number is a number
-the payload already carries. The same rule is why `_withheld`, `_not_measurable` and
-`_not_tested_at_all` are three functions rather than one — a family absent for three
-different reasons is three different statements, and a single "not tested" list would
-be this module deciding they are the same thing.
+the payload already carries. The same rule is why `_withheld`, `_not_measurable`,
+`_elective` and `_not_tested_at_all` are four functions rather than one — a
+family absent for four different reasons is four different statements, and a single
+"not tested" list would be this module deciding they are the same thing.
 
 **The adaptive layer reports in its own section and writes into no rate here**
 (ADR-0010). `_adaptive` prints episodes, and an episode is not an attempt; the only
@@ -64,7 +64,7 @@ cut points that were those rates are printed beside every band.
 """
 
 
-def _figures(measured: Mapping[str, Any]) -> Section:
+def _figures(measured: Mapping[str, Any], elective: Mapping[str, Any]) -> Section:
     """The per-family figures, each with the counts and the limits behind it.
 
     Every family stands alone. Nothing here reads two of them, which is why a reader
@@ -75,6 +75,16 @@ def _figures(measured: Mapping[str, Any]) -> Section:
     this report publishes, and for those only: a withheld or unmeasurable family has no
     figure for the note to qualify, and the boundary of a claim printed beside an
     absent claim would read as the claim having been made.
+
+    `elective` is the tier's declared selection and its absences, and it arrives as
+    its own argument — **required, not defaulted** — because it is a declared input of
+    the run rather than anything the run measured
+    ([ADR-0035](../../../docs/adr/0035-the-elective-family-tier-is-never-gate-deciding.md)).
+    A default would let a caller that forgot it print *none is absent for want of a
+    request*, which is a false statement about coverage rather than a missing block.
+    It prints in this section, under its own heading, because a reader comparing the
+    reasons a family is missing from the figures above should find all of them in one
+    place — and in its own block, because five reasons are five statements.
     """
     cuts = measured["cuts"]
     return Section(
@@ -102,6 +112,10 @@ def _figures(measured: Mapping[str, Any]) -> Section:
             "### Families this target could not be measured on",
             "",
             *_not_measurable(measured["not_measurable"]),
+            "",
+            "### The elective families, requested and not",
+            "",
+            *_elective(elective),
         ),
     )
 
@@ -247,6 +261,32 @@ def _not_measurable(unanswerable: Sequence[Mapping[str, Any]]) -> tuple[str, ...
         ),
         "- None. Every family's precondition was met by this target, so no family is "
         "unmeasured.",
+    )
+
+
+def _elective(elective: Mapping[str, Any]) -> tuple[str, ...]:
+    """What this run was asked of the elective tier, and what it was not.
+
+    The absences are the fifth kind of nothing, and none of the other four
+    ([ADR-0035](../../../docs/adr/0035-the-elective-family-tier-is-never-gate-deciding.md)):
+    the bench holds a tier for these, nothing was attempted against them, and nobody
+    could not answer.
+
+    The **request** prints above them, because a run that asked for every elective
+    family produces no absences at all and a section that then said nothing would
+    leave a reader unable to tell it from a run made before the tier existed. What
+    neither half carries is a figure: an elective family's `D` is a claim about the
+    bench and is printed where the bench's claims are printed, which is the gate
+    document and not this one (ADR-0018).
+    """
+    return (
+        elective["requested_stated"],
+        "",
+        *_listed(
+            (f"- {one['stated']}." for one in elective["not_requested"]),
+            "- None. Every elective family the bench declares was requested by this "
+            "run, so none of them is absent here for want of a request.",
+        ),
     )
 
 

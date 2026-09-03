@@ -13,21 +13,19 @@ by omission: not one of the four entries is an OWASP agentic category, so the se
 that promised to name the untested categories named none of them. This module holds
 the copy, and the subtraction the copy makes possible.
 
-**A copy is not the source, and this one says where it came from.** The identifiers
-and titles below were transcribed on 2026-08-20 from two independent secondary
-readings of the list, which agreed on all ten of both; the OWASP resource page itself
-refuses automated retrieval, so no reading here is the primary document. That is
-weaker provenance than a signed artefact deserves and it is stated rather than
-smoothed over: what the derivation below can claim is *agreement between two
-readings*, and a reader who needs the authoritative wording goes to OWASP. Titles are
-carried verbatim from that agreement, with no rewording to fit this repository's
-voice, so that a stale copy is visible as a mismatch rather than hidden as a
-paraphrase.
+**The copy is not here, and it is not the source either.** `editions.py` holds the
+stored copies of both published lists and the provenance of each — a copy is worth
+storing only if the things claiming its identifiers are checked against it, and the
+thing that claims them is a case record, so the copies have to live somewhere
+`library.py` can import
+([ADR-0036](../../docs/adr/0036-a-published-identifier-resolves-to-a-stored-copy.md)).
+This module reads the agentic copy from there and adds what a copy cannot carry: who
+claims what, why an unclaimed entry is unclaimed, and the subtraction.
 
-**Three declared things, and one derived one.** The transcription is a
-transcription and holds nothing but the published fact. Which family claims which
-category is a judgement, declared apart from the copy. Why an unclaimed category is
-unclaimed is a second judgement, declared apart again. Only the subtraction is
+**Two declared things here, one stored elsewhere, and one derived.** The copy is a
+copy and holds nothing but the published fact. Which family claims which category is
+a judgement, declared apart from the copy. Why an unclaimed category is unclaimed is
+a second judgement, declared apart again. Only the subtraction is
 computed — and it is computed over the **library's families**, never over the
 families one run happened to measure. That boundary is load-bearing: `payload.py`
 asserts that dropping a family from a result leaves every other byte of the document
@@ -50,51 +48,8 @@ library refuses to load rather than one the coverage section discovers.
 from collections.abc import Mapping
 from dataclasses import dataclass
 
+from backend.bench.editions import AGENTIC_TOP_10_2026, StoredCopy
 from backend.bench.library import Family
-
-
-@dataclass(frozen=True)
-class AgenticCategory:
-    """One entry of the published list: its identifier and its title, and no more.
-
-    Deliberately holds no judgement about this bench. A record that carried *why we
-    do not test this* beside the published fact would be a copy nobody could check
-    against the source without first separating the two, and the whole value of a
-    stored copy is that it can be checked.
-    """
-
-    identifier: str
-    title: str
-
-
-AGENTIC_TOP_10_2026: tuple[AgenticCategory, ...] = (
-    AgenticCategory("ASI01", "Agent Goal Hijack"),
-    AgenticCategory("ASI02", "Tool Misuse & Exploitation"),
-    AgenticCategory("ASI03", "Identity & Privilege Abuse"),
-    AgenticCategory("ASI04", "Agentic Supply Chain Vulnerabilities"),
-    AgenticCategory("ASI05", "Unexpected Code Execution (RCE)"),
-    AgenticCategory("ASI06", "Memory & Context Poisoning"),
-    AgenticCategory("ASI07", "Insecure Inter-Agent Communication"),
-    AgenticCategory("ASI08", "Cascading Failures"),
-    AgenticCategory("ASI09", "Human-Agent Trust Exploitation"),
-    AgenticCategory("ASI10", "Rogue Agents"),
-)
-"""OWASP Top 10 for Agentic Applications 2026, transcribed 2026-08-20.
-
-Ten entries, `ASI01` through `ASI10` in the published order. The order is part of the
-copy: a list whose entries are sorted or grouped by this repository's convenience is
-no longer the published list.
-"""
-
-EDITION = "OWASP Top 10 for Agentic Applications 2026"
-"""What the copy above is a copy of, printed beside the derived list.
-
-The edition and not a fetch date, because the fetch date of a secondary reading says
-nothing about which edition was read. A second edition of this list makes every
-subtraction below stale, and the only defence against a stale subtraction that still
-looks current is naming the edition in the report.
-"""
-
 
 FAMILY_CATEGORY: Mapping[Family, str | None] = {
     Family.INDIRECT_PROMPT_INJECTION: "ASI01",
@@ -189,11 +144,12 @@ content is the blocker rather than the boolean.
 class UntestedCategory:
     """A published agentic category no family in the library claims.
 
-    A different type from `AgenticCategory` on purpose. That one is a copy of a
-    published fact and says nothing about this bench; this one is a claim this bench
-    makes about itself, and it is only ever produced by the subtraction below. Nothing
-    can print a tested category in the untested section by passing the wrong record,
-    because the untested section takes a type that only the derivation constructs.
+    A different type from `editions.PublishedCategory` on purpose. That one is a copy
+    of a published fact and says nothing about this bench; this one is a claim this
+    bench makes about itself, and it is only ever produced by the subtraction below.
+    Nothing can print a tested category in the untested section by passing the wrong
+    record, because the untested section takes a type that only the derivation
+    constructs.
     """
 
     identifier: str
@@ -206,7 +162,7 @@ class UntestedCategory:
 
 
 def untested_categories(
-    categories: tuple[AgenticCategory, ...] = AGENTIC_TOP_10_2026,
+    copy: StoredCopy = AGENTIC_TOP_10_2026,
     claimed: Mapping[Family, str | None] = FAMILY_CATEGORY,
     reasons: Mapping[str, str] = OUT_OF_REACH,
 ) -> tuple[UntestedCategory, ...]:
@@ -224,25 +180,31 @@ def untested_categories(
     moves when the library does, which is the property a hand-written list cannot
     have and the only reason this function exists rather than a constant.
 
+    **The copy is a `StoredCopy` and not a tuple of entries**, so the raise below can
+    name the edition the claim failed against. A subtraction whose error message
+    cannot say *which published list* it read is one a reader cannot check, and there
+    are now two of them in the tree (ADR-0036).
+
     Raises:
         KeyError: if a family claims an identifier the published copy does not carry,
             which is a typo in `FAMILY_CATEGORY` and would silently subtract nothing.
         KeyError: if an unclaimed category has no reason in `OUT_OF_REACH`, which
             would print a bare identifier and read as an oversight.
     """
-    published = {category.identifier for category in categories}
+    published = {category.identifier for category in copy.entries}
     for family, identifier in claimed.items():
         if identifier is not None and identifier not in published:
             raise KeyError(
-                f"{family} claims {identifier}, which is not in {EDITION}. A family "
-                "claiming an identifier the stored copy does not carry subtracts "
-                "nothing, so the category it meant to cover stays listed as untested "
-                "and the mistake reads as a wider gap rather than as an error"
+                f"{family} claims {identifier}, which is not in {copy.edition}. A "
+                "family claiming an identifier the stored copy does not carry "
+                "subtracts nothing, so the category it meant to cover stays listed "
+                "as untested and the mistake reads as a wider gap rather than as "
+                "an error"
             )
 
     covered = {identifier for identifier in claimed.values() if identifier is not None}
     untested = tuple(
-        category for category in categories if category.identifier not in covered
+        category for category in copy.entries if category.identifier not in covered
     )
 
     missing = [

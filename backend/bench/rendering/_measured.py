@@ -32,7 +32,7 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping, Sequence
 from typing import Any
 
-from backend.bench.published import EDITION as AGENTIC_EDITION
+from backend.bench.editions import AGENTIC_TOP_10_2026, LLM_TOP_10_2026
 from backend.bench.rendering._layout import Section, _listed
 from backend.bench.reproducibility import Reproducibility
 from backend.bench.scorer import Band
@@ -318,7 +318,8 @@ def _not_tested_at_all(
             "them are the lowest priority this project holds, and a gap is not a "
             "defect in this run.",
             "",
-            f"**Published categories no family reaches** — {AGENTIC_EDITION}, "
+            "**Published categories no family reaches** — "
+            f"{AGENTIC_TOP_10_2026.edition}, "
             "subtracted from the stored copy of that list rather than written out "
             "here, so this block shortens by itself when a family that claims one of "
             "them is admitted (ADR-0002).",
@@ -335,11 +336,13 @@ def _not_tested_at_all(
             "resource page refuses automated retrieval, so the identifiers and titles "
             "were taken from two independent readings that agreed on all ten. What "
             "that supports is agreement between two readings, and a reader who needs "
-            "the authoritative wording goes to OWASP. The **OWASP GenAI LLM Top 10 "
-            "2026** identifiers carried by section 4 have no stored copy at all, so "
-            "that list's negative coverage is not derived and a category published on "
-            "it since is missing here. The per-family notes in section 4 carry the "
-            "other half of the same disclosure (ADR-0002).",
+            "the authoritative wording goes to OWASP. The identifiers carried by "
+            f"section 4 name the **{LLM_TOP_10_2026.edition}** and are checked "
+            "against a stored copy of it, so a case claiming an identifier that "
+            "edition does not carry does not load; that copy is not subtracted from "
+            "here, so a category on it that no family reaches is not named above. "
+            "The per-family notes in section 4 carry the other half of the same "
+            "disclosure (ADR-0002).",
         ),
     )
 

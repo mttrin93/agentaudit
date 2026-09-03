@@ -339,3 +339,18 @@ _Avoid_: consent, agreement, terms, disclaimer
 **Provenance block**:
 The part of a report recording who ran it, against what, under which attestation, with which library version.
 _Avoid_: metadata, header, audit trail
+
+**Stored copy**:
+A committed transcription of one **edition** of a published category list this project
+cites — OWASP's agentic list, OWASP's GenAI LLM list — holding each entry's identifier
+and title and no judgement about this bench. Named for what it is rather than for what
+it is a copy of: it is not the source, it says which edition it copies and where that
+reading came from, and its whole value is that a claim the bench prints about an
+external standard can be checked against something in the tree instead of against
+somebody's memory. An identifier a **case** claims resolves to an entry in a *current*
+stored copy or the case does not load, and one that names an edition must name the
+stored edition — the 2025 and 2026 editions of the LLM list both carry `LLM07` and it
+is two different entries
+([ADR-0036](./docs/adr/0036-a-published-identifier-resolves-to-a-stored-copy.md)). A
+superseded copy is kept for diagnosis and resolves nothing.
+_Avoid_: the list, the standard, the taxonomy, the source, OWASP (for the copy)

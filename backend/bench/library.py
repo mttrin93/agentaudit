@@ -23,6 +23,8 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
+from backend.bench import editions
+
 
 class Family(StrEnum):
     """The six kinds of failure the bench tests for."""
@@ -263,6 +265,27 @@ class ExternalId:
 
     identifier: str
     not_tested: str
+
+    def __post_init__(self) -> None:
+        """Refuse an identifier no stored copy of a published list carries.
+
+        The check the agentic half already had, arriving from the other end.
+        `published.untested_categories` refuses a *family* claiming an identifier
+        the copy does not carry, because such a claim subtracts nothing and the gap
+        it meant to close stays printed as untested. This refuses a *case* claiming
+        one, where the failure is the mirror image: the report prints a published
+        number that is not published, and nothing anywhere can check it
+        ([ADR-0036](../../docs/adr/0036-a-published-identifier-resolves-to-a-stored-copy.md)).
+
+        It is on the record's own type rather than in `load_case` so that both ways
+        in are covered by one guard. A case the adaptive layer proposed is written
+        into the library by the run that admitted it (ADR-0033), and an unresolvable
+        identifier that got as far as being written would be a record the loader
+        refuses for ever after — a library broken by a write that succeeded.
+        """
+        refused = editions.not_a_claim(self.identifier)
+        if refused is not None:
+            raise ValueError(refused)
 
 
 @dataclass(frozen=True)

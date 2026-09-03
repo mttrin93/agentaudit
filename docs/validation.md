@@ -173,6 +173,42 @@ What follows from that, and what does not:
   record on disk carries one for a ledger to be assembled from. The record gains those
   fields with the first family that produces one.
 
+### No stored copy has ever been checked against a published document by a person (#44)
+
+**Both published lists are now stored and every identifier a case record claims
+resolves against one, and none of that makes the copies *right*.** What a stored copy
+buys is that the claim is checkable offline against something committed
+([ADR-0036](./adr/0036-a-published-identifier-resolves-to-a-stored-copy.md)); what it
+cannot buy is fidelity to the publisher. Nobody has sat with the OWASP documents and
+the copies side by side, and no test in the suite could tell if they had.
+
+What follows from that, and what does not:
+
+- **The two copies do not have the same provenance, and the difference is stated on
+  each.** The LLM 2026 copy was read from the publishing project's own repository
+  README and corroborated by three secondary readings that agreed on all ten entries;
+  the agentic copy is two agreeing secondary readings, because the OWASP resource page
+  refuses automated retrieval. Neither is a byte-for-byte fetch of a primary document,
+  and the copies say so where a reader will see it rather than in this file alone.
+- **Two readings disagreed, and that is the strongest argument in this section.** Below
+  `LLM03`, two of the readings consulted contradicted the publisher and each other.
+  Whatever confidence the copies deserve, a *memory* of these lists deserved none — and
+  a memory is what twelve of the eighteen case records rested on until #44.
+- **Nothing checks that a title means what a case claims it means.** `resolves` answers
+  whether an identifier is carried by a stored copy; that `LLM07:2026 Misinformation`
+  is the right home for wrongful commitment is a judgement, and it is unmoved by
+  anything in the suite. The roster test forces somebody to look at the entry a new
+  identifier resolved to. It cannot make them agree with it.
+- **A new edition is not detected, only survived.** This repository has no way to learn
+  that a list has been republished. What it has is that every claim names an edition
+  and every stored copy names the edition it copies, so adopting a new one fails every
+  claim written under the old tag until each is re-read. The failure mode left open is
+  a copy that is quietly out of date while honestly labelled — which is a reader's
+  check to make, and is why the edition prints beside the derived list.
+- **One list of the two is subtracted from.** The negative coverage claim is still
+  derived over the agentic copy alone. The LLM copy is stored and unsubtracted, so no
+  report names a GenAI LLM category that no family reaches, and none claims to.
+
 ---
 
 ## Pre-gate observations

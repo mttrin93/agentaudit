@@ -380,13 +380,18 @@ measured, which is what keeps it clear of the drop-a-family invariant in `payloa
 and is also the honest scope: a category the bench does not test and a family this
 target could not answer are different absences.
 
-*What is left.* Only the agentic list is stored. The `LLM0x:2026` identifiers on the
-case records have no stored copy to be subtracted from, so that list's negative
-coverage is still declared, and a category published on it since is still missing.
-Deriving it needs the same treatment `published.py` gives the other — and a
-transcription of that list with the same provenance caveat, since the OWASP resource
-pages refuse automated retrieval and the stored copy can only claim agreement between
-two independent readings.
+*What is left, and what is no longer.* **Both lists are now stored.** `editions.py`
+holds a copy of each and every identifier a case record claims is resolved against
+one, so a claim about an external standard is checkable in the tree rather than
+against somebody's memory
+([ADR-0036](./docs/adr/0036-a-published-identifier-resolves-to-a-stored-copy.md)). That
+copy also settled the three-way disagreement between §4's numbering and #42's
+selection: #42 was numbering against the superseded 2025 edition, §4's numbers name
+the edition their own `:2026` tags claim, and no case record changed. What is left is
+the LLM list's **negative** coverage, which is still declared rather than derived —
+each entry removed from an untested list is a coverage claim getting wider, so it
+needs a reason beside every unclaimed entry and belongs with the label record (#45)
+and the identifier claims (#47) rather than with the copy.
 
 ---
 

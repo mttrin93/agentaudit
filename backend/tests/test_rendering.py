@@ -37,6 +37,7 @@ from backend.bench.capability import (
     ReasoningEffort,
 )
 from backend.bench.contract import DeclaredControl
+from backend.bench.editions import AGENTIC_TOP_10_2026, LLM_TOP_10_2026
 from backend.bench.elective import ElectiveSelection
 from backend.bench.library import ElectiveFamily, Family
 from backend.bench.measurability import NotMeasurable
@@ -143,7 +144,7 @@ def test_every_section_states_its_own_reproducibility_and_three_read_the_payload
 
 # --- The golden digest: one document, pinned to the byte ---------------------
 
-GOLDEN_ONE_FAMILY = "26e56959888980396d8cb4d24f254187788117045383e53f3fb573f5f53f4b97"
+GOLDEN_ONE_FAMILY = "f953a54f8affbe510bdf954f2ce1e66c7a95594bf9b8b7e84aa9507cbebdd513"
 """The sha256 of `_one_family()`'s rendering, written down.
 
 **A tripwire, and it is deliberately a strict one.** Every other assertion in this
@@ -503,9 +504,19 @@ def test_the_untested_published_categories_print_with_their_identifiers() -> Non
     assert "Published categories no family reaches" in body
     assert "Limits of the bench" in body
 
-    # And the confession this change retires is gone: the bench does now hold a copy
-    # of one of the two lists, so the report may not still say it holds neither.
-    assert "holds no stored copy" not in text
+    # Both lists are stored now (ADR-0036), and the report says what each copy is for:
+    # one is subtracted from, the other is what section 4's identifiers are checked
+    # against. Widened from `holds no stored copy` — the exact phrase the prose carried
+    # before the agentic copy existed — because the sentence that replaced it said the
+    # LLM identifiers "have no stored copy at all", which was true then, is false now,
+    # and slipped past an assertion pinned to the older wording.
+    assert "no stored copy" not in text
+    assert "checked against a stored copy of it" in body
+    assert "is not subtracted from here" in body
+    # Both editions print off their own copy and neither is spelled out here, so a
+    # copy replaced by a later edition cannot leave a report naming the older one.
+    assert AGENTIC_TOP_10_2026.edition in body
+    assert LLM_TOP_10_2026.edition in body
 
 
 # --- Each family's own boundary, beside its own figure (ADR-0002) ------------

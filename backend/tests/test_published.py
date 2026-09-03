@@ -1,4 +1,4 @@
-"""The stored copy of the published agentic list, and the subtraction over it.
+"""The subtraction over the stored agentic copy, and the two mistakes it refuses.
 
 The point of `published.py` is that the negative-coverage claim is **derived**, so the
 tests that matter are the ones a hand-written list could not pass:
@@ -11,45 +11,23 @@ tests that matter are the ones a hand-written list could not pass:
   does not carry, and a reason left behind for a category somebody has since started
   claiming — are refused rather than absorbed.
 
-The copy itself is asserted as a copy: ten entries, published order, no rewording.
-There is nothing here that checks the titles are *correct*, because this repository
-cannot check that — the provenance is two agreeing secondary readings and
-`published.py` says so.
+**The copies are asserted where the copies live.** Both agentic and LLM entries are
+`editions.py`'s since ADR-0036, and so are the assertions that each is ten entries in
+the published order carrying no judgement about this bench — `test_editions.py`. What
+stays here reads a copy and never checks one.
 """
 
 import pytest
 
+from backend.bench.editions import AGENTIC_TOP_10_2026
 from backend.bench.library import Family
 from backend.bench.published import (
-    AGENTIC_TOP_10_2026,
-    EDITION,
     FAMILY_CATEGORY,
     OUT_OF_REACH,
     UNTESTED_AGENTIC_CATEGORIES,
-    AgenticCategory,
     UntestedCategory,
     untested_categories,
 )
-
-# --- The copy ----------------------------------------------------------------
-
-
-def test_the_copy_is_ten_entries_in_the_published_order() -> None:
-    # The order is part of the copy: a list re-sorted for this repository's
-    # convenience is no longer the published list.
-    assert [category.identifier for category in AGENTIC_TOP_10_2026] == [
-        f"ASI{number:02d}" for number in range(1, 11)
-    ]
-    for category in AGENTIC_TOP_10_2026:
-        assert category.title.strip()
-    assert EDITION == "OWASP Top 10 for Agentic Applications 2026"
-
-
-def test_a_published_entry_carries_no_judgement_about_this_bench() -> None:
-    # A copy that mixes the published fact with our opinion of it is a copy nobody
-    # can check against the source without separating the two first.
-    assert set(AgenticCategory.__dataclass_fields__) == {"identifier", "title"}
-
 
 # --- Every family answers ----------------------------------------------------
 
@@ -119,7 +97,7 @@ def test_an_untested_category_is_a_different_type_from_a_published_one() -> None
         isinstance(category, UntestedCategory)
         for category in UNTESTED_AGENTIC_CATEGORIES
     )
-    assert not isinstance(AGENTIC_TOP_10_2026[0], UntestedCategory)
+    assert not isinstance(AGENTIC_TOP_10_2026.entries[0], UntestedCategory)
 
 
 # --- The two mistakes that would make a gap disappear ------------------------

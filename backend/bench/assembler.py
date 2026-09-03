@@ -532,14 +532,20 @@ the OWASP agentic list and subtracts the categories the library's families claim
 different blocks. One says the bench cannot measure this at all; the other names a
 published category no family reaches yet.
 
-**The gap that is left.** Only the agentic list is stored. The GenAI LLM Top 10 2026
-identifiers on the case records — `LLM01`, `LLM02`, `LLM03`, `LLM07`, `LLM08` — have
-no stored copy to be subtracted from, so that list's negative coverage is still not
-derived, and a category published on it after this was written is still missing.
-Deriving it needs the same treatment `published.py` gives the other, and it is
-tracked rather than absorbed here. The per-family `coverage` notes carry what each
-case does *not* test inside the identifier it claims, which is the other half of the
-same disclosure and is derived from the case records already.
+**The gap that is left.** Both lists are stored now — `editions.py` holds a copy of
+each, and the `LLM0x:2026` identifiers on the case records resolve against one or the
+case does not load
+([ADR-0036](../../docs/adr/0036-a-published-identifier-resolves-to-a-stored-copy.md)).
+What is still not derived is that list's **negative** coverage: the block below
+subtracts over the agentic copy alone, so a GenAI LLM category no family reaches is
+not named here. Subtracting over the second copy removes an entry from an untested
+list per family that claims one, which is a coverage claim getting wider in the one
+direction nobody checks, and it needs a reason beside every unclaimed entry the way
+`OUT_OF_REACH` carries one. Tracked rather than absorbed here.
+
+The per-family `coverage` notes carry what each case does *not* test inside the
+identifier it claims, which is the other half of the same disclosure and is derived
+from the case records already.
 """
 
 

@@ -79,6 +79,7 @@ from scripts.console import (
     note_is_planted,
     price,
     print_findings,
+    print_precedent,
     rate_line,
     terminal_approval,
     traced_run,
@@ -348,6 +349,9 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     [target_run] = result.target_runs
     print_target_run(target_run, gaps)
+    # Out here rather than inside `print_target_run`: what a run filed is a fact
+    # about the bench's own memory and not about this target (ADR-0031).
+    print_precedent(result)
     for layer in Layer:
         print(
             f"\ncalls spent, {layer} layer: {result.run_state.spent_in(layer)} "

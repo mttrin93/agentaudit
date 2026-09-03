@@ -578,6 +578,35 @@ def _run(record: RunRecord, config: BenchConfig, pending: PendingApproval) -> No
             "where the success condition and the judge read one transcript "
             "differently: the verdicts stand and the disagreements are for a human"
         )
+    if result.filing.filed or result.filing.judged:
+        # What this run contributed to the long-term memory, on the same sentence
+        # and for the same reason the review queue is: the records are on
+        # `record.result`, and what a poller is *told* is that the store grew and
+        # that something was kept out of it. A judged family files nothing
+        # (ADR-0004) and an operator who finds the store empty of one has to be
+        # able to read that as a refusal rather than as a broken write.
+        #
+        # A count and never a rate. Nothing filed here moved a number: the write
+        # is the last thing a run does, after every instrument in it has read
+        # (ADR-0031).
+        #
+        # The count is this run's contribution and deliberately not the store's
+        # growth, which is what the closing clause says: `Precedent.key` is a
+        # digest of the record, so a finding an earlier run already filed is the
+        # same row — and a sentence claiming the store gained this many rows would
+        # be a number a poller could not check (`filing.Filing.filed`).
+        finished = (
+            f"{finished}. {len(result.filing.filed)} precedent(s) were filed to "
+            f"the long-term memory and {len(result.filing.judged)} judged "
+            "case(s) were withheld from it, because precedent holds "
+            "deterministic findings only. Both counts are per case per target, "
+            "so a case attempted ten times counts once. Filed after this run "
+            "had finished "
+            "reading, so nothing filed informed a fix this run wrote — and a "
+            "record an earlier run already filed is the same row rather than a "
+            "new one, so this is what the run contributed and not what the store "
+            "grew by"
+        )
     if isinstance(record.report, Unsigned):
         # Said here rather than left to the report route, because this is the
         # sentence a poller reads: a run whose status says completed and whose

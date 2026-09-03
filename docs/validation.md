@@ -610,6 +610,21 @@ blocks for the reason they are computed in separate modules: `scorer.py` imports
 from `backend/bench/adaptive/`, the adaptive statistics import no `GateRule`, and a test
 fails if either ever does.
 
+**Every `A_break` reading in this document was taken over an empty precedent store, and
+that stopped being automatic at #38.** Until then the store could only hold sentences an
+operator typed by hand, so a reading over an untouched clone was a reading over nothing.
+A narrated run files its deterministic findings now
+([ADR-0031](./adr/0031-a-run-files-its-deterministic-findings-after-it-has-read-them.md)),
+and a gate run reads the same store — so an `A_break` measured on a machine whose store
+has been filled by earlier runs is a reading about the attacker *plus that corpus*, and
+is comparable only with another reading over the same corpus. It still decides nothing:
+the gate is decided on rates, intervals, bands and `D`, none of which the adaptive layer
+can reach (ADR-0010), and the episode record carries `consulted_precedent` so a run that
+read the store says so. What it costs is the comparability of the diagnostic, which is
+why a future reading belongs beside a statement of what the store held —
+`uv run python -m scripts.seed_precedent --list` prints it, and `--clear` removes only
+what an operator typed.
+
 
 ### 2026-08-18 — the gate, its rule as applied, and the certified run that passed it (#13)
 

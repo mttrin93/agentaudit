@@ -81,6 +81,7 @@ from scripts.console import (
     price,
     print_episodes,
     print_findings,
+    print_precedent,
     print_provenance,
     rate_line,
     terminal_approval,
@@ -312,6 +313,10 @@ def _print_result(
         # of the denominator and a finding is a verdict plus its narrative, and
         # the two are counted apart (CONTEXT.md).
         print_findings(target_run)
+
+    # Per run and after every target, because that is where the write happens
+    # (ADR-0031).
+    print_precedent(result)
 
     print_episodes(result, trivial=TRIVIAL.name, hardened=HARDENED.name)
 

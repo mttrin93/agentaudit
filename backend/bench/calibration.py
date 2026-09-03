@@ -13,6 +13,13 @@ and the two records travel on `TargetRun.narrations` (ADR-0030). It defaults to
 `None`, which is a run that measured what it measured and explained none of it —
 a stated absence rather than an empty result, and what every gate run is.
 
+`precedent` is the long-term memory, and this is the one function in the bench that
+holds it as something able to write: the deterministic findings are filed at the end
+of the run, once every instrument in it has read (`filing.py`, ADR-0031). The
+annotation is the concrete `DurablePrecedents` for that reason, and everything below
+here — `_run_target`, the narrative pass, the adaptive layer — takes the read-only
+protocol instead, so nothing inside a run can write what the run is still reading.
+
 The order below is the order ADR-0007 requires and is not an implementation
 detail: attestation, then the estimate, then the halt, and only then anything that
 reaches an endpoint. The approval interrupt sits ahead of registration as well as
@@ -51,13 +58,18 @@ from typing import Final
 from backend.bench.adaptive.attacker import AttackerCompletion
 from backend.bench.adaptive.budget import DECLARED_ADAPTIVE_BUDGET, AdaptiveBudget
 from backend.bench.adaptive.layer import AttackableTarget, run_adaptive_layer
-from backend.bench.adaptive.precedent import DURABLE_PRECEDENT, PrecedentStore
+from backend.bench.adaptive.precedent import (
+    DURABLE_PRECEDENT,
+    DurablePrecedents,
+    PrecedentStore,
+)
 from backend.bench.adaptive.scripted import SCRIPTED_ATTACKER
 from backend.bench.adjudication import Completion, NoAdjudicator
 from backend.bench.applicability import SkippedCase, applicable, skipped_cases
 from backend.bench.attacker import run_case
 from backend.bench.contract import TargetConfig, TargetUnreachable
 from backend.bench.evaluator import Verdict
+from backend.bench.filing import Filing, file_precedent
 from backend.bench.judge import Disagreement, Finding
 from backend.bench.library import Case, Family, LibraryVersion, VerdictClass
 from backend.bench.measurability import (
@@ -322,6 +334,16 @@ class CalibrationResult:
     (ADR-0010).
     """
 
+    filing: Filing = field(default_factory=Filing)
+    """What this run contributed to the long-term memory, and what it withheld.
+
+    On the result because a judged family filing nothing is a statement rather
+    than an absence: the run says what it refused rather than swallowing the
+    refusal (`filing.py`, ADR-0031). Empty for a run that produced no finding to
+    file, which every gate run is — and *why* it produced none is answered on
+    `TargetRun.narrations` rather than restated here.
+    """
+
 
 @dataclass(frozen=True)
 class _UsageFields:
@@ -416,7 +438,7 @@ def run_calibration(
     adjudicator: Completion | None = None,
     narrator: Narrator | None = None,
     attacker: AttackerCompletion = SCRIPTED_ATTACKER,
-    precedent: PrecedentStore = DURABLE_PRECEDENT,
+    precedent: DurablePrecedents = DURABLE_PRECEDENT,
     rule: GateRule = DECLARED_RULE,
     adaptive: AdaptiveBudget = DECLARED_ADAPTIVE_BUDGET,
     budget: RunBudget | None = None,
@@ -522,8 +544,10 @@ def run_calibration(
             "run with no limit (ADR-0007)"
         )
     target_runs: list[TargetRun] = []
+    filing = Filing()
 
     def run_suite() -> None:
+        nonlocal filing
         for target in targets:
             target_runs.append(
                 _run_target(
@@ -566,6 +590,24 @@ def run_calibration(
             budget=adaptive,
             precedent=precedent,
         )
+        # And last of all, the one write. Here rather than beside each target's
+        # narration, so that **nothing in this run reads what this run filed**:
+        # `suggest_remediation` has run for every target and the adaptive layer's
+        # `retrieve_precedent` has answered every episode, so the store every
+        # instrument saw is the store as it stood when the run began. Filing per
+        # target instead would make target *n*'s findings precedent for target
+        # *n+1*'s fix, which is a corpus that depends on the order targets were
+        # run in — and would put this run's scored findings in front of this run's
+        # own attacker, whose `A_break` is then a reading about the attacker plus
+        # its own run's hint (ADR-0031, ADR-0019, `seed_precedent.py`).
+        filing = file_precedent(
+            [
+                finding
+                for completed in target_runs
+                for finding in completed.findings or ()
+            ],
+            precedent,
+        )
 
     try:
         with traced(Span.RUN, trace.fields() if trace is not None else None) as span:
@@ -603,6 +645,7 @@ def run_calibration(
         target_runs=tuple(target_runs),
         budget=declared,
         approval=approval,
+        filing=filing,
         usage=ledger,
     )
 

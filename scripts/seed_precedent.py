@@ -7,22 +7,41 @@
 **What this is.** `retrieve_precedent` is one of the adaptive attacker's five tools
 and it reads the durable store. The store fills from the scored layer — a fixed case
 that succeeded, described in one sentence by the judge, filed as a `Precedent` — and
-that chain has no caller yet, so on every run to date the tool has answered *nothing
-has been filed against this family yet*. An attacker with a weak model then invents
-its opening move from scratch in every episode, and invents the same weak one.
+since #38 that chain has a caller: `run_calibration` files one precedent per case per
+target at the end of every run that narrated (`bench/filing.py`, ADR-0031). So this
+script is no longer the only thing the store has ever held.
+
+What it is still for is the first run, and the run before the first useful one. A
+fresh install has an empty store, a gate run files nothing at all (ADR-0030), and the
+findings a run does file reach nobody until the run *after* it — so an attacker with a
+weak model invents its opening move from scratch until then, and invents the same weak
+one. These sentences are what an operator can put in front of it in the meantime.
 
 **What this is not.** These entries are the operator's own text. They are not
 findings, no run produced them, and no judge wrote them — so each is filed under a
 `case_id` that says so, and a reader of the file can tell a typed sentence from a
 recorded one at a glance. Nothing here is dressed up as evidence.
 
-**What it costs the reading.** `A_break` measured on a run that read seeded
-precedent is a reading about the attacker *plus the hint*, which is not the same
-instrument as the attacker alone. The episode record already carries
-`consulted_precedent`, so a run that read the store says so — and the honest use of
-this script is the diagnostic one: if a weak attacker cannot break a target with the
-route written out in front of it, the model is the ceiling and long-term memory was
-never what was holding it back.
+**What it costs the reading, and the cost is no longer this script's alone.**
+`A_break` measured on a run that read a **non-empty store** is a reading about the
+attacker *plus what was in front of it*, which is not the same instrument as the
+attacker alone. That used to be a statement about seeding, because seeds were the
+only thing the store could hold. Since #38 a narrated run fills it, and neither
+`scripts/gate.py` nor `api/gate_runs.py` hands the layer a store — both read
+`DURABLE_PRECEDENT` — so a gate run's `A_break` can now be measured over a corpus
+nobody chose to put there.
+
+Nothing the gate *decides* moves, because ADR-0010 keeps the adaptive layer out of
+every rate, interval, band and `D`, and `DURABLE_PRECEDENT`'s own docstring is where
+that is argued. What moves is the comparability of the diagnostic: the episode record
+carries `consulted_precedent`, so a run that read the store says so, and two
+`A_break` figures are comparable only over the same store. `--clear` and `--list` are
+here for exactly that, and `docs/validation.md` says which readings were taken over
+an empty one.
+
+The honest use of the seeds themselves is still the diagnostic one: if a weak attacker
+cannot break a target with the route written out in front of it, the model is the
+ceiling and long-term memory was never what was holding it back.
 
 **Prose, and never a payload** (ADR-0008). Each sentence below describes a published
 class of attack in the terms a defender would use, which is what the precedent record

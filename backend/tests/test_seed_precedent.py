@@ -1,10 +1,11 @@
 """What hand-seeded precedent is allowed to be, and what it must never look like.
 
 The store is long-term memory the attacker reads, and this script is the operator
-writing into it by hand while the chain that fills it from the scored layer has no
-caller. So the risk here is not that the writing fails — it is that a typed sentence
-becomes indistinguishable from a recorded finding, or that the remediation half
-reaches the attacker along with the failure half.
+writing into it by hand. The chain that fills it from the scored layer has a caller
+since #38 (`bench/filing.py`), so these sentences are no longer the only thing the
+store has ever held — and the risk here is unchanged by that: it is that a typed
+sentence becomes indistinguishable from a recorded finding, or that the remediation
+half reaches the attacker along with the failure half.
 
 The store these tests touch is the one `conftest.precedent_elsewhere` points at a
 temporary directory, so nothing here writes to the real database.
@@ -24,6 +25,7 @@ from backend.bench.adaptive.tools import retrieve_precedent
 from backend.bench.library import Family, VerdictClass
 from backend.tests.conftest import a_finding, a_target
 from scripts.seed_precedent import SEEDS, cleared, held, main, seeded
+from scripts.seed_precedent import __doc__ as SEED_DOC
 
 
 def test_a_seeded_entry_says_it_was_typed_and_not_measured() -> None:
@@ -202,3 +204,24 @@ def test_the_store_the_script_writes_to_is_the_one_it_names(
     assert main(["--list"]) == 0
 
     assert str(PrecedentDatabase().path) in capsys.readouterr().out
+
+
+def test_the_script_describes_a_chain_that_now_has_a_caller() -> None:
+    """The docstring is a claim about the rest of the codebase, so it is asserted.
+
+    It used to say the chain that fills the store from the scored layer "has no
+    caller yet", which was true and is the sentence #38 quoted as the statement of
+    the bug. A run files now (ADR-0031), so an operator reading this script would
+    otherwise be told the store has only ever held their own typed sentences — and
+    the one place that mistake matters is the script whose whole purpose is to make
+    a typed sentence distinguishable from a recorded finding.
+    """
+    assert SEED_DOC is not None
+    assert "no caller" not in SEED_DOC, (
+        "the script still describes the absence #38 closed, so an operator is "
+        "told the store holds nothing a run produced"
+    )
+    assert "bench/filing.py" in SEED_DOC, (
+        "the script does not name the module that now fills the store, so a "
+        "reader has nowhere to go to check the claim above"
+    )

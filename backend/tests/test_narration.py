@@ -150,7 +150,6 @@ def narrated(
             approve=CONFIRMING,
             adjudicator=ADJUDICATING,
             narrator=Narrator(assess=assess, remediate=remediate),
-            precedent=NO_PRECEDENT,
         )
     return Narrated(result=result, judge=assess, remediation=remediate)
 
@@ -291,7 +290,6 @@ def test_a_run_made_with_no_narrative_instrument_explains_nothing_and_says_so(
             plant_nonce=reference.plant_nonce,
             approve=CONFIRMING,
             adjudicator=ADJUDICATING,
-            precedent=NO_PRECEDENT,
         )
 
     [target_run] = result.target_runs
@@ -426,7 +424,6 @@ def test_a_truncated_narrative_is_a_named_refusal_and_never_a_finding(
                 approve=CONFIRMING,
                 adjudicator=ADJUDICATING,
                 narrator=Narrator(assess=_truncated, remediate=remediation),
-                precedent=NO_PRECEDENT,
             )
 
     assert refused.value.unfinished is UnfinishedReply.TRUNCATED
@@ -589,7 +586,6 @@ def test_a_run_declined_at_the_interrupt_calls_neither_narrative_instrument(
             ),
             adjudicator=ADJUDICATING,
             narrator=Narrator(assess=judge, remediate=remediation),
-            precedent=NO_PRECEDENT,
         )
 
     assert not result.approval.proceeded
@@ -738,7 +734,6 @@ def test_the_printed_section_says_which_of_the_three_readings_this_run_was(
             plant_nonce=reference.plant_nonce,
             approve=CONFIRMING,
             adjudicator=ADJUDICATING,
-            precedent=NO_PRECEDENT,
         ).target_runs
 
     assert "no narrative instrument" in findings_section(unexplained)

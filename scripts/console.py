@@ -258,6 +258,69 @@ def findings_section(target_run: TargetRun) -> str:
     return "\n".join(lines)
 
 
+def print_precedent(result: CalibrationResult) -> None:
+    """What this run contributed to the long-term memory, printed."""
+    print(precedent_section(result))
+
+
+def precedent_section(result: CalibrationResult) -> str:
+    """What the run filed against what it withheld, and one line of why.
+
+    Printed because a refusal nobody is handed is a refusal nobody reads. A judged
+    family files nothing (ADR-0004), and the failure mode this section exists
+    against is an operator who checks the store, finds nothing from the two judged
+    families, and concludes the write is broken.
+
+    **Three readings and never two of them at once.** A run that filed nothing and
+    refused nothing had no finding to file; a run that filed nothing and refused
+    something had only judged ones; a run that filed something says what. The first
+    two are one line each because printing *nothing was refused* above a list of
+    refusals is the confusion this section exists against, arrived at from inside it.
+
+    Per run rather than per target, because that is the unit the write happens in:
+    the findings are filed once, after every instrument in the run has read, so a
+    per-target line would describe a write that did not happen there (ADR-0031).
+
+    Whole-run and never a rate. Nothing in this section is a measurement of the
+    target: a count of precedents is a fact about the bench's own memory, and it
+    sits apart from the tables above for the reason the adaptive section does.
+    """
+    filing = result.filing
+    lines = ["", "  precedent — what this run filed to the long-term memory"]
+    if not filing.filed and not filing.judged:
+        lines.append(
+            "    nothing filed: this run produced no finding to file. Not the "
+            "same statement as a store that refused one"
+        )
+    elif not filing.filed:
+        # The third reading, and the one the two above would contradict between
+        # them: every finding this run produced was judged, so *nothing filed* and
+        # *something refused* are both true and have to be said in one sentence.
+        lines.append(
+            "    nothing filed: every finding this run produced was judged, and "
+            "the refusals are below"
+        )
+    for entry in filing.filed:
+        lines.append(f"    {entry.case_id} / {entry.family}: {entry.failure}")
+    if filing.judged:
+        lines.append(
+            f"    {len(filing.judged)} judged case(s) withheld — the unit is a "
+            "case, as it is above, so a case attempted ten times counts once. "
+            "Precedent holds deterministic findings only, because a judged "
+            "verdict carries a reliability figure and a wider stated limit that "
+            "remediation informed by it would inherit neither of (ADR-0004):"
+        )
+        lines.extend(f"      {held.case_id} / {held.family}" for held in filing.judged)
+    lines.append(
+        "    Filed after every instrument in this run had read, so nothing above "
+        "informed a fix this run wrote. The store earns its place at run two. A "
+        "record an earlier run already filed is the same row rather than a new "
+        "one, so what is listed here is this run's contribution and not the "
+        "store's growth"
+    )
+    return "\n".join(lines)
+
+
 def print_episodes(result: CalibrationResult, trivial: str, hardened: str) -> None:
     """The adaptive section, printed."""
     print(episodes_section(result, trivial=trivial, hardened=hardened))

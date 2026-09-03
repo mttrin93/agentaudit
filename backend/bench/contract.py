@@ -375,6 +375,39 @@ class DeclaredControl(StrEnum):
     halt defeat."""
 
 
+class AgentCapability(StrEnum):
+    """One of the three properties the Agents Rule of Two is read over.
+
+    A **declared capability** ([CONTEXT.md](../../CONTEXT.md)) and not a
+    `DeclaredControl`: a control is a defence the operator claims, this is something
+    the agent can *do*. Why the rule is read off a declaration rather than measured is
+    [ADR-0038](../../docs/adr/0038-the-rule-of-two-is-a-declared-property.md).
+
+    It sits here rather than in `scanner.py` for the reason `DeclaredControl` does: it
+    is a registered property of a target, beside `declared_controls` and
+    `declared_tools`, and a target cannot describe itself in terms of a module that
+    reads it. `scanner.py` holds the reading.
+
+    **There is deliberately no `family_claimed_by` for this enumeration**, and that
+    absence is ADR-0038's decision 3 at the one call site where it could be undone.
+    Each of the three has a family that is its near-neighbour — untrusted input beside
+    indirect prompt injection, private data beside data leakage, outward action beside
+    scope creep — so a mapping is the obvious next thing to write and it is the thing
+    that would let a declaration be read off verdicts. The two enumerations share no
+    member and no function.
+    """
+
+    PROCESSES_UNTRUSTED_INPUT = "processes_untrusted_input"
+    """Handles content the operator does not control — retrieved pages, documents,
+    messages from third parties."""
+
+    REACHES_PRIVATE_DATA = "reaches_private_data"
+    """Can read private data or reach sensitive systems inside the boundary."""
+
+    CHANGES_STATE_OR_COMMUNICATES = "changes_state_or_communicates"
+    """Can change state or communicate outward — write, pay, send, publish."""
+
+
 @dataclass(frozen=True)
 class TargetConfig:
     """How a target is described to the bench, reference agent or user agent alike."""
@@ -415,6 +448,36 @@ class TargetConfig:
     the declared-controls section — never move a rate, a band or a `D`, which is
     what makes declaring truthfully the operator's own interest rather than a
     scoring strategy (ADR-0005).
+    """
+
+    processes_untrusted_input: bool | None = None
+    """Whether this agent handles content the operator does not control.
+
+    The first of the Agents Rule of Two's three properties, and the first of the four
+    declarations `scanner.py` reads that rule over. Three states and not two: `None`
+    is *unstated*, `False` is a declared absence, and the two are different answers
+    all the way through the reading. Why unstated is the default, and why the reading
+    they produce moves no figure, is
+    [ADR-0038](../../docs/adr/0038-the-rule-of-two-is-a-declared-property.md),
+    decisions 1 and 4.
+
+    None of the four is derived from another field, `declared_tools` included: a
+    capability guessed from a tool name would be a measurement wearing a
+    declaration's name, in the direction the module docstring of `scanner.py` names.
+    """
+
+    reaches_private_data: bool | None = None
+    """Whether this agent can reach private data or sensitive systems. The second."""
+
+    changes_state_or_communicates: bool | None = None
+    """Whether this agent can change state or communicate outward. The third."""
+
+    under_human_supervision: bool | None = None
+    """Whether a human confirms what this agent does inside one session.
+
+    The fourth declaration, and not an afterthought beside the three above: it is the
+    **unsupervised** third property that the rule warns about, so a scan that read the
+    three without this one would report a shape the rule does not object to.
     """
 
 

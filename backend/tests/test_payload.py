@@ -41,7 +41,7 @@ from backend.bench.assembler import (
     TargetResult,
 )
 from backend.bench.capability import ReasoningEffort
-from backend.bench.contract import DeclaredControl, Transcript
+from backend.bench.contract import AgentCapability, DeclaredControl, Transcript
 from backend.bench.elective import ElectiveSelection
 from backend.bench.library import (
     Case,
@@ -69,6 +69,12 @@ from backend.bench.payload import (
 from backend.bench.registration import Attestation, AttestationRecord
 from backend.bench.reproducibility import Reproducibility
 from backend.bench.rule import DECLARED_RULE, GateRule
+from backend.bench.scanner import (
+    NOTHING_DECLARED,
+    RuleOfTwo,
+    RuleOfTwoStanding,
+    Supervision,
+)
 from backend.bench.scorer import (
     DECLARED_BAND_CUTS,
     BandCuts,
@@ -731,6 +737,86 @@ def test_a_family_this_run_was_not_asked_for_is_the_fifth_absence() -> None:
     assert asked_for_everything["elective"]["not_requested"] == []
 
 
+def test_the_declared_shape_travels_as_names_and_carries_no_figure() -> None:
+    # The Rule of Two is read off what the operator declared, so it travels in the
+    # declared section — beside the join, never inside it. Every value under it is a
+    # name: a count of held capabilities is the figure this block is one line away
+    # from, and two of them are a composite score over self-report, gameable in the
+    # under-declaring direction (ADR-0005, ADR-0038).
+    body = document(
+        a_payload(
+            result=a_result(
+                rule_of_two=RuleOfTwo(
+                    held=tuple(AgentCapability),
+                    supervision=Supervision.UNSUPERVISED,
+                )
+            )
+        )
+    )
+
+    block = body["declared"]["rule_of_two"]
+    assert set(block) == {
+        "standing",
+        "held",
+        "not_held",
+        "unstated",
+        "supervision",
+        "stated",
+    }
+    assert block["standing"] == "three_unsupervised"
+    assert block["held"] == [one.value for one in AgentCapability]
+    assert block["supervision"] == "unsupervised"
+
+    # No number, and no boolean either: a `true` per capability would be a column two
+    # targets could be lined up under and counted down.
+    for value in _leaves(block):
+        assert isinstance(value, str), f"{value!r} is not a name"
+
+    # And it is not a finding. It names no case, joins against no verdict, and the
+    # defeated list — the report's headline — cannot select it.
+    assert body["declared"]["defeated"] == ["output_filter"]
+    assert "rule_of_two" not in body["declared"]["defeated"]
+    assert all(
+        control["control"] != "rule_of_two" for control in body["declared"]["controls"]
+    )
+
+
+def test_a_target_that_declared_nothing_about_its_shape_says_so_in_the_document() -> (
+    None
+):
+    # The block prints whether or not anything was declared, in the discipline the
+    # elective request follows: a heading with nothing under it is indistinguishable
+    # from a document made before the scan asked.
+    block = document(a_payload(result=a_result()))["declared"]["rule_of_two"]
+
+    assert block["standing"] == "not_declared"
+    assert block["unstated"] == [one.value for one in AgentCapability]
+    assert block["supervision"] == "supervision_not_stated"
+    assert block["held"] == []
+
+    # And it is **not a sixth kind of nothing**. A target that declared nothing about
+    # its shape is the same absence a control the checklist asks about and nobody
+    # claimed already is: nothing was attempted, nobody could not answer, and no
+    # figure is missing because none was ever due. So the five lists stay five, and
+    # nothing from this block appears in any of them (ADR-0035, ADR-0038).
+    document_body = document(a_payload(result=a_result()))
+    absences = {
+        name
+        for listed in (
+            document_body["measured"]["withheld"],
+            document_body["measured"]["not_measurable"],
+            document_body["elective"]["not_requested"],
+        )
+        for one in listed
+        for name in [one["family"]]
+    }
+    absences |= {one["category"] for one in document_body["coverage_gaps"]}
+    absences |= {one["identifier"] for one in document_body["untested_categories"]}
+
+    assert not absences & {one.value for one in AgentCapability}
+    assert not absences & {one.value for one in RuleOfTwoStanding}
+
+
 def test_the_five_absences_are_five_lists_and_no_family_is_in_two_of_them() -> None:
     # A reader tells the five apart without reading a footnote, which needs them to
     # be five keys rather than one "not tested" list this module decided were the
@@ -894,6 +980,7 @@ def a_result(
     not_measurable: dict[Family, NotMeasurable] | None = None,
     controls: tuple[ScannedControl, ...] | None = None,
     absent: tuple[DeclaredControl, ...] = (DeclaredControl.STOP_CONTROL,),
+    rule_of_two: RuleOfTwo = NOTHING_DECLARED,
 ) -> TargetResult:
     """One target's result, with both judged families present — one fit, one not."""
     if judged is None:
@@ -929,7 +1016,9 @@ def a_result(
             judged=judged,
             not_measurable=not_measurable or {},
         ),
-        declared=DeclaredSection(controls=controls, absent=absent),
+        declared=DeclaredSection(
+            controls=controls, absent=absent, rule_of_two=rule_of_two
+        ),
         adaptive=AdaptiveSection(episodes=(an_episode(),)),
     )
 
@@ -993,6 +1082,16 @@ def _without_the_entries(body: dict[str, Any]) -> dict[str, Any]:
         key: value for key, value in body["measured"].items() if key != "deterministic"
     }
     return {**body, "measured": measured}
+
+
+def _leaves(node: Any) -> list[Any]:
+    """Every scalar under a node, so a type assertion is made over values and not
+    over the serialised text."""
+    if isinstance(node, dict):
+        return [found for value in node.values() for found in _leaves(value)]
+    if isinstance(node, list):
+        return [found for value in node for found in _leaves(value)]
+    return [node]
 
 
 def _strings(node: Any) -> list[str]:

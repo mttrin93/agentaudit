@@ -1,6 +1,6 @@
 """The configuration scan, and the join that is the report's headline.
 
-Three hazards, and every test here is one of them.
+Four hazards, and every test here is one of them.
 
 *A declaration could become a measurement.* The scan sends nothing, so the only
 thing it can contribute is a claim. That is asserted at import level as well as
@@ -20,6 +20,16 @@ declared control untested rather than defeating it on an adjudicated verdict
 (ADR-0004, spec: the join is computed against the attacker's deterministic
 findings).
 
+*A declared capability could be read off a measurement.* The Agents Rule of Two is
+read from what the operator declares and from nothing else
+([ADR-0038](../../docs/adr/0038-the-rule-of-two-is-a-declared-property.md)), and each
+of its three properties has a family that is its near-neighbour — so the tests here
+assert that the two enumerations share no member, that nothing in the reading can
+hold a figure or a family, and that the scanner imports nothing that carries one. The
+gaming direction is the mirror of the one above: a target would improve this property
+by declaring **less**, and the answer is the same answer, so the same
+declared-against-silent comparison is made over the capabilities.
+
 The join itself is a pure function over recorded attempts, so it is driven
 directly — seam two. The end-to-end cases at the foot of the file go through the
 calibration entry point, because "the target declares a filter it does not have"
@@ -30,6 +40,7 @@ import ast
 from collections.abc import Iterator
 from dataclasses import replace
 from pathlib import Path
+from typing import Any, get_type_hints
 
 import pytest
 
@@ -41,12 +52,27 @@ from backend.bench.assembler import (
     declared_and_defeated,
 )
 from backend.bench.calibration import PlantNonce, run_calibration
-from backend.bench.contract import DeclaredControl, TargetConfig, Transcript
+from backend.bench.contract import (
+    AgentCapability,
+    DeclaredControl,
+    TargetConfig,
+    Transcript,
+)
 from backend.bench.evaluator import Verdict
-from backend.bench.library import Case, Family, VerdictClass
+from backend.bench.library import Case, ElectiveFamily, Family, VerdictClass
 from backend.bench.measurability import NotMeasurable
 from backend.bench.rule import DECLARED_RULE
-from backend.bench.scanner import CONTROL_CHECKLIST, Scan, family_claimed_by, scan
+from backend.bench.scanner import (
+    CONTROL_CHECKLIST,
+    NOT_A_MEASUREMENT,
+    NOTHING_DECLARED,
+    RuleOfTwo,
+    RuleOfTwoStanding,
+    Scan,
+    Supervision,
+    family_claimed_by,
+    scan,
+)
 from backend.bench.scorer import (
     FamilyOutcome,
     FamilyRates,
@@ -136,6 +162,32 @@ def test_the_scanner_imports_no_route_to_a_target() -> None:
     )
 
 
+def test_the_scanner_imports_nothing_that_carries_a_measured_figure() -> None:
+    # The other half of the boundary, and the half the Rule of Two put pressure on:
+    # a module that cannot send a message can still read one. `Rate`, `Interval`,
+    # `Band` and `Attempt` are the shapes a figure arrives in, and none of them has
+    # any business in a module whose whole output is names — a standing computed
+    # from a rate would be a measurement wearing a declaration's name without a
+    # single byte on the wire (ADR-0005, ADR-0038).
+    reachable = set(_imports_of(SCANNER_SOURCE))
+    forbidden = reachable & {
+        "backend.bench.scorer",
+        "backend.bench.evaluator",
+        "backend.bench.assembler",
+        "backend.graph.runstate",
+        "backend.bench.goldset",
+        "backend.bench.gate",
+    }
+
+    assert not forbidden, (
+        f"{sorted(forbidden)} is imported by the scanner. Nothing this module "
+        "returns may be a function of a measured figure"
+    )
+    # And what it does import from the library is a family name, for the join's
+    # closed mapping — never a case, an attempt or a reading.
+    assert "backend.bench.library.Family" in reachable
+
+
 def test_every_control_in_the_checklist_claims_one_deterministic_family(
     library: list[Case],
 ) -> None:
@@ -148,6 +200,221 @@ def test_every_control_in_the_checklist_claims_one_deterministic_family(
     assert len(set(claimed)) == len(CONTROL_CHECKLIST)
     for family in claimed:
         assert case_for(library, family).verdict_class is VerdictClass.DETERMINISTIC
+
+
+# --- The Agents Rule of Two: read off a declaration -------------------------
+
+
+def test_a_target_that_declares_two_of_the_three_properties_is_within_the_rule() -> (
+    None
+):
+    # The rule is about what the operator says their agent can do, and the scan reads
+    # it the only way it can be read without attacking: off the registration. Two
+    # capabilities held is the shape the rule permits, and the standing is a name.
+    scanned = scan(
+        a_target_declaring_capabilities(
+            processes_untrusted_input=True,
+            reaches_private_data=True,
+            changes_state_or_communicates=False,
+        )
+    )
+
+    assert scanned.rule_of_two.standing is RuleOfTwoStanding.AT_MOST_TWO
+    assert scanned.rule_of_two.held == (
+        AgentCapability.PROCESSES_UNTRUSTED_INPUT,
+        AgentCapability.REACHES_PRIVATE_DATA,
+    )
+    assert scanned.rule_of_two.not_held == (
+        AgentCapability.CHANGES_STATE_OR_COMMUNICATES,
+    )
+    assert scanned.rule_of_two.unstated == ()
+
+
+def test_a_target_that_declares_all_three_unsupervised_is_the_shape_the_rule_warns_of() -> (  # noqa: E501
+    None
+):
+    # The reading the rule exists to produce, and the one most easily mistaken for a
+    # finding. It is a declaration: nothing was sent, no verdict lies behind it, and
+    # the sentence says so in the same breath as it names the shape.
+    scanned = scan(
+        a_target_declaring_capabilities(
+            processes_untrusted_input=True,
+            reaches_private_data=True,
+            changes_state_or_communicates=True,
+            under_human_supervision=False,
+        )
+    )
+
+    assert scanned.rule_of_two.standing is RuleOfTwoStanding.THREE_UNSUPERVISED
+    assert scanned.rule_of_two.held == tuple(AgentCapability)
+    assert scanned.rule_of_two.supervision is Supervision.UNSUPERVISED
+    assert "all three, unsupervised" in scanned.rule_of_two.stated()
+    assert NOT_A_MEASUREMENT in scanned.rule_of_two.stated()
+
+
+def test_all_three_under_human_supervision_is_a_reading_of_its_own() -> None:
+    # An agent holding all three under human confirmation is not the thing the rule
+    # warns about, so the supervision declaration decides between two readings and is
+    # part of the record rather than an afterthought to it.
+    supervised = scan(
+        a_target_declaring_capabilities(
+            processes_untrusted_input=True,
+            reaches_private_data=True,
+            changes_state_or_communicates=True,
+            under_human_supervision=True,
+        )
+    ).rule_of_two
+
+    assert supervised.standing is RuleOfTwoStanding.THREE_UNDER_SUPERVISION
+    assert supervised.held == tuple(AgentCapability)
+    assert "under human supervision" in supervised.stated()
+
+
+def test_a_target_that_declares_nothing_about_its_shape_has_no_standing_read() -> None:
+    # Silence buys nothing and is reported as silence. `None` is the conservative
+    # default in the direction that matters: `False` on the three would read as a
+    # target inside a published rule that nothing ever read it against.
+    scanned = scan(a_target())
+
+    rule = scanned.rule_of_two
+    assert rule.standing is RuleOfTwoStanding.NOT_DECLARED
+    assert rule.unstated == tuple(AgentCapability)
+    assert rule.held == ()
+    assert rule.not_held == ()
+    assert rule.supervision is Supervision.NOT_STATED
+    # The same kind of absence as an undeclared control, and stated as one rather
+    # than as a family the target could not answer.
+    assert "not declared" in rule.stated()
+    assert "nothing was attempted" in rule.stated()
+
+
+def test_a_property_declared_absent_settles_the_rule_whatever_went_unsaid() -> None:
+    # One property the operator declares their agent does *not* have is one it cannot
+    # hold, so at most two of the three are left whatever the third answer would have
+    # been. The reading is settled, and reporting it as partly declared would print a
+    # sentence saying the rule could not be read over a declaration it can.
+    rule = scan(
+        a_target_declaring_capabilities(
+            processes_untrusted_input=True,
+            reaches_private_data=False,
+        )
+    ).rule_of_two
+
+    assert rule.standing is RuleOfTwoStanding.AT_MOST_TWO
+    assert rule.unstated == (AgentCapability.CHANGES_STATE_OR_COMMUNICATES,)
+    # And the sentence still prints all three sides, so a reader can see that the
+    # unanswered property could not have changed the reading.
+    assert "at most two of the three" in rule.stated()
+    assert (
+        f"not stated: {AgentCapability.CHANGES_STATE_OR_COMMUNICATES}" in rule.stated()
+    )
+    assert f"declared absent: {AgentCapability.REACHES_PRIVATE_DATA}" in rule.stated()
+
+
+def test_a_capability_left_unstated_is_partly_declared_and_names_what_is_missing() -> (
+    None
+):
+    # A partial declaration is a third answer, not a `False` and not a silence: the
+    # scan cannot read the rule over it, and the block says which property nobody
+    # answered for rather than reporting a shape it does not know.
+    rule = scan(
+        a_target_declaring_capabilities(
+            processes_untrusted_input=True,
+            reaches_private_data=True,
+        )
+    ).rule_of_two
+
+    assert rule.standing is RuleOfTwoStanding.PARTLY_DECLARED
+    assert rule.unstated == (AgentCapability.CHANGES_STATE_OR_COMMUNICATES,)
+    assert (
+        f"not stated: {AgentCapability.CHANGES_STATE_OR_COMMUNICATES}" in rule.stated()
+    )
+
+
+def test_all_three_held_with_supervision_unstated_cannot_be_read_either() -> None:
+    # The other way to be partly declared, and the one that matters: the three are
+    # stated and held, and the declaration that decides between the two readings
+    # above is missing. Reading it as unsupervised would report a shape the operator
+    # never described; reading it as supervised would excuse one.
+    rule = scan(
+        a_target_declaring_capabilities(
+            processes_untrusted_input=True,
+            reaches_private_data=True,
+            changes_state_or_communicates=True,
+        )
+    ).rule_of_two
+
+    assert rule.standing is RuleOfTwoStanding.PARTLY_DECLARED
+    assert rule.unstated == ()
+    assert rule.supervision is Supervision.NOT_STATED
+    assert f"supervision: {Supervision.NOT_STATED.stated()}" in rule.stated()
+
+
+def test_the_three_sides_of_the_reading_partition_the_rules_three_properties() -> None:
+    # A property held and unstated at once, or missing from all three sides, would be
+    # a standing read over a rule with a different number of properties in it.
+    with pytest.raises(ValueError, match="exactly once"):
+        RuleOfTwo(
+            held=(AgentCapability.REACHES_PRIVATE_DATA,),
+            unstated=(AgentCapability.REACHES_PRIVATE_DATA,),
+        )
+
+    with pytest.raises(ValueError, match="exactly once"):
+        RuleOfTwo(held=(AgentCapability.REACHES_PRIVATE_DATA,))
+
+    # And there is no empty reading. The three defaults name none of the properties,
+    # so a reading has to say something about each of them — a registration that said
+    # nothing is `NOTHING_DECLARED`, where all three sit under `unstated`.
+    with pytest.raises(ValueError, match="exactly once"):
+        RuleOfTwo()
+    assert NOTHING_DECLARED.unstated == tuple(AgentCapability)
+
+
+def test_no_declared_capability_names_a_family_or_a_control() -> None:
+    # The alternative #42 refused once so it would not be re-argued: built as a
+    # family, the rule would have to establish its three properties by attack, which
+    # is three families the bench already has, joined. Each capability has a family
+    # that is its near-neighbour, and the two enumerations share no member and no
+    # function — there is no `family_claimed_by` for a declared capability, so a
+    # standing cannot be read off verdicts.
+    #
+    # Over the value sets and never by containment: a StrEnum member is a `str`, and
+    # `direct_prompt_injection` sits inside `indirect_prompt_injection`.
+    capabilities = {one.value for one in AgentCapability}
+
+    assert not capabilities & {family.value for family in Family}
+    assert not capabilities & {control.value for control in DeclaredControl}
+    assert not capabilities & {family.value for family in ElectiveFamily}
+    assert not {standing.value for standing in RuleOfTwoStanding} & {
+        status.value for status in ControlStatus
+    }
+
+
+def test_nothing_in_the_reading_can_hold_a_figure_or_a_family() -> None:
+    # Over the annotations rather than over an instance, because a field that would
+    # carry a number has to be added before it can be filled — and this is the test
+    # that fails when somebody adds it. The idiom `test_payload.py` uses to keep a
+    # gate decision out of the artefact.
+    #
+    # A count of held capabilities is the figure this record is one line away from,
+    # and two of them are a composite score over self-report: exactly ADR-0005's
+    # defect, gameable in the *under*-declaring direction.
+    annotations = get_type_hints(RuleOfTwo)
+
+    assert set(annotations) == {"held", "not_held", "unstated", "supervision"}
+    assert annotations["supervision"] is Supervision
+    for name in ("held", "not_held", "unstated"):
+        assert annotations[name] == tuple[AgentCapability, ...]
+
+    # And no property returns one either. `standing` is the only one, and its own
+    # return annotation is the closed set of names.
+    properties: dict[str, Any] = {
+        name: attribute
+        for name, attribute in vars(RuleOfTwo).items()
+        if isinstance(attribute, property)
+    }
+    assert list(properties) == ["standing"]
+    assert get_type_hints(properties["standing"].fget)["return"] is RuleOfTwoStanding
 
 
 # --- The join: untested, held, defeated -------------------------------------
@@ -295,6 +562,48 @@ def test_declaring_a_control_moves_no_rate_no_interval_no_band_and_no_score(
     assert len(declaring.declared.controls) == len(CONTROL_CHECKLIST)
 
 
+def test_declaring_capabilities_moves_no_rate_no_interval_no_band_and_no_score(
+    leakage_case: Case,
+) -> None:
+    # ADR-0005's defect from the other side. A declared control is a claim a target
+    # might be caught over-making; a declared capability is one a target profits by
+    # *under*-making, because three capabilities declared away is a target reported
+    # as sitting inside a published rule. Either way nothing measured may move: the
+    # same served agent, the same attempts, two declarations.
+    with reference_target(name="trivial") as reference:
+        silent = _assembled(reference.target, leakage_case, reference.plant_nonce)
+        declaring = _assembled(
+            replace(
+                reference.target,
+                processes_untrusted_input=True,
+                reaches_private_data=True,
+                changes_state_or_communicates=True,
+                under_human_supervision=False,
+            ),
+            leakage_case,
+            reference.plant_nonce,
+        )
+
+    assert silent.measured == declaring.measured
+    assert silent.coverage_gaps == declaring.coverage_gaps
+    assert silent.headline == declaring.headline
+    [quiet] = silent.measured.deterministic
+    [loud] = declaring.measured.deterministic
+    assert (quiet.rate, quiet.interval, quiet.band, quiet.discrimination) == (
+        loud.rate,
+        loud.interval,
+        loud.band,
+        loud.discrimination,
+    )
+
+    # The declaration reaches exactly one field, and it is a name.
+    assert silent.declared.rule_of_two.standing is RuleOfTwoStanding.NOT_DECLARED
+    assert (
+        declaring.declared.rule_of_two.standing is RuleOfTwoStanding.THREE_UNSUPERVISED
+    )
+    assert silent.declared.controls == declaring.declared.controls
+
+
 # --- End to end: declared and defeated is the headline ----------------------
 
 
@@ -405,6 +714,27 @@ def test_a_family_no_gate_run_has_read_carries_no_score_rather_than_zero(
 def a_target_declaring(controls: tuple[DeclaredControl, ...]) -> TargetConfig:
     """A target *described*, never served: the scan reads it and sends nothing."""
     return replace(a_target(), declared_controls=controls)
+
+
+def a_target_declaring_capabilities(
+    processes_untrusted_input: bool | None = None,
+    reaches_private_data: bool | None = None,
+    changes_state_or_communicates: bool | None = None,
+    under_human_supervision: bool | None = None,
+) -> TargetConfig:
+    """A target whose four Rule-of-Two declarations are set one at a time.
+
+    Keyword-only in practice at every call site, because four booleans in a row is
+    the one shape a reader cannot check: `(True, True, False, None)` says nothing
+    about which property was withheld, and the whole of this record is which.
+    """
+    return replace(
+        a_target(),
+        processes_untrusted_input=processes_untrusted_input,
+        reaches_private_data=reaches_private_data,
+        changes_state_or_communicates=changes_state_or_communicates,
+        under_human_supervision=under_human_supervision,
+    )
 
 
 def an_attempt(

@@ -63,7 +63,13 @@ from backend.bench.published import (
     UntestedCategory,
 )
 from backend.bench.reproducibility import Reproducibility
-from backend.bench.scanner import Scan, family_claimed_by, scan
+from backend.bench.scanner import (
+    NOTHING_DECLARED,
+    RuleOfTwo,
+    Scan,
+    family_claimed_by,
+    scan,
+)
 from backend.bench.scorer import (
     DECLARED_BAND_CUTS,
     Band,
@@ -358,6 +364,20 @@ class DeclaredSection:
     absent: tuple[DeclaredControl, ...] = ()
     """Controls the checklist asks about and this target did not claim. Listed and
     nothing else — an absence is not a finding and costs nothing."""
+
+    rule_of_two: RuleOfTwo = NOTHING_DECLARED
+    """The target's declared shape, read against the Agents Rule of Two.
+
+    Here because this is the section that shares no arithmetic with any other, and
+    a declared capability is the same kind of thing a declared control is: a
+    statement read at registration with nothing sent to establish it
+    ([ADR-0038](../../docs/adr/0038-the-rule-of-two-is-a-declared-property.md)).
+
+    **Not a row of the join, and not among the controls.** It claims no family, so
+    there is no verdict for it to be crossed with and no `broken_by` it could ever
+    carry; `defeated` above cannot select it, because it is not a `ScannedControl`.
+    A reader meets it beside the join and not inside it.
+    """
 
     @property
     def defeated(self) -> tuple[ScannedControl, ...]:
@@ -777,6 +797,7 @@ def assemble(
                 scanned, target_run.attempts, target_run.not_measurable
             ),
             absent=scanned.absent,
+            rule_of_two=scanned.rule_of_two,
         ),
         adaptive=AdaptiveSection(episodes=tuple(episodes)),
         coverage_gaps=coverage_gaps,

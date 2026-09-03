@@ -92,6 +92,7 @@ from backend.bench.library import ExternalId, LibraryVersion
 from backend.bench.published import ClaimedInPart, UntestedCategory
 from backend.bench.registration import AttestationRecord
 from backend.bench.rule import DECLARED_RULE, GateRule
+from backend.bench.scanner import RuleOfTwo
 from backend.bench.scorer import GateOutcome, Interval, Reliability
 from backend.graph.budget import Layer
 
@@ -877,6 +878,7 @@ def _declared(section: DeclaredSection) -> dict[str, Any]:
     return {
         "reproducibility": section.reproducibility.value,
         "reproducibility_stated": section.reproducibility.stated(),
+        "rule_of_two": _rule_of_two(section.rule_of_two),
         "controls": [_control(control) for control in section.controls],
         "defeated": [control.control.value for control in section.defeated],
         "absent": [
@@ -890,6 +892,31 @@ def _declared(section: DeclaredSection) -> dict[str, Any]:
             }
             for control in section.absent
         ],
+    }
+
+
+def _rule_of_two(rule: RuleOfTwo) -> dict[str, Any]:
+    """The target's declared shape, as names and one sentence — and nothing else.
+
+    **Every value here is a string or a list of them.** Not a description of today's
+    output but the whole of what this block may ever carry: no figure and no boolean,
+    because the count of held capabilities is the composite score this one is a line
+    away from
+    ([ADR-0038](../../docs/adr/0038-the-rule-of-two-is-a-declared-property.md),
+    decision 4).
+
+    Printed whether or not anything was declared, on the reasoning `_elective` prints
+    the request it never got: a block that appeared only when an operator answered
+    would leave a reader unable to tell a target that said nothing from a document
+    made before the scan asked.
+    """
+    return {
+        "standing": rule.standing.value,
+        "held": [one.value for one in rule.held],
+        "not_held": [one.value for one in rule.not_held],
+        "unstated": [one.value for one in rule.unstated],
+        "supervision": rule.supervision.value,
+        "stated": rule.stated(),
     }
 
 

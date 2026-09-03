@@ -18,6 +18,27 @@ _Avoid_: baseline, control agent, dummy agent
 A defence the user states their target has, recorded at registration. A statement, not a measurement.
 _Avoid_: safeguard, mitigation, feature
 
+**Declared capability**:
+Something the user states their target **can do**, recorded at registration. A
+statement, not a measurement — the same footing as a **declared control** and a
+different word on purpose: a control is a defence claimed, a capability is a power
+claimed, and the two print in one section of a report where one word for both would
+make a claimed power read as a claimed defence. Three of them today, and they are the
+three properties the Agents Rule of Two is read over — processes untrusted input,
+reaches private data or sensitive systems, changes state or communicates outward —
+beside the fourth declaration that rule needs, whether a human confirms what the agent
+does inside the session. Each is close to a **family** the bench measures and is
+deliberately not one: nothing is sent to establish it, so it reaches no rate and has
+no verdict. What the rule makes of the four is that target's *standing* — one of
+five names and never a figure, in particular never a count of the capabilities held,
+because a count is a composite score over self-report
+([ADR-0038](./docs/adr/0038-the-rule-of-two-is-a-declared-property.md), ADR-0005).
+Each capability is *held*, *declared absent* or *not stated*: three answers, because
+silence is not a denial, is reported as silence, and buys nothing.
+_Avoid_: using **declared control** for one, bare *capability* — the bench already
+uses that word for what a *model* accepts (`capability.py`, temperature and
+reasoning effort) — permission, feature, power
+
 **Defeated**:
 The status of a declared control that the bench empirically broke. The strongest finding the bench can produce.
 _Avoid_: failed, bypassed, broken

@@ -36,7 +36,7 @@ from backend.bench.capability import (
     PRESUMED_NO_REASONING_EFFORT,
     ReasoningEffort,
 )
-from backend.bench.contract import DeclaredControl
+from backend.bench.contract import AgentCapability, DeclaredControl
 from backend.bench.editions import AGENTIC_TOP_10_2026, LLM_TOP_10_2026
 from backend.bench.elective import ElectiveSelection
 from backend.bench.library import ElectiveFamily, Family
@@ -49,6 +49,7 @@ from backend.bench.rendering import (
     CONTROL_PROVED,
     FORMAT_UNVALIDATED,
     INTEGRITY_CLAIM,
+    PUBLISHED_RULE_OF_TWO,
     RE_DERIVABILITY_CLAIM,
     bind,
     digest,
@@ -58,6 +59,7 @@ from backend.bench.rendering import (
 )
 from backend.bench.reproducibility import Reproducibility
 from backend.bench.rule import DECLARED_RULE, NOT_A_GATE_RESULT
+from backend.bench.scanner import RuleOfTwo, Supervision
 from backend.bench.scorer import Band, GateOutcome
 from backend.tests.test_payload import (
     FORBIDDEN_IN_A_KEY,
@@ -144,7 +146,7 @@ def test_every_section_states_its_own_reproducibility_and_three_read_the_payload
 
 # --- The golden digest: one document, pinned to the byte ---------------------
 
-GOLDEN_ONE_FAMILY = "76aa817490638fadc414cbe7d1341e20d5ecb3ad484bedf358e7d62a37ea59e8"
+GOLDEN_ONE_FAMILY = "c2573d476cad3397a5a2ce047d66279d5a3272b91a00b925174d9aeb8313b8c2"
 """The sha256 of `_one_family()`'s rendering, written down.
 
 **A tripwire, and it is deliberately a strict one.** Every other assertion in this
@@ -187,6 +189,16 @@ coverage claim getting wider is the one direction nobody checks, so the digest m
 here is the intended noise: the section says less about what is untested and more
 about where what is claimed stops. The claim lines name no family, which is why the
 title moved and no line naming a family did.
+
+Moved a fifth time, by #51, and it is section 3 that grew: the declared-controls
+section gained the Agents Rule of Two under a heading of its own, the published rule
+stated above one line naming what this target declared about its own shape
+([ADR-0038](../../docs/adr/0038-the-rule-of-two-is-a-declared-property.md)). Every
+report gains it, including a report about a target that declared nothing — the
+absence of the four declarations is what the block then says, and a heading that
+appeared only when somebody answered would be indistinguishable from a document made
+before the scan asked. It is a declaration and not a finding, so it moved this digest
+and moved nothing in section 4.
 """
 
 
@@ -632,6 +644,55 @@ def test_the_declared_and_defeated_join_is_the_headline_above_every_figure() -> 
         result=a_result(controls=(), absent=(DeclaredControl.OUTPUT_FILTER,))
     )
     assert "This target declared no controls" in render(nothing_declared)
+
+
+def test_the_declared_shape_prints_beside_the_controls_and_never_as_a_finding() -> None:
+    # The Rule of Two is a property of what the operator declared, so it prints in
+    # the section that holds declarations — beside the join, under its own heading,
+    # and above nothing (ADR-0038). What a reader must not be able to do is read it
+    # as a finding: it names no case, it is not in the headline, and the sentence
+    # says in its own words that nothing was measured.
+    payload = a_payload(
+        result=a_result(
+            rule_of_two=RuleOfTwo(
+                held=tuple(AgentCapability), supervision=Supervision.UNSUPERVISED
+            )
+        )
+    )
+    text = render(payload)
+    rule = document(payload)["declared"]["rule_of_two"]
+    [controls] = [section for section in sections(payload) if section.number == "3"]
+
+    assert "### The Agents Rule of Two, as this target declares itself" in text
+    assert f"- {rule['stated']}." in controls.body
+    # The published rule itself, above the line that reads this target against it. A
+    # shape named without it reads as the next finding down the page.
+    assert PUBLISHED_RULE_OF_TWO in controls.body
+    assert "Nothing was sent to establish any of this" in text
+    assert "three_unsupervised" not in text, (
+        "the standing prints as the sentence a reader reads and not as its wire name"
+    )
+
+    # Under one heading, in section 3, and after the join rather than above it: the
+    # headline is a defeated control, which points at a verdict.
+    heading = "### The Agents Rule of Two"
+    assert text.count(heading) == 1
+    assert text.index("### Declared") < text.index(heading) < text.index("## 4.")
+
+    # No digit on the line that names the shape. A count of the held capabilities is
+    # the one figure this block is a line away from, and two of them rank two
+    # targets — so the standing is a sentence and the capabilities are named.
+    [line] = [row for row in text.splitlines() if row.startswith("- the Agents Rule")]
+    assert not re.search(r"\d", line), f"{line} carries a figure"
+    for capability in AgentCapability:
+        assert capability.value in rule["held"]
+
+    # A target that declared nothing prints the block too, rather than leaving a
+    # reader to tell silence from a document made before the scan asked.
+    silent = render(a_payload(result=a_result()))
+    assert "not declared, so the rule was not read" in silent
+    named = ", ".join(str(one) for one in AgentCapability)
+    assert f"not stated: {named}" in silent
 
 
 # --- The gate is about the bench (ADR-0018) ---------------------------------

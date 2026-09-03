@@ -87,6 +87,9 @@ from backend.bench.rendering._declared import (
     INTEGRITY_CLAIM as INTEGRITY_CLAIM,
 )
 from backend.bench.rendering._declared import (
+    PUBLISHED_RULE_OF_TWO as PUBLISHED_RULE_OF_TWO,
+)
+from backend.bench.rendering._declared import (
     RE_DERIVABILITY_CLAIM as RE_DERIVABILITY_CLAIM,
 )
 from backend.bench.rendering._declared import (

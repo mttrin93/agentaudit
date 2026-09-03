@@ -250,6 +250,45 @@ one refusal of a stop control.
   what `LibraryVersion` exists to make visible rather than something this file can
   make go away.
 
+### No target has ever declared its own shape, and the scan cannot check one (#51)
+
+**The Agents Rule of Two is read entirely off what an operator declares, and no
+operator has ever declared any of it**
+([ADR-0038](./adr/0038-the-rule-of-two-is-a-declared-property.md)). Four fields on
+`TargetConfig` carry the three properties and the supervision declaration, every one
+of them defaulting to *unstated*, so every report this bench produces today reads
+`not_declared` and says so in a block of its own. The suite exercises the reading and
+nothing more: the five standings, the partition of the three properties, that no value
+in the block is a number, and that the same attempts against the same agent produce
+the same rates, intervals, bands and `D` whatever is declared.
+
+- **The bench cannot check the declaration, and this one is not even attackable in
+  principle.** A declared *control* is a claim the attacks can contradict — that is
+  the declared-and-defeated join, and it is the report's headline. A declared
+  *capability* has no counterpart: nothing is sent, so a target that under-declares
+  gets *at most two* printed and nothing in the document disagrees. What that buys is
+  nothing, and the reason is structural rather than diligent — the standing carries no
+  figure, so there is no number an under-declaration could move.
+- **The direction of the risk is the mirror of ADR-0005's.** That ADR killed a score a
+  target improved by declaring **more**; this is a property a target would improve by
+  declaring **less**. Neither reaches a rate, and the defence in both cases is that
+  the reading is a name printed in a section that shares no arithmetic with any other.
+- **Nothing has asked a real operator whether the four questions are answerable.**
+  Whether an operator can say, of their own agent, that it processes untrusted input
+  within one session is a question about their knowledge of their own deployment, and
+  it has the same standing as the report format itself (#50): a defensible default
+  that no reader has been asked about. A partly-declared standing is what the scan
+  reports when they cannot, and how often that will be the answer in practice is
+  unknown.
+- **The rule's *within one session* is not measured and is not claimed to be.** The
+  declaration is a property of the target; nothing here observes a session. An agent
+  that holds the three properties across different sessions and never in one is
+  reported the same way as one that holds them together, because the operator's
+  declaration is what was read.
+- **The library did not move and no figure in this document changed.** The change is
+  a declared field, a reading of it and a block in section 3 of the rendering; the
+  golden rendering digest moved once, on purpose, and the case records did not.
+
 ---
 
 ## Pre-gate observations

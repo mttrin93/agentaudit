@@ -280,6 +280,32 @@ def _how_the_run_was_made(body: Mapping[str, Any]) -> Section:
     )
 
 
+PUBLISHED_RULE_OF_TWO = (
+    "The published rule says an agent should not, in one session and without human "
+    "supervision, hold more than two of — processes untrusted input, reaches private "
+    "data or sensitive systems, changes state or communicates outward. **Nothing was "
+    "sent to establish any of this.** It is read off the operator's own registration "
+    "and reported against the rule, so it is a declaration on the same footing as the "
+    "controls above and not a finding: no attempt was made against it, no verdict "
+    "lies behind it, and no rate, band or discrimination score anywhere in this "
+    "document is a function of it (ADR-0005, ADR-0038)."
+)
+"""What the rule is, and what reading it off a declaration does and does not buy.
+
+Printed above the line rather than folded into it, because the reader arrives here
+from a join whose every row points at a verdict. A shape named without that paragraph
+reads as the next finding down the page, and the one standing that matters — all
+three, unsupervised — is the one that reads most like a finding.
+
+Its counterpart in the artefact is `scanner.NOT_A_MEASUREMENT`, which every reading
+carries: the sentence travels with the fact, the way `NotMeasurable.stated` does, so
+a consumer that never renders this page still gets it. The two are not one constant
+because this module reads the serialised document and never the records behind it,
+and they say different things — this one states the rule, that one states what
+reading it off a declaration is worth.
+"""
+
+
 def _controls(declared: Mapping[str, Any]) -> Section:
     """The declared-and-defeated join in full: what was claimed, and what held.
 
@@ -309,5 +335,11 @@ def _controls(declared: Mapping[str, Any]) -> Section:
                 (f"- {absent['stated']}" for absent in declared["absent"]),
                 "- The checklist asks about no control this target left undeclared.",
             ),
+            "",
+            "### The Agents Rule of Two, as this target declares itself",
+            "",
+            PUBLISHED_RULE_OF_TWO,
+            "",
+            f"- {declared['rule_of_two']['stated']}.",
         ),
     )

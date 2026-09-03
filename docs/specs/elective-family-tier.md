@@ -10,7 +10,7 @@
 
 ## Problem Statement
 
-The bench tests six families and the gate is decided over those six. Group G selects three more — `ASI06` memory poisoning, `LLM01` direct prompt injection and `LLM02` PII leakage — and each of them is an attack the bench cannot currently hold. (Group G's fourth missing row, the Rule of Two, is [not a family](../../PLAN.md) and lands in the configuration scan.)
+The bench tests six families and the gate is decided over those six. Group G selects three more — `ASI06` memory poisoning, `LLM01` direct prompt injection and `LLM02` PII leakage — and each of them is an attack the bench cannot currently hold. (Group G's fourth missing row, the Rule of Two, is [not a family](../adr/0038-the-rule-of-two-is-a-declared-property.md) and lands in the configuration scan, where it is read off what the operator declares.)
 
 Adding them to `Family` is the obvious move and it re-opens a closed argument. [ADR-0015](../adr/0015-the-gate-is-decided-over-families-fit-to-report.md) spent its whole length proving that `families_required = 4` and `monotonic_families_required = 5` must be **fixed counts** over a fixed `family_count = 6`, and that a family leaving the decision may only ever remove a candidate from a count and never lower a bar. A seventh family in the denominator either re-opens that or forces the threshold move [ADR-0003](../adr/0003-gate-decision-rule-and-sample-size.md) exists to prevent — at hour 30, to make a run pass.
 

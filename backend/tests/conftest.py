@@ -59,6 +59,7 @@ from backend.bench.library import (
 )
 from backend.bench.registration import Attestation
 from backend.bench.rule import DECLARED_RULE
+from backend.graph import approval
 from backend.graph.approval import Approval, Approve
 from backend.graph.budget import BudgetPayload, RunBudget
 from backend.graph.runstate import Attempt
@@ -397,6 +398,40 @@ def precedent_elsewhere(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
     elsewhere = tmp_path / "precedent" / "findings.json"
     monkeypatch.setattr(precedent, "DEFAULT_STORE_PATH", elsewhere)
     monkeypatch.setattr(DURABLE_PRECEDENT.store, "path", elsewhere)
+
+
+@pytest.fixture(scope="session", autouse=True)
+def checkpoints_elsewhere(
+    tmp_path_factory: pytest.TempPathFactory,
+) -> Iterator[None]:
+    """No test writes the halt database a real run uses. `precedent_elsewhere`'s
+    reasoning, applied to the other durable file (ADR-0028).
+
+    Autouse for the same reason: `run_under_approval` takes the default database
+    and the suite drives the approval interrupt in dozens of places, so without
+    this every one of them would append a checkpoint — carrying the identity of
+    whoever a fixture says confirmed the spend — to a file in the engineer's
+    working copy that nothing prunes. Pointed elsewhere rather than disabled, so
+    what the tests exercise is the SQLite saver rather than a stand-in for it.
+
+    **Session-scoped, and it has to be.** `test_gate.py`'s gate run is a
+    module-scoped fixture, and a function-scoped patch is not in place when a
+    module-scoped fixture is built — so the one run in the suite that drives the
+    whole library through the interrupt was also the one that escaped the
+    redirection. Its own `pytest.MonkeyPatch` because the injected `monkeypatch`
+    is function-scoped and cannot be asked for here.
+
+    One database for the whole session rather than one per test, which is the
+    shape a process actually runs in: many halts, one file.
+    """
+    patch = pytest.MonkeyPatch()
+    patch.setattr(
+        approval,
+        "DEFAULT_CHECKPOINT_DATABASE",
+        tmp_path_factory.mktemp("checkpoints") / "halts.sqlite",
+    )
+    yield
+    patch.undo()
 
 
 RUN_THREADS: tuple[str, ...] = ("agentaudit-run-", "agentaudit-gate-run-")

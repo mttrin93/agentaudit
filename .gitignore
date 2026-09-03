@@ -30,5 +30,12 @@ wheels/
 # about one machine's running processes and never part of the library.
 .gate-run.lease
 
+# Halted approval runs: a checkpoint on disk, so a run waiting on a human survives
+# a deploy inside the hour it was promised (ADR-0028). A directory rather than a file
+# name, because SQLite writes `-wal` and `-shm` sidecars beside the database, and the
+# checkpoint holds the identity of whoever authorised the spend — never committed, on
+# the same reasoning as `/precedent/` (ADR-0008).
+/checkpoints/
+
 # Node
 node_modules/

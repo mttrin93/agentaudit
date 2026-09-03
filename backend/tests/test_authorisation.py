@@ -193,24 +193,25 @@ def test_the_suite_has_not_run_at_the_moment_the_human_is_asked() -> None:
 
 def test_the_graph_stays_paused_until_it_is_resumed() -> None:
     ran: list[str] = []
-    run = ApprovalRun(a_budget(), lambda: ran.append("suite"))
 
-    presented = run.present()
+    with ApprovalRun(a_budget(), lambda: ran.append("suite")) as run:
+        presented = run.present()
 
-    assert run.paused
-    assert ran == []
-    assert presented["scored"]["calls"] > 0
+        assert run.paused
+        assert ran == []
+        assert presented["scored"]["calls"] > 0
 
-    run.resume(Approval(confirmed=True, identity="operator"))
+        run.resume(Approval(confirmed=True, identity="operator"))
 
-    assert not run.paused
-    assert ran == ["suite"]
+        assert not run.paused
+        assert ran == ["suite"]
 
 
 def test_the_interrupt_presents_two_figures_and_the_ceilings() -> None:
     budget = a_budget()
 
-    presented = ApprovalRun(budget, lambda: None).present()
+    with ApprovalRun(budget, lambda: None) as run:
+        presented = run.present()
 
     # The fact and the bound arrive labelled, so a consumer cannot lose which is
     # which on the way to a screen.

@@ -354,7 +354,7 @@ a gate result and nothing may compare it to one.
 | --- | --- | --- |
 | E3 | Choose from a list of LLMs | Five attacker models in Settings; the scripts take `--model`, `--adjudicator-model`, `--attacker-model` |
 | E4 | Tune the main settings | Settings has temperature, `T`, `k` and attempts per case, each with the range the route enforces |
-| M2 | Long-term or short-term memory | Both. Run state for one run; a file-backed precedent store that survives a restart |
+| M2 | Long-term or short-term memory | Both. Run state for one run, with the approval halt checkpointed to SQLite so the halt outlives the process that wrote it — not yet the run record around it ([ADR-0028](./docs/adr/0028-the-approval-checkpoint-outlives-the-process.md)); a file-backed precedent store that survives a restart |
 | M3 | A tool that calls an external API | The attacker's `run_probe` calls your agent over HTTP. Five tools in total |
 | M7 | Multi-model support | OpenAI, Anthropic and DeepSeek via OpenRouter. `scripts/swap.py` runs the same library on two models and compares the results |
 | M8 | A security guard, and developer settings kept apart | Proof of control, three attestations and a cost halt before anything is sent. Settings is its own screen |

@@ -16,17 +16,26 @@ invariant, and this module only surfaces it.
 interrupting node from its start on resume, so anything above `interrupt()` runs
 again. The approval node therefore does nothing but ask, and everything that
 spends is on the far side of the edge that the human's answer decides.
+
+**The checkpoint is on disk, and one `ApprovalRun` owns one connection to it**
+([ADR-0028](../../docs/adr/0028-the-approval-checkpoint-outlives-the-process.md)).
+`APPROVAL_WAIT_SECONDS` gives the human an hour, so the halt has to outlive a
+deploy inside that hour, and the answer arrives on a thread that did not invoke the
+graph — so the connection is owned by the object rather than by a thread, and
+`approval_checkpoints` below says what that costs at the line that pays it.
 """
 
 from __future__ import annotations
 
+import sqlite3
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Final, Literal, TypedDict, cast
 
 from langchain_core.runnables import RunnableConfig
-from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import Command, interrupt
 
@@ -37,6 +46,35 @@ CONFIRM_COST: Final = "confirm_cost"
 RUN_SUITE: Final = "run_suite"
 STOP: Final = "__end__"
 """LangGraph's own `END`, spelled out, because a router has to return a literal."""
+
+CHECKPOINT_DIRECTORY: Final = Path(__file__).resolve().parents[2] / "checkpoints"
+"""Where halted runs are kept. A directory, and git-ignored as one — `.gitignore`
+carries the pattern and ADR-0028 point 5 the reason."""
+
+DEFAULT_CHECKPOINT_DATABASE: Final = CHECKPOINT_DIRECTORY / "approvals.sqlite"
+
+
+def approval_checkpoints(database: Path | None = None) -> SqliteSaver:
+    """Open a checkpointer over that database, creating it if it is not there.
+
+    **The connection is owned by the `ApprovalRun` that opened it and not by a
+    thread** — the decision ADR-0028 records, with the alternatives it beat. What
+    belongs here is why the two flags below are what that decision costs.
+
+    `check_same_thread=False` is demanded twice over, and the second time is the
+    reason a convenient test would not have found its absence: LangGraph writes the
+    checkpoint from its Pregel executor's pool rather than from the caller, so even
+    a single-threaded `invoke` uses the connection off the thread that opened it and
+    raises `ProgrammingError` before the halt and the answer are on two threads of
+    ours at all. Safe because `SqliteSaver` holds a lock across every cursor.
+
+    WAL so that one run reading its own halt is not blocked by another writing one.
+    """
+    location = DEFAULT_CHECKPOINT_DATABASE if database is None else database
+    location.parent.mkdir(parents=True, exist_ok=True)
+    connection = sqlite3.connect(location, check_same_thread=False)
+    connection.execute("PRAGMA journal_mode=WAL")
+    return SqliteSaver(connection)
 
 
 @dataclass(frozen=True)
@@ -103,12 +141,26 @@ class ApprovalState(TypedDict):
 class ApprovalRun:
     """One run's approval graph: present the cost, halt, and proceed only on a yes."""
 
-    def __init__(self, budget: RunBudget, run_suite: Callable[[], None]) -> None:
+    def __init__(
+        self,
+        budget: RunBudget,
+        run_suite: Callable[[], None],
+        *,
+        thread_id: str | None = None,
+        checkpoints: Path | None = None,
+    ) -> None:
+        """`thread_id` names an existing halt; omitted, this run is a new one.
+
+        Both parameters exist for the same reason: a checkpoint on disk is only
+        reachable by something that knows which thread and which database to look
+        in, so a run that could not be named could not be resumed after the object
+        that halted it was gone, and the durability would be unobservable (ADR-0028).
+        """
         self.budget = budget
         self._suite = run_suite
-        self._config: RunnableConfig = {
-            "configurable": {"thread_id": f"run-{uuid.uuid4()}"}
-        }
+        self.thread_id = thread_id if thread_id is not None else f"run-{uuid.uuid4()}"
+        self._config: RunnableConfig = {"configurable": {"thread_id": self.thread_id}}
+        self._saver = approval_checkpoints(checkpoints)
 
         builder = StateGraph(ApprovalState)
         builder.add_node(CONFIRM_COST, self._confirm_cost)
@@ -118,7 +170,28 @@ class ApprovalRun:
             CONFIRM_COST, self._decided, {RUN_SUITE: RUN_SUITE, STOP: END}
         )
         builder.add_edge(RUN_SUITE, END)
-        self._graph = builder.compile(checkpointer=InMemorySaver())
+        self._graph = builder.compile(checkpointer=self._saver)
+
+    def __enter__(self) -> ApprovalRun:
+        """A context manager because this object now owns an OS resource.
+
+        Before the checkpoint was a file, constructing an `ApprovalRun` and dropping
+        it cost nothing, so every caller was free to. It costs a connection now, and
+        a `with` is how that stops being something each caller has to remember.
+        """
+        return self
+
+    def __exit__(self, *exception: object) -> None:
+        self.close()
+
+    def close(self) -> None:
+        """Release this run's connection. The halt it wrote stays on disk.
+
+        Called for its file handle and not for the checkpoint: a thread per halted
+        run is the v1 `api/runs.py` licensed, and a connection per halted run that
+        nothing closes is the same cost paid twice.
+        """
+        self._saver.conn.close()
 
     def _confirm_cost(self, state: ApprovalState) -> ApprovalState:
         """Surface the estimate and stop. Nothing above the interrupt spends."""
@@ -210,24 +283,27 @@ def run_under_approval(
     not said how a human will be asked gets a run that halts and stays halted.
     Nothing is sent, and the outcome says so.
     """
-    run = ApprovalRun(budget, run_suite)
-    presented = run.present()
+    # The `with` releases the connection and not the checkpoint: a run that halted
+    # here is still on disk, and still answerable by something that knows its
+    # thread id — which is the half of restart survival issue #61 carries.
+    with ApprovalRun(budget, run_suite) as run:
+        presented = run.present()
 
-    if approve is None:
+        if approve is None:
+            return ApprovalOutcome(
+                budget=budget,
+                presented=presented,
+                confirmed=False,
+                halted=True,
+                reason="halted at the approval interrupt: nobody was asked",
+            )
+
+        final = run.resume(approve(presented))
         return ApprovalOutcome(
             budget=budget,
             presented=presented,
-            confirmed=False,
-            halted=True,
-            reason="halted at the approval interrupt: nobody was asked",
+            confirmed=final["confirmed"],
+            halted=run.paused,
+            identity=final["identity"],
+            reason=final["reason"],
         )
-
-    final = run.resume(approve(presented))
-    return ApprovalOutcome(
-        budget=budget,
-        presented=presented,
-        confirmed=final["confirmed"],
-        halted=run.paused,
-        identity=final["identity"],
-        reason=final["reason"],
-    )

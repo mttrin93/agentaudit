@@ -259,6 +259,15 @@ _Avoid_: source, origin, motivation
 The halt before the first attack, where a human sees what the run will cost and consents to it. A run cannot proceed past it unattended.
 _Avoid_: confirmation, gate, prompt, checkpoint
 
+**Checkpoint**:
+The record on disk that an approval interrupt is waiting, and the state it will
+resume with. Promoted to a term of its own while remaining on the **approval
+interrupt** avoid-list above, on the same footing as **probe** against **case**:
+*checkpoint* must not be used to mean the halt, because the halt is a decision a
+human has not yet made and a checkpoint is a row in a file. One is what the bench
+asks; the other is what survives a restart while it waits ([ADR-0028](./docs/adr/0028-the-approval-checkpoint-outlives-the-process.md)).
+_Avoid_: using it for **approval interrupt**, save point, snapshot, session
+
 **Override**:
 A typed annotation a user attaches to a finding. Never changes a measured rate.
 _Avoid_: correction, dispute, appeal, exception

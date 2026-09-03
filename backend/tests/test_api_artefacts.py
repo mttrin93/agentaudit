@@ -98,6 +98,7 @@ def a_record(name: str, artefact: SignedArtefact | Unsigned) -> RunRecord:
     budget = a_budget(cases=18, targets=1)
     return RunRecord(
         run_id=f"run-{name}",
+        thread_id=f"halt-{name}",
         target=a_target(name=name),
         attestation=BENCH_ATTESTATION,
         nonce="nonce",

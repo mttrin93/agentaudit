@@ -79,6 +79,7 @@ def a_record(scored: int, adaptive: int, name: str) -> RunRecord:
             state.record_call(layer, calls)
     return RunRecord(
         run_id=f"run-{name}",
+        thread_id=f"halt-{name}",
         target=target,
         attestation=BENCH_ATTESTATION,
         nonce="nonce",

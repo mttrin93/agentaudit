@@ -49,5 +49,14 @@ wheels/
 # the same reasoning as `/precedent/` (ADR-0008).
 /checkpoints/
 
+# The runs this deployment has started: the run record around each approval halt,
+# kept so that a process which restarts inside the hour a human was promised can
+# still tell them what happened (backend/api/recorded.py, ADR-0034). Its own
+# database rather than a table beside precedent or the gate's decisions, on
+# ADR-0029 decision 6. A directory rather than a file name, for /checkpoints/'s
+# reason: SQLite writes `-wal` and `-shm` sidecars beside the database, and a row
+# names whoever authorised a spend against somebody else's endpoint (ADR-0008).
+/runs/
+
 # Node
 node_modules/

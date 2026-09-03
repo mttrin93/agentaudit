@@ -25,6 +25,8 @@ from fastapi.testclient import TestClient
 from opentelemetry import context as otel_context
 from opentelemetry import trace as otel_trace
 
+from backend.api import recorded
+from backend.api.recorded import RECORDED_RUNS
 from backend.bench import decided
 from backend.bench.adaptive import precedent
 from backend.bench.adaptive.precedent import DURABLE_PRECEDENT
@@ -484,6 +486,52 @@ def decisions_elsewhere(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
     from, and the suite's result would depend on its order.
     """
     _decisions_at(monkeypatch, tmp_path / "decisions" / "routes.sqlite")
+
+
+def _run_records_at(patch: pytest.MonkeyPatch, elsewhere: Path) -> None:
+    """Point every route to the run records at `elsewhere`.
+
+    Two of them, on `_decisions_at`'s reasoning: the module constant, which is what
+    a freshly constructed `RunDatabase` reads, and the shared module-level object
+    `BenchRuns.__init__` takes as its default — which captured the real path at
+    import and would answer with it however the constant moved.
+    """
+    patch.setattr(recorded, "DEFAULT_RUN_RECORD_PATH", elsewhere)
+    patch.setattr(RECORDED_RUNS.store, "path", elsewhere)
+
+
+@pytest.fixture(scope="session", autouse=True)
+def run_records_elsewhere_for_the_session(
+    tmp_path_factory: pytest.TempPathFactory,
+) -> Iterator[None]:
+    """The redirection below, from a scope a module-scoped fixture cannot escape.
+
+    Session-scoped for the reason `checkpoints_elsewhere` is, and about the file
+    that sits beside the one it redirects: `create_app` builds a `BenchRuns` and
+    every run started through one writes a row, so a module-scoped fixture holding
+    an app would otherwise record its runs — with the identity of whoever a fixture
+    says confirmed the spend — into a git-ignored file in the working copy.
+    """
+    patch = pytest.MonkeyPatch()
+    _run_records_at(patch, tmp_path_factory.mktemp("runs") / "started.sqlite")
+    yield
+    patch.undo()
+
+
+@pytest.fixture(autouse=True)
+def run_records_elsewhere(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """No test reads or writes the run records a real deployment uses.
+
+    Autouse and unconditional, on `precedent_elsewhere`'s reasoning with one of its
+    own: a `BenchRuns` reads every row on disk when it is constructed and settles
+    the ones an earlier process left in flight, so a test that read the engineer's
+    own file would recover their halted runs — and the suite's result would depend
+    on what they had last started at a terminal.
+
+    A fresh database per test, because these rows accumulate by design: a run one
+    test recorded would be a run the next test's `create_app` recovered.
+    """
+    _run_records_at(monkeypatch, tmp_path / "runs" / "started.sqlite")
 
 
 @pytest.fixture(scope="session", autouse=True)

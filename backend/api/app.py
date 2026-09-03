@@ -194,6 +194,7 @@ from backend.api.report import (
 from backend.api.runs import (
     BenchConfig,
     BenchRuns,
+    HaltRecovered,
     Instrumented,
     Instruments,
     NeverPresented,
@@ -340,7 +341,7 @@ def report_paths(run_id: str) -> tuple[str, str, str, str]:
 class ReportRefusal(StrEnum):
     """Why a report is not being served, as a name rather than as a status code.
 
-    Four members and four different facts, kept apart for the reason every other
+    Five members and five different facts, kept apart for the reason every other
     outcome in this bench is named. Three of them share a status code and none of
     the three is readable from it, and the difference that matters most is between
     the second and the third: one is a run to ask again about and the other is a run
@@ -352,6 +353,24 @@ class ReportRefusal(StrEnum):
     IN_FLIGHT = "in_flight"
     DID_NOT_COMPLETE = "did_not_complete"
     NEVER_SIGNED = "never_signed"
+
+    LOST_WITH_ITS_PROCESS = "lost_with_its_process"
+    """This run is on the record and its report was never in this process.
+
+    The fifth member, added by
+    [ADR-0034](../../docs/adr/0034-a-run-record-outlives-its-process-and-carries-no-run.md),
+    and it is added here where a ninth `RunStatus` was refused — the same rule
+    applied twice rather than an inconsistency. A `RunStatus` is what a poller
+    branches on to decide whether to keep polling, and `FAILED` already answers that
+    truly. This enum is a taxonomy of *why there is no report*, and none of the four
+    above is true of a recovered run: it is not a run nobody started, it is not in
+    flight, it may well have completed, and its artefact may well have been signed —
+    by a process that has ended, holding the bytes in memory (`report.py`, #56).
+
+    Refused rather than rebuilt for the reason a signature is over one document
+    rather than over a recipe for making one. Bytes reassembled now would be a
+    different document, and no signature this route ever served would verify them.
+    """
 
 
 class Refusal(BaseModel):
@@ -579,6 +598,36 @@ def response_for(record: RunRecord) -> RunResponse:
         families_not_run={
             str(family): gap.stated() for family, gap in record.plan.gaps.items()
         },
+    )
+
+
+def _no_progress_for(bench: BenchRuns, run_id: str) -> str:
+    """Why there is no progress for that run, in the words the record allows.
+
+    Two answers rather than one, because the two are different facts and the wrong
+    one used to be given for both. A run nothing recorded is a caller with a bug to
+    find. A run an earlier process of this bench started, halted and estimated is a
+    run that exists — and telling its operator it was never started is the reading
+    ADR-0028 put the checkpoint on disk to prevent, arriving one route over.
+
+    Still a `404` for both, and deliberately: the counters a progress response is
+    built from belonged to the run state, which does not outlive its process
+    (ADR-0034). What is served instead is not a partial reading, it is the reason
+    there is none.
+    """
+    recovered = bench.recovered(run_id)
+    if recovered is None:
+        return (
+            f"no run {run_id} was started by this bench, in this process or in any "
+            "run it has on record"
+        )
+    return (
+        f"run {run_id} was started by an earlier process of this bench at "
+        f"{recovered.recorded_at.isoformat(timespec='seconds')} and is "
+        f"{recovered.status}. This process holds no run state for it, so there is "
+        f"no progress to report and no figure here is zero: what it had spent "
+        f"belonged to the run state, which does not outlive its process "
+        f"(ADR-0034). {recovered.statement}"
     )
 
 
@@ -1027,6 +1076,34 @@ def _no_report_for(record: RunRecord) -> tuple[ReportRefusal, str]:
         f"not produce one: a report is made by a run that completed. "
         f"{record.statement}. Nothing is served in its place, and nothing here is a "
         "finding about the target",
+    )
+
+
+def _no_report_recorded_for(bench: BenchRuns, run_id: str) -> tuple[ReportRefusal, str]:
+    """Why there is no report for a run this process did not start.
+
+    Two answers, and the wrong one used to be given for both — the third route to
+    have said *no run of that id was started by this bench* about a run this bench
+    had started, halted and estimated (ADR-0034). `_no_progress_for` is the same
+    correction one route over; this one exists separately because a report refusal
+    is a named taxonomy and a progress refusal is a sentence.
+    """
+    recovered = bench.recovered(run_id)
+    if recovered is None:
+        return (
+            ReportRefusal.NO_SUCH_RUN,
+            f"no run {run_id} was started by this bench, in this process or in any "
+            "run it has on record",
+        )
+    return (
+        ReportRefusal.LOST_WITH_ITS_PROCESS,
+        f"run {run_id} was started by an earlier process of this bench at "
+        f"{recovered.recorded_at.isoformat(timespec='seconds')} and is "
+        f"{recovered.status}, and no report for it will be served here: an artefact "
+        f"is built once by the run that made it and held in that process, so a "
+        f"restart takes the bytes with it and nothing may be reassembled in their "
+        f"place — a signature is over one document, not over a recipe for making "
+        f"one. {recovered.statement}",
     )
 
 
@@ -4589,8 +4666,22 @@ def create_app(
         except KeyError as unknown:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"no run {run_id} was started by this bench",
+                detail=(
+                    f"no run {run_id} was started by this bench, in this process or "
+                    "in any run it has on record"
+                ),
             ) from unknown
+        except HaltRecovered as elsewhere:
+            # A run this bench started, halted and estimated in a process that has
+            # since ended. `409` rather than `404` because the run is on the record
+            # and it is the *answer* that could not be applied, and rather than a
+            # `200` because there is no run state to build a `RunResponse` out of —
+            # ADR-0034, and the refusal itself says which of three states the record
+            # is now in. The answer is recorded before this is raised: a no is a
+            # decline in full.
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT, detail=str(elsewhere)
+            ) from elsewhere
         except NoLongerWaiting as closed:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT, detail=str(closed)
@@ -4628,7 +4719,7 @@ def create_app(
         if record is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"no run {run_id} was started by this bench",
+                detail=_no_progress_for(bench, run_id),
             )
         return progress_for(record, bench.config.rule)
 
@@ -4726,10 +4817,7 @@ def create_app(
         if record is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=_refused(
-                    ReportRefusal.NO_SUCH_RUN,
-                    f"no run {run_id} was started by this bench",
-                ),
+                detail=_refused(*_no_report_recorded_for(bench, run_id)),
             )
         if record.status is not RunStatus.COMPLETED:
             raise HTTPException(

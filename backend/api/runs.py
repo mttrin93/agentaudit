@@ -45,9 +45,11 @@ and there would be nobody to answer. So the run starts on its own thread and the
 request rendezvouses with it at the interrupt. The cost is a thread per run
 awaiting an answer, which is the v1 the spec licensed; a queue is P1.
 
-**What is left here is the service, and the three modules beside it are the rest.**
+**What is left here is the service, and the four modules beside it are the rest.**
 `run_status.py` holds the vocabulary a run is described in, `run_config.py` what a
-run is measured with, `run_state.py` one run's record and the halt it waits at.
+run is measured with, `run_state.py` one run's record and the halt it waits at,
+`recorded.py` what is written down about a run so a restarted process can still
+answer or close its halt (ADR-0034).
 This module drives a run through them, and it re-exports their names because
 `app.py`'s routes and the suite both import a run's vocabulary from
 `backend.api.runs` — the split moved the definitions and deliberately did not move
@@ -66,7 +68,23 @@ from __future__ import annotations
 import threading
 import uuid
 from dataclasses import replace
+from datetime import UTC, datetime
+from typing import NoReturn
 
+from backend.api.recorded import (
+    CONFIRMED_AND_NOT_RUN,
+    RECORDED_RUNS,
+    RECOVERED_DECLINE,
+)
+from backend.api.recorded import (
+    HaltRecovered as HaltRecovered,
+)
+from backend.api.recorded import (
+    RecordedRun as RecordedRun,
+)
+from backend.api.recorded import (
+    RecordedRuns as RecordedRuns,
+)
 from backend.api.report import Unsigned, artefact_for
 from backend.api.run_config import (
     BenchConfig as BenchConfig,
@@ -127,7 +145,7 @@ from backend.bench.payload import GateCitation
 from backend.bench.registration import Attestation, issue_nonce
 from backend.bench.signing import SignedArtefact
 from backend.bench.usage import UsageLedger
-from backend.graph.approval import Approval, Approve
+from backend.graph.approval import Approval, Approve, forget_halt
 from backend.graph.budget import (
     BudgetExceeded,
     CallPrice,
@@ -140,18 +158,57 @@ from backend.observability import TracedRun
 class BenchRuns:
     """Every run this process has started, and every nonce it has issued.
 
-    In memory, single process, and that is the v1 the spec licensed: a queue and a
-    store outlive a restart and are P1. What is *not* deferred is that a run holds
-    its own ceiling and its own state — those are correctness rather than
-    durability, and they are on `RunRecord`.
+    **Two registries and they are deliberately two.** `self._runs` holds the runs
+    *this* process started — the live records, with their counters, their plans and
+    the rendezvous a request answers a halt through. What earlier processes wrote
+    down is read from `RecordedRuns`, and it is a declaration rather than a run: no
+    counters, no plan, no target (ADR-0034). They are two types and they stay two,
+    because a signature that took either would be the place a restored row acquired
+    a plausible-looking plan — so `records()` returns run records only and
+    `recovered` returns the other thing.
+
+    **The live records are held and the recorded ones are read.** A dictionary is
+    right for the first: those runs exist because this process started them, and
+    their state is in memory by construction. It is wrong for the second, on
+    ADR-0029 decision 2's principle that the file is the authority and the object
+    holds no state — a cached row would be this process's opinion of a row a second
+    deployment over the same volume may have answered since, and the one thing that
+    must not happen to an interrupt is being answered twice.
+
+    A queue is still P1, and so is a run started here surviving a restart *as a
+    run*: what survives is enough to answer or to close the halt it left behind.
     """
 
-    def __init__(self, config: BenchConfig) -> None:
+    def __init__(
+        self, config: BenchConfig, recorded: RecordedRuns = RECORDED_RUNS
+    ) -> None:
         self._config = config
         self._issued: set[str] = set()
         self._runs: dict[str, RunRecord] = {}
         self._pending: dict[str, PendingApproval] = {}
         self._lock = threading.Lock()
+        self._answering = threading.Lock()
+        self._recorded = recorded
+        # Every row on disk, reconciled on the way in, and nothing kept: a row still
+        # saying *running* is a run `RunStatus.in_flight` calls still going, so
+        # leaving one unread would refuse every `instrument` call for the lifetime of
+        # this deployment on behalf of a process that no longer exists (ADR-0034).
+        # The reconciliation is written back by `recovered`, so what is needed here
+        # is the halts it settled and not the rows.
+        #
+        # Retention, and this is the half nothing could reach before: a halt whose
+        # process ended is settled by nobody, so its checkpoint — and the estimate a
+        # person was asked to confirm — would be kept until somebody deleted the file
+        # by hand (ADR-0028's consequences). The rows are what know which halts are
+        # over, and they name the threads.
+        #
+        # Not caught. A checkpoint store this cannot open is one the next run cannot
+        # halt against either, so a bench that carried on would take an operator's
+        # attestation and then fail at the interrupt — after the request that asked
+        # for the estimate, which is the wrong end (ADR-0007).
+        for run in recorded.recovered():
+            if not run.status.in_flight:
+                forget_halt(run.thread_id)
 
     @property
     def config(self) -> BenchConfig:
@@ -277,9 +334,60 @@ class BenchRuns:
         return nonce
 
     def record(self, run_id: str) -> RunRecord | None:
-        """One run's record, or `None` for an id this bench never issued."""
+        """One run's record, or `None` for an id this process did not start.
+
+        Run records only, and a recovered row is deliberately not one of them: it
+        has no counters, no plan and no result, so a caller reading progress off it
+        would be reading defaults (ADR-0034). `recovered` below is how a route asks
+        the other question, and it answers with the other type.
+        """
         with self._lock:
             return self._runs.get(run_id)
+
+    def recovered(self, run_id: str) -> RecordedRun | None:
+        """What an earlier process of this bench wrote down about one run.
+
+        The read a route makes when `record` says nothing: a `404` that told an
+        operator no run of that id was ever started, of a run this bench had
+        started and halted, was the false statement issue #61 was filed about.
+
+        Reconciled on the way out, so a halt whose hour ran out while this process
+        was up reads as unanswered here too rather than as still waiting.
+        """
+        return self._recovered_row(run_id)
+
+    def _recovered_row(self, run_id: str) -> RecordedRun | None:
+        """One recorded run, reconciled, its dead halt forgotten, and cached.
+
+        The one lookup for both callers — this bench's `recovered` read and the
+        answer path — because the four steps are one operation and two copies of
+        them would be two places for the reconciliation and the deletion to come
+        apart.
+
+        **Read from the file every time**, on ADR-0029 decision 2's principle that
+        the file is the authority: a row cached here would be this bench's opinion
+        of a row a second deployment over the same volume may have answered since,
+        and an interrupt answered twice is the one thing the live path takes a lock
+        to prevent. The cost is one `get` on a route nobody calls in a loop.
+
+        **Reconciled here and not only at construction**, because the hour runs out
+        *while* this process is up: a halt that was answerable when the bench was
+        built is not answerable forty minutes later, and nothing wakes to notice.
+
+        **And the halt is forgotten here**, which is the case boot-time pruning
+        cannot reach. A halt whose process ended is settled by nobody, so if it
+        expires while this bench is running, the deletion has to happen at the first
+        read that observes the expiry — otherwise the approver identity in it
+        outlives the run's answerability until the next restart, against ADR-0034
+        decision 8.
+        """
+        found = self._recorded.find(run_id)
+        if found is None:
+            return None
+        row = self._recorded.reconcile(found)
+        if not row.status.in_flight:
+            forget_halt(row.thread_id)
+        return row
 
     def records(self) -> list[RunRecord]:
         """Every run this bench has started, most recently recorded first.
@@ -345,6 +453,12 @@ class BenchRuns:
         run_id = str(uuid.uuid4())
         record = RunRecord(
             run_id=run_id,
+            # Minted here and not inside `ApprovalRun`, which is where it used to
+            # come from: a name the worker thread generates and never returns is a
+            # durable checkpoint nothing else can look up, so the halt outlived the
+            # process and the id needed to reach it did not (ADR-0034). Derived from
+            # the run id so that a reader with one has the other.
+            thread_id=f"run-{run_id}",
             target=target,
             attestation=attestation,
             nonce=nonce,
@@ -362,10 +476,19 @@ class BenchRuns:
         with self._lock:
             self._runs[run_id] = record
             self._pending[run_id] = pending
+        # Written before the thread starts, and it has to be: `start` returns once
+        # the graph is holding its interrupt, so a row written any later would leave
+        # a window in which a halt exists on disk and the run around it does not.
+        # Not caught, either — nothing has been sent to the target yet, so a store
+        # that will not open is a deployment fault the operator should hear about
+        # before they are asked to confirm a spend rather than after (ADR-0034).
+        self._recorded.record(
+            RecordedRun.of(record, self._config.approval_wait_seconds)
+        )
 
         threading.Thread(
             target=_execute,
-            args=(record, self._config, pending),
+            args=(record, self._config, pending, self._recorded),
             name=f"agentaudit-run-{run_id}",
             daemon=True,
         ).start()
@@ -382,7 +505,10 @@ class BenchRuns:
             record = self._runs.get(run_id)
             pending = self._pending.get(run_id)
         if record is None or pending is None:
-            raise KeyError(run_id)
+            # Not this process's run, which used to be the end of the matter and a
+            # false statement: the human was told no run of that id had been
+            # started, of a run this bench had started, halted and estimated.
+            self._answer_a_recovered_halt(run_id, approval)
         if record.status is not RunStatus.AWAITING_APPROVAL or not pending.answer(
             approval
         ):
@@ -401,6 +527,16 @@ class BenchRuns:
                     "aborting rather than exceeding it"
                 ),
             )
+            # The row moves off *awaiting an answer* here, and it has to move here.
+            # A process that died mid-suite would otherwise leave a row saying the
+            # run is still at its interrupt — and a human inside the hour would be
+            # offered a second consent for a spend that had already happened, which
+            # is the one thing ADR-0007's halt exists to make impossible.
+            # `RecordedRuns.record` is what keeps this from overwriting a terminal
+            # row the worker has already written.
+            self._recorded.record(
+                RecordedRun.of(record, self._config.approval_wait_seconds)
+            )
         else:
             # Deliberately not settled here. The worker is unwinding the graph with
             # this refusal in its hands and is the only thread that may say what the
@@ -415,6 +551,69 @@ class BenchRuns:
                 # own write, if it ever lands, says the same thing.
                 record.settle(RunStatus.DECLINED, _declined(approval.reason))
         return record
+
+    def _answer_a_recovered_halt(self, run_id: str, approval: Approval) -> NoReturn:
+        """Answer a halt this process did not start, and refuse the request saying so.
+
+        Always refuses, and `NoReturn` is how the caller above knows: a
+        `RunResponse` is built from a run record's plan, counters and presented
+        estimate, and a recovered run has none of those. So there is nothing to
+        respond *with*, and the choice is between a refusal that states what was
+        recorded and a response assembled out of defaults — which would be a
+        restored row wearing a run record's clothes, the one thing ADR-0034 exists
+        to prevent.
+
+        **What is recorded is three different things and they stay three.** A no is
+        `DECLINED`, in full and with the operator's reason: a refusal needs no
+        target and no graph, the run had spent nothing, and losing the difference
+        between *refused by a human* and *nobody answered* is the distinction
+        ADR-0028 was built to keep. A yes is `FAILED` — the run cannot be started,
+        because the endpoint and its credential are deliberately not on the record
+        — and it carries `confirmed_by`, so it reads as answered and not run rather
+        than as either of the two spend-nothing outcomes it is not. A halt past its
+        hour was `UNANSWERED` before this request arrived and stays that way.
+
+        **An interrupt is answered once, and that is this lock's whole job.** The
+        live path gets it from `PendingApproval.answer`, which takes a lock of its
+        own so that a confirmation landing in the instant the wait closes is either
+        taken or refused and never both. There is no `PendingApproval` here, so
+        without one, two requests reading an answerable row at the same moment would
+        both write and both be told their answer was recorded — a decline and a
+        confirmation recorded for one halt, which is the distinction ADR-0028 exists
+        to keep, lost in a new way. Its own lock rather than `self._lock`, which
+        guards this bench's live records and its configuration and should not be
+        held across a write to a file.
+        """
+        with self._answering:
+            row = self._recovered_row(run_id)
+            if row is None:
+                # The only `KeyError` left, and the honest one: nothing was ever
+                # written under this id, in this process or in any earlier one.
+                raise KeyError(run_id)
+
+            if not row.answerable_at(datetime.now(tz=UTC)):
+                # Already terminal — past its hour, or answered once already. The
+                # request is refused and *nothing is written*, which is why the
+                # refusal below has to say so rather than claim an answer was
+                # recorded (`HaltRecovered`).
+                raise HaltRecovered(row, answered=False)
+
+            answered = (
+                replace(
+                    row.settled(RunStatus.FAILED, CONFIRMED_AND_NOT_RUN),
+                    confirmed_by=approval.identity,
+                )
+                if approval.confirmed
+                else row.settled(
+                    RunStatus.DECLINED,
+                    f"{_declined(approval.reason)}. {RECOVERED_DECLINE}",
+                )
+            )
+            self._recorded.record(answered)
+            # The halt is over the instant this answer is recorded, whichever way
+            # it went, so the checkpoint holding its estimate goes with it.
+            forget_halt(answered.thread_id)
+            raise HaltRecovered(answered, answered=True)
 
 
 def _declined(reason: str) -> str:
@@ -439,7 +638,12 @@ def _traced(run_id: str, config: BenchConfig) -> TracedRun:
     )
 
 
-def _execute(record: RunRecord, config: BenchConfig, pending: PendingApproval) -> None:
+def _execute(
+    record: RunRecord,
+    config: BenchConfig,
+    pending: PendingApproval,
+    recorded: RecordedRuns,
+) -> None:
     """One run, on its own thread: the same entry point a terminal run takes.
 
     There is one code path to a target and this does not add a second — the
@@ -453,7 +657,43 @@ def _execute(record: RunRecord, config: BenchConfig, pending: PendingApproval) -
         # In a `finally` and not at the end, because every way out of `_run` is a
         # run the worker has finished with: an abort, a transport failure and a
         # refusal are all states somebody is waiting to read.
+        #
+        # The row and the halt go *before* the event, so that `finished` means the
+        # record is complete rather than complete in this process's memory: a
+        # declining request wakes on it and reads the record, and a restart that
+        # landed between the two would find a row still saying this run was going.
+        # `_filed` swallows its own failures, so it cannot be why the event is
+        # never set.
+        _filed(recorded, record, config)
         record.finished.set()
+
+
+def _filed(recorded: RecordedRuns, record: RunRecord, config: BenchConfig) -> None:
+    """Write down where this run got to, and forget the halt it is no longer at.
+
+    Before `finished.set()`, and the caller says why: that event is what a declining
+    request waits on, so it has to mean *the record is complete* rather than
+    complete in this process's memory. The two things here are one fact — the run is
+    over, so the row is terminal and the checkpoint has nothing left to answer.
+
+    **Every exception is caught, and it is `_published`'s argument rather than a
+    reflex.** The suite ran and the target was measured; what would have failed
+    here is the bookkeeping, and a run marked failed for it would be reporting a
+    storage fault as a fact about somebody's agent. It also runs on the run's own
+    thread, where anything that escaped would be raised into a `finally` nobody is
+    catching.
+
+    What that costs is stated rather than absorbed: a row that could not be written
+    stays as the last thing this bench said about the run, so a process that
+    restarts may reconcile a finished run as one that stopped part-way. That is the
+    conservative direction — it under-claims about a run that completed and never
+    over-claims about one that did not.
+    """
+    try:
+        recorded.record(RecordedRun.of(record, config.approval_wait_seconds))
+        forget_halt(record.thread_id)
+    except Exception:  # noqa: BLE001 - a storage fault is not a fact about a target
+        return
 
 
 def _run(record: RunRecord, config: BenchConfig, pending: PendingApproval) -> None:
@@ -507,6 +747,10 @@ def _run(record: RunRecord, config: BenchConfig, pending: PendingApproval) -> No
             planted_nonces={record.target.name: record.nonce},
             proof_waived=record.proof_waived,
             trace=_traced(record.run_id, config),
+            # The halt this run's record already names, rather than one minted
+            # inside the graph: the record and the checkpoint have to agree, or the
+            # id a restart looks the halt up by names nothing (ADR-0034).
+            thread_id=record.thread_id,
         )
     except BudgetExceeded as abort:
         record.settle(

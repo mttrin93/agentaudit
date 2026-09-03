@@ -20,6 +20,13 @@ one module.
 That is the split's load-bearing direction: state may know what it was configured
 with, configuration may not know what state a run reached. `BenchRuns`, the service
 that drives a run through this record, stays in `runs.py`.
+
+**What is written down about a run is `recorded.py` and not this record.** That
+module imports this one, in the same direction and for the same reason: a durable
+row may know what a run record holds, and a run record may not be reconstructed from
+a row. `RecordedRun` is the declaration a restarted process can still act on, and
+[ADR-0034](../../docs/adr/0034-a-run-record-outlives-its-process-and-carries-no-run.md)
+is why almost nothing on `RunRecord` is in it.
 """
 
 from __future__ import annotations
@@ -101,6 +108,21 @@ class RunRecord:
     """
 
     run_id: str
+
+    thread_id: str
+    """The name of the halt this run is waiting at, or waited at.
+
+    A checkpoint on disk is reachable only by something that can say which thread to
+    look in (ADR-0028 point 4), and for a run started through this API that name used
+    to be minted inside `ApprovalRun.__init__` and never leave the worker thread — so
+    the durable halt was unreachable in exactly the case it was built for.
+
+    It is on the record rather than derived from `run_id` because two things read it
+    and neither may guess: a restarted process answers a halt by it, and retention
+    deletes a checkpoint by it (ADR-0034). Required rather than defaulted, so a
+    record that cannot be joined to its halt cannot be constructed.
+    """
+
     target: TargetConfig
     attestation: Attestation
     nonce: str

@@ -23,6 +23,14 @@ spends is on the far side of the edge that the human's answer decides.
 deploy inside that hour, and the answer arrives on a thread that did not invoke the
 graph — so the connection is owned by the object rather than by a thread, and
 `approval_checkpoints` below says what that costs at the line that pays it.
+
+**A halt is kept only while its run can be answered**
+([ADR-0034](../../docs/adr/0034-a-run-record-outlives-its-process-and-carries-no-run.md)).
+`ApprovalState` is three primitives and one of them is who authorised the spend, so a
+directory of halts nobody can answer is a directory of people's names at rest
+(ADR-0008). `forget_halt` is the deletion and a run record is what decides it — the
+record names the thread, which is the one thing that makes a checkpoint reachable and
+therefore the one thing that makes it deletable.
 """
 
 from __future__ import annotations
@@ -70,11 +78,73 @@ def approval_checkpoints(database: Path | None = None) -> SqliteSaver:
 
     WAL so that one run reading its own halt is not blocked by another writing one.
     """
-    location = DEFAULT_CHECKPOINT_DATABASE if database is None else database
+    location = _located(database)
     location.parent.mkdir(parents=True, exist_ok=True)
     connection = sqlite3.connect(location, check_same_thread=False)
     connection.execute("PRAGMA journal_mode=WAL")
     return SqliteSaver(connection)
+
+
+def _located(database: Path | None) -> Path:
+    """Which database this call means. Read at the call and never bound at import,
+    so the suite's redirection of the module constant still lands."""
+    return DEFAULT_CHECKPOINT_DATABASE if database is None else database
+
+
+def forget_halt(thread_id: str, database: Path | None = None) -> None:
+    """Delete that halt. Retention, and it is decided by a run record, not a timer.
+
+    ADR-0028 left `/checkpoints/` growing without bound with nothing to prune it,
+    and nothing *could*: a halt is reachable only by thread id, and no run record
+    carried one. `RunRecord.thread_id` and `RecordedRun.thread_id` do, so the rule
+    is the one thing about a halt that is knowable — **a checkpoint is kept exactly
+    as long as the run it belongs to can still be answered**
+    ([ADR-0034](../../docs/adr/0034-a-run-record-outlives-its-process-and-carries-no-run.md)).
+
+    Not a timeout, deliberately, and `lease.py` has the argument for why: every rule
+    for deciding that a lease has gone stale is a rule for deciding that a slow gate
+    run has. The same holds here in the direction that matters — an hour is a long
+    time to be thinking, and a sweep short enough to catch an abandoned halt is short
+    enough to delete one somebody is still reading. So nothing here is time-based:
+    the record says whether the run is over, and this deletes what the record names.
+
+    The identity is why it is worth doing rather than housekeeping. `ApprovalState`
+    carries `identity` — who authorised the spend — so a directory of halts nobody
+    can answer is a directory of people's names at rest (ADR-0008).
+
+    **A database that is not there stays not there**, on `DatabaseStore.batch`'s
+    reasoning: opening one runs the schema, so forgetting a halt on a bench that has
+    never halted would leave a checkpoint database where there was none. Anything
+    else that goes wrong is raised — a checkpoint store this cannot open is one the
+    next run cannot halt against either, and a caller that would rather not fail
+    over retention catches it at the call site that knows why.
+    """
+    location = _located(database)
+    if not location.exists():
+        return
+    saver = approval_checkpoints(location)
+    try:
+        saver.delete_thread(thread_id)
+    finally:
+        saver.conn.close()
+
+
+def checkpoint_kept(thread_id: str, database: Path | None = None) -> bool:
+    """Whether any checkpoint for that thread is still on disk.
+
+    The observable side of `forget_halt`, and public because retention nothing can
+    ask about is retention nobody can check. Distinct from `ApprovalRun.paused` and
+    the distinction is the whole point: a completed run and a deleted one are both
+    *not paused*, and only one of them has stopped holding a person's name.
+    """
+    location = _located(database)
+    if not location.exists():
+        return False
+    saver = approval_checkpoints(location)
+    try:
+        return saver.get_tuple({"configurable": {"thread_id": thread_id}}) is not None
+    finally:
+        saver.conn.close()
 
 
 @dataclass(frozen=True)
@@ -276,17 +346,24 @@ def run_under_approval(
     budget: RunBudget,
     run_suite: Callable[[], None],
     approve: Approve | None = None,
+    thread_id: str | None = None,
 ) -> ApprovalOutcome:
     """Present the cost, halt, and run the suite only if a human confirms.
 
     `approve` defaults to `None`, and that default is the point: a caller that has
     not said how a human will be asked gets a run that halts and stays halted.
     Nothing is sent, and the outcome says so.
+
+    `thread_id` is for a caller that has to be able to find this halt again — the
+    API records it on the run before the graph is invoked, because a name minted in
+    here and never returned is a durable checkpoint nothing can look up
+    ([ADR-0034](../../docs/adr/0034-a-run-record-outlives-its-process-and-carries-no-run.md)).
+    A terminal run passes none and gets the fresh one `ApprovalRun` mints.
     """
     # The `with` releases the connection and not the checkpoint: a run that halted
     # here is still on disk, and still answerable by something that knows its
-    # thread id — which is the half of restart survival issue #61 carries.
-    with ApprovalRun(budget, run_suite) as run:
+    # thread id (ADR-0034, and #61 before it).
+    with ApprovalRun(budget, run_suite, thread_id=thread_id) as run:
         presented = run.present()
 
         if approve is None:

@@ -447,6 +447,7 @@ def run_calibration(
     planted_nonces: Mapping[str, str] | None = None,
     proof_waived: bool = False,
     trace: TracedRun | None = None,
+    thread_id: str | None = None,
 ) -> CalibrationResult:
     """Run the given cases against the given targets and return what was measured.
 
@@ -612,7 +613,9 @@ def run_calibration(
     try:
         with traced(Span.RUN, trace.fields() if trace is not None else None) as span:
             try:
-                approval = run_under_approval(declared, run_suite, approve)
+                approval = run_under_approval(
+                    declared, run_suite, approve, thread_id=thread_id
+                )
             finally:
                 # In a `finally` because the figures are most wanted on the run that
                 # did not finish: a suite that stopped on a transport failure is one

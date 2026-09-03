@@ -138,6 +138,31 @@ class ReadingOutcome:
     adjudicator: str | None = None
 
     @property
+    def counts(self) -> AdmissionReading:
+        """The reading this outcome was read from, recovered.
+
+        Lossless and deliberately so: `Rate` carries the successes and the
+        denominator it came from, because "3 successes in 30 attempts and 100 in
+        1000 are the same number and not the same evidence" — so an outcome holds
+        every count that went into it and none of them has to be carried beside it.
+
+        Here rather than at the one caller that needs it, because it is a property
+        of this record: what makes admission evidence is that the counts survive the
+        arithmetic (`AdmissionReading`, `AdmissionRecord`), and a reader who can get
+        back to them from an outcome can re-derive the decision from either end. The
+        caller is `backend/bench/decided.py`, which remembers the measurement and
+        never the decision.
+        """
+        return AdmissionReading(
+            model=self.model,
+            attempts=self.hardened.attempts,
+            hardened=self.hardened.successes,
+            weak=self.weak.successes,
+            trivial=self.trivial.successes,
+            adjudicator=self.adjudicator,
+        )
+
+    @property
     def clears(self) -> bool:
         """Whether this reading meets the bar: magnitude *and* separation.
 
@@ -187,6 +212,17 @@ class AdmissionOutcome:
     def models(self) -> tuple[str, ...]:
         """The distinct underlying models this case was read on, in reading order."""
         return tuple(dict.fromkeys(reading.model for reading in self.readings))
+
+    @property
+    def counts(self) -> tuple[AdmissionReading, ...]:
+        """The readings this decision was made over, in the order they were made.
+
+        What `decide` was handed, recovered from what it produced. A decision that
+        can be reduced back to its counts is a decision anything may re-derive
+        rather than replay — which is the property `backend/bench/decided.py` rests
+        on when it remembers a measurement instead of an answer.
+        """
+        return tuple(reading.counts for reading in self.readings)
 
     @property
     def models_required(self) -> int:

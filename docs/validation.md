@@ -16,6 +16,16 @@ kinds of number are measured on different denominators and are kept apart on the
 page for the same reason they are kept apart in the code
 ([ADR-0010](./adr/0010-two-layers-in-one-run-the-adaptive-layer-is-never-scored.md)).
 
+**Since #39 a cross-model admission count can include a route an earlier run
+measured.** The admission gate remembers the counts it read — never its decision, which
+is re-derived from them under the declared rule on every run
+([ADR-0032](./adr/0032-the-admission-memory-holds-the-measurement.md)) — so a route the
+attacker rediscovers is reported rather than re-measured. Every block that prints those
+counts therefore also prints how many of them the run in front of the reader measured,
+how many came from memory, and the date and the models each remembered reading was taken
+on. A figure a reader would have to cross-reference to qualify is a figure that gets
+quoted unqualified, so the qualification is on the line with it.
+
 ---
 
 ## What has never been validated, and is not claimed to have been
@@ -48,6 +58,28 @@ What follows from that, and what does not:
   renderer costs a new digest and nothing else.
 - The label is in the document itself and not only in this file, because the document
   is the thing that travels and this file is not.
+
+### The admission memory has never answered a run against the field (#39)
+
+**No route has ever been reported from the admission memory in a run against real
+provider models.** The mechanism is exercised end to end in the suite — a first run
+measures a route on both models, a second reports the same refusal and calls nothing —
+but every one of those runs is against the two stub models, and the certified
+cross-model run this bar was built for is still the paid run #15 left open.
+
+What follows from that, and what does not:
+
+- The *saving* is a claim about a code path that is tested and not about an operator's
+  bill. Nobody has yet watched a paid run skip an admission run it would have paid for.
+- The *refusals* are the tested half and they are the half that matters more. A reading
+  taken on two stubs does not answer a run on two provider models, a reading at another
+  `attempts_per_case` does not answer the declared rule, and a conclusion the current
+  arithmetic no longer reaches is measured again rather than reconciled. Each of those
+  is a test that has been driven red on purpose
+  ([ADR-0032](./adr/0032-the-admission-memory-holds-the-measurement.md)).
+- The store is machine-local and git-ignored, so **no figure in this document was ever
+  read out of it** and none can be: an import test forbids every module that produces a
+  rate, an interval, a band, a `D` or a κ from reaching it (ADR-0010).
 
 ---
 
@@ -1116,6 +1148,17 @@ written by hand and not by the attacker, so the collapse on data leakage cannot 
 explained by "the library was built by the first model" — which is the confound that
 would have made this whole check uninterpretable had the four proposals been admitted
 on one model's evidence.
+
+**All four were measured in the run that printed them**, because the admission memory
+of #39 did not exist yet. Recorded here rather than left to be inferred: a later run's
+block can carry counts an earlier run took, and this reading is the one that cannot.
+Its four are also the exact case that memory has to refuse — both readings were taken
+on `stub:obedient` and `stub:cooperative`, and a gate run on a stub measures **the
+field** not at all ([ADR-0022](./adr/0022-the-retirement-window-is-two-readings-of-one-model.md)),
+so a paid run answered from them would report a bar cleared against hardcoded replies
+as a bar cleared against the field. The models a reading was taken on are part of what
+`recall` compares before it answers
+([ADR-0032](./adr/0032-the-admission-memory-holds-the-measurement.md)).
 
 ##### What #15 leaves open, stated rather than closed quietly
 

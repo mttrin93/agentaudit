@@ -42,13 +42,11 @@ with the line it was given and records what it was shown, because what the fix
 reached the model at all.
 """
 
-import ast
 import sqlite3
 import subprocess
 import sys
 import threading
 import time
-from collections.abc import Iterator
 from contextlib import closing
 from pathlib import Path
 from typing import get_type_hints
@@ -66,7 +64,6 @@ from backend.bench.adaptive.precedent import (
     RETRIEVAL_LIMIT,
     DurablePrecedents,
     JudgedPrecedent,
-    NoVectorIndex,
     PrecedentDatabase,
 )
 from backend.bench.adaptive.precedent import __doc__ as PRECEDENT_DOC
@@ -76,7 +73,8 @@ from backend.bench.remediation import (
     RemediationFailed,
     suggest_remediation,
 )
-from backend.tests.conftest import PRECEDENT_TARGET, a_finding
+from backend.bench.store import NoVectorIndex
+from backend.tests.conftest import PRECEDENT_TARGET, a_finding, reachable_from
 
 BACKEND = Path(__file__).resolve().parents[1]
 REPOSITORY = BACKEND.parent
@@ -448,7 +446,7 @@ A_WRITER_HAS_FINISHED = 60.0
 """How long one writer process is given to do its writes and exit.
 
 Generous, because the wait is not what is under test: a writer queueing behind
-another for up to `precedent.WRITE_WAIT_SECONDS` is the behaviour being asked for,
+another for up to `store.WRITE_WAIT_SECONDS` is the behaviour being asked for,
 and a limit tight enough to catch that would fail the test for the thing it exists
 to prove.
 """
@@ -669,7 +667,7 @@ def test_the_judge_cannot_reach_the_store_through_any_module_it_imports() -> Non
     # blinding channel reopened by another route.
     reachable = [
         name
-        for name in _reachable_from(JUDGE_SOURCE)
+        for name in reachable_from(JUDGE_SOURCE)
         if "precedent" in name.lower() or "remediation" in name.lower()
     ]
     assert not reachable, (
@@ -685,7 +683,7 @@ def test_the_adjudicator_cannot_reach_the_store_through_any_module_it_imports() 
     # figure that decides whether a judged family may be reported at all.
     reachable = [
         name
-        for name in _reachable_from(ADJUDICATION_SOURCE)
+        for name in reachable_from(ADJUDICATION_SOURCE)
         if "precedent" in name.lower() or "remediation" in name.lower()
     ]
     assert not reachable, (
@@ -702,7 +700,7 @@ def test_the_store_a_run_uses_cannot_be_the_in_memory_double() -> None:
     # durability.
     reachable = [
         name
-        for name in _reachable_from(PRECEDENT_SOURCE)
+        for name in reachable_from(PRECEDENT_SOURCE)
         if "store.memory" in name or "InMemoryStore" in name
     ]
     assert not reachable, (
@@ -831,55 +829,3 @@ def test_the_ignored_names_are_the_files_the_store_actually_writes() -> None:
     """
     assert DEFAULT_STORE_PATH == PRECEDENT_DIRECTORY / "findings.sqlite"
     assert LEGACY_STORE_PATH == PRECEDENT_DIRECTORY / "findings.json"
-
-
-# --- Reading the import graph -----------------------------------------------
-
-
-def _reachable_from(source: Path) -> set[str]:
-    """Every name reachable from that module, following first-party imports.
-
-    Transitive where the repository's other import tests are direct, and that is
-    the point of it here: the two prohibitions this file enforces are about
-    *reachability*, and a module that imports a module that imports the store has
-    reached the store.
-    """
-    seen: set[Path] = {source}
-    names: set[str] = set()
-    pending = [source]
-    while pending:
-        for name in _imports_of(pending.pop()):
-            names.add(name)
-            module = _module_file(name)
-            if module is not None and module not in seen:
-                seen.add(module)
-                pending.append(module)
-    return names
-
-
-def _imports_of(source: Path) -> Iterator[str]:
-    """Every module and name the given module imports, dotted."""
-    for node in ast.walk(ast.parse(source.read_text(encoding="utf-8"))):
-        if isinstance(node, ast.Import):
-            yield from (alias.name for alias in node.names)
-        elif isinstance(node, ast.ImportFrom):
-            module = node.module or ""
-            yield module
-            yield from (f"{module}.{alias.name}" for alias in node.names)
-
-
-def _module_file(dotted: str) -> Path | None:
-    """The file a first-party dotted name refers to, or `None` for anything else.
-
-    `None` for a third-party package and for an imported symbol, so the walk
-    follows the repository's own modules and stops at its boundary. A dependency's
-    import graph is not where this prohibition can be broken.
-    """
-    if not dotted.startswith("backend"):
-        return None
-    candidate = REPOSITORY / Path(*dotted.split("."))
-    if candidate.with_suffix(".py").is_file():
-        return candidate.with_suffix(".py")
-    if (candidate / "__init__.py").is_file():
-        return candidate / "__init__.py"
-    return None

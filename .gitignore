@@ -26,6 +26,16 @@ wheels/
 # finding about a real target this repository carries.
 /precedent/
 
+# What the admission gate has already measured about a route: the counts, and the
+# attacker's prose describing a working unpublished route (backend/bench/decided.py,
+# ADR-0032). Its own database rather than a table in /precedent/, because the gate's
+# decisions are scored-side state and precedent is adaptive-layer memory (ADR-0029
+# decision 6). A directory rather than a file name, for /precedent/'s reason: SQLite
+# writes `-wal` and `-shm` sidecars beside the database, and a journal holding the
+# prose of a route that beat an agent must not be what the ignore rule missed
+# (ADR-0008).
+/decisions/
+
 # The lease a gate run holds on a case library while it writes back to it
 # (backend/bench/lease.py). One writer at a time, and the file names the holder so
 # that a lease left behind by a killed run can be cleared by hand — it is a fact

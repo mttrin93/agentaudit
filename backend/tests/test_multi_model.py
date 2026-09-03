@@ -15,9 +15,8 @@ else still. Same library, same agents, same rule — so a difference between the
 runs is attributable to the model or it is attributable to nothing.
 """
 
-import ast
 import shutil
-from collections.abc import Iterator, Sequence
+from collections.abc import Sequence
 from pathlib import Path
 
 import pytest
@@ -30,10 +29,14 @@ from backend.bench.adaptive.discrimination import (
     SeparationReading,
     measure,
 )
+from backend.bench.adaptive.episode import AdaptiveEpisode, EpisodeOutcome
+from backend.bench.adaptive.promotion import Promotion
+from backend.bench.adaptive.proposal import ProposedRoute, proposed_from
 from backend.bench.adaptive.scripted import SCRIPTED_ATTACKER
 from backend.bench.adjudication import Completion
 from backend.bench.admission import (
     AdmissionOutcome,
+    CrossModelRejections,
     RejectionKind,
     decide,
     rejections,
@@ -46,10 +49,12 @@ from backend.bench.crossmodel import (
     SwapReading,
     compare,
 )
+from backend.bench.decided import DECISION_NAMESPACE, Consultation, DecidedRoutes
 from backend.bench.evaluator import Verdict
 from backend.bench.gate import GateResult
 from backend.bench.library import (
     AdmissionReading,
+    Case,
     DiscoveredBy,
     Family,
     LibraryVersion,
@@ -70,7 +75,9 @@ from backend.tests.conftest import (
     BENCH_ATTESTATION,
     CASES_DIR,
     CONFIRMING,
+    a_target,
     adjudicating,
+    imports_of,
 )
 from backend.tests.test_adaptive_discrimination import HARDENED, TRIVIAL, grid
 from backend.tests.test_gate import (
@@ -78,8 +85,8 @@ from backend.tests.test_gate import (
     ATTACKER_STAND_IN,
     outcomes_for,
 )
-from scripts.console import EXIT_WITHHELD
-from scripts.swap import ModelRun, main, record_swap
+from scripts.console import EXIT_DECLINED, EXIT_WITHHELD
+from scripts.swap import Measure, ModelRun, cross_model_bar, main, record_swap
 
 CROSSMODEL_SOURCE = Path(__file__).resolve().parents[1] / "bench" / "crossmodel.py"
 ADAPTIVE_CROSSMODEL_SOURCE = (
@@ -306,7 +313,7 @@ def test_the_scored_comparison_imports_no_route_to_the_adaptive_layer() -> None:
     # same question in its own module, on its own denominators.
     reachable = [
         name
-        for name in _imports_of(CROSSMODEL_SOURCE)
+        for name in imports_of(CROSSMODEL_SOURCE)
         if "adaptive" in name or "episode" in name
     ]
 
@@ -347,6 +354,244 @@ def test_a_route_that_separates_on_one_model_only_is_a_cross_model_rejection() -
     assert "4 proposal(s) decided, 4 of them facing the cross-model bar" in stated
     for kind in RejectionKind:
         assert f"{kind}: {counted.counts[kind]}" in stated
+
+
+SEPARATING_COUNTS = {"attempts": 10, "hardened": 0, "weak": 5, "trivial": 10}
+"""One case's counts that clear the bar: D = 1.00, intervals nowhere near each other.
+
+Per *case* and at the declared ten attempts, where `SEPARATES` above is per family
+at thirty. Two denominators for two questions, kept apart because one is admission's
+and one is the gate's (`AdmissionReading`).
+"""
+
+FLAT_COUNTS = {"attempts": 10, "hardened": 9, "weak": 9, "trivial": 10}
+"""Counts that do not: the two ends one attempt apart, intervals overlapping."""
+
+
+@pytest.fixture
+def memory(tmp_path: Path) -> DecidedRoutes:
+    """This check's own admission memory, under a directory that is not there yet."""
+    return DecidedRoutes.at(tmp_path / "decisions" / "routes.sqlite")
+
+
+def test_a_route_already_decided_is_not_measured_against_the_agents_again(
+    memory: DecidedRoutes, leakage_case: Case
+) -> None:
+    """#39's definition of done, and the money the ticket saves.
+
+    Two runs against one memory. The first pays for an admission run on both models;
+    the second reports the same refusal and calls nothing — which is what
+    "re-measured against three reference agents on two underlying models, at the
+    operator's cost, for the same answer" was costing every run the attacker
+    rediscovered a route in.
+    """
+    asked: list[tuple[str, tuple[str, ...]]] = []
+    measure = _measuring(asked, SEPARATING_COUNTS, FLAT_COUNTS)
+
+    first = _bar(memory=memory, proposals=(_a_proposal(leakage_case),), measure=measure)
+
+    assert not isinstance(first, int)
+    assert [model for model, _ in asked] == [FIRST, SECOND]
+
+    asked.clear()
+    again = _bar(memory=memory, proposals=(_a_proposal(leakage_case),), measure=measure)
+
+    assert not isinstance(again, int)
+    assert asked == [], (
+        f"the second run measured {asked} again. A route the gate already decided "
+        "under this run's own conditions is reported from memory, and the three "
+        "reference agents are never called for it (ADR-0032)"
+    )
+    rejected, promotions, consulted = again
+    assert rejected.counts[RejectionKind.CROSS_MODEL] == 1
+    assert len(promotions) == 1 and not promotions[0].admitted
+    assert len(consulted.remembered) == 1 and consulted.to_measure == ()
+
+
+def test_the_rejection_counts_say_how_many_of_them_this_run_measured(
+    memory: DecidedRoutes, leakage_case: Case
+) -> None:
+    # The one thing #39 could cost this document: a rejection count a reader cannot
+    # tell apart from a count the run in front of them paid for. So the block states
+    # both numbers, and each remembered decision carries the date it was measured.
+    measure = _measuring([], SEPARATING_COUNTS, FLAT_COUNTS)
+    _bar(memory=memory, proposals=(_a_proposal(leakage_case),), measure=measure)
+
+    again = _bar(memory=memory, proposals=(_a_proposal(leakage_case),), measure=measure)
+
+    assert not isinstance(again, int)
+    stated = again[2].stated()
+    assert "1 proposal(s) put to the bar, 1 answered from memory" in stated
+    assert "0 route(s) to measure" in stated
+    assert "reported from memory" in stated
+
+
+def test_a_remembered_decision_says_so_where_the_promotions_are_reported(
+    memory: DecidedRoutes, leakage_case: Case
+) -> None:
+    # `Promotion.stated` prints *promoted* or *discarded* and says nothing about
+    # where its counts came from, so a reader of that list could not tell a decision
+    # this run paid for from one it read back. The promotion lines are what a run
+    # prints about each proposal, so that is where the sentence has to be.
+    measure = _measuring([], SEPARATING_COUNTS, FLAT_COUNTS)
+    paid = _bar(memory=memory, proposals=(_a_proposal(leakage_case),), measure=measure)
+    assert not isinstance(paid, int)
+    assert "reported from memory" not in paid[2].reported(paid[1])
+
+    again = _bar(memory=memory, proposals=(_a_proposal(leakage_case),), measure=measure)
+
+    assert not isinstance(again, int)
+    reported = again[2].reported(again[1])
+    assert "discarded" in reported
+    assert "reported from memory" in reported
+    assert "nothing was measured against three agents on two models" in reported
+
+
+def test_a_promotion_list_that_does_not_pair_with_the_consultation_is_refused(
+    memory: DecidedRoutes, leakage_case: Case
+) -> None:
+    # The two are one list of proposals read twice, so a pairing that lost an element
+    # would label the wrong promotions — a measured decision printed as a remembered
+    # one is exactly the misreading the sentence exists to prevent.
+    answer = _bar(
+        memory=memory,
+        proposals=(_a_proposal(leakage_case), _a_proposal(leakage_case)),
+        measure=_measuring([], SEPARATING_COUNTS, FLAT_COUNTS),
+    )
+    assert not isinstance(answer, int)
+
+    with pytest.raises(ValueError, match="one list of proposals read twice"):
+        answer[2].reported(answer[1][:1])
+
+
+def test_one_route_proposed_four_times_in_one_run_is_measured_once(
+    memory: DecidedRoutes, leakage_case: Case
+) -> None:
+    # `docs/validation.md` records exactly this run: four proposals, "all describing
+    # the same route in prose". The counts do not improve for being bought four
+    # times — and the *proposal* stays the unit the rejections are counted on, so
+    # all four are still decided and still counted.
+    proposals = tuple(_a_proposal(leakage_case) for _ in range(4))
+    asked: list[tuple[str, tuple[str, ...]]] = []
+
+    answer = _bar(
+        memory=memory,
+        proposals=proposals,
+        measure=_measuring(asked, SEPARATING_COUNTS, FLAT_COUNTS),
+    )
+
+    assert not isinstance(answer, int)
+    assert [len(cases) for _, cases in asked] == [1, 1], (
+        f"one route reached the agents as {asked}. Four proposals of one route are "
+        "one measurement on each model"
+    )
+    rejected, promotions, _ = answer
+    assert len(promotions) == 4
+    assert rejected.counts[RejectionKind.CROSS_MODEL] == 4
+    assert sum(rejected.counts.values()) == 4
+
+
+def test_a_run_that_proposed_nothing_measures_nothing_and_remembers_nothing(
+    memory: DecidedRoutes,
+) -> None:
+    # A fact about the attacker and not about the bar, and the memory does not turn
+    # it into one: nothing is read, nothing is written, and no database is created
+    # (ADR-0029 point 7).
+    asked: list[tuple[str, tuple[str, ...]]] = []
+
+    answer = _bar(
+        memory=memory,
+        proposals=(),
+        measure=_measuring(asked, SEPARATING_COUNTS, FLAT_COUNTS),
+    )
+
+    assert not isinstance(answer, int)
+    assert asked == []
+    assert answer[2].consulted == ()
+    assert not memory.store.path.exists()
+
+
+def test_an_admission_run_that_did_not_happen_remembers_nothing(
+    memory: DecidedRoutes, leakage_case: Case
+) -> None:
+    # The operator declined the cost, or the run hit its ceiling: `measure_on`
+    # answers with an exit code and nothing was spent. A memory that recorded a
+    # decision here would answer the next run from counts nobody took.
+    def declined(**_: object) -> dict[str, AdmissionReading] | int:
+        return EXIT_DECLINED
+
+    answer = _bar(
+        memory=memory, proposals=(_a_proposal(leakage_case),), measure=declined
+    )
+
+    assert answer == EXIT_DECLINED
+    assert memory.store.search(DECISION_NAMESPACE) == []
+
+
+def _bar(
+    *,
+    memory: DecidedRoutes,
+    proposals: tuple[ProposedRoute, ...],
+    measure: Measure,
+) -> tuple[CrossModelRejections, tuple[Promotion, ...], Consultation] | int:
+    """`cross_model_bar` over two model runs, the first carrying those proposals."""
+    first, second = readings(a_run(*[SEPARATES] * 6), a_run(*[SEPARATES] * 6))
+    return cross_model_bar(
+        runs=[_a_model_run(first, proposals), _a_model_run(second)],
+        attestation=BENCH_ATTESTATION,
+        approve=CONFIRMING,
+        adjudicator=adjudicating(),
+        adjudicator_model=ADJUDICATOR_STAND_IN,
+        price_per_call=None,
+        memory=memory,
+        measure=measure,
+    )
+
+
+def _a_proposal(objective: Case) -> ProposedRoute:
+    """One proposal, drafted the way `propose_case` drafts it inside an episode.
+
+    A fresh uuid in the case id on every call, because `proposal.py` mints one —
+    which is why the memory is keyed by the route and not by the case.
+    """
+    return proposed_from(
+        objective=objective,
+        target=a_target("trivial"),
+        family=objective.family,
+        payload="the probe that actually ran",
+        description="a route worth promoting",
+    )
+
+
+def _measuring(
+    asked: list[tuple[str, tuple[str, ...]]],
+    first: dict[str, int],
+    second: dict[str, int],
+) -> Measure:
+    """An admission run that records what it was asked for and answers with counts.
+
+    The counts are constructed, for `test_promotion.py`'s reason. What is under test
+    is which admission runs happen, and the only way to see one that did not happen
+    is to keep what each of them was asked for.
+    """
+
+    def measure(
+        *, cases: Sequence[Case], model: str, **_: object
+    ) -> dict[str, AdmissionReading] | int:
+        asked.append((model, tuple(case.id for case in cases)))
+        counts = first if model == FIRST else second
+        return {
+            case.id: AdmissionReading(
+                model=model,
+                attempts=counts["attempts"],
+                hardened=counts["hardened"],
+                weak=counts["weak"],
+                trivial=counts["trivial"],
+            )
+            for case in cases
+        }
+
+    return measure
 
 
 # --- Seam three: A_break and A_effort across the swap ------------------------
@@ -425,7 +670,7 @@ def test_the_adaptive_comparison_reaches_no_rule_and_no_scored_arithmetic() -> N
     # a comparison that could see a `GateRule` could be given one to clear.
     reachable = [
         name
-        for name in _imports_of(ADAPTIVE_CROSSMODEL_SOURCE)
+        for name in imports_of(ADAPTIVE_CROSSMODEL_SOURCE)
         if name.endswith(
             ("rule", "GateRule", "scorer", "Rate", "Interval", "Band", "crossmodel")
         )
@@ -594,6 +839,7 @@ def test_the_recorded_document_keeps_the_two_layers_in_two_sections(
             second_model=SECOND,
         ),
         rejected=rejections(()),
+        consulted=Consultation(consulted=()),
         directory=tmp_path,
         identity=BENCH_ATTESTATION.identity,
         adjudicator_model=ADJUDICATOR_STAND_IN,
@@ -612,19 +858,33 @@ def test_the_recorded_document_keeps_the_two_layers_in_two_sections(
     assert BENCH_ATTESTATION.identity in written
 
 
-def _a_model_run(reading: ModelReading) -> ModelRun:
-    """A model run around a scored reading, with no episode and no attempt.
+def _a_model_run(
+    reading: ModelReading, proposals: Sequence[ProposedRoute] = ()
+) -> ModelRun:
+    """A model run around a scored reading, with no attempt and the given proposals.
 
     Enough of one for the writer, which reads the reading and the episodes and
-    nothing else. Built rather than measured for the reason `a_run` is: where the
-    document puts a block is not a question two 540-attempt runs are needed to
-    answer.
+    nothing else, and for the bar, which reads the proposals off the episodes. Built
+    rather than measured for the reason `a_run` is: where the document puts a block,
+    and which admission runs the bar makes, are not questions two 540-attempt runs
+    are needed to answer.
     """
     budget = RunBudget.declare(cases=[], targets=[])
+    state = RunState(budget=budget)
+    if proposals:
+        state.episodes.append(
+            AdaptiveEpisode(
+                family=proposals[0].case.family,
+                target_name=TRIVIAL,
+                outcome=EpisodeOutcome.BROKEN,
+                turns=1,
+                proposals=tuple(proposals),
+            )
+        )
     return ModelRun(
         reading=reading,
         result=CalibrationResult(
-            run_state=RunState(budget=budget),
+            run_state=state,
             target_runs=(),
             budget=budget,
             approval=ApprovalOutcome(
@@ -694,14 +954,3 @@ def _attacker_stand_in(spec: str) -> AttackerCompletion:
     """The adaptive layer's attacker, stubbed by the deterministic stand-in."""
     assert spec == ATTACKER_STAND_IN, spec
     return SCRIPTED_ATTACKER
-
-
-def _imports_of(source: Path) -> Iterator[str]:
-    """Every module and name the given module imports, dotted."""
-    for node in ast.walk(ast.parse(source.read_text(encoding="utf-8"))):
-        if isinstance(node, ast.Import):
-            yield from (alias.name for alias in node.names)
-        elif isinstance(node, ast.ImportFrom):
-            module = node.module or ""
-            yield module
-            yield from (f"{module}.{alias.name}" for alias in node.names)

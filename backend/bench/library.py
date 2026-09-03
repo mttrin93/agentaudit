@@ -16,7 +16,7 @@ a consumer reads the class off the record and never infers it from the family na
 
 import hashlib
 import tomllib
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, fields
 from datetime import date
 from enum import StrEnum
@@ -323,6 +323,43 @@ class AdmissionReading:
     """The model that decided the verdicts, for a judged case. `None` for a case
     a success condition decided, where no instrument stood between the reply and
     the verdict."""
+
+    def stored(self) -> dict[str, Any]:
+        """The reading as a mapping, in the keys `read` takes back.
+
+        The inverse of `read`, here beside it so that a store writing a reading and
+        a loader reading one cannot drift on a key name. Only
+        `backend/bench/decided.py` writes one today: a case record's `[admission]`
+        block is hand-written TOML, not something the bench serialises.
+        """
+        return {
+            "model": self.model,
+            "attempts": self.attempts,
+            "hardened": self.hardened,
+            "weak": self.weak,
+            "trivial": self.trivial,
+            "adjudicator": self.adjudicator,
+        }
+
+    @classmethod
+    def read(cls, value: Mapping[str, Any]) -> "AdmissionReading":
+        """One reading out of a mapping, whoever wrote the mapping.
+
+        Three callers read these six fields — a case record's `[admission]` block, an
+        entry of its decay series, and the admission memory's own rows — and they
+        used to be three copies of the same six lines. The coercions are here rather
+        than at each: a TOML loader hands back integers already and a JSON one may
+        hand back anything, so the one that has to be defensive sets the shape.
+        """
+        adjudicator = value.get("adjudicator")
+        return cls(
+            model=str(value["model"]),
+            attempts=int(value["attempts"]),
+            hardened=int(value["hardened"]),
+            weak=int(value["weak"]),
+            trivial=int(value["trivial"]),
+            adjudicator=None if adjudicator is None else str(adjudicator),
+        )
 
     def __post_init__(self) -> None:
         if self.attempts <= 0:
@@ -795,17 +832,7 @@ def _admission(block: dict[str, Any] | None) -> AdmissionRecord | None:
     return AdmissionRecord(
         bar=AdmissionBar(block["bar"]),
         admitted_on=block["admitted_on"],
-        readings=tuple(
-            AdmissionReading(
-                model=reading["model"],
-                attempts=reading["attempts"],
-                hardened=reading["hardened"],
-                weak=reading["weak"],
-                trivial=reading["trivial"],
-                adjudicator=reading.get("adjudicator"),
-            )
-            for reading in block["readings"]
-        ),
+        readings=tuple(AdmissionReading.read(reading) for reading in block["readings"]),
     )
 
 
@@ -822,14 +849,7 @@ def _reading(entry: dict[str, Any]) -> GateReading:
         ran_on=entry["ran_on"],
         fit_to_report=entry["fit_to_report"],
         measured_the_field=entry["measured_the_field"],
-        counts=AdmissionReading(
-            model=entry["model"],
-            attempts=entry["attempts"],
-            hardened=entry["hardened"],
-            weak=entry["weak"],
-            trivial=entry["trivial"],
-            adjudicator=entry.get("adjudicator"),
-        ),
+        counts=AdmissionReading.read(entry),
     )
 
 

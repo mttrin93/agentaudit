@@ -11,6 +11,7 @@ that supplied consent by default would make the halt invisible in exactly the
 tests that are supposed to demonstrate it.
 """
 
+import ast
 import threading
 import time
 from collections.abc import Iterator
@@ -24,6 +25,7 @@ from fastapi.testclient import TestClient
 from opentelemetry import context as otel_context
 from opentelemetry import trace as otel_trace
 
+from backend.bench import decided
 from backend.bench.adaptive import precedent
 from backend.bench.adaptive.precedent import DURABLE_PRECEDENT
 from backend.bench.adjudication import Completion
@@ -34,6 +36,7 @@ from backend.bench.calibration import (
     run_calibration,
 )
 from backend.bench.contract import RetryPolicy, TargetConfig, Transcript
+from backend.bench.decided import DECIDED_ROUTES
 from backend.bench.evaluator import Verdict
 from backend.bench.judge import (
     Article,
@@ -437,6 +440,52 @@ def precedent_elsewhere(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
     _precedent_at(monkeypatch, tmp_path / "precedent" / "findings.sqlite")
 
 
+def _decisions_at(patch: pytest.MonkeyPatch, elsewhere: Path) -> None:
+    """Point every route to the admission memory at `elsewhere`.
+
+    Two of them, on `_precedent_at`'s reasoning: the module constant, which is what
+    a freshly constructed `DecisionDatabase` reads, and the shared module-level
+    object `cross_model_bar` takes as its default — which captured the real path at
+    import and would answer with it however the constant moved.
+    """
+    patch.setattr(decided, "DEFAULT_DECISION_PATH", elsewhere)
+    patch.setattr(DECIDED_ROUTES.store, "path", elsewhere)
+
+
+@pytest.fixture(scope="session", autouse=True)
+def decisions_elsewhere_for_the_session(
+    tmp_path_factory: pytest.TempPathFactory,
+) -> Iterator[None]:
+    """The redirection below, from a scope a module-scoped fixture cannot escape.
+
+    Session-scoped for the reason `precedent_elsewhere_for_the_session` is, and it
+    is the same defect being pre-empted rather than a new one: a function-scoped
+    patch is not in place while a module-scoped fixture is being built, and this
+    repository has already had one module-scoped run write a git-ignored file into
+    the working copy without anybody noticing (ADR-0029's consequences).
+    """
+    patch = pytest.MonkeyPatch()
+    _decisions_at(patch, tmp_path_factory.mktemp("decisions") / "routes.sqlite")
+    yield
+    patch.undo()
+
+
+@pytest.fixture(autouse=True)
+def decisions_elsewhere(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """No test reads or writes the admission memory a real run uses.
+
+    Autouse and unconditional, on `precedent_elsewhere`'s reasoning and with one
+    addition of its own: what this memory changes is *whether a route is measured*,
+    so a test that read the engineer's own file would be a test whose admission run
+    happened or did not depending on what that engineer had run last month.
+
+    A fresh database per test, because the memory accumulates by design: a decision
+    one test remembered would be a decision the next test's proposal was answered
+    from, and the suite's result would depend on its order.
+    """
+    _decisions_at(monkeypatch, tmp_path / "decisions" / "routes.sqlite")
+
+
 @pytest.fixture(scope="session", autouse=True)
 def checkpoints_elsewhere(
     tmp_path_factory: pytest.TempPathFactory,
@@ -719,3 +768,64 @@ def served_references(
             ),
             plant_nonce=plant,
         )
+
+
+# --- Reading the import graph, for the tests that enforce a wall -------------
+
+BACKEND = Path(__file__).resolve().parents[1]
+REPOSITORY = BACKEND.parent
+
+
+def reachable_from(source: Path) -> set[str]:
+    """Every name reachable from that module, following first-party imports.
+
+    Transitive, which is the point: a prohibition about *reachability* is not
+    enforced by reading one module's first line, and a module that imports a module
+    that imports the forbidden one has reached it.
+
+    Here rather than in the three test modules that ask the question, because there
+    were two copies of this walk before there were three walls to walk it for.
+    """
+    seen: set[Path] = {source}
+    names: set[str] = set()
+    pending = [source]
+    while pending:
+        for name in imports_of(pending.pop()):
+            names.add(name)
+            module = _module_file(name)
+            if module is not None and module not in seen:
+                seen.add(module)
+                pending.append(module)
+    return names
+
+
+def imports_of(source: Path) -> Iterator[str]:
+    """Every module and name the given module imports, dotted.
+
+    The direct question, and some walls want only this one: whether *this* module
+    names the thing, rather than whether anything it reaches does.
+    """
+    for node in ast.walk(ast.parse(source.read_text(encoding="utf-8"))):
+        if isinstance(node, ast.Import):
+            yield from (alias.name for alias in node.names)
+        elif isinstance(node, ast.ImportFrom):
+            module = node.module or ""
+            yield module
+            yield from (f"{module}.{alias.name}" for alias in node.names)
+
+
+def _module_file(dotted: str) -> Path | None:
+    """The file a first-party dotted name refers to, or `None` for anything else.
+
+    `None` for a third-party package and for an imported symbol, so the walk
+    follows the repository's own modules and stops at its boundary. A dependency's
+    import graph is not where any of these prohibitions can be broken.
+    """
+    if not dotted.startswith("backend"):
+        return None
+    candidate = REPOSITORY / Path(*dotted.split("."))
+    if candidate.with_suffix(".py").is_file():
+        return candidate.with_suffix(".py")
+    if (candidate / "__init__.py").is_file():
+        return candidate / "__init__.py"
+    return None

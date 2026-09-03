@@ -251,7 +251,7 @@ repository rather than a blank a typo could imitate.
 
 **It says nothing about the family's label, and since #47 those are two different
 claims.** Halt defeat's and disclosure denial's families claim `ASI10` and `ASI09` as
-secondary labels in `published.FAMILY_CATEGORY`, and every one of their case records
+secondary labels on their `labels.LABELS` entry, and every one of their case records
 still carries this constant: a family's label is a reading of a published category,
 a case's identifier is what *this payload* tests one case within, and the six records
 that used to give *the published lists carry no equivalent entry* as the reason now
@@ -299,10 +299,11 @@ def resolves(identifier: str) -> PublishedCategory | None:
     the copy that carries the entry, which is what stops an identifier written under
     a superseded numbering from resolving to whatever now sits at that number.
 
-    **The tag is optional here and required of a case record's claim.** A caller
-    holding a copy and asking *what is `ASI06`* is asking a question with one answer,
-    and `published.FAMILY_CATEGORY` asks exactly that with bare identifiers. A claim
-    stored on a record is a different thing and goes through `not_a_claim`.
+    **The tag is optional here and required of a claim.** A caller holding a copy and
+    asking *what is `ASI06`* is asking a question with one answer. A claim written on a
+    record is a different thing and goes through `not_a_claim` — which is every claim
+    in the tree since #45, a family's label included
+    ([ADR-0039](../../docs/adr/0039-a-familys-label-is-one-record.md)).
 
     Reads `CURRENT` and never `STORED_COPIES`, so a superseded copy answers nothing.
     """

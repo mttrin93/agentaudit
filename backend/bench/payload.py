@@ -966,24 +966,30 @@ def _gap(gap: CoverageGap) -> dict[str, str]:
 
 
 def _untested(category: UntestedCategory) -> dict[str, str]:
-    """One published agentic category no family claims, with its identifier apart.
+    """One published category no family claims, with its identifier apart.
 
     The identifier is its own key rather than folded into the category name, because
     it is the part a reader can look up: a recipient checking this report's coverage
-    against the published list matches on `ASI07`, not on a title this repository
+    against the published list matches on `ASI07:2026`, not on a title this repository
     transcribed. `stated` carries the rendered line beside them, on the same terms as
     `_gap` — the document holds what the Markdown says, so the two cannot drift.
+
+    The edition travels beside it because this block carries entries from two lists
+    since #45. The identifier names its edition and its prefix names its list, but a
+    consumer should not have to know that `LLM` means the GenAI list to say which
+    document an entry came from.
     """
     return {
         "identifier": category.identifier,
         "title": category.title,
+        "edition": category.edition,
         "reason": category.reason,
         "stated": category.stated(),
     }
 
 
 def _claim(claim: ClaimedInPart) -> dict[str, str]:
-    """One claimed agentic category, with the half of it the family does not reach.
+    """One claimed category, with the half of it the claiming family does not reach.
 
     The identifier is its own key on `_untested`'s terms — it is the part a recipient
     looks up — and the claiming family is **not** here at all, for the reason
@@ -995,6 +1001,7 @@ def _claim(claim: ClaimedInPart) -> dict[str, str]:
     return {
         "identifier": claim.identifier,
         "title": claim.title,
+        "edition": claim.edition,
         "not_reached": claim.not_reached,
         "stated": claim.stated(),
     }

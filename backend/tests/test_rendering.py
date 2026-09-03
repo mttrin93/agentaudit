@@ -146,7 +146,7 @@ def test_every_section_states_its_own_reproducibility_and_three_read_the_payload
 
 # --- The golden digest: one document, pinned to the byte ---------------------
 
-GOLDEN_ONE_FAMILY = "c2573d476cad3397a5a2ce047d66279d5a3272b91a00b925174d9aeb8313b8c2"
+GOLDEN_ONE_FAMILY = "bae43e9671ee9ea3423f96ea6bb9a5d6b68ca1d7c143adbf01f0fc35c7a71b3d"
 """The sha256 of `_one_family()`'s rendering, written down.
 
 **A tripwire, and it is deliberately a strict one.** Every other assertion in this
@@ -199,6 +199,16 @@ absence of the four declarations is what the block then says, and a heading that
 appeared only when somebody answered would be indistinguishable from a document made
 before the scan asked. It is a declaration and not a finding, so it moved this digest
 and moved nothing in section 4.
+
+Moved a sixth time, by #45, and it is the negative-coverage section again. The GenAI
+LLM list is now subtracted from as well as the agentic one, so the untested block
+gains five entries and the claimed block five more, every published identifier in the
+section names its edition, and the paragraph that said the second copy "is not
+subtracted from here" is gone because it is no longer true
+([ADR-0039](../../docs/adr/0039-a-familys-label-is-one-record.md)). The section gets
+longer in both derived blocks at once, which is what a second subtraction costs: five
+categories are named as unreached with a reason and five as reached-in-part with a
+limit, and no figure anywhere moved.
 """
 
 
@@ -539,9 +549,9 @@ def test_a_claimed_category_prints_beside_the_half_it_does_not_reach() -> None:
     printed = " ".join(gaps_section.body)
     untested = {category.identifier for category in payload.result.untested_categories}
     for identifier, title in (
-        ("ASI03", "Identity & Privilege Abuse"),
-        ("ASI09", "Human-Agent Trust Exploitation"),
-        ("ASI10", "Rogue Agents"),
+        ("ASI03:2026", "Identity & Privilege Abuse"),
+        ("ASI09:2026", "Human-Agent Trust Exploitation"),
+        ("ASI10:2026", "Rogue Agents"),
     ):
         assert f"{identifier} {title} — tested in part" in printed
         assert identifier not in untested
@@ -571,15 +581,16 @@ def test_the_untested_published_categories_print_with_their_identifiers() -> Non
     assert "Published categories no family reaches" in body
     assert "Limits of the bench" in body
 
-    # Both lists are stored now (ADR-0036), and the report says what each copy is for:
-    # one is subtracted from, the other is what section 4's identifiers are checked
-    # against. Widened from `holds no stored copy` — the exact phrase the prose carried
-    # before the agentic copy existed — because the sentence that replaced it said the
-    # LLM identifiers "have no stored copy at all", which was true then, is false now,
-    # and slipped past an assertion pinned to the older wording.
+    # Both lists are stored (ADR-0036) and both are now subtracted from (#45), so the
+    # untested block carries entries from each. Asserted on the payload's own records
+    # rather than on the section's prose: the sentence that used to say the LLM copy
+    # "is not subtracted from here" was true when it was written, is false now, and an
+    # assertion pinned to a phrase goes quietly true the day somebody rewords it.
     assert "no stored copy" not in text
-    assert "checked against a stored copy of it" in body
-    assert "is not subtracted from here" in body
+    assert {category.edition for category in payload.result.untested_categories} == {
+        AGENTIC_TOP_10_2026.edition,
+        LLM_TOP_10_2026.edition,
+    }
     # Both editions print off their own copy and neither is spelled out here, so a
     # copy replaced by a later edition cannot leave a report naming the older one.
     assert AGENTIC_TOP_10_2026.edition in body

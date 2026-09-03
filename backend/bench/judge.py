@@ -36,9 +36,12 @@ was broken six ways by a live attacker has been un-blinded by a channel that did
 not exist when ADR-0004 was written.
 
 What the judge is *not* trusted with, the harness looks up: the article comes
-from a fixed table (`article_for`, PLAN §4 and §11) and the external identifier
-comes from the case record. A model that could choose either could widen a case's
-coverage claim past what the record says it tests.
+from a fixed table (`labels.article_for`, PLAN §4 and §11) and the external
+identifier comes from the case record. A model that could choose either could
+widen a case's coverage claim past what the record says it tests. That table is
+the family's label record and is read here rather than declared here, which is
+#45's consolidation — the article and the family's published identifiers are one
+record, in `labels.py`, and the judge is one of its readers.
 
 The narrative's quality is deliberately not unit-tested. It has its own
 evaluation — the DeepEval gold-set run producing κ per judged family (ADR-0009) —
@@ -53,6 +56,7 @@ from enum import StrEnum
 
 from backend.bench.contract import ToolTrace
 from backend.bench.evaluator import Verdict
+from backend.bench.labels import Article, article_for
 from backend.bench.library import Case, ExternalId, Family, VerdictClass
 from backend.graph.runstate import Attempt
 
@@ -64,46 +68,6 @@ client would be a judge that could be given a different endpoint later without
 anybody having to change its signature, and the signature is where the
 no-precedent constraint is held.
 """
-
-
-class Article(StrEnum):
-    """The duty a family's failure bears on. A fixed table, never a model's choice.
-
-    `map_to_article` is harness-side deliberately (PLAN §11): the mapping is the
-    project's own legal claim, written down in PLAN §4 before any code, and a
-    model free to pick a different article each run would make the report's
-    central column non-reproducible for the same reason ADR-0004 demoted the
-    judge's verdict.
-    """
-
-    RECORD_KEEPING = "12"
-    """Applies to every family. The article a disagreement is recorded under."""
-
-    HUMAN_OVERSIGHT = "14"
-    STOP_CONTROL = "14(4)(e)"
-    ROBUSTNESS_AND_CYBERSECURITY = "15"
-    TRANSPARENCY = "50"
-
-
-def article_for(family: Family) -> Article:
-    """The article this family's failure bears on, from PLAN §4.
-
-    The match has no fallback branch on purpose: a seventh family must fail the
-    type check rather than acquire an article by default.
-    """
-    match family:
-        case Family.INDIRECT_PROMPT_INJECTION:
-            return Article.ROBUSTNESS_AND_CYBERSECURITY
-        case Family.DATA_LEAKAGE:
-            return Article.ROBUSTNESS_AND_CYBERSECURITY
-        case Family.WRONGFUL_COMMITMENT:
-            return Article.ROBUSTNESS_AND_CYBERSECURITY
-        case Family.SCOPE_CREEP:
-            return Article.HUMAN_OVERSIGHT
-        case Family.HALT_DEFEAT:
-            return Article.STOP_CONTROL
-        case Family.DISCLOSURE_DENIAL:
-            return Article.TRANSPARENCY
 
 
 class Exposure(StrEnum):

@@ -289,6 +289,52 @@ the same rates, intervals, bands and `D` whatever is declared.
   a declared field, a reading of it and a block in section 3 of the rendering; the
   golden rendering digest moved once, on purpose, and the case records did not.
 
+### Five GenAI LLM categories are now claimed and five are refused, and nothing here can check either (#45)
+
+**The second published list is subtracted from for the first time**
+([ADR-0039](./adr/0039-a-familys-label-is-one-record.md)). Until #45 the negative
+coverage in every report was the agentic list alone; the GenAI LLM list was stored
+(#44) and read only to check what a *case* claimed. Ten new pieces of prose now print
+in every report — five reasons why an unclaimed GenAI LLM category is unclaimed and
+five limits on the categories the six families claim — and the suite checks the shape
+of all ten and the truth of none.
+
+- **The direction of the risk is the same one-way direction #47 recorded, doubled.**
+  Five entries left an untested list that never had them, which is not a regression;
+  what is new is that `LLM01`, `LLM02`, `LLM03`, `LLM07` and `LLM08` are now printed
+  as *tested in part* by this bench. Each of those is a judgement about what a
+  published category covers, made against material that is not in the tree — only
+  identifiers and titles are stored (ADR-0036's Attribution note). A reader can check
+  the limit beside each claim; nothing in the suite can.
+- **The two claims on `data_leakage` are PLAN §4's and were never separately argued.**
+  That row of the plan has said `LLM02:2026` / `LLM08:2026` since before any code, and
+  #45 transcribed it rather than deciding it. `LLM08` Hidden Context Exposure is the
+  2026 edition's renaming of `LLM07:2025` System Prompt Leakage, which is a published
+  fact `editions.RETITLED` carries; that the family's cases reach *both* halves — a
+  configured credential and the system prompt — is a reading of three case records
+  that no test asserts.
+- **Five reasons say *never* and none says *not yet*.** Supply chain, data and model
+  poisoning, unbounded consumption, vector and embedding weaknesses and improper
+  output handling are all refused as structurally out of reach for a bench that speaks
+  to one endpoint. Two of those — the training set and the pre-trained components —
+  are PLAN §4 permanent limits and are the strongest of the five. Unbounded
+  consumption is refused on a different footing and it is worth naming: measuring it
+  would mean driving a target until it gave way, which this bench declines to do to a
+  system that invited it. That is a decision about conduct, not a limit of the
+  instrument, and a reader may disagree with it.
+- **An elective family's label subtracts nothing, and that is a choice with a cost.**
+  `ASI06` is on `ElectiveFamily.MEMORY_POISONING`'s label and is still printed as
+  untested. The reason now says the elective family carrying its label has no cases,
+  which is true today and becomes false the moment #48 lands — at which point the
+  entry has to move to the claimed block with a limit, or the report will be
+  understating what the bench can be asked for. Nothing automates that: it is three
+  visible edits, which is ADR-0037's consequence and this file's reminder of it.
+- **No figure moved and no case record changed.** The library digest is unchanged at
+  `sha256:8f1932c50602`; the golden rendering digest moved, because the
+  negative-coverage section is longer in both derived blocks. The gate citation of
+  2026-08-24 is as far from the live library as #47 left it, and no reading in this
+  file was re-measured.
+
 ---
 
 ## Pre-gate observations

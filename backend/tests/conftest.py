@@ -41,12 +41,12 @@ from backend.bench.contract import RetryPolicy, TargetConfig, Transcript
 from backend.bench.decided import DECIDED_ROUTES
 from backend.bench.evaluator import Verdict
 from backend.bench.judge import (
-    Article,
     Exposure,
     Finding,
     Narrative,
     Reading,
 )
+from backend.bench.labels import Article
 from backend.bench.library import (
     AdmissionReading,
     Case,

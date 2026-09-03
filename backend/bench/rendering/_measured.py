@@ -308,7 +308,7 @@ def _not_tested(
 
     The three blocks are not the same claim and are not merged. The first names
     published categories no family in the library reaches, and it is **subtracted**
-    from a stored copy of the list rather than written out by hand, so a family added
+    from a stored copy of each list rather than written out by hand, so a family added
     later shortens it without anyone editing this function. The second names the
     categories a family *does* reach and where each claim stops, which is the only
     thing that shortens the first — a category leaving the untested block with nothing
@@ -330,16 +330,18 @@ def _not_tested(
             "defect in this run.",
             "",
             "**Published categories no family reaches** — "
-            f"{AGENTIC_TOP_10_2026.edition}, "
+            f"{AGENTIC_TOP_10_2026.edition} and {LLM_TOP_10_2026.edition}, each "
             "subtracted from the stored copy of that list rather than written out "
             "here, so this block shortens by itself when a family that claims one of "
-            "them is admitted (ADR-0002).",
+            "them is admitted (ADR-0002). Every entry names the edition it is from, "
+            "because the same number is a different entry in a different edition of "
+            "one list.",
             "",
             *(f"- {category['stated']}." for category in untested),
             "",
             "**Published categories a family claims, and the half of each it does "
-            "not reach** — the same copy, and the only thing that shortens the list "
-            "above. A family *tests one case within* an identifier and it is not "
+            "not reach** — the same two copies, and the only thing that shortens the "
+            "list above. A family *tests one case within* an identifier and it is not "
             "that identifier (ADR-0002), so a claim is a claim on part of a "
             "category, and the part it does not cover is stated beside it rather "
             "than left to be inferred from the claim's absence from the block "
@@ -352,18 +354,18 @@ def _not_tested(
             "",
             *(f"- {gap['stated']}." for gap in gaps),
             "",
-            "Two of the lists above are derived and one is declared, and the copy "
-            "the derivations read is a transcription rather than the source: the "
-            "OWASP "
-            "resource page refuses automated retrieval, so the identifiers and titles "
-            "were taken from two independent readings that agreed on all ten. What "
-            "that supports is agreement between two readings, and a reader who needs "
-            "the authoritative wording goes to OWASP. The identifiers carried by "
-            f"section 4 name the **{LLM_TOP_10_2026.edition}** and are checked "
-            "against a stored copy of it, so a case claiming an identifier that "
-            "edition does not carry does not load; that copy is not subtracted from "
-            "here, so a category on it that no family reaches is not named above. "
-            "The per-family notes in section 4 carry the other half of the same "
+            "Two of the lists above are derived and one is declared, and the copies "
+            "the derivations read are transcriptions rather than the source. The "
+            "OWASP resource page refuses automated retrieval, so the agentic "
+            "identifiers and titles were taken from two independent readings that "
+            "agreed on all ten; the GenAI LLM list was read from the publishing "
+            "project's own repository and corroborated by three further readings, "
+            "and two readings that disagreed with it are recorded beside the copy "
+            "rather than discarded. What that supports is a faithful reading, and a "
+            "reader who needs the authoritative wording goes to OWASP. The "
+            "identifiers carried by section 4 are checked against the same copies, "
+            "so a case claiming an identifier neither edition carries does not load, "
+            "and the per-family notes there carry the other half of the same "
             "disclosure (ADR-0002).",
         ),
     )

@@ -33,7 +33,6 @@ from backend.bench.adaptive.precedent import NO_PRECEDENT
 from backend.bench.calibration import CalibrationResult, run_calibration
 from backend.bench.evaluator import Verdict
 from backend.bench.judge import (
-    Article,
     Exposure,
     JudgeBrief,
     JudgeFailed,
@@ -41,6 +40,7 @@ from backend.bench.judge import (
     Reading,
     assess_finding,
 )
+from backend.bench.labels import Article
 from backend.bench.library import Case, Family
 from backend.bench.narration import (
     Narration,

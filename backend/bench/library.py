@@ -67,9 +67,12 @@ class ElectiveFamily(StrEnum):
     cases.
 
     The `ASI` and `LLM` identifiers below say which published entry each family was
-    selected from. They are **not** the family's label: that is a record holding the
-    agentic id, the LLM id and the articles in one place, read by report, payload and
-    UI, and it is #45's to build.
+    selected from, and they are not the label: the label is a record holding the
+    agentic identifiers, the LLM identifiers and the articles, and the tier's three are
+    `labels.ELECTIVE_LABELS`
+    ([ADR-0039](../../docs/adr/0039-a-familys-label-is-one-record.md)). It is a table
+    of its own rather than rows in the six's, and nothing that shortens a printed
+    coverage claim reads it.
     """
 
     MEMORY_POISONING = "memory_poisoning"

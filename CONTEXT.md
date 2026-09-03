@@ -69,6 +69,19 @@ gate runs on **the field** becomes *eligible to enter the six*; entry is a
 library-version event a human declares before a run, and never something a counter does.
 _Avoid_: using **family** for one, seventh family, optional family, extra family
 
+**Label**:
+What a **family** is labelled with: the entries it claims on each of the two published
+lists and the EU AI Act articles its failure bears on, held as one record per family
+([ADR-0039](./docs/adr/0039-a-familys-label-is-one-record.md)). A *secondary* label and
+never an identity — a family **tests one case within** an entry and it is not that
+entry ([ADR-0002](./docs/adr/0002-owasp-ids-as-secondary-labels.md)). Not the same
+claim as a **case**'s identifier, which says which case inside one published entry that
+payload tests; neither is derived from the other, and a family whose cases claim no
+published entry can still carry a label. An **elective family** carries a label of the
+same shape in a table of its own, and an elective label makes no coverage claim: the
+entry it names stays listed as untested until a family with cases claims it.
+_Avoid_: the family's OWASP number, category, mapping, taxonomy
+
 **Case**:
 One executable test belonging to a family, consisting of a payload and the criterion that decides its verdict — a success condition, or, for a judged family, the semantic question stated on the record. Three cases per family as authored; a family the admission gate has grown holds more, and the count is read off the library rather than declared.
 _Avoid_: test, probe, scenario, payload

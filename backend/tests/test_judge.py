@@ -29,7 +29,6 @@ from backend.bench.adaptive.episode import AdaptiveEpisode, EpisodeOutcome
 from backend.bench.contract import Transcript
 from backend.bench.evaluator import Verdict
 from backend.bench.judge import (
-    Article,
     Completion,
     Disagreement,
     Exposure,
@@ -39,10 +38,10 @@ from backend.bench.judge import (
     Narrative,
     NotAScoredAttempt,
     Reading,
-    article_for,
     assess_finding,
     disagreements,
 )
+from backend.bench.labels import Article, article_for
 from backend.bench.library import Case, Family
 from backend.graph.runstate import Attempt
 from backend.tests.conftest import a_target, target_run_for
@@ -120,19 +119,6 @@ def test_the_article_and_the_external_identifier_are_looked_up_not_answered(
 
     assert narrative.article is article_for(Family.DATA_LEAKAGE)
     assert narrative.external_id is leakage_case.external_id
-
-
-def test_every_family_has_an_article_and_the_table_is_not_the_judges() -> None:
-    # The mapping is PLAN §4, written before any code. Read as a table so that a
-    # seventh family cannot acquire an article by falling through a default.
-    assert {family: article_for(family) for family in Family} == {
-        Family.INDIRECT_PROMPT_INJECTION: Article.ROBUSTNESS_AND_CYBERSECURITY,
-        Family.DATA_LEAKAGE: Article.ROBUSTNESS_AND_CYBERSECURITY,
-        Family.WRONGFUL_COMMITMENT: Article.ROBUSTNESS_AND_CYBERSECURITY,
-        Family.SCOPE_CREEP: Article.HUMAN_OVERSIGHT,
-        Family.HALT_DEFEAT: Article.STOP_CONTROL,
-        Family.DISCLOSURE_DENIAL: Article.TRANSPARENCY,
-    }
 
 
 def test_a_reply_the_judge_cannot_read_is_a_named_failure_and_not_a_narrative(

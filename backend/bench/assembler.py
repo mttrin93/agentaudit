@@ -58,7 +58,7 @@ from backend.bench.library import Case, ExternalId, Family, VerdictClass
 from backend.bench.measurability import NotMeasurable
 from backend.bench.published import (
     CLAIMED_IN_PART,
-    UNTESTED_AGENTIC_CATEGORIES,
+    UNTESTED_CATEGORIES,
     ClaimedInPart,
     UntestedCategory,
 )
@@ -548,24 +548,21 @@ report that would read better without it.
 entries on anybody's published list — no register of risks carries "there is no
 ground truth for the target's domain" — so there is nothing to subtract them from and
 declaring them is the only available form. The half of this disclosure that *is* a
-published list is now derived rather than declared: `published.py` holds the copy of
-the OWASP agentic list and subtracts the categories the library's families claim, so
+published list is now derived rather than declared: `published.py` subtracts the
+categories the library's families claim from the stored copy of each list, so
 `UntestedCategory`, `ClaimedInPart` and `CoverageGap` are three different claims and
 print in three different blocks. The first names a published category no family
 reaches; the second names one a family *does* reach and where its reach stops
 ([ADR-0037](../../docs/adr/0037-a-claimed-category-is-claimed-in-part.md)); this one
 says the bench cannot measure something at all, and no published register carries it.
 
-**The gap that is left.** Both lists are stored now — `editions.py` holds a copy of
-each, and the `LLM0x:2026` identifiers on the case records resolve against one or the
-case does not load
-([ADR-0036](../../docs/adr/0036-a-published-identifier-resolves-to-a-stored-copy.md)).
-What is still not derived is that list's **negative** coverage: the block below
-subtracts over the agentic copy alone, so a GenAI LLM category no family reaches is
-not named here. Subtracting over the second copy removes an entry from an untested
-list per family that claims one, which is a coverage claim getting wider in the one
-direction nobody checks, and it needs a reason beside every unclaimed entry the way
-`OUT_OF_REACH` carries one. Tracked rather than absorbed here.
+**Both lists, since #45.** `editions.py` holds a copy of each and a family's label
+holds its claims on both
+([ADR-0039](../../docs/adr/0039-a-familys-label-is-one-record.md)), so the derived
+blocks below are two subtractions concatenated rather than one over the agentic copy
+with the GenAI LLM list unaccounted for. Every entry the second copy carries is now
+either claimed with a stated limit or listed with a reason, which is what a subtraction
+costs in the direction nobody checks.
 
 The per-family `coverage` notes carry what each case does *not* test inside the
 identifier it claims, which is the other half of the same disclosure and is derived
@@ -606,8 +603,8 @@ class TargetResult:
     `untested_categories` does.
     """
 
-    untested_categories: tuple[UntestedCategory, ...] = UNTESTED_AGENTIC_CATEGORIES
-    """Published agentic categories no family in the library claims (`published.py`).
+    untested_categories: tuple[UntestedCategory, ...] = UNTESTED_CATEGORIES
+    """Published categories no family in the library claims, on either list.
 
     Derived from the library's families and never from the families this run measured,
     so it is the same tuple on every result at a given library version. That is what

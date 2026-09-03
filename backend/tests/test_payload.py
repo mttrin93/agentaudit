@@ -42,6 +42,7 @@ from backend.bench.assembler import (
 )
 from backend.bench.capability import ReasoningEffort
 from backend.bench.contract import AgentCapability, DeclaredControl, Transcript
+from backend.bench.editions import AGENTIC_TOP_10_2026, LLM_TOP_10_2026
 from backend.bench.elective import ElectiveSelection
 from backend.bench.library import (
     Case,
@@ -464,16 +465,24 @@ def test_no_field_in_the_payload_can_hold_a_gate_decision_about_the_target() -> 
 
 def test_an_untested_category_carries_its_identifier_as_its_own_key() -> None:
     # A recipient checking this report's coverage against the published list matches
-    # on ASI07, not on a title this repository transcribed — so the identifier is a
-    # key of its own rather than prose a reader has to parse out of a sentence.
+    # on ASI07:2026, not on a title this repository transcribed — so the identifier is
+    # a key of its own rather than prose a reader has to parse out of a sentence.
     categories = document(a_payload())["untested_categories"]
     assert categories
 
     for entry in categories:
-        assert set(entry) == {"identifier", "title", "reason", "stated"}
-        assert entry["identifier"].startswith("ASI")
+        assert set(entry) == {"identifier", "title", "edition", "reason", "stated"}
         assert entry["identifier"] in entry["stated"]
         assert all(isinstance(value, str) for value in entry.values())
+
+    # Two lists, and the block says which by name. Asserted on the edition strings
+    # rather than on the shape of an identifier: a published number's prefix is the
+    # publisher's convention and not this document's promise, and reading a list out
+    # of the front of a number is the containment habit `editions.py` refuses.
+    assert {entry["edition"] for entry in categories} == {
+        AGENTIC_TOP_10_2026.edition,
+        LLM_TOP_10_2026.edition,
+    }
 
 
 def test_a_claim_carries_no_family_and_the_half_it_does_not_reach() -> None:
@@ -491,8 +500,13 @@ def test_a_claim_carries_no_family_and_the_half_it_does_not_reach() -> None:
     assert claims
 
     for entry in claims:
-        assert set(entry) == {"identifier", "title", "not_reached", "stated"}
-        assert entry["identifier"].startswith("ASI")
+        assert set(entry) == {
+            "identifier",
+            "title",
+            "edition",
+            "not_reached",
+            "stated",
+        }
         assert all(isinstance(value, str) for value in entry.values())
         # On the line's exact opening rather than on "no family name appears in it":
         # a search for the wire names would pass a line that printed `Wrongful
@@ -500,6 +514,12 @@ def test_a_claim_carries_no_family_and_the_half_it_does_not_reach() -> None:
         assert entry["stated"].startswith(
             f"{entry['identifier']} {entry['title']} — tested in part;"
         )
+
+    # Claims on both published lists, each entry naming its own edition.
+    assert {entry["edition"] for entry in claims} == {
+        AGENTIC_TOP_10_2026.edition,
+        LLM_TOP_10_2026.edition,
+    }
 
 
 def test_the_three_claims_47_landed_are_in_the_document_and_not_in_the_untested_block() -> (  # noqa: E501
@@ -515,9 +535,9 @@ def test_the_three_claims_47_landed_are_in_the_document_and_not_in_the_untested_
 
     assert not set(claimed) & untested
     for identifier, title in (
-        ("ASI03", "Identity & Privilege Abuse"),
-        ("ASI09", "Human-Agent Trust Exploitation"),
-        ("ASI10", "Rogue Agents"),
+        ("ASI03:2026", "Identity & Privilege Abuse"),
+        ("ASI09:2026", "Human-Agent Trust Exploitation"),
+        ("ASI10:2026", "Rogue Agents"),
     ):
         assert claimed[identifier]["title"] == title
         assert claimed[identifier]["not_reached"].strip()

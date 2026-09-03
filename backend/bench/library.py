@@ -328,9 +328,12 @@ class AdmissionReading:
         """The reading as a mapping, in the keys `read` takes back.
 
         The inverse of `read`, here beside it so that a store writing a reading and
-        a loader reading one cannot drift on a key name. Only
-        `backend/bench/decided.py` writes one today: a case record's `[admission]`
-        block is hand-written TOML, not something the bench serialises.
+        a loader reading one cannot drift on a key name. `backend/bench/decided.py`
+        is its one caller: it is the JSON shape the admission memory's rows are in.
+        A case record's `[admission]` block is TOML and has its own writer —
+        `entry.admission_block`, which the bench uses to file a route the admission
+        gate admitted (ADR-0033) — so the two serialisations are two functions and
+        neither is the other's fallback.
         """
         return {
             "model": self.model,

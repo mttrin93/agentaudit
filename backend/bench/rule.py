@@ -23,10 +23,20 @@ class GateRule:
     attempts_per_case: int = 10
     """How many times one case is run against one target.
 
-    Three cases per family at ten attempts is ADR-0003's n = 30 per family per
-    agent — the sample size chosen so that the retirement rule can operate, not
-    merely so the gate can pass. It sits with the thresholds because moving it
-    moves every interval the gate is decided on.
+    Ten, chosen so that the retirement rule can operate and not merely so the gate
+    can pass: at ADR-0003's three cases per family that is the n = 30 per family per
+    agent the ADR declares, and n = 5 could pass the gate but could not see a family
+    decay from `D = 0.85` to `D = 0.45`. It sits with the thresholds because moving
+    it moves every interval the gate is decided on.
+
+    **The per-case denominator, and deliberately not the per-family one.** How many
+    cases a family holds is a fact about the library on disk, and since the
+    admission gate writes an admitted route into it
+    ([ADR-0033](../../docs/adr/0033-an-admitted-route-is-written-into-the-library.md))
+    a family can hold four while the others hold three. This record has no library
+    and must not be given one, so a family's `n` is counted off the attempts that
+    ran and printed beside that family's own rates (`gate.stated_outcome`). Nothing
+    here multiplies by three.
     """
 
     discrimination_floor: float = 0.4
@@ -102,18 +112,6 @@ class GateRule:
     only remove a candidate, never move the bar (ADR-0015).
     """
 
-    def attempts_per_family(self) -> int:
-        """`n` per family per agent: three cases at this many attempts each.
-
-        ADR-0003's n = 30 at the declared rule, and the number every sentence about
-        the denominator quotes — here rather than at each of them, because a run at
-        another `attempts_per_case` has to state its own `n` and four inline
-        multiplications are four places to get that wrong. The three is the cases per
-        family the library holds (#12); a library that held another number would move
-        this, which is why the sentences read it from one method.
-        """
-        return 3 * self.attempts_per_case
-
     def at_the_declared_denominator(self) -> bool:
         """Whether `attempts_per_case` is the number ADR-0003 declared.
 
@@ -140,14 +138,16 @@ class GateRule:
         if self.at_the_declared_denominator():
             return (
                 f"{_attempts(self.attempts_per_case)} per case — the declared "
-                "denominator of ADR-0003, so these figures were counted on the "
-                f"published n = {self.attempts_per_family()} per family"
+                "denominator of ADR-0003, so every rate below was counted on it. A "
+                "family's own n is that many attempts times the cases this library "
+                "holds in it, and it is printed with that family's figures rather "
+                "than asserted here (ADR-0033)"
             )
         return (
             f"{_attempts(self.attempts_per_case)} per case where the declared rule "
-            f"reads {DECLARED_RULE.attempts_per_case}, so "
-            f"n = {self.attempts_per_family()} per family and not the published "
-            f"{DECLARED_RULE.attempts_per_family()}. {NOT_A_GATE_RESULT}"
+            f"reads {DECLARED_RULE.attempts_per_case}, so every family below was "
+            "measured on a smaller n than the declared rule counts one on. "
+            f"{NOT_A_GATE_RESULT}"
         )
 
     def stated(self) -> str:
@@ -160,12 +160,20 @@ class GateRule:
         **Nothing here is an adaptive threshold and there is nowhere for one to
         live.** `T` and `k` are declared in `AdaptiveBudget`; this record holds the
         numbers that decide, and the adaptive layer decides nothing (ADR-0010).
+
+        **And no per-family `n`.** It used to read *three cases per family, so
+        n = 30*, which was the one expression in this bench that asserted the
+        library's shape rather than reading it. The admission gate can now grow a
+        family (ADR-0033) and this record has no library to ask, so the denominator
+        prints where the counts are — beside each family's rates, in
+        `gate.stated_outcome`.
         """
         return "\n".join(
             (
                 "the decision rule as applied, from ADR-0003 and ADR-0015:",
-                f"  n = {self.attempts_per_case} attempts per case, three cases per "
-                f"family, so n = {self.attempts_per_family()} per family per agent",
+                f"  {_attempts(self.attempts_per_case)} per case; a family's n is "
+                "that many times the cases this library holds in it, and prints "
+                "with that family's own figures",
                 f"  per-family pass: D ≥ {self.discrimination_floor:.2f} and the "
                 f"hardened and trivial Wilson "
                 f"{self.interval_confidence:.0%} intervals do not overlap",
@@ -192,9 +200,10 @@ NOT_A_GATE_RESULT = (
     "**This is not a gate result.** A run at another number is a real run and its "
     "rates carry the rule they were measured at, but nothing may compare it to a "
     "reading taken at the declared rule: the Wilson interval, the band, monotonicity "
-    "and the retirement rule are all defined against n = 30 per family (ADR-0003), "
-    "the band's cut points were chosen for that n and lose resolving power below it "
-    "(ADR-0014), and `scripts/gate.py` takes no setting from any console (ADR-0025)"
+    "and the retirement rule are all defined at the declared ten attempts per case, "
+    "which is n = 30 for a three-case family (ADR-0003), the band's cut points were "
+    "chosen for that n and lose resolving power below it (ADR-0014), and "
+    "`scripts/gate.py` takes no setting from any console (ADR-0025)"
 )
 """What a report measured at a non-declared denominator says about itself.
 

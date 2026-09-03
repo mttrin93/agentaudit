@@ -30,8 +30,9 @@ reading no longer reproduces is what the retirement rule is for (#14), and this 
 the script that would show it.
 
 What prints is not a gate result. Admission is one case against the three reference
-agents; the gate is six families at n = 30 each against a declared rule, and it is
-`scripts/gate.py`.
+agents; the gate is all six families against a declared rule — n = 30 per family for
+the authored three cases, and each family's own n printed beside its figures — and it
+is `scripts/gate.py`.
 """
 
 import argparse
@@ -55,6 +56,7 @@ from backend.bench.admission import (
 from backend.bench.calibration import TargetRun, run_calibration
 from backend.bench.completion import DEFAULT_ADJUDICATOR_MODEL, completion_for
 from backend.bench.contract import TargetConfig
+from backend.bench.entry import admission_block
 from backend.bench.evaluator import Verdict
 from backend.bench.library import (
     AdmissionReading,
@@ -408,27 +410,22 @@ def _block(outcome: AdmissionOutcome) -> str:
     deciding whether to believe a discard needs the counts behind it as much as a
     reader deciding whether to believe an entry. Only `--write` puts it on a record,
     and only for a case that cleared.
+
+    **Through `entry.admission_block`, which is the one writer of these lines.**
+    This function used to hand-build them and `bench/entry.py` was written with a
+    second copy, which is the drift that must not happen (ADR-0033). It hands over
+    the parts rather than an `AdmissionRecord` because a rejected cross-model
+    outcome is exactly the record `AdmissionRecord.__post_init__` refuses to build,
+    and this function has to be able to print one.
+
+    `ReadingOutcome.counts` recovers each reading's own counts, so what is printed
+    here and what is written by a run are the same six lines from the same numbers.
     """
-    lines = [
-        "",
-        "[admission]",
-        f'bar = "{outcome.bar}"',
-        f"admitted_on = {date.today().isoformat()}",
-    ]
-    for reading in outcome.readings:
-        lines.extend(
-            [
-                "[[admission.readings]]",
-                f'model = "{reading.model}"',
-                f"attempts = {reading.hardened.attempts}",
-                f"hardened = {reading.hardened.successes}",
-                f"weak = {reading.weak.successes}",
-                f"trivial = {reading.trivial.successes}",
-            ]
-        )
-        if reading.adjudicator is not None:
-            lines.append(f'adjudicator = "{reading.adjudicator}"')
-    return "\n".join(lines)
+    return admission_block(
+        bar=outcome.bar,
+        admitted_on=date.today().isoformat(),
+        readings=[reading.counts for reading in outcome.readings],
+    )
 
 
 def _write(cases: Sequence[Case], outcomes: Sequence[AdmissionOutcome]) -> None:
@@ -449,7 +446,7 @@ def _write(cases: Sequence[Case], outcomes: Sequence[AdmissionOutcome]) -> None:
             print(f"not written: {outcome.case_id} already records an admission")
             continue
         with path.open("a", encoding="utf-8") as record:
-            record.write(f"{_block(outcome)}\n")
+            record.write(_block(outcome))
         print(f"written: {path.name}")
 
 

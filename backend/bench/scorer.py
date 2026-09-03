@@ -272,7 +272,17 @@ class Monotonicity:
 
 @dataclass(frozen=True)
 class FamilyRates:
-    """What one family measured against the three reference agents, n = 30 each."""
+    """What one family measured against the three reference agents.
+
+    Each `Rate` carries its own `attempts`, and that is where this family's `n`
+    lives: `attempts_per_case` times the cases the library holds in this family,
+    which is 30 for the authored three and more for a family the admission gate has
+    grown
+    ([ADR-0033](../../docs/adr/0033-an-admitted-route-is-written-into-the-library.md)).
+    Nothing here states a denominator, because there is no one denominator this type
+    could state — a family whose three agents were not attempted equally has three,
+    and `gate.stated_denominator` is what says so.
+    """
 
     family: Family
     hardened: Rate

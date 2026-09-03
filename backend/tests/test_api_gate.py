@@ -142,6 +142,11 @@ def test_the_route_cites_the_gate_run_the_bench_last_passed() -> None:
         "library": {"cases": 18, "digest": "90a8ebcc3d0c"},
         "document": "docs/gate-runs/gate-2026-08-19T09-38-37Z.md",
         "record": "docs/gate-runs/gate-2026-08-19T09-38-37Z.json",
+        # `null` and never a missing key: this library still holds exactly the
+        # cases that gate run put itself through, and a reader who cannot tell that
+        # from a serialiser that stopped writing the key will assume the
+        # reassuring one (ADR-0033).
+        "moved": None,
         "stated": CITED.stated(),
     }
 
@@ -272,11 +277,20 @@ def test_the_gate_document_is_named_and_never_opened() -> None:
     body = a_client(CITED).get(BENCH_GATE_ROUTE).json()
     served = a_client(CITED).get(BENCH_GATE_ROUTE).text
 
-    # The rule in the response is `rule.py`'s own text, so every clause of it that
-    # also appears in the document got here from the declared record and not out of
-    # the prose. This assertion is what lets the scan below be about measurements.
+    # The rule in the response is `rule.py`'s own text and not a number scraped out
+    # of the prose beside it, which is what lets the scan below be about
+    # measurements rather than about wording.
     assert body["rule"]["stated"] == DECLARED_RULE.stated()
-    assert DECLARED_RULE.stated() in document
+
+    # The document carries a printed rule of its own, and it is deliberately *not*
+    # asserted equal to today's: a dated gate document carries the text it was
+    # written with, and since ADR-0033 the rule prints no per-family `n` — the
+    # library's shape is read off the attempts that ran instead. Every recorded
+    # document from that ticket on carries different rule text, and the ones already
+    # signed are unaffected, which is the point of recording it on the document
+    # rather than looking it up (ADR-0017).
+    assert "the decision rule as applied, from ADR-0003 and ADR-0015:" in document
+    assert DECLARED_RULE.stated() not in document
 
     # Per-family figures are in the document and nowhere in the response: not a
     # measured `D`, not a measured κ, not a count over its denominator, not an

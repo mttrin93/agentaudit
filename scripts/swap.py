@@ -23,9 +23,11 @@ it is running, and the two runs differ in that one setting: same eighteen cases,
 `read_gate` is how a family's three rates become a `D` a reader can re-derive, and
 each is printed in full — but this command's answer is the comparison, and the check
 has no declared pass rule. So there is no exit code that claims one: a comparison that
-was made exits zero whatever it found, and only a refusal, a decline or an abort
-exits non-zero. Inventing a collapse threshold here would be declaring a bar nobody
-agreed, at the one point in the build where the result is already in front of us.
+was made exits zero whatever it *found*, and the non-zero codes are all refusals — a
+withheld attestation, a declined cost, an aborted budget, and since ADR-0033 a library
+a gate run was holding when the write came. Inventing a collapse threshold here would
+be declaring a bar nobody agreed, at the one point in the build where the result is
+already in front of us.
 
 **κ is measured once, not twice.** The adjudicator is the same instrument in both
 runs and the gold set is the same gold set; the reference agents' model is nowhere in
@@ -41,14 +43,21 @@ against all three agents on *both* models, and `promote` admits it only if it
 separates on both. The rejections are counted and recorded, because a route that
 separates on one model only is itself a finding about that route (ADR-0012).
 
-**A proposal that clears both models is reported and not written.** `promote` returns
-the case with the admission block that would let it in, and nothing here puts it on
-disk: the decision to add a record to the library belongs to whoever owns that
-directory, and no entry point in this repo writes a case record from scratch
-(`scripts/admit.py --write` appends an admission block to a record a human already
-wrote). So the bar is enforced here — a proposal that fails it has no admitted state
-anywhere — and entry itself is still a human's action. A run that cleared a proposal
-says so and says what to do about it.
+**A proposal that clears both models is written into the library, and that is where
+the loop closes** (ADR-0033). `promote` returns the case with the admission block
+that let it in and `bench/entry.py` files it as a `.toml` record under the library
+lease, so the library the next run loads is different because of it. One route is one
+record — keyed by the family and a digest of the probe — so a route this attacker
+rediscovers next run does not grow the family's `n` twice, and a route the library
+already holds is reported as held rather than written again.
+
+Three things that write does not do. It does not decide: the cross-model bar decided,
+and a case whose own reading does not clear it is refused at the write rather than
+filed. It does not re-date: the admission block carries the day the three reference
+agents were run, which for a route read out of the admission memory is a day on an
+earlier run (ADR-0032). And it moves no figure anything already recorded — what it
+does move is the library version, so the gate run this library cites is recorded as
+superseded on the citation itself, because a citation is a claim about a version.
 
 **It asks before it sends anything**, on the same terms as every other entry point:
 the three attestation statements one at a time, then the estimated cost of each run
@@ -101,8 +110,10 @@ from backend.bench.decided import (
     consult,
     worth_remembering,
 )
+from backend.bench.entry import Entry, enter
 from backend.bench.gate import NotAGateRun, read_gate
 from backend.bench.goldset import load_gold_sets, measure_reliability
+from backend.bench.lease import LibraryBusy
 from backend.bench.library import AdmissionReading, Case, Family
 from backend.bench.registration import Attestation
 from backend.bench.retirement import live_library
@@ -134,6 +145,25 @@ from scripts.console import (
     traced_run,
 )
 from scripts.gate import CASES_DIR, DEFAULT_MODEL, GOLDSET_DIR, reference_targets
+
+EXIT_NOT_WRITTEN = 6
+"""Exit code when a route cleared the bar and the library could not be written.
+
+Distinct from the three consent refusals and from an abort, because everything above
+the write happened: both suites ran, the bar was put to every route, the document was
+recorded. What did not happen is the write, because a gate run held the library
+(`bench/lease.py`) — and a run that reported that as success would be a run whose
+caller believes a route entered the library when none did.
+
+**Not returned by a run that had nothing to write.** A held library and no admitted
+route is a run that changed nothing and was never going to, which is the ordinary
+outcome of every run to date; an exit code for it would report the lease rather than
+the run.
+
+Distinct from `EXIT_WITHHELD` for the same reason `scripts/admit.py` gives its own
+rejection a code: that one means nothing was sent, and by this point a great deal has
+been.
+"""
 
 SWAP_RUNS_DIR = Path(__file__).resolve().parents[1] / "docs" / "swap-runs"
 
@@ -390,19 +420,42 @@ def main(argv: Sequence[str] | None = None) -> int:
     # Through the consultation, so that a promotion whose counts came from an earlier
     # run says so on its own lines rather than only in the block above (ADR-0032).
     print(consulted.reported(promotions))
-    if any(promotion.admitted for promotion in promotions):
-        print(
-            "\nA proposal cleared the cross-model bar. Nothing here wrote it to the "
-            "library: the case and the admission block that would let it in are "
-            "returned by `promote`, and adding a record to the library is the "
-            "decision of whoever owns that directory (ADR-0012)."
+    admitted = [
+        promotion.case for promotion in promotions if promotion.case is not None
+    ]
+    entry: Entry | None
+    try:
+        entry = enter(
+            admitted,
+            cases_dir,
+            holder=f"{attestation.identity}, admitting a route at a terminal",
         )
+    except LibraryBusy as held:
+        # Everything above this line has already been measured, printed and paid
+        # for, so this is a refusal to *write* and not a refusal to run: the
+        # comparison is recorded, and the routes are re-proposed on the next run
+        # against the counts the memory now holds (ADR-0032).
+        print(f"\nThis case library is already being written to:\n{held}")
+        print(
+            "The comparison above stands. "
+            + (
+                "No route entered the library."
+                if admitted
+                else "No route cleared the cross-model bar, so this run had "
+                "nothing to write into it."
+            )
+        )
+        entry = None
+    if entry is not None:
+        print()
+        print(entry.stated())
 
     written = record_swap(
         swap=swap,
         adaptive=adaptive,
         rejected=rejected,
         consulted=consulted,
+        entry=entry,
         directory=Path(args.record),
         identity=first.result.approval.identity,
         adjudicator_model=args.adjudicator_model,
@@ -411,7 +464,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         cases=cases,
     )
     print(f"\nthis comparison's own document: {written}")
-    return 0
+    # Non-zero only where a route that cleared the bar did not reach the library.
+    # A held library and nothing to put in it is a run that changed nothing and was
+    # never going to, which is the ordinary outcome and not a refusal.
+    return 0 if entry is not None or not admitted else EXIT_NOT_WRITTEN
 
 
 def calibrate_on(
@@ -669,6 +725,7 @@ def record_swap(
     adaptive: AdaptiveSwap | None,
     rejected: CrossModelRejections,
     consulted: Consultation,
+    entry: Entry | None,
     directory: Path,
     identity: str,
     adjudicator_model: str,
@@ -693,6 +750,14 @@ def record_swap(
     route the gate already decided is reported from memory, so a document that
     printed the rejection counts alone would present a figure no run in front of the
     reader paid for as one it did (ADR-0032).
+
+    **And it says what entered the library, including *nothing*.** Since ADR-0033 a
+    proposal that clears the bar becomes a record, so this document is the account of
+    a run that changed the library it was made against — which record was written,
+    which route was already held, and the version the library now stands at. `entry`
+    is `None` for a run whose write was refused because a gate run held the library,
+    and that is written down as the refusal it is rather than left as an absent
+    section.
     """
     directory.mkdir(parents=True, exist_ok=True)
     stamped = datetime.now(tz=UTC)
@@ -756,6 +821,22 @@ def record_swap(
                 # fitted to these three agents, and the retirement rate by
                 # provenance beside it.
                 provenance_section(cases),
+                "```",
+                "",
+                "## What entered the library",
+                "",
+                "```",
+                (
+                    entry.stated()
+                    if entry is not None
+                    else (
+                        "not written — a gate run held this case library, so nothing "
+                        "entered it. The comparison above stands: it was measured "
+                        "before the write was attempted, and a route refused here is "
+                        "re-proposed on the next run against the counts the admission "
+                        "memory now holds (ADR-0032, ADR-0033)"
+                    )
+                ),
                 "```",
                 "",
             )

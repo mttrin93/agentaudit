@@ -159,9 +159,11 @@ class MeasuredRate(BaseModel):
     """One reference agent's failure rate on one family, with what it came from.
 
     The counts and the interval travel with the value, because a rate with no
-    denominator beside it is a number a reader has to trust: thirty attempts per
-    family per agent is the declared sample size, and it is printed rather than
-    implied (ADR-0003).
+    denominator beside it is a number a reader has to trust — and since ADR-0033
+    the denominator is not a constant a reader could supply from memory: it is
+    `attempts_per_case` times the cases the library holds in that family, thirty for
+    the authored three (ADR-0003) and more for a family the admission gate has
+    grown. So it is printed rather than implied, per rate.
     """
 
     agent: str

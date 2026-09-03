@@ -2051,8 +2051,36 @@ class CitedGate(BaseModel):
     write and ADR-0023 replaced with a pointer. Named here and opened by nothing:
     this route still serves no per-family figure of its own."""
 
+    moved: CitedMoved | None
+    """How far the library has grown past the version this gate run was decided at.
+
+    `null` where it has not, which is every citation a gate run writes. Present on
+    one whose library has since admitted a route (`bench/entry.py`, ADR-0033), and
+    it is the field this response gains rather than a caveat somebody adds to
+    `stated`: a screen that showed a pass at a version the library has left behind
+    would be showing the flattering half of two digits it already had.
+
+    On the response because `citation` here is byte-identical to the provenance
+    block of every signed report, field for field, and a field this model dropped
+    would break that equality in the one direction ADR-0018 refuses.
+    """
+
     stated: str
     """The citation in the bench's own words, whose subject is the bench."""
+
+
+class CitedMoved(BaseModel):
+    """The version the library is at now, and what entered it since the gate run.
+
+    The same three values `payload.LibraryMoved` carries and no reading of the cases
+    that entered: a count, a digest, and the ids. What the new cases would measure
+    is a question only a gate run answers, and this response still serves no
+    per-family figure of its own.
+    """
+
+    cases: int
+    digest: str
+    by: list[str]
 
 
 class UncitedGate(BaseModel):
@@ -2825,7 +2853,16 @@ class Tuning(BaseModel):
     attempts_per_family: int
     """`attempts_per_case` times the cases this library holds per family, which is the
     `n` a rate is read at. Derived and served, because `n = 30` is the number ADR-0003
-    names and an operator setting the per-case figure is choosing that one."""
+    names for a three-case family and an operator setting the per-case figure is
+    choosing that one.
+
+    **The cases are the most any family holds** (`_cases_per_family`), and since
+    ADR-0033 that can exceed three: the admission gate writes an admitted route into
+    the library, so a family can hold four while the others hold three. That reading
+    is the right one for a screen telling an operator what they are setting — it is
+    the `n` a full family is measured at. What a particular *figure* was read at is
+    printed beside that figure, per family (`gate.stated_denominator`), and never
+    from here."""
 
     declared_attempts_per_case: int
     """What `rule.py` declares. Shown beside the current value so a reader can see at
@@ -2857,9 +2894,10 @@ THE_CONSOLE_MAY_SET_THESE = (
 A_RUN_BELOW_THE_DECLARED_RULE_IS_NOT_A_GATE_RESULT = (
     "attempts per case is the scored denominator, and it is not in the same class as "
     "the four above it. The gate is decided at the declared rule — ADR-0003 sets it "
-    "so that n = 30 per family, which is what the Wilson interval, the band, "
-    "monotonicity and the retirement rule are all defined against. A run at another "
-    "number is a real run whose rates carry the rule they were measured at, and it "
+    "so that a three-case family gives n = 30, which is what the Wilson interval, "
+    "the band, monotonicity and the retirement rule are all defined against. A run "
+    "at another number is a real run whose rates carry the rule they were measured "
+    "at, and it "
     "is not a gate result: nothing may compare it to a reading taken at the declared "
     "rule, and `scripts/gate.py` takes no setting from this screen"
 )

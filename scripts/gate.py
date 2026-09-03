@@ -8,8 +8,10 @@
         --adjudicator-model openrouter:openai/gpt-4o-mini
 
 **This is the stop before the bench is trusted.** The whole admitted library
-against all three reference agents at ten attempts per case — n = 30 per family per
-agent — then the two judged families' κ against the gold set, then the declared
+against all three reference agents at ten attempts per case — so n = 30 per family
+per agent for a family holding the authored three, and each family's own n printed
+beside its figures because the admission gate can grow one (ADR-0033) — then the two
+judged families' κ against the gold set, then the declared
 rule applied to what came back and printed beside its answer. It ends in one of
 three ways and two of them stop the build: passed, failed, or **not decided**
 because too few families were fit to be asked (ADR-0003, ADR-0015).

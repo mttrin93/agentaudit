@@ -27,8 +27,9 @@ record and must be a person rather than whatever `$USER` happens to be; the seco
 is the operator's own figure from their own provider, and a run without it says
 *not priced* rather than showing a number the bench made up.
 
-That reading is not a gate result. The gate is decided over six families at
-n = 30 each against a stated rule, and it is `scripts/gate.py`; what prints here is
+That reading is not a gate result. The gate is decided over all six families
+against a stated rule — n = 30 per family for the authored three cases — and it is
+`scripts/gate.py`; what prints here is
 one family's worth of evidence — often one case's — which is why nothing below says
 pass or fail.
 """

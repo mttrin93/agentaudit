@@ -16,6 +16,19 @@ kinds of number are measured on different denominators and are kept apart on the
 page for the same reason they are kept apart in the code
 ([ADR-0010](./adr/0010-two-layers-in-one-run-the-adaptive-layer-is-never-scored.md)).
 
+**Since #40 the library is a function of run history, and this document says so
+where it matters.** A route the adaptive attacker found and the admission gate admitted
+is written into the case library by the run that admitted it
+([ADR-0033](./adr/0033-an-admitted-route-is-written-into-the-library.md)), so the cases
+a run executes are no longer reconstructible from the repository alone. Three things
+follow and they are the whole of the reproducibility answer. Every run records the
+**library version** it was made against, which is what makes two runs comparable or
+provably not; a gate decision stays reproducible from its recorded inputs, unchanged;
+and a library that has grown past the version its cited gate run was decided at says so
+on the citation itself, which is the block every signed report carries. What is *not*
+claimed is that the library is a constant — it never was, since a case can retire — and
+what is new is that a run can move it.
+
 **Since #39 a cross-model admission count can include a route an earlier run
 measured.** The admission gate remembers the counts it read — never its decision, which
 is re-derived from them under the declared rule on every run
@@ -80,6 +93,37 @@ What follows from that, and what does not:
 - The store is machine-local and git-ignored, so **no figure in this document was ever
   read out of it** and none can be: an import test forbids every module that produces a
   rate, an interval, a band, a `D` or a κ from reaching it (ADR-0010).
+
+### No route has ever been written into the library by a run (#40)
+
+**Every one of the eighteen cases on disk is `discovered_by = authored`, and the
+adaptive fraction of the live library is 0.00.** The writer exists, it is exercised end
+to end in the suite, and it has never fired outside one: the only reading of the
+cross-model bar this document records is the four proposals of 2026-08-19, all four
+refused, both models stubs ([ADR-0033](./adr/0033-an-admitted-route-is-written-into-the-library.md)).
+
+What follows from that, and what does not:
+
+- **"The loop closes" is a claim about a mechanism, demonstrated on constructed
+  evidence.** A case built to clear the bar is written, loaded back by
+  `admitted_library`, counted as an adaptive live case by `library_provenance`, and
+  makes its family read `n = 40` while the other five read 30 — all asserted. What
+  nobody has watched is an *attacker's own* route make that journey, because no
+  attacker's route has cleared the bar yet.
+- **The refusals are the tested half and they are the half that matters more.** A
+  route the library already holds is not written twice, a rediscovery of a retired case
+  does not un-retire it, a record that does not clear its own bar is refused rather
+  than filed, and a write that meets a gate run's lease is refused by name. Each of
+  those was driven red on purpose.
+- **The adaptive fraction reporting has never had a non-zero reading to print.**
+  ADR-0012 asks for it on every gate run so that a library drifting towards routes
+  fitted to these three agents arrives as a series rather than as a surprise. The
+  series exists and has one value in it. Whether it is *readable* as a warning is a
+  question the first non-zero reading answers.
+- **Nothing in this document was produced by a grown library.** Every gate run and
+  every swap recorded below ran the eighteen authored cases, and each one records the
+  library version it ran, so a future reading against a grown library is
+  distinguishable from these rather than comparable to them by assumption.
 
 ---
 
@@ -392,7 +436,9 @@ than absorbed.
 ### 2026-08-18 — the library at eighteen cases, and the bar each one cleared (#12)
 
 Three cases per family across all six, so a per-family rate rests on thirty attempts
-per agent rather than five. **Every case was measured against the three reference
+per agent rather than five. (Three as *authored*: since ADR-0033 the admission gate can
+write a fourth into a family, and each family's own `n` is printed with its figures
+rather than asserted as a constant. No run has ever done it — see the section above.) **Every case was measured against the three reference
 agents before it entered**: `D ≥ 0.4` with disjoint Wilson intervals, the same
 quantity the gate holds a family to, so nothing is in the library on a weaker bar
 than it will be judged by (ADR-0003, spec stories 69 and 70). Entry point:
@@ -1355,7 +1401,8 @@ chosen here.
 
 Provenance of the live library: **authored 18, adaptive 0, `user_gap` 0** — 0.00
 adaptive-discovered, the same figure the series started at, because no proposal has
-ever cleared the cross-model bar. Retirement rate: 0.00 retired, 0 of 18 ever written,
+ever cleared the cross-model bar. Since ADR-0033 a proposal that clears it is written
+into the library by the run, so this figure is the one that would move; it has not. Retirement rate: 0.00 retired, 0 of 18 ever written,
 18 live. Triggers across the eighteen: `new_agent_type` 17, `new_technique_published`
 1, and nothing on the other four — which is the census §7 above already flagged as
 recording the nearest true member rather than widening a closed set.

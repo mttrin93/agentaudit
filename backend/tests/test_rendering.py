@@ -142,7 +142,7 @@ def test_every_section_states_its_own_reproducibility_and_three_read_the_payload
 
 # --- The golden digest: one document, pinned to the byte ---------------------
 
-GOLDEN_ONE_FAMILY = "d565134c476fabbea62e6ed7ae9f5faac55764d400377272c92edae9ea99ea2e"
+GOLDEN_ONE_FAMILY = "48598c88498037e530436c856d619476fe334f8d8406f2db2215e07d2488aea0"
 """The sha256 of `_one_family()`'s rendering, written down.
 
 **A tripwire, and it is deliberately a strict one.** Every other assertion in this
@@ -159,9 +159,14 @@ the point: a digest changing is a fact with an author. It is not a signature and
 issued signature depends on it (ADR-0017); changing the renderer stays free, and
 changing it by accident does not.
 
-Moved once, by #56: the rule block gained the sentence beside its denominator, so
+Moved twice. By #56: the rule block gained the sentence beside its denominator, so
 every rendering says whether its figures are a gate result and not only what `n`
-they were counted on (ADR-0027).
+they were counted on (ADR-0027). By #40: the printed rule no longer states a
+per-family `n` at all — the admission gate can grow a family, so the denominator is
+read off the attempts that ran and printed with each family's figures instead
+([ADR-0033](../../docs/adr/0033-an-admitted-route-is-written-into-the-library.md)).
+Both are wording in the rule block, which is the part of a document that says what
+bar the figures were measured against, and both moved on purpose.
 """
 
 

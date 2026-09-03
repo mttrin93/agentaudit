@@ -169,6 +169,58 @@ class Withheld:
 
 
 @dataclass(frozen=True)
+class LibraryMoved:
+    """The library has grown past the version its cited gate run was earned at.
+
+    A **gate citation** is a claim about a library version — *this bench passed its
+    own gate at eighteen cases, digest 90a8ebcc* — earned by running that library.
+    Since the admission gate writes an admitted route into the library
+    ([ADR-0033](../../docs/adr/0033-an-admitted-route-is-written-into-the-library.md))
+    the version can move without a gate run, and a citation left standing untouched
+    would be a pass recorded against a library that no longer exists.
+
+    **It is not a correction of that gate run and takes nothing off it.** The
+    outcome, the date, the version it was earned at and the two addresses its figures
+    are recovered through are all still the record's own. This is one more fact
+    beside them, about the library rather than about the run — the same shape
+    ADR-0023 chose when a failing gate run replaced a passing citation: nothing is
+    deleted, and the loss is announced.
+
+    **No figure, on the same terms as the citation itself.** A count and a digest of
+    the records now on disk, and the ids that entered. There is no rate here, no `D`
+    and no reading of the new cases at all: what a reader is told is that the bench's
+    discriminating power was measured at another version, not what it would measure
+    at this one. The answer to that is a gate run, which is also what clears this.
+    """
+
+    version: LibraryVersion
+    """What the library is at now, read off the records rather than declared."""
+
+    by: tuple[str, ...]
+    """The cases that entered since the cited gate run, in the order they entered.
+
+    The ids and not a count, because the one question a reader has is *which* cases
+    the gate run did not see, and `discovered_by` on each record is how they find
+    out who wrote them. Appended to across runs, so a library that has drifted over
+    four runs says so rather than reporting the last one.
+    """
+
+    def stated(self) -> str:
+        """The superseding in the words a report carries."""
+        entered = ", ".join(self.by)
+        return (
+            f"**This library has grown past the version that gate run was decided "
+            f"at.** {len(self.by)} "
+            f"{'case' if len(self.by) == 1 else 'cases'} entered it since — "
+            f"{entered} — so it now stands at {self.version.stated()}. Each entered "
+            "by clearing the cross-model admission bar, which is the same declared "
+            "floor the gate holds a family to (ADR-0012); none of them was in the "
+            "library the outcome above was measured on. Running the gate again is "
+            "what earns a citation at this version"
+        )
+
+
+@dataclass(frozen=True)
 class GateCitation:
     """The bench's own gate result, cited as provenance and never as a result.
 
@@ -219,6 +271,21 @@ class GateCitation:
     where the run put it (ADR-0023).
     """
 
+    moved: LibraryMoved | None = None
+    """Whether the library has grown past the version this gate run was decided at.
+
+    `None` on a citation whose library still holds exactly the cases the gate run
+    put itself through, which is every citation a gate run writes. Set by the write
+    that moved it (`bench/entry.py`), and cleared by the next gate run, because a
+    gate run decided at this version supersedes nothing (ADR-0033).
+
+    Last in the field list because it has a default and the four fields above it do
+    not. It is the only field on this record a gate run did not measure, which is
+    also why it is typed apart rather than folded into `library`: that one is the
+    version the outcome was earned at and this one is where the library has got to,
+    and a single field holding whichever was later would lose the pair.
+    """
+
     def stated(self) -> str:
         """The citation in the bench's own words, which are not the target's.
 
@@ -227,6 +294,13 @@ class GateCitation:
         circulates is a screenshot of one section, so a field whose correctness
         depends on an adjacent caption is a field that will eventually be wrong in
         the flattering direction (ADR-0018).
+
+        **A superseded library is said here and not left to a reader's arithmetic.**
+        The version the gate run was earned at and the version the library is at now
+        are both on this record, so a reader *could* compare two digests — and a
+        figure a reader has to cross-reference to qualify is a figure that will be
+        quoted unqualified, which is the reasoning ADR-0032 applied to the admission
+        counts one ticket earlier.
         """
         prose = (
             f"recorded in {self.document}, and as fields in {self.record}"
@@ -243,7 +317,7 @@ class GateCitation:
             "sentence. A fact about the instrument that produced the figures above, "
             "and not a verdict on this target: this target has rates, intervals and "
             "bands, and passes and fails nothing"
-        )
+        ) + ("" if self.moved is None else f". {self.moved.stated()}")
 
 
 UNCITED_GATE = (
@@ -880,6 +954,12 @@ def citation(cited: GateCitation | None) -> dict[str, Any]:
     (ADR-0023). `document` is `null` for a gate run that left none, which is a third
     fact and not an empty field: the figures are in `record` either way, and a reader
     is never handed a path to a file nobody wrote.
+
+    **`moved` is `null` and never a missing key**, on the same terms as everything
+    above it: a citation whose library still holds the cases its gate run put itself
+    through has been checked and has moved past nothing, and a reader who cannot
+    tell that from a serialiser that stopped writing the key is a reader who will
+    assume the reassuring one (ADR-0033).
     """
     if cited is None:
         return {"cited": False, "stated": UNCITED_GATE}
@@ -893,6 +973,13 @@ def citation(cited: GateCitation | None) -> dict[str, Any]:
         },
         "document": cited.document,
         "record": cited.record,
+        "moved": None
+        if cited.moved is None
+        else {
+            "cases": cited.moved.version.cases,
+            "digest": cited.moved.version.digest,
+            "by": list(cited.moved.by),
+        },
         "stated": cited.stated(),
     }
 

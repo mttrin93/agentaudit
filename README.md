@@ -147,8 +147,11 @@ read before you agree to anything.
 **How often.** Each case is sent 10 times. The same text, 10 separate tries,
 each in a fresh session. Models are not deterministic, so one try tells you
 almost nothing and ten tries tell you something. One try of one case is an
-**attempt**. Ten attempts per case, three cases per family, so **30 attempts per
-family** — and that 30 is the bottom of every fraction in the report.
+**attempt**. Ten attempts per case, and each family holds at least three cases, so
+**30 attempts per family or more** — and that number is the bottom of every fraction
+in the report. It is printed beside every figure rather than assumed, because the
+bench can add a case to a family: a route its own attacker found, once that route has
+cleared a stated bar against the three agents below.
 
 **How a try is judged.** Four families are decided by a plain check, with no
 opinion in it:

@@ -57,7 +57,7 @@ which one a report carries and never a loss of the ones before it.
 from __future__ import annotations
 
 import json
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import date, datetime
 from pathlib import Path
@@ -65,7 +65,7 @@ from typing import Any
 
 from backend.bench.gate_record import RecordedGateRun
 from backend.bench.library import Family, LibraryVersion
-from backend.bench.payload import GateCitation, citation
+from backend.bench.payload import GateCitation, LibraryMoved, citation
 from backend.bench.rule import DECLARED_RULE, GateRule
 from backend.bench.scorer import GateOutcome, Reliability
 
@@ -179,6 +179,43 @@ def cite(record: RecordedGateRun, library: Path) -> Replaced:
     return Replaced(now=now, previous=previous)
 
 
+def moved_past(
+    library: Path, version: LibraryVersion, entered: Sequence[str]
+) -> GateCitation | None:
+    """Record that this library has grown past the version its citation was earned at.
+
+    Called by the write that grew it, under the same lease, for `cite`'s reason: the
+    citation is a file in the case directory, and a claim about a library version has
+    to land inside the critical section the version moved in
+    ([ADR-0033](../../docs/adr/0033-an-admitted-route-is-written-into-the-library.md)).
+
+    **The citation's own fields are not touched.** Only `moved` is written, so the
+    outcome, the date, the version the gate run was earned at and the two addresses
+    its figures are recovered through stay the record's. Deleting or clearing the
+    citation were the two alternatives and both lose evidence — ADR-0023's *nothing
+    is deleted, only the pointer moves* applies here unchanged.
+
+    **The list is appended to.** A library that has drifted over four runs says how
+    far, not how far the last run took it, so `entered` joins whatever the citation
+    already names. A run whose write entered nothing calls this with an empty
+    sequence and the file is left exactly as it was — there is nothing new to say,
+    and rewriting it would put a superseding statement on a bench whose gate run
+    still describes the library it is cited on.
+
+    `None` where the library cites no readable gate run. An uncited bench has no
+    claim to have moved past, and this is not the thing that invents one for it.
+    """
+    cited = the_citation(library)
+    if cited is None or not entered:
+        return cited
+    before = () if cited.moved is None else cited.moved.by
+    now = replace(cited, moved=LibraryMoved(version=version, by=(*before, *entered)))
+    (library / CITED_GATE_RUN).write_text(
+        json.dumps(citation(now), indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    return now
+
+
 def the_citation(library: Path) -> GateCitation | None:
     """The gate run this library cites, or `None` where it cites none.
 
@@ -210,9 +247,27 @@ def the_citation(library: Path) -> GateCitation | None:
             ),
             document=(None if body["document"] is None else str(body["document"])),
             record=str(body["record"]),
+            moved=_moved(body.get("moved")),
         )
     except (KeyError, TypeError, ValueError):
         return None
+
+
+def _moved(block: Any) -> LibraryMoved | None:
+    """How far this library has grown past the version it cites, or `None`.
+
+    Read with `get` rather than a subscript, and that is the one place a field of
+    this record is allowed to be absent: a citation written before ADR-0033 has no
+    such key and has moved past nothing that anything can name. Everything else here
+    is subscripted, because a citation assembled out of whichever keys happened to be
+    present is how a bench comes to claim an outcome nothing decided.
+    """
+    if block is None:
+        return None
+    return LibraryMoved(
+        version=LibraryVersion(cases=int(block["cases"]), digest=str(block["digest"])),
+        by=tuple(str(entered) for entered in block["by"]),
+    )
 
 
 @dataclass(frozen=True)

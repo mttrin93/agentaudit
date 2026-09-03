@@ -31,13 +31,16 @@ One of six kinds of failure the bench tests for. A category, not a test.
 _Avoid_: category, class, attack type, vector
 
 **Case**:
-One executable test belonging to a family, consisting of a payload and the criterion that decides its verdict — a success condition, or, for a judged family, the semantic question stated on the record. Three cases per family.
+One executable test belonging to a family, consisting of a payload and the criterion that decides its verdict — a success condition, or, for a judged family, the semantic question stated on the record. Three cases per family as authored; a family the admission gate has grown holds more, and the count is read off the library rather than declared.
 _Avoid_: test, probe, scenario, payload
 
 **Attempt**:
 One execution of one case against one target. Ten attempts per case. The unit of
-the denominator: thirty attempts per family per agent, and nothing that is not an
-attempt is ever counted as one. A **turn** is not an attempt.
+the denominator, and nothing that is not an attempt is ever counted as one: a
+**turn** is not an attempt. A family's `n` is ten attempts times the cases the
+library holds in it — thirty per family per agent as authored, and read off the
+attempts that ran rather than asserted, because the admission gate can add a case to
+a family ([ADR-0033](./docs/adr/0033-an-admitted-route-is-written-into-the-library.md)).
 _Avoid_: run, trial, call, iteration
 
 **Run**:
@@ -218,7 +221,7 @@ never means parsing the document. The **gate document** links to it.
 _Avoid_: sidecar, gate JSON, gate summary, the gate's data
 
 **Admission**:
-The check a proposed case must pass against the reference agents before it may ever reach a user.
+The check a proposed case must pass against the reference agents before it may ever reach a user. The check and not the filing: a case that has cleared it is **admitted**, and the run that admitted it writes the record into the library ([ADR-0033](./docs/adr/0033-an-admitted-route-is-written-into-the-library.md)). What the admission *memory* holds is what was decided, which is a different thing from what the library holds (ADR-0032).
 _Avoid_: approval, review, vetting
 
 **Retirement**:

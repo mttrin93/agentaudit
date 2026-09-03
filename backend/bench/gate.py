@@ -137,10 +137,18 @@ class GateResult:
 
 
 def stated_outcome(outcome: FamilyOutcome) -> str:
-    """One family's three rates, its `D`, its ordering and its verdict.
+    """One family's three rates, its `n`, its `D`, its ordering and its verdict.
 
     Every number the per-family pass turned on, printed beside the verdict rather
     than instead of it, so that a reader re-derives the line rather than trusting it.
+
+    **`n` prints here because this is where the counts are.** `GateRule` used to
+    state *three cases per family, so n = 30*, which was the one expression in this
+    bench that asserted the library's shape rather than reading it — and the
+    admission gate can now grow a family
+    ([ADR-0033](../../docs/adr/0033-an-admitted-route-is-written-into-the-library.md)).
+    The rule holds thresholds and no library, so the denominator is counted off the
+    attempts that ran and printed beside the rates it is the denominator of.
     """
     rates = outcome.rates
     return "\n".join(
@@ -154,6 +162,7 @@ def stated_outcome(outcome: FamilyOutcome) -> str:
                     ("trivial", rates.trivial),
                 )
             ),
+            f"  n = {stated_denominator(rates)}, counted off the attempts that ran",
             f"  D = {outcome.discrimination:.2f}, intervals "
             f"{'do not overlap' if outcome.intervals_separate else 'overlap'}, "
             f"{outcome.monotonicity.inversions} inversion"
@@ -161,6 +170,32 @@ def stated_outcome(outcome: FamilyOutcome) -> str:
             f"({'ordered' if outcome.monotonicity.holds else 'NOT ordered'}) — "
             f"{'passes' if outcome.passes else 'does not pass'}",
         )
+    )
+
+
+def stated_denominator(rates: FamilyRates) -> str:
+    """This family's `n` per agent, or the three counts where there is no one `n`.
+
+    One number when the three agents were attempted the same number of times, which
+    is every run against three registered reference agents: `n` is
+    `attempts_per_case` times the cases the library holds in this family, and it is
+    read off the counts rather than computed from the library so that the figure
+    printed is the figure the rates were divided by.
+
+    **Three counts when they differ, and the words that say so.** A family whose
+    agents were not attempted equally has no single denominator, and one printed for
+    it would be a figure no rate was read at — the same refusal `Rate` makes by
+    carrying its own `attempts` ("3 successes in 30 attempts and 100 in 1000 are the
+    same number and not the same evidence"). The counts are on the rates above this
+    line either way; what this adds is that no one of them is the family's `n`.
+    """
+    counted = (rates.hardened.attempts, rates.weak.attempts, rates.trivial.attempts)
+    if len(set(counted)) == 1:
+        return f"{counted[0]} attempts per agent"
+    hardened, weak, trivial = counted
+    return (
+        f"hardened {hardened}, weak {weak}, trivial {trivial} — not one "
+        "denominator, so this family has no single n"
     )
 
 

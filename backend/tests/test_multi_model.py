@@ -15,6 +15,7 @@ else still. Same library, same agents, same rule — so a difference between the
 runs is attributable to the model or it is attributable to nothing.
 """
 
+import re
 import shutil
 from collections.abc import Sequence
 from pathlib import Path
@@ -30,7 +31,7 @@ from backend.bench.adaptive.discrimination import (
     measure,
 )
 from backend.bench.adaptive.episode import AdaptiveEpisode, EpisodeOutcome
-from backend.bench.adaptive.promotion import Promotion
+from backend.bench.adaptive.promotion import Promotion, promote
 from backend.bench.adaptive.proposal import ProposedRoute, proposed_from
 from backend.bench.adaptive.scripted import SCRIPTED_ATTACKER
 from backend.bench.adjudication import Completion
@@ -49,10 +50,18 @@ from backend.bench.crossmodel import (
     SwapReading,
     compare,
 )
-from backend.bench.decided import DECISION_NAMESPACE, Consultation, DecidedRoutes
+from backend.bench.decided import (
+    DECISION_NAMESPACE,
+    Consultation,
+    Consulted,
+    DecidedRoutes,
+)
+from backend.bench.entry import Entry
 from backend.bench.evaluator import Verdict
 from backend.bench.gate import GateResult
+from backend.bench.lease import take_the_library
 from backend.bench.library import (
+    EMPTY_LIBRARY,
     AdmissionReading,
     Case,
     DiscoveredBy,
@@ -86,7 +95,14 @@ from backend.tests.test_gate import (
     outcomes_for,
 )
 from scripts.console import EXIT_DECLINED, EXIT_WITHHELD
-from scripts.swap import Measure, ModelRun, cross_model_bar, main, record_swap
+from scripts.swap import (
+    EXIT_NOT_WRITTEN,
+    Measure,
+    ModelRun,
+    cross_model_bar,
+    main,
+    record_swap,
+)
 
 CROSSMODEL_SOURCE = Path(__file__).resolve().parents[1] / "bench" / "crossmodel.py"
 ADAPTIVE_CROSSMODEL_SOURCE = (
@@ -782,17 +798,182 @@ def test_the_entry_point_re_runs_the_library_on_a_second_model_and_records_both(
     # Each run's own block says which model it was made on, on both sides of the
     # document: two unlabelled blocks are two runs a reader cannot tell apart.
     assert written.count(f"on {FIRST}:") == 2 and written.count(f"on {SECOND}:") == 2
-    # The model moved and nothing else did: one library version, one set of agents.
-    assert written.count("sha256:") == 3
+    # The model moved and nothing else did: one library version, wherever it is
+    # printed. Four printings since ADR-0033 — the two runs, the comparison, and the
+    # version the library stands at after the write — and the assertion is that they
+    # are one digest rather than that there are three of them. A run that admitted a
+    # route would move the last of the four, which is exactly the fact that section
+    # exists to state.
+    digests = set(re.findall(r"sha256:([0-9a-f]+)", written))
+    assert written.count("sha256:") == 4
+    assert len(digests) == 1, digests
     # The adaptive half, in its own section and never in the table above it.
     assert "does A_break survive the model swap?" in written
     # The cross-model admission bar, the count ADR-0012 asks for, and the provenance
     # series that ADR asks to be printed on every run beside it.
     assert f"{RejectionKind.CROSS_MODEL}:" in written
     assert "provenance of the live library:" in written
+    # And what entered the library, which on this run is nothing: the scripted
+    # attacker's routes do not clear the cross-model bar on two stubs, so the section
+    # says the library is the library this run was made against (ADR-0033).
+    assert "## What entered the library" in written
+    assert "no route cleared the cross-model bar" in written
+    assert sorted(path.name for path in cases.glob("*.toml")) == sorted(
+        path.name for path in CASES_DIR.glob("*.toml")
+    )
     # And no payload, on any side of it (ADR-0008).
     for case in load_library(CASES_DIR):
         assert case.payload not in written
+
+
+def test_a_gate_run_holding_the_library_stops_the_write_and_not_the_comparison(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A held library refuses the write by name, and the comparison still stands.
+
+    The half of ADR-0033's lease decision that only the entry point can show. By the
+    time the write is attempted both suites have run, the bar has been put to every
+    route and the operator has paid — so this is a refusal to *write*, and the
+    comparison is measured, printed and recorded either way.
+
+    **Exit zero, because this run had nothing to write.** The scripted attacker's
+    routes do not clear the cross-model bar on two stubs, which is the ordinary
+    outcome of every run to date; a non-zero code here would report the lease rather
+    than the run. The test below is the other case.
+    """
+    monkeypatch.setattr("scripts.swap.attest", lambda identity: BENCH_ATTESTATION)
+    monkeypatch.setattr("scripts.swap.terminal_approval", lambda identity: CONFIRMING)
+    monkeypatch.setattr("scripts.swap.completion_for", _adjudicator_stand_in)
+    monkeypatch.setattr("scripts.swap.attacker_completion_for", _attacker_stand_in)
+    cases = tmp_path / "cases"
+    shutil.copytree(CASES_DIR, cases)
+    lease = take_the_library(cases, "a gate run, at a terminal")
+
+    try:
+        code = main(
+            [
+                "--identity",
+                BENCH_ATTESTATION.identity,
+                "--model",
+                FIRST,
+                "--second-model",
+                SECOND,
+                "--adjudicator-model",
+                ADJUDICATOR_STAND_IN,
+                "--attacker-model",
+                ATTACKER_STAND_IN,
+                "--cases",
+                str(cases),
+                "--record",
+                str(tmp_path),
+            ]
+        )
+    finally:
+        lease.release()
+    printed = capsys.readouterr().out
+
+    assert code == 0
+    assert "a gate run, at a terminal" in printed
+    assert "The comparison above stands" in printed
+    assert "nothing to write into it" in printed
+    # The comparison was made and is recorded, and the document says the write was
+    # refused rather than leaving the section out — a run whose write did not happen
+    # is a fact about that run and not an absence a reader has to notice.
+    [record] = list(tmp_path.glob("swap-*.md"))
+    written = record.read_text(encoding="utf-8")
+    assert "## The scored comparison" in written
+    assert "## What entered the library" in written
+    assert "not written — a gate run held this case library" in written
+
+
+def test_a_route_that_cleared_the_bar_and_was_not_written_is_a_non_zero_exit(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    leakage_case: Case,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The exit code that says a route cleared and did not reach the library.
+
+    The bar is stood in for rather than driven, because no route the scripted
+    attacker composes clears it on two stub models — which is the fact the test above
+    rests on. What is under test here is not the bar but what `main` does with an
+    admitted promotion it cannot write: everything measured stands, and the caller is
+    told that a case cleared and is not in the library, because a caller that read
+    zero would believe one had entered.
+    """
+    monkeypatch.setattr("scripts.swap.attest", lambda identity: BENCH_ATTESTATION)
+    monkeypatch.setattr("scripts.swap.terminal_approval", lambda identity: CONFIRMING)
+    monkeypatch.setattr("scripts.swap.completion_for", _adjudicator_stand_in)
+    monkeypatch.setattr("scripts.swap.attacker_completion_for", _attacker_stand_in)
+    cleared = _an_admitted_promotion(leakage_case)
+    monkeypatch.setattr(
+        "scripts.swap.cross_model_bar",
+        lambda **_: (
+            rejections((cleared.outcome,)),
+            (cleared,),
+            Consultation(
+                consulted=(Consulted(proposal=cleared.proposal, answer=None),)
+            ),
+        ),
+    )
+    cases = tmp_path / "cases"
+    shutil.copytree(CASES_DIR, cases)
+    lease = take_the_library(cases, "a gate run, at a terminal")
+
+    try:
+        code = main(
+            [
+                "--identity",
+                BENCH_ATTESTATION.identity,
+                "--model",
+                FIRST,
+                "--second-model",
+                SECOND,
+                "--adjudicator-model",
+                ADJUDICATOR_STAND_IN,
+                "--attacker-model",
+                ATTACKER_STAND_IN,
+                "--cases",
+                str(cases),
+                "--record",
+                str(tmp_path),
+            ]
+        )
+    finally:
+        lease.release()
+    printed = capsys.readouterr().out
+
+    assert code == EXIT_NOT_WRITTEN
+    assert "No route entered the library." in printed
+    # And the library is untouched, which is the whole of what the lease bought.
+    assert sorted(path.name for path in cases.glob("*.toml")) == sorted(
+        path.name for path in CASES_DIR.glob("*.toml")
+    )
+
+
+def _an_admitted_promotion(objective: Case) -> Promotion:
+    """One proposed route that cleared the cross-model bar, and the case it became.
+
+    Counts rather than a measurement, on `test_promotion.py`'s terms: whether a case
+    *would* separate the reference agents is a question about that case, and what is
+    under test where this is used is what the entry point does with the answer.
+    """
+    proposal = proposed_from(
+        objective=objective,
+        target=a_target("trivial"),
+        family=objective.family,
+        payload="the probe that actually ran",
+        description="a route worth promoting",
+    )
+    readings = [
+        AdmissionReading(model=model, attempts=10, hardened=0, weak=5, trivial=10)
+        for model in (FIRST, SECOND)
+    ]
+    promotion = promote(proposal, readings)
+    assert promotion.admitted, "these counts are supposed to clear the bar"
+    return promotion
 
 
 def test_one_model_named_twice_is_refused_before_anything_is_sent(
@@ -840,6 +1021,7 @@ def test_the_recorded_document_keeps_the_two_layers_in_two_sections(
         ),
         rejected=rejections(()),
         consulted=Consultation(consulted=()),
+        entry=Entry(version=EMPTY_LIBRARY),
         directory=tmp_path,
         identity=BENCH_ATTESTATION.identity,
         adjudicator_model=ADJUDICATOR_STAND_IN,
@@ -852,7 +1034,8 @@ def test_the_recorded_document_keeps_the_two_layers_in_two_sections(
     runs = written.index("## The two runs it compares")
     adaptive = written.index("## The adaptive layer, which decides nothing")
     bar = written.index("## The cross-model admission bar")
-    assert scored < runs < adaptive < bar
+    library = written.index("## What entered the library")
+    assert scored < runs < adaptive < bar < library
     assert "COLLAPSED" in written
     assert "provenance of the live library:" in written
     assert BENCH_ATTESTATION.identity in written

@@ -38,6 +38,7 @@ ADR-0018).
 from __future__ import annotations
 
 import ast
+import dataclasses
 import json
 from collections.abc import Iterator, Sequence
 from datetime import UTC, datetime
@@ -62,7 +63,12 @@ from backend.bench.gate_record import (
     write_the_record,
 )
 from backend.bench.library import Family, LibraryVersion
-from backend.bench.payload import UNCITED_GATE, GateCitation, citation
+from backend.bench.payload import (
+    UNCITED_GATE,
+    GateCitation,
+    LibraryMoved,
+    citation,
+)
 from backend.bench.scorer import GateDecision, GateOutcome, Reliability, decide_gate
 from backend.tests.test_gate import INVERTED, SEPARATES, TOO_CLOSE, judged, outcomes_for
 
@@ -450,18 +456,34 @@ def test_a_citation_is_not_a_gate_result_and_carries_no_decision() -> None:
     """The type that reaches `ReportConfig.gate` holds an address, not a decision.
 
     ADR-0021's condition 2 on a new axis: the one edge from a gate run onto the bench
-    a run is measured with carries a `GateCitation`, and a `GateCitation` has five
+    a run is measured with carries a `GateCitation`, and a `GateCitation` has six
     fields and none of them is a `GateDecision`, a `GateResult` or a
     `RecordedGateRun`. A contributor who wanted the figures on the report would have
     to widen this type, which is the signal ADR-0010 established.
+
+    `moved` is the sixth and the only one no gate run measured: how far the library
+    has grown past the version the outcome was earned at (ADR-0033). It is a count,
+    a digest and a list of case ids — the version the *next* gate run would be
+    decided at, and deliberately not a reading of the cases that entered.
     """
     fields = {field for field in GateCitation.__dataclass_fields__}
 
-    assert fields == {"outcome", "decided_on", "library", "document", "record"}
+    assert fields == {
+        "outcome",
+        "decided_on",
+        "library",
+        "document",
+        "record",
+        "moved",
+    }
     for held in (GateResult, GateDecision, RecordedGateRun, Replaced):
         assert held.__name__ not in {
             str(GateCitation.__dataclass_fields__[field].type) for field in fields
         }
+    assert {field.name for field in dataclasses.fields(LibraryMoved)} == {
+        "version",
+        "by",
+    }
 
 
 # --- helpers -----------------------------------------------------------------

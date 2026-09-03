@@ -322,8 +322,8 @@ class Instrumented:
     **`attempts_per_case` is in a different class from the other five**, and
     ADR-0025 argues the difference: the other five bound a layer scored on nothing
     (ADR-0010), and this one is the scored denominator that ADR-0003 sets to give
-    `n = 30` per family. What the difference buys here is that a run at a lower
-    number is honest and is **not a gate result** —
+    `n = 30` for a family holding the authored three cases. What the difference buys
+    here is that a run at a lower number is honest and is **not a gate result** —
     `GateRule` travels on `TargetRun` and prints beside every figure, and
     `scripts/gate.py` stays on `DECLARED_RULE` and takes no setting from this type.
     """

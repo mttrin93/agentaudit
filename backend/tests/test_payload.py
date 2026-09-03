@@ -382,6 +382,11 @@ def test_the_gate_citation_is_provenance_and_speaks_only_about_the_bench() -> No
         "library": {"cases": 18, "digest": "90a8ebcc3d0c"},
         "document": "docs/gate-runs/gate-2026-08-19T09-38-37Z.md",
         "record": "docs/gate-runs/gate-2026-08-19T09-38-37Z.json",
+        # `null` and never a missing key: this library still holds exactly the
+        # cases that gate run put itself through, and a reader who cannot tell that
+        # from a serialiser that stopped writing the key will assume the
+        # reassuring one (ADR-0033).
+        "moved": None,
         "stated": CITATION.stated(),
     }
 

@@ -1,7 +1,7 @@
 """The HTTP surface: a nonce, a run, the answer to the run's interrupt, and the
 artefact it produced.
 
-Twenty routes, in three families. `POST /nonces` issues the value an operator
+Twenty-two routes, in three families. `POST /nonces` issues the value an operator
 plants to prove they control the endpoint; `POST /runs` records the attestation,
 declares the estimate and halts; `POST /runs/{id}/approval` answers the halt; `GET
 /runs` lists the runs on the record; `GET /runs/{id}` says where the run has got to;
@@ -10,9 +10,11 @@ declares the estimate and halts; `POST /runs/{id}/approval` answers the halt; `G
 this process's memory and out of no document; four under `/report/{id}` — three that
 serve the files one signed run leaves, the payload, the rendering and the detached
 signature, and a fourth that says what a verifier makes of them; `GET /artefacts`
-lists every signed artefact with that same reading beside it; four under `/bench`,
+lists every signed artefact with that same reading beside it; six under `/bench`,
 whose subject is the bench rather than any run — `GET /bench/gate`, `GET
-/bench/gate/record`, `GET /bench/settings` and `GET /bench/notes`; and four under
+/bench/gate/record`, `GET /bench/settings` and `GET /bench/notes`, plus the two that
+declare the next run's inputs, `PUT /bench/settings/tuning` and `PUT
+/bench/settings/families` (ADR-0025, as amended by #57); and four under
 `/gate-runs`, which are the newest and the only ones on this surface that spend money
 on the bench's own behalf.
 
@@ -3299,7 +3301,7 @@ def _a_level_this_bench_offers(named: str | None) -> ReasoningEffort | None:
 
 
 BENCH_TUNING_ROUTE = "/bench/settings/tuning"
-"""Where the declared inputs of the next run are set. The one write on this bench.
+"""Where the instruments of the next run are set. The first of two writes here.
 
 A `PUT` because it is the whole statement every time: six settings arrive together
 so that a bench cannot end up naming one instrument in a report while another one

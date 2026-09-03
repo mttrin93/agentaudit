@@ -61,10 +61,11 @@ else about the word *gate* on this surface is still a read. Asserted from two
 directions, because the first is escapable by naming a route something else and a
 gate run started under a friendlier word would spend the same 830 calls: nothing
 whose path says *gate* is a write unless it is one of the two the gate-run family
-declares, and nothing under `/bench` is a write at all. What the reversal did not
-touch is why the pinning matters — the estimate and the three attestation statements
-are what make those 830 calls somebody's decision (ADR-0007), and they are asserted
-in `test_api_gate_runs.py`.
+declares, and the only writes under `/bench` are the two settings routes ADR-0025
+admits (as amended by #57) — a gate run is not one of them and never moved there.
+What the reversal did not touch is why the pinning matters — the estimate and the
+three attestation statements are what make those 830 calls somebody's decision
+(ADR-0007), and they are asserted in `test_api_gate_runs.py`.
 """
 
 from __future__ import annotations
@@ -337,15 +338,16 @@ def test_this_route_reads_and_the_one_that_starts_a_gate_run_is_elsewhere() -> N
     assert (BENCH_GATE_ROUTE, "POST") not in gate_routes
 
 
-def test_nothing_under_the_bench_prefix_does_anything_but_read() -> None:
-    """`/bench` reads, apart from the one route that sets a run's declared inputs.
+def test_only_the_two_settings_routes_write_under_the_bench_prefix() -> None:
+    """`/bench` reads, apart from the two routes that set a run's declared inputs.
 
     The assertion above is about the word *gate* in a path, and a route called
     `/bench/validate` would walk straight past it. This one is about the prefix: the
     subject of `/bench` is the instrument, everything the console asks of the
     instrument is a question, and a gate run is the one thing under it that would
     spend money and write to the case library. So every method on every route here is
-    `GET`, and a write appearing under this prefix fails here whatever it is called.
+    a `GET` bar the two that declare the next run's inputs, and a **third** write
+    appearing under this prefix fails here whatever it is called.
 
     Every route on the prefix is named here rather than allowed for, because the claim
     this test makes is about the whole set and not about how many are in it:
@@ -359,10 +361,12 @@ def test_nothing_under_the_bench_prefix_does_anything_but_read() -> None:
     and it is started at `POST /gate-runs` — a route whose path says plainly that it
     is not a read. Nothing moved under `/bench` to do it.
 
-    **ADR-0025 admitted exactly one write here**, and the set below is how narrow it
-    is: the declared inputs of the next run, printed in the provenance of every run
-    made under them. A gate run is still not one of them — it spends money and
-    rewrites the case library, and it stays at its own `POST`.
+    **ADR-0025, as amended, admits two writes here**, and the set below is how narrow
+    they are: the instruments the next run is set with, and the families it covers.
+    The decision paragraph said *one* and the families route already existed, which
+    is a claim the tree had outgrown before it was written down (#57). A gate run is
+    still not one of them — it spends money and rewrites the case library, and it
+    stays at its own `POST`.
     """
     app = create_app(BenchConfig(cases=[], report=ReportConfig(gate=CITED)))
     under_bench = {
@@ -382,10 +386,13 @@ def test_nothing_under_the_bench_prefix_does_anything_but_read() -> None:
         (BENCH_FAMILIES_ROUTE, "PUT"),
     }
 
-    # And the writes on this bench are the five that are named. Two of them start
-    # something that spends — a run and a gate run — and each is behind an
-    # attestation that cannot be constructed incomplete and a halt in front of the
-    # figures (ADR-0007). A sixth appearing here is a spend nobody declared.
+    # And the writes on this bench are the seven that are named — five `POST`s and
+    # the two settings `PUT`s. Two of the five start something that spends — a run
+    # and a gate run — and each is behind an attestation that cannot be constructed
+    # incomplete and a halt in front of the figures (ADR-0007). The count is asserted
+    # by naming every pair rather than by its length, because an **eighth** is either
+    # a spend nobody declared or a setting no ADR admitted, and the failure has to
+    # name which route it is.
     writes = {
         (route.path, method)
         for route in app.routes

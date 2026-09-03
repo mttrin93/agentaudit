@@ -1,7 +1,8 @@
 /**
- * The operator's other screen: what this instrument is set to, stated and not changed.
+ * The operator's other screen: what this instrument is set to, and the one thing an
+ * operator sets from it.
  *
- * Five blocks, in the order the response serves them, and the order is the content
+ * Six blocks, in the order the response serves them, and the order is the content
  * rather than the layout. **The two key identifiers first**, because the question an
  * operator opens this screen with is *which key will sign the thing I am about to
  * send a customer* — and because there are two answers to it and only one of them is
@@ -10,7 +11,8 @@
  * citation carries. **Then the three reference agents**, because the next thing a
  * reader asks about a discrimination score is what it was measured against. **Then
  * the four model settings**, four rows and never one. **Then each layer's ceiling**,
- * two records in two different units.
+ * two records in two different units. **And last the tuning**, the one block that
+ * offers a change rather than stating one (ADR-0025).
  *
  * **The order is asserted, not merely intended.** This module returns the blocks as a
  * sequence and the component maps over it, so *above* is a property of a value a test
@@ -40,11 +42,13 @@
  * shaped records, and an attempt is the unit of a denominator while a turn is a
  * spending limit (CONTEXT.md, ADR-0007, ADR-0010).
  *
- * **Nothing here changes anything.** Every field of every block is text, a boolean or
- * a declared number; the type has no callback in it, and `SettingsScreen.tsx` has no
- * button, no form and no write of any kind. Rotation stays in the environment and
- * configuration stays on the command line, because the factory reads its key from one
- * place and refuses to boot without it (ADR-0020).
+ * **Nothing in this module changes anything, and the one block that offers a change
+ * offers only the tuning.** Every field of every *stating* block is text, a boolean or
+ * a declared number and the type has no callback in it, so there is nowhere in those
+ * values for a handler to live; the `tuning` block is the exception, it is one block,
+ * and what it describes is the form `SettingsScreen.tsx` draws (ADR-0025). Rotation
+ * stays in the environment, because the factory reads its key from one place and
+ * refuses to boot without it (ADR-0020), and the library stays what was mounted.
  */
 
 import type {
@@ -65,8 +69,9 @@ export const WHAT_THIS_SCREEN_ANSWERS =
   'What this bench is configured to do, as it is currently loaded. It states the ' +
   'key an artefact will be signed by and the key a verification is run against, the ' +
   'case library it holds, the four models behind its instruments and each layer’s ' +
-  'own ceiling — and it changes none of them: the signing key is rotated in the ' +
-  'environment and everything else is chosen on the command line.'
+  'own ceiling — and of those it changes none: the signing key is rotated in the ' +
+  'environment and the library is what was mounted. What it does set are the ' +
+  'declared inputs of the next run (ADR-0025).'
 
 /** The command that generates a signing pair, for an operator who needs one. */
 export const KEYGEN_COMMAND =

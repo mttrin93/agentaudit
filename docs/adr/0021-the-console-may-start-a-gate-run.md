@@ -213,6 +213,14 @@ Everything else this spends is smaller and none of it is nothing:
   read-only in every method — and two in `frontend/src/console/gate.test.ts`, which
   now pin the *one* control the screen adds and refuse a second one. An absence that
   became a presence is worth more as a pinned presence than as a deleted test.
+
+  *Corrected by #57*: read the second of those two as *what `/bench` does in every
+  method*. Read-only in every method stopped being true at
+  [ADR-0025](./0025-the-console-may-set-a-runs-declared-inputs.md), and it was already
+  untrue of `PUT /bench/settings/families`, which predates both records. The
+  assertion is now `test_only_the_two_settings_routes_write_under_the_bench_prefix`
+  and it names every pair on the prefix, so it is not weakened — and the claim this
+  record owns, that **no gate run moved under `/bench`**, is unaffected either way.
 - **A bench that declared its own configuration runs no gate unless it says so.**
   `create_app` takes the gate-run bench as a second argument, so the operation that
   spends 830 calls and rewrites the library is not something a deployment acquires by

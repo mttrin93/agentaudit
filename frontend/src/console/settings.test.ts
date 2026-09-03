@@ -34,10 +34,14 @@
  * them — a threshold written into the console is a threshold that can disagree with
  * `rule.py` in the flattering direction.
  *
- * **That nothing here changes a setting.** Asserted three ways: no leaf of the view is
- * anything but text, a boolean or a declared number, so there is nowhere for a handler
- * to live; no field is named for an action; and `SettingsScreen.tsx` itself is read and
- * contains no button, no form, no handler and no write.
+ * **That the tuning form is the only thing here that changes a setting.** Asserted
+ * three ways: no leaf of any *stating* block is anything but text, a boolean or a
+ * declared number, so there is nowhere outside the one `tuning` block for a handler to
+ * live; no field anywhere is named for something that happens to a key or to the
+ * library; and `SettingsScreen.tsx` itself is read and reaches `tuneBench` and nothing
+ * else on the bench — no run started, no interrupt answered, no nonce issued, no gate
+ * run, no `fetch` of its own. The claim used to be that the file contained no write at
+ * all, which ADR-0025 ended and this docstring outlived (#57).
  */
 
 import { describe, expect, it } from 'vitest'
@@ -694,11 +698,12 @@ describe('nothing on this screen changes a setting', () => {
     }
   })
 
-  it('sends the five settings together, on change, with no confirm step', () => {
+  it('sends the six settings together, on change, with no confirm step', () => {
     // A caller that could set the turn budget without restating the model would let
     // a bench name one instrument in a report while another attacked, which is why
-    // the request takes all five. Asserted over the source, because what this
-    // guards is the shape of the call and not what the screen looks like.
+    // the request takes all six. Asserted over the source, because what this
+    // guards is the shape of the call and not what the screen looks like. Six since
+    // #5 added the reasoning effort; this list said five until #57 counted it.
     const call = component.slice(component.indexOf('await tuneBench({'))
     // No button and no submit: these are the settings the *next* run starts with,
     // and that run has its own attestation and its own halt in front of its own
@@ -708,6 +713,7 @@ describe('nothing on this screen changes a setting', () => {
     for (const field of [
       'attacker_model:',
       'temperature:',
+      'reasoning_effort:',
       'turns_per_episode:',
       'episodes_per_family:',
       'attempts_per_case:',
@@ -722,7 +728,7 @@ describe('nothing on this screen changes a setting', () => {
   it('draws the bench’s own caveat about the scored denominator', () => {
     const tuning = block(settingsScreen(CONFIGURED), 'tuning')
 
-    // Carried, never paraphrased: four of the five settings bound a layer that is
+    // Carried, never paraphrased: five of the six settings bound a layer that is
     // scored on nothing, and this one moves the number the gate is decided at.
     // The reasoning effort is carried as the closed list the route enforces, with the
     // bench's own sentence beside it: two runs of one model at one temperature and

@@ -100,12 +100,10 @@ export const ARTEFACTS_PATH = '/artefacts'
  * server proxies to the bench.
  *
  * `/settings` and deliberately not `/configure`, which is the distinction still
- * worth stating now that the rail's label is the plain word: nothing on this screen
- * changes a setting, and there is no route on this bench that would take one. The
- * screen states what the bench is set to and offers no control that alters it —
- * rotation stays in the environment and configuration stays on the command line
- * (ADR-0020) — so a path promising otherwise would be a promise no route here can
- * keep.
+ * worth stating now that ADR-0025 has admitted a form onto the screen: what this
+ * screen sets are the declared inputs of the *next run*, and what `/configure` would
+ * promise is the part no route keeps — rotation stays in the environment (ADR-0020),
+ * and the library stays what was mounted. So the plain word is still the honest one.
  */
 export const SETTINGS_PATH = '/settings'
 

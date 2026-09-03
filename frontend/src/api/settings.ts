@@ -51,11 +51,13 @@ export interface BenchGate {
  * editing a configuration, and a bench whose last gate run failed says *that*.
  * Reading a gate run and starting one are still two operations on two routes.
  *
- * **Nothing under `/bench` is a write, and starting a gate run is not here.** The
- * four functions below post to and read `/gate-runs`, which is its own route
- * family for the reason a gate run is its own record: a run produces rates about
- * somebody's target, a gate run produces a decision about this bench (ADR-0018,
- * ADR-0021).
+ * **Starting a gate run is not here, and is nowhere under `/bench`.** The four
+ * functions below post to and read `/gate-runs`, which is its own route family for
+ * the reason a gate run is its own record: a run produces rates about somebody's
+ * target, a gate run produces a decision about this bench (ADR-0018, ADR-0021). The
+ * only writes on the prefix are the two settings routes further down — the
+ * instruments the next run is set with, and the families it covers (ADR-0025, as
+ * amended by #57).
  */
 export async function benchGate(): Promise<BenchGate> {
   return (await fetched(BENCH_GATE_PATH, 'gate citation')) as BenchGate
@@ -375,9 +377,10 @@ export const BENCH_TUNING_PATH = '/bench/settings/tuning'
 /**
  * Set the declared inputs of the next run, and read back what the bench now holds.
  *
- * The one write under `/bench` (ADR-0025). All six settings go every time, because a
- * caller that could send the turn budget without restating the attacker model could
- * leave a bench naming one instrument in a report while another attacked.
+ * The first of the two writes under `/bench` (ADR-0025, as amended by #57 — the second
+ * is `coverFamilies` below). All six settings go every time, because a caller that
+ * could send the turn budget without restating the attacker model could leave a bench
+ * naming one instrument in a report while another attacked.
  *
  * The answer is the whole settings reading, so the screen renders what was stored
  * rather than what it hoped it sent. A `409` is the bench refusing while a run is
@@ -403,10 +406,11 @@ export const BENCH_FAMILIES_PATH = '/bench/settings/families'
 /**
  * Set which families the next run covers, and read back what the bench now holds.
  *
- * The second write under `/bench` (ADR-0025), and its own statement rather than a
- * field on the tuning request: that one is *how the instruments are set* and takes all
- * six settings every time; this is *what the next run covers*, sent from a different
- * screen. An empty list is refused — a run covering no family attacks nothing.
+ * The second write under `/bench` (ADR-0025, as amended by #57), and its own statement
+ * rather than a field on the tuning request: that one is *how the instruments are set*
+ * and takes all six settings every time; this is *what the next run covers*, sent from
+ * a different screen. An empty list is refused — a run covering no family attacks
+ * nothing.
  */
 export async function coverFamilies(families: string[]): Promise<BenchSettings> {
   const response = await fetch(BENCH_FAMILIES_PATH, {

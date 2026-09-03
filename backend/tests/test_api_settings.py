@@ -1,10 +1,11 @@
 """What this instrument is configured to do, and the four ways stating it goes wrong.
 
 `GET /bench/settings` is the second route whose subject is the bench. It is a
-reader: nothing under `/bench` writes, rotation stays in the environment and
-configuration stays on the command line, because the factory reads its key from one
-place and refuses to boot without it (ADR-0020). Every assertion here is about a way
-this response could quietly become something else.
+reader, and the two writes on the prefix are the settings `PUT`s below (ADR-0025 as
+amended by #57). Rotation stays in the environment, because the factory reads its
+key from one place and refuses to boot without it (ADR-0020), and the library stays
+what was mounted. Every assertion here is about a way this response could quietly
+become something else.
 
 **Two key identifiers, because they are two facts.** The key an artefact will be
 signed by and the key a verification is run against are the two halves of
@@ -562,21 +563,29 @@ def test_the_declared_figures_are_read_off_the_records_that_declare_them() -> No
     assert "adaptive/budget.py" in str(adaptive["declared_in"])
 
 
-def test_one_route_under_the_bench_prefix_writes_and_it_is_the_declared_inputs() -> (
-    None
-):
-    """`/bench` holds exactly one write, and it is the tuning route (ADR-0025).
+def test_two_routes_under_the_bench_prefix_write_and_both_are_declared_inputs() -> None:
+    """`/bench` holds exactly two writes: the tuning route and the families route.
 
     Over the route table rather than over this module, because the claim is about the
     whole surface. The line is not *no writes* any more and it is not *any write*: a
-    setting that changes what the **next run measures** may be set from the console,
-    and it is printed in the provenance of every run made under it. Everything else
-    stays where it was — the signing key is read from the environment by
-    `signing.signing_key` and by no route (ADR-0020), the library is what was mounted,
-    and the citation moves only when a gate run earns it (ADR-0023).
+    setting that changes what the **next run covers or measures** may be set from the
+    console, and what it changed is legible in the record of every run made under it.
+    Everything else stays where it was — the signing key is read from the environment
+    by `signing.signing_key` and by no route (ADR-0020), the library is what was
+    mounted, and the citation moves only when a gate run earns it (ADR-0023).
 
-    A second write appearing under this prefix fails here whatever it is called, which
-    is the protection this test still is.
+    **Two, and it was two before the name above admitted it.** `PUT
+    /bench/settings/families` predates ADR-0025, the ADR was written claiming one
+    write anyway, and this set was later widened to admit the second while the name
+    and the prose went on saying *one* — so the test kept failing correctly and
+    describing itself wrongly (#57). ADR-0025's amendment argues the families route on
+    the same four conditions as the tuning route, which is what makes the two below a
+    decision rather than an accretion.
+
+    A **third** write appearing under this prefix fails here whatever it is called,
+    which is the protection this test is. Every route is named rather than counted for
+    exactly that reason: an assertion on how *many* writes there are would pass on a
+    route that swapped one of these for something else.
     """
     app = create_app(BenchConfig(cases=[]))
     under_bench = {
@@ -596,7 +605,7 @@ def test_one_route_under_the_bench_prefix_writes_and_it_is_the_declared_inputs()
         (BENCH_FAMILIES_ROUTE, "PUT"),
     }
 
-    # And nothing anywhere on this bench takes a key: the one setting route takes the
+    # And nothing anywhere on this bench takes a key: the two setting routes take the
     # declared inputs of a run and nothing else, and the rest take an attestation, an
     # approval, or a nonce request.
     writes = {
@@ -610,9 +619,10 @@ def test_one_route_under_the_bench_prefix_writes_and_it_is_the_declared_inputs()
         "/nonces",
         "/runs",
         "/runs/{run_id}/approval",
-        # The one setting a console may write, since ADR-0025: the attacker's model
-        # and temperature, T, k and attempts per case. Every one of them is printed
-        # in the report of every run made under it, and none of them is a key.
+        # The first of the two settings a console may write, since ADR-0025: the
+        # attacker's model, its temperature and its reasoning effort, T, k and
+        # attempts per case. Every one of them is printed in the report of every run
+        # made under it, and none of them is a key.
         BENCH_TUNING_ROUTE,
         # And the second: which families the next run covers. Its own statement from
         # its own screen, and it takes no instrument.
@@ -627,7 +637,7 @@ def test_one_route_under_the_bench_prefix_writes_and_it_is_the_declared_inputs()
 
 
 def test_the_declared_inputs_of_the_next_run_can_be_set_and_are_read_back() -> None:
-    """The one write under `/bench`, and it answers with what the bench now holds.
+    """The tuning write under `/bench`, and it answers with what the bench now holds.
 
     The response is the whole settings reading rather than an acknowledgement, so a
     console renders what was stored instead of what it hoped it sent — the same
@@ -1085,7 +1095,7 @@ def test_a_reasoning_effort_a_model_has_no_setting_for_is_refused_when_it_is_set
 def test_the_block_says_a_run_below_the_declared_rule_is_not_a_gate_result() -> None:
     """`attempts_per_case` is the scored denominator and the block says so.
 
-    The other four settings bound a layer that is scored on nothing; this one moves
+    The other five settings bound a layer that is scored on nothing; this one moves
     the number the Wilson interval, the band, monotonicity and the retirement rule
     are all defined against (ADR-0003). A screen offering it without that sentence
     would be offering a way to produce a rate that reads like a gate reading.

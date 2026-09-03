@@ -1,16 +1,21 @@
 /**
- * The operator's screen for what this bench is set to. It states; it changes nothing.
+ * The operator's screen for what this bench is set to. It states, and it tunes.
  *
  * The blocks are `settings.ts`'s sequence and this file maps over it in order, so
  * *the library above the ceilings* is a property of a value a test reads rather than of
  * markup nobody checks.
  *
- * **There is no control here.** Not one element on this screen writes a setting, and
- * there is no route on this bench that would take one: the signing key is rotated in
- * the environment and the models, the library and the thresholds are chosen on the
- * command line, because the factory reads its key from one place and refuses to boot
- * without it (ADR-0020). So the console offers no affordance at all, and
- * `settings.test.ts` reads this file to assert the absence.
+ * **There is one control here, and it is the tuning form.** This docstring said
+ * *there is no control here* and that there was no route on this bench that would
+ * take one; ADR-0025 reversed the second half and this screen grew the first, and the
+ * sentence stayed (#57). What is still true is the boundary, and it is the part worth
+ * asserting: the form reaches `tuneBench` and nothing else on the bench — no run
+ * started, no interrupt answered, no nonce issued, no gate run, no `fetch` of its own
+ * — and the signing key is still rotated in the environment and by no route, because
+ * the factory reads its key from one place and refuses to boot without it (ADR-0020).
+ * `settings.test.ts` reads this file to assert exactly that, and the families a run
+ * covers are the prefix's other write, set from `LandingScreen.tsx` against their own
+ * route (ADR-0025 as amended by #57).
  *
  * **The two key identifiers are not drawn here.** They are still the reading's first
  * block, still two and still never merged — `settings.ts` builds both fingerprints,

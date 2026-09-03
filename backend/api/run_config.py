@@ -278,8 +278,8 @@ class Instrumented:
     another, and the four settings of a run's provenance exist to make exactly that
     unreadable (ADR-0004, ADR-0013).
 
-    **`attempts_per_case` is in a different class from the other four**, and
-    ADR-0025 argues the difference: the other four bound a layer scored on nothing
+    **`attempts_per_case` is in a different class from the other five**, and
+    ADR-0025 argues the difference: the other five bound a layer scored on nothing
     (ADR-0010), and this one is the scored denominator that ADR-0003 sets to give
     `n = 30` per family. What the difference buys here is that a run at a lower
     number is honest and is **not a gate result** —

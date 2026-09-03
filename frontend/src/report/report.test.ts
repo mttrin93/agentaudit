@@ -140,6 +140,23 @@ function nothingWasReDerived(): Verification {
   }
 }
 
+/** A run at an `attempts_per_case` the console offered: figures agree, not a gate
+ * result. */
+function measuredOffTheDeclaredRule(): Verification {
+  return {
+    ...allThreeHeld(),
+    arithmetic: {
+      outcome: 'arithmetic_agrees_not_a_gate_result',
+      statement:
+        '31 stated figures recomputed from the counts beside them and every one ' +
+        'agrees — and they were counted on a denominator that is not the declared ' +
+        'one.\n**This is not a gate result.**',
+    },
+    verified: true,
+    contradicted: false,
+  }
+}
+
 /** That payload with one measured family taken out, and nothing else touched. */
 function without(family: string): TargetReport {
   const copy = structuredClone(SERVED)
@@ -412,6 +429,21 @@ describe('verification status', () => {
     expect(nothing.settled).toBe('not_established')
     expect(nothing.heading).toContain('not all three were established')
     expect(nothing.heading).not.toContain('did not verify')
+  })
+
+  it('reads a run off the declared denominator as held, and says it is not a gate result', () => {
+    // The fourth answer of the third check (ADR-0027): the figures re-derived, and
+    // the denominator they were counted on is one the console offered (ADR-0025). A
+    // screen that drew this as a failed check would be reporting an artefact that
+    // verified as one that did not — and the reader would learn that the row is
+    // noise, which is the state in which a real disagreement goes unnoticed.
+    const probed = verificationReading(measuredOffTheDeclaredRule())
+
+    expect(probed.checks.map((check) => check.held)).toEqual([true, true, true])
+    expect(probed.checks[2].outcome).toBe('arithmetic_agrees_not_a_gate_result')
+    expect(probed.settled).toBe('verified')
+    // The sentence a reader must not miss travels in the check's own statement.
+    expect(probed.checks[2].statement).toContain('not a gate result')
   })
 })
 

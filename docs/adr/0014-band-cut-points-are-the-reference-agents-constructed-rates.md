@@ -99,7 +99,9 @@ reader.
   gets *stricter* with more evidence rather than looser, and never claims more than
   the counts support. The reading is chosen for `n = 30` and does not have to be
   revisited if that number ever rises — but if it falls, it must be, because the
-  band's resolving power falls with it.
+  band's resolving power falls with it. A report whose bands were read at an `n`
+  below the declared one therefore states that it is not a gate result
+  ([ADR-0027](./0027-the-verifier-reads-the-denominator-and-asserts-the-rest-of-the-bar.md)).
 - **A band inherits its section's evidentiary strength.** The judged families carry
   bands too, and a judged band rests on adjudication ([ADR-0013](./0013-adjudication-is-a-third-instrument.md))
   rather than on a re-derivable success condition. `MeasuredSection` keeps the two

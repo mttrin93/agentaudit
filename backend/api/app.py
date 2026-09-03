@@ -2857,6 +2857,15 @@ A_RUN_BELOW_THE_DECLARED_RULE_IS_NOT_A_GATE_RESULT = (
     "is not a gate result: nothing may compare it to a reading taken at the declared "
     "rule, and `scripts/gate.py` takes no setting from this screen"
 )
+"""What the screen says about the setting before anybody uses it.
+
+Its own sentence and not `rule.NOT_A_GATE_RESULT`, which is the one a produced
+report carries: this one is about an offer on a screen — *this screen*, whose form
+is the reason the caveat is here — and that one is about an artefact somebody is
+holding. Both say the reading may not be compared with one taken at the declared
+rule, and the report's copy is the one a recipient who never saw this screen reads
+(ADR-0025, ADR-0027).
+"""
 
 A_FAMILY_SWITCHED_OFF_IS_NOT_RUN = (
     "a family switched off is not run: no case in it is attempted, no episode opens "

@@ -56,18 +56,20 @@ const IDENTITY = 'the browser walkthrough'
  * screen sends, refused by the bench while a run is in flight, and printed in the
  * report of every run made under them.
  *
- * **`attempts_per_case` is left at the declared value, and that is a finding this walk
- * made rather than a choice.** It is settable, the console offers it, and a run made at
- * anything other than the published `n` signs an artefact that reports
- * `arithmetic_disagrees`: `verification._declared_bar` checks the payload's stated rule
- * against `DECLARED_RULE` and nothing else, on the grounds that a report measured under
- * an alternative rule is a report whose numbers mean something else (ADR-0003,
- * ADR-0014) — which is in tension with ADR-0025 admitting the setting at all. The first
- * version of this walk shrank the run that way and the verifier caught it. So the
- * figure is read back from `declared_attempts_per_case` and re-sent unchanged, and what
- * shrinks the run is the family count and the adaptive layer's two knobs, neither of
- * which the scored arithmetic is re-derived from. One family of three cases at the
- * declared attempts is thirty-one calls including the registration probe.
+ * **`attempts_per_case` is left at the declared value, and it is now a choice.** This
+ * walk shrank its run that way first and the verifier caught it — `_declared_bar`
+ * asserted the payload's stated rule against `DECLARED_RULE` and nothing else, so a
+ * run at the `n` the console offers signed an artefact reporting
+ * `arithmetic_disagrees` — and the finding was reported rather than accommodated.
+ * ADR-0027 has since decided it: the denominator is read, the rest of the bar is
+ * asserted, and a report measured off the declared rule verifies while saying it is
+ * not a gate result. This walk stays at the declared `n` anyway, because it is the one
+ * end-to-end assertion that a recipient's verification of a real run comes out
+ * `arithmetic_agrees`; the fourth answer is asserted in `backend/tests/test_verify.py`.
+ * So the figure is read back from `declared_attempts_per_case` and re-sent unchanged,
+ * and what shrinks the run is the family count and the adaptive layer's two knobs,
+ * neither of which the scored arithmetic is re-derived from. One family of three cases
+ * at the declared attempts is thirty-one calls including the registration probe.
  *
  * The attacker's model is read back and re-sent for the same reason as the attempts:
  * all six settings go on every tuning request, and a walkthrough that wrote a model

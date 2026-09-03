@@ -57,6 +57,14 @@ Admitted on four conditions, and each one is enforced rather than intended:
 
 ## `attempts_per_case` is in a different class from the other four, and the screen says so
 
+*Amended by
+[ADR-0027](./0027-the-verifier-reads-the-denominator-and-asserts-the-rest-of-the-bar.md)*:
+the screen said it and the signed artefact did not,
+and a verifier asserted the declared number against every payload — so a run made at
+the offer below reported its own arithmetic as disagreeing. ADR-0027 decides what that
+verifier is asserting: this number is read, the rest of the bar is asserted, and the
+*not a gate result* sentence travels in the document rather than only on the screen.
+
 Four of the five bound a layer that is **scored on nothing**
 ([ADR-0010](./0010-two-layers-in-one-run-the-adaptive-layer-is-never-scored.md)):
 turning `T` up buys the attacker more rope and moves no rate, no band, no `D` and no

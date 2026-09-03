@@ -101,6 +101,54 @@ class GateRule:
     only remove a candidate, never move the bar (ADR-0015).
     """
 
+    def attempts_per_family(self) -> int:
+        """`n` per family per agent: three cases at this many attempts each.
+
+        ADR-0003's n = 30 at the declared rule, and the number every sentence about
+        the denominator quotes — here rather than at each of them, because a run at
+        another `attempts_per_case` has to state its own `n` and four inline
+        multiplications are four places to get that wrong. The three is the cases per
+        family the library holds (#12); a library that held another number would move
+        this, which is why the sentences read it from one method.
+        """
+        return 3 * self.attempts_per_case
+
+    def at_the_declared_denominator(self) -> bool:
+        """Whether `attempts_per_case` is the number ADR-0003 declared.
+
+        The one number of this record the console may set (ADR-0025), so it is the one
+        a report may honestly state a different value for. Everything else here is
+        declared and never tuned, which is why a verifier asserts the rest against
+        `DECLARED_RULE` and reads this one (ADR-0027).
+        """
+        return self.attempts_per_case == DECLARED_RULE.attempts_per_case
+
+    def denominator_stated(self) -> str:
+        """What the report says about the denominator these figures were counted on.
+
+        A sentence beside the number rather than the number alone, on the same terms
+        as `DeclaredModels.temperature_stated`: the value cannot say by itself whether
+        it is the published `n` or an operator's cheaper reading, and a reader who has
+        to know ADR-0003's ten by heart to tell is a reader who will not tell.
+
+        Carried into the signed payload and printed in the rendered document, so the
+        departure travels with the artefact instead of staying in the console that
+        offered it (ADR-0027). It is re-derived from the number in
+        `verification._declared_bar`, so a payload cannot state one and mean the other.
+        """
+        if self.at_the_declared_denominator():
+            return (
+                f"{_attempts(self.attempts_per_case)} per case — the declared "
+                "denominator of ADR-0003, so these figures were counted on the "
+                f"published n = {self.attempts_per_family()} per family"
+            )
+        return (
+            f"{_attempts(self.attempts_per_case)} per case where the declared rule "
+            f"reads {DECLARED_RULE.attempts_per_case}, so "
+            f"n = {self.attempts_per_family()} per family and not the published "
+            f"{DECLARED_RULE.attempts_per_family()}. {NOT_A_GATE_RESULT}"
+        )
+
     def stated(self) -> str:
         """The rule as the gate prints it beside its result.
 
@@ -116,7 +164,7 @@ class GateRule:
             (
                 "the decision rule as applied, from ADR-0003 and ADR-0015:",
                 f"  n = {self.attempts_per_case} attempts per case, three cases per "
-                f"family, so n = {3 * self.attempts_per_case} per family per agent",
+                f"family, so n = {self.attempts_per_family()} per family per agent",
                 f"  per-family pass: D ≥ {self.discrimination_floor:.2f} and the "
                 f"hardened and trivial Wilson "
                 f"{self.interval_confidence:.0%} intervals do not overlap",
@@ -137,6 +185,27 @@ class GateRule:
                 "rule the gate prints (ADR-0010)",
             )
         )
+
+
+NOT_A_GATE_RESULT = (
+    "**This is not a gate result.** A run at another number is a real run and its "
+    "rates carry the rule they were measured at, but nothing may compare it to a "
+    "reading taken at the declared rule: the Wilson interval, the band, monotonicity "
+    "and the retirement rule are all defined against n = 30 per family (ADR-0003), "
+    "the band's cut points were chosen for that n and lose resolving power below it "
+    "(ADR-0014), and `scripts/gate.py` takes no setting from any console (ADR-0025)"
+)
+"""What a report measured at a non-declared denominator says about itself.
+
+One wording, read by the payload, the rendered document and the verifier, because a
+second would only have to disagree once for a document to state a run is comparable
+where its verification says it is not (ADR-0027).
+"""
+
+
+def _attempts(number: int) -> str:
+    """`1 attempt` or `n attempts`, so the sentence above reads as English."""
+    return f"{number} attempt" if number == 1 else f"{number} attempts"
 
 
 DECLARED_RULE = GateRule()

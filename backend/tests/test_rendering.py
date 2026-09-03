@@ -55,6 +55,7 @@ from backend.bench.rendering import (
     sections,
 )
 from backend.bench.reproducibility import Reproducibility
+from backend.bench.rule import DECLARED_RULE, NOT_A_GATE_RESULT
 from backend.bench.scorer import Band, GateOutcome
 from backend.tests.test_payload import (
     FORBIDDEN_IN_A_KEY,
@@ -141,7 +142,7 @@ def test_every_section_states_its_own_reproducibility_and_three_read_the_payload
 
 # --- The golden digest: one document, pinned to the byte ---------------------
 
-GOLDEN_ONE_FAMILY = "257b0e3fbe011e1a879f08a2222126a225da4b700abb09ea84cab835b90af0b7"
+GOLDEN_ONE_FAMILY = "d565134c476fabbea62e6ed7ae9f5faac55764d400377272c92edae9ea99ea2e"
 """The sha256 of `_one_family()`'s rendering, written down.
 
 **A tripwire, and it is deliberately a strict one.** Every other assertion in this
@@ -157,6 +158,10 @@ then this constant is updated in the same diff as the wording that moved it, whi
 the point: a digest changing is a fact with an author. It is not a signature and no
 issued signature depends on it (ADR-0017); changing the renderer stays free, and
 changing it by accident does not.
+
+Moved once, by #56: the rule block gained the sentence beside its denominator, so
+every rendering says whether its figures are a gate result and not only what `n`
+they were counted on (ADR-0027).
 """
 
 
@@ -365,6 +370,29 @@ def test_the_document_says_how_hard_the_attacker_was_told_to_think() -> None:
 
 
 # --- Two claims, printed together (ADR-0017) ---------------------------------
+
+
+def test_the_document_says_when_its_figures_are_not_a_gate_result() -> None:
+    """The denominator's own sentence, in the document rather than in the console.
+
+    `attempts_per_case` is a declared input the console offers (ADR-0025), and a run
+    at another number is a real run that may not be compared with one taken at the
+    published `n`. The block that offers the setting already printed that sentence on
+    a screen; the signed document carries it too, so a reader who never saw the
+    console is told (ADR-0027). Inside the rendering, and so inside the digest the
+    signature covers.
+    """
+    declared = render(a_payload())
+    probed = render(a_payload(rule=replace(DECLARED_RULE, attempts_per_case=1)))
+
+    assert "10 attempts per case" in declared
+    assert NOT_A_GATE_RESULT not in declared
+
+    # The whole sentence, because the load-bearing half is what may be done with the
+    # figures rather than which number was used: a reader who is told only the `n`
+    # will compare the reading against ones taken at the declared rule.
+    assert NOT_A_GATE_RESULT in probed
+    assert "1 attempt per case where the declared rule reads 10" in probed
 
 
 def test_the_document_prints_both_claims_and_scopes_re_derivability_to_the_scored() -> (

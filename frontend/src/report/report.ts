@@ -738,9 +738,19 @@ export function verificationReading(
     // one would let its reader infer the strongest claim from the weakest, which is
     // the inference ADR-0017 exists to prevent.
     checks: [
-      check('Signature', verification.signature, 'signature_valid'),
-      check('Rendering binding', verification.binding, 'rendering_matches_its_digest'),
-      check('Arithmetic re-derived', verification.arithmetic, 'arithmetic_agrees'),
+      check('Signature', verification.signature, ['signature_valid']),
+      check('Rendering binding', verification.binding, [
+        'rendering_matches_its_digest',
+      ]),
+      // Two passing outcomes on the third check and one of them carries a sentence:
+      // a run at an `attempts_per_case` the console offered re-derives, and it is not
+      // a gate result (ADR-0025, ADR-0027). The distinction is in the outcome and in
+      // the statement beside it; drawing it as a failed row would tell a reader that
+      // an artefact which verified did not, and teach them the row is noise.
+      check('Arithmetic re-derived', verification.arithmetic, [
+        'arithmetic_agrees',
+        'arithmetic_agrees_not_a_gate_result',
+      ]),
     ],
     claims: [
       { label: 'Integrity — the whole document', statement: verification.integrity },
@@ -756,13 +766,13 @@ export function verificationReading(
   function check(
     name: string,
     result: { outcome: string; statement: string },
-    passing: string,
+    passing: string[],
   ): CheckReading {
     return {
       name,
       outcome: result.outcome,
       statement: result.statement,
-      held: result.outcome === passing,
+      held: passing.includes(result.outcome),
     }
   }
 }

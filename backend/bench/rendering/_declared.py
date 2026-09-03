@@ -258,6 +258,12 @@ def _how_the_run_was_made(body: Mapping[str, Any]) -> Section:
             "",
             f"- **{rule['attempts_per_case']} attempts per case** — the denominator "
             "behind each rate is printed beside it in section 4.",
+            # The sentence beside the number, nested under it the way the attacker's
+            # two sampling settings are: the value alone cannot say whether it is the
+            # published denominator, and a run at another one is not a gate result and
+            # says so here rather than only on the screen that offered the setting
+            # (ADR-0025, ADR-0027).
+            f"  - {rule['attempts_per_case_stated']}.",
             f"- **Wilson interval at {rule['interval_confidence']:.0%}** around every "
             "rate.",
             f"- **κ floor of {rule['kappa_floor']:.2f}** — a judged family whose "

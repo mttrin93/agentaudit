@@ -814,11 +814,20 @@ def a_provenance(gate: GateCitation | None = CITATION) -> Provenance:
 
 
 def a_payload(
-    result: TargetResult | None = None, provenance: Provenance | None = None
+    result: TargetResult | None = None,
+    provenance: Provenance | None = None,
+    rule: GateRule | None = None,
 ) -> TargetPayload:
+    """One payload, at the declared rule unless a caller states another one.
+
+    `rule` is a parameter because a run at another `attempts_per_case` is a real run
+    (ADR-0025, ADR-0027) and the artefact it signs has to be constructible here: the
+    default is the declared rule, which is what every other test wants.
+    """
     return TargetPayload(
         result=result if result is not None else a_result(),
         provenance=provenance if provenance is not None else a_provenance(),
+        rule=rule if rule is not None else DECLARED_RULE,
     )
 
 

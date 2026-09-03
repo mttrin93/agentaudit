@@ -22,7 +22,7 @@ import ast
 import json
 import socket
 from collections.abc import Callable, Iterator
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -34,6 +34,7 @@ from backend.bench.library import Family
 from backend.bench.measurability import NotMeasurable
 from backend.bench.payload import canonical
 from backend.bench.rendering import REPORT_MARKDOWN, REPORT_PAYLOAD, publish
+from backend.bench.rule import DECLARED_RULE, GateRule
 from backend.bench.signing import (
     SIGNATURE_FILE,
     encoded,
@@ -355,6 +356,69 @@ def test_the_bar_the_figures_were_read_against_is_checked_against_the_declared_o
     assert "provenance.rule.kappa_floor" in capsys.readouterr().out
 
 
+def test_a_run_at_a_non_declared_denominator_verifies_and_says_it_is_not_a_gate_result(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # The console offers `attempts_per_case` and ADR-0025 argues why: an operator
+    # probing a new target does not want 181 calls to find out whether the wire works.
+    # A verifier that reported such a run as arithmetic_disagrees would teach its
+    # reader that the outcome is noise, which is the state in which a real tampering
+    # goes unnoticed — so the departure is a fourth answer and not a disagreement
+    # (ADR-0027).
+    published = _publish(tmp_path, rule=replace(DECLARED_RULE, attempts_per_case=1))
+
+    code = main([str(tmp_path), "--pubkey", str(published.pubkey)])
+
+    printed = capsys.readouterr().out
+    assert code == 0
+    assert ReDerivationOutcome.AGREES_OFF_DECLARED_RULE.value in printed
+    assert ReDerivationOutcome.DISAGREES.value not in printed
+    assert "not a gate result" in printed
+    assert "1 attempt per case where the declared rule reads 10" in printed
+
+
+def test_a_denominator_altered_after_the_fact_still_fails_under_its_own_outcome(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # The distinction ADR-0027 draws is between a rule the operator declared and the
+    # document states, and one altered after the fact. Both halves are asserted here,
+    # because reading the denominator instead of asserting it is only admissible if
+    # the second half still fails: a rewritten `n` with the signature left as it was,
+    # and a rewritten `n` re-signed with the key, keeping the wording the declared
+    # denominator would have carried.
+    published = _publish(tmp_path)
+    path = tmp_path / REPORT_PAYLOAD
+    path.write_bytes(
+        path.read_bytes().replace(
+            b'"attempts_per_case":10', b'"attempts_per_case":1', 1
+        )
+    )
+
+    code = main([str(tmp_path), "--pubkey", str(published.pubkey)])
+
+    printed = capsys.readouterr().out
+    assert code == EXIT_DID_NOT_VERIFY
+    assert SignatureOutcome.INVALID.value in printed
+
+    published = _publish(tmp_path)
+
+    def one_attempt_stated_as_ten(body: dict[str, Any]) -> None:
+        body["provenance"]["rule"]["attempts_per_case"] = 1
+
+    _doctor(tmp_path, published.key, one_attempt_stated_as_ten)
+
+    code = main([str(tmp_path), "--pubkey", str(published.pubkey)])
+
+    printed = capsys.readouterr().out
+    assert code == EXIT_DID_NOT_VERIFY, (
+        "A payload whose denominator was rewritten while its own sentence kept the "
+        "declared wording verified. The sentence is re-derived from the number for "
+        "exactly this case: a document may not carry one and mean the other."
+    )
+    assert ReDerivationOutcome.DISAGREES.value in printed
+    assert "provenance.rule.attempts_per_case_stated" in printed
+
+
 def test_the_verifier_reaches_no_network_and_reads_no_credential(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -421,10 +485,14 @@ class Publication:
     pubkey: Path
 
 
-def _publish(directory: Path, result: TargetResult | None = None) -> Publication:
+def _publish(
+    directory: Path,
+    result: TargetResult | None = None,
+    rule: GateRule | None = None,
+) -> Publication:
     """One signed report in that directory, under a key generated for this test."""
     key = generate()
-    publish_signed(a_payload(result=result), directory, key)
+    publish_signed(a_payload(result=result, rule=rule), directory, key)
     return Publication(key, _pubkey(directory.parent, key))
 
 

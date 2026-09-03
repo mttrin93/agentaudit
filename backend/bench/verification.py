@@ -158,9 +158,19 @@ class ReDerivationOutcome(StrEnum):
     with, and telling its reader the arithmetic *agrees* would be a stated absence
     read as a result — the same mistake this project refuses four times over in the
     payload itself.
+
+    `AGREES_OFF_DECLARED_RULE` is the fourth, and it is a **pass with a sentence
+    attached**: every figure follows from the counts, and the denominator they were
+    counted on is not the declared one, so the document is not a gate result
+    (ADR-0027). It is not `DISAGREES`, because a run at an operator's cheaper `n` is
+    a run the console offers (ADR-0025) and reporting it as a disagreement would
+    teach a reader that `DISAGREES` is noise — which is the state in which a real
+    tampering goes unnoticed. It is not `AGREES` either: a reader who is not told
+    would compare a reading against ones taken at the published `n`.
     """
 
     AGREES = "arithmetic_agrees"
+    AGREES_OFF_DECLARED_RULE = "arithmetic_agrees_not_a_gate_result"
     DISAGREES = "arithmetic_disagrees"
     NOTHING_RE_DERIVED = "nothing_to_re_derive"
 
@@ -297,6 +307,16 @@ class ReDerivation:
 
     disagreements: tuple[Disagreement, ...] = ()
 
+    departure: str | None = None
+    """What the payload says about a denominator that is not the declared one.
+
+    The rule's own sentence, read out of the payload and re-derived from the number
+    beside it, or `None` where the report was measured at the declared `n`. Carried
+    on every outcome rather than only on `AGREES_OFF_DECLARED_RULE`: a report that
+    states no figure, or one whose figures disagree, was still measured on some
+    denominator, and a reader of either is owed the same sentence (ADR-0027).
+    """
+
     @property
     def held(self) -> bool:
         """True only where figures were recomputed and every one of them agreed.
@@ -307,10 +327,26 @@ class ReDerivation:
         never ran — a stated absence read as a result, which is the one mistake this
         project refuses everywhere else. It has not failed either: `Verification`
         carries that third answer rather than collapsing it into a fail.
+
+        A departure from the declared denominator does not fail this check, and that
+        is the whole of ADR-0027: the figures re-derived, and what they re-derived
+        against is a rule the operator declared and the document states. The
+        sentence saying so is in `stated()` and in the outcome's own name, where a
+        reader cannot miss it — the one place it is not is a `False` here, which
+        would report a run the console offers as an artefact that did not verify.
         """
-        return self.outcome is ReDerivationOutcome.AGREES
+        return self.outcome in (
+            ReDerivationOutcome.AGREES,
+            ReDerivationOutcome.AGREES_OFF_DECLARED_RULE,
+        )
 
     def stated(self) -> str:
+        """What this check found, with the denominator's departure under it."""
+        return "\n".join(
+            (self._found(), *(() if self.departure is None else (self.departure,)))
+        )
+
+    def _found(self) -> str:
         match self.outcome:
             case ReDerivationOutcome.AGREES:
                 return (
@@ -320,6 +356,14 @@ class ReDerivation:
                     f"{TOLERANCE:g}. This is the check on the bench rather than on "
                     "the transport: it is what makes re-derivable something you "
                     "established and not something the document told you"
+                )
+            case ReDerivationOutcome.AGREES_OFF_DECLARED_RULE:
+                return (
+                    f"{self.checked} stated figures recomputed from the counts beside "
+                    "them and every one agrees to within "
+                    f"{TOLERANCE:g} — and they were counted on a denominator that is "
+                    "not the declared one. The figures follow from the counts; what "
+                    "they may be compared with is the sentence below"
                 )
             case ReDerivationOutcome.DISAGREES:
                 return "\n".join(
@@ -646,24 +690,41 @@ class _Comparisons:
                 Disagreement(path=path, stated=stated, re_derived=re_derived)
             )
 
-    def outcome(self, figures: int) -> ReDerivation:
-        """What these comparisons amount to: one of three answers, never two.
+    def outcome(self, figures: int, departure: str | None) -> ReDerivation:
+        """What these comparisons amount to: one of four answers, never two.
 
         `figures` is how many of them were about a **family** rather than about the bar
         the families were read against. The distinction decides the third answer: a
         report stating no per-family figure has had its rule and its cut points checked
         and still re-derived nothing, and counting those against it would report an
         agreement about figures nobody recomputed.
+
+        `departure` is what the payload says about a denominator that is not the
+        declared one, and it decides the fourth answer without deciding the first
+        three. A disagreement is still a disagreement and a report stating no figure
+        still re-derived nothing — those two facts are about the arithmetic, and the
+        denominator a run was measured on cannot make either of them better or worse.
+        So the departure travels on all four and names only the one where the figures
+        agreed and the reader still must not compare them (ADR-0027).
         """
         if self.found:
             return ReDerivation(
                 ReDerivationOutcome.DISAGREES,
                 checked=self.checked,
                 disagreements=tuple(self.found),
+                departure=departure,
             )
         if figures == 0:
             return ReDerivation(
-                ReDerivationOutcome.NOTHING_RE_DERIVED, checked=self.checked
+                ReDerivationOutcome.NOTHING_RE_DERIVED,
+                checked=self.checked,
+                departure=departure,
+            )
+        if departure is not None:
+            return ReDerivation(
+                ReDerivationOutcome.AGREES_OFF_DECLARED_RULE,
+                checked=self.checked,
+                departure=departure,
             )
         return ReDerivation(ReDerivationOutcome.AGREES, checked=self.checked)
 
@@ -684,12 +745,18 @@ def _re_derive(body: Mapping[str, Any]) -> ReDerivation:
     ADR-0003's thresholds and ADR-0014's anchors are declared in the repository and
     never tuned, so a payload carrying its own would otherwise let a forger move the
     bar and re-derive cleanly against it.
+
+    **The second question has two answers and not one** (ADR-0027). One number of the
+    rule — the attempts per case — is a declared input an operator may set, so a
+    payload stating another one is reported as *measured off the declared rule* and
+    not as a disagreement; every other number of the bar is asserted, and a
+    disagreement on one of them is a doctored document.
     """
     measured = _mapping(body, "measured")
     rule = _rule(body)
     cuts = _cuts(measured)
     comparisons = _Comparisons()
-    _declared_bar(body, measured, cuts, comparisons)
+    departure = _declared_bar(body, measured, rule, cuts, comparisons)
     # Counted from here, so what decides the third answer is how many figures about a
     # family were recomputed and not how many comparisons this function happened to
     # make. The bar is checked on every report, including one that states no figure.
@@ -699,15 +766,16 @@ def _re_derive(body: Mapping[str, Any]) -> ReDerivation:
             _entry(f"measured.{section}[{index}]", entry, rule, cuts, comparisons)
     for index, one in enumerate(_sequence(measured, "withheld")):
         _withheld(f"measured.withheld[{index}]", one, rule, comparisons)
-    return comparisons.outcome(figures=comparisons.checked - bar)
+    return comparisons.outcome(figures=comparisons.checked - bar, departure=departure)
 
 
 def _declared_bar(
     body: Mapping[str, Any],
     measured: Mapping[str, Any],
+    rule: GateRule,
     cuts: BandCuts,
     comparisons: _Comparisons,
-) -> None:
+) -> str | None:
     """The rule and the anchors this payload states, against the declared ones.
 
     Not a figure about the target: it is the question of whether the bar the figures
@@ -715,6 +783,16 @@ def _declared_bar(
     rule is a report whose numbers mean something else, and the stated absence of that
     check is what would let a doctored `fails_at_or_above` promote a band with every
     other comparison still agreeing (ADR-0003, ADR-0014).
+
+    **The attempts per case is read and not asserted, and it is the only one**
+    (ADR-0027). It is a declared input the console offers, so a payload stating
+    another number may be an operator probing a target cheaply; the rest of the bar
+    is offered by no route, so a payload stating another number for one of those has
+    been doctored. What is asserted instead is the *sentence* beside the number: it
+    is re-derived from the number here, so a document cannot carry a non-declared
+    denominator while telling its reader it carries the published one. Returns that
+    sentence where the denominator departs, for the outcome to name, and `None`
+    otherwise.
     """
     stated_rule = _mapping(_mapping(body, "provenance"), "rule")
     comparisons.same(
@@ -723,11 +801,11 @@ def _declared_bar(
         "interval_confidence",
         DECLARED_RULE.interval_confidence,
     )
-    comparisons.same(
-        "provenance.rule",
-        stated_rule,
-        "attempts_per_case",
-        DECLARED_RULE.attempts_per_case,
+    comparisons.agrees(
+        "provenance.rule.attempts_per_case_stated",
+        stated_rule.get("attempts_per_case_stated") == rule.denominator_stated(),
+        "wording that does not follow from the attempts per case beside it",
+        f"the wording for {rule.attempts_per_case} attempts per case",
     )
     comparisons.same(
         "provenance.rule", stated_rule, "kappa_floor", DECLARED_RULE.kappa_floor
@@ -757,6 +835,7 @@ def _declared_bar(
             "reference agents, which a target's report does not (ADR-0018)"
         ),
     )
+    return None if rule.at_the_declared_denominator() else rule.denominator_stated()
 
 
 def _entry(

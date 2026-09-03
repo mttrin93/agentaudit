@@ -845,6 +845,13 @@ def _provenance(payload: TargetPayload) -> dict[str, Any]:
         "rule": {
             "interval_confidence": payload.rule.interval_confidence,
             "attempts_per_case": payload.rule.attempts_per_case,
+            # Beside the number and never folded into it, on the same terms as the
+            # attacker's temperature: the value alone cannot say whether it is the
+            # published denominator or an operator's cheaper reading, and a report
+            # measured below the declared `n` is not a gate result and says so in the
+            # document rather than in the console that offered the setting (ADR-0025,
+            # ADR-0027).
+            "attempts_per_case_stated": payload.rule.denominator_stated(),
             "kappa_floor": payload.rule.kappa_floor,
             "stated": payload.rule.stated(),
         },

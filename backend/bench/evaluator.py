@@ -2,7 +2,7 @@
 
 Per ADR-0004 the success condition is authoritative: the number the bench later
 signs has to be reproducible by anyone who re-runs the case over the recorded
-transcript. The judge (#8) produces narrative for the same transcript and has no
+transcript. The judge (`judge.py`) produces narrative for the same transcript and has no
 argument through which it could reach this function, which is the structural
 half of that decision.
 

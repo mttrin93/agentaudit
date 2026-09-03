@@ -53,6 +53,7 @@ from backend.bench.completion import (
     DEFAULT_ATTACKER_MODEL,
     attacker_completion_for,
     completion_for,
+    narrator_for,
 )
 from backend.bench.contract import TargetConfig
 from backend.bench.library import Case, Family, VerdictClass
@@ -79,6 +80,7 @@ from scripts.console import (
     excerpt,
     price,
     print_episodes,
+    print_findings,
     print_provenance,
     rate_line,
     terminal_approval,
@@ -172,7 +174,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         return EXIT_WITHHELD
     auth_token = secrets.token_urlsafe(16)
 
-    # One ledger for this run, and the two instruments below are built to report
+    # One ledger for this run, and the instruments below are built to report
     # into it. Bound here rather than inside the run because the sink an instrument
     # records through is fixed when its client is built, which is before a run
     # exists (`usage.UsageLedger.for_layer`, `run_calibration`). Which layer a sink
@@ -188,6 +190,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         attacker = attacker_completion_for(
             args.attacker_model, usage=ledger.for_layer(Layer.ADAPTIVE)
         )
+        # And the pair that explains what the run finds, off the adjudicator's
+        # declared string and into the scored layer. Why one string serves both
+        # the verdict instrument and the narrative ones is ADR-0030's, and
+        # `narrator_for` is where it is turned into the pair.
+        narrator = narrator_for(args.adjudicator_model, ledger.for_layer(Layer.SCORED))
     except (KeyError, ValueError) as unusable:
         print(f"No usable bench model: {unusable}")
         return EXIT_WITHHELD
@@ -221,6 +228,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 plant_nonce=nonce_planter(base_url),
                 approve=terminal_approval(attestation.identity),
                 adjudicator=adjudicator,
+                narrator=narrator,
                 attacker=attacker,
                 usage=ledger,
                 budget=RunBudget.declare(
@@ -299,6 +307,11 @@ def _print_result(
             print(f"  attempt {attempt.case_id} #{attempt.index}")
             print(f"    verdict: {attempt.verdict}  ({reached})")
             print(f"    reply:   {excerpt(attempt.transcript.reply_text)}")
+
+        # Printed after the attempts and never among them: an attempt is the unit
+        # of the denominator and a finding is a verdict plus its narrative, and
+        # the two are counted apart (CONTEXT.md).
+        print_findings(target_run)
 
     print_episodes(result, trivial=TRIVIAL.name, hardened=HARDENED.name)
 

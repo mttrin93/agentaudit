@@ -281,7 +281,16 @@ class RunState:
 
         Deliberately not called findings: a finding is a verdict *plus* its
         narrative — reason, article, external identifier, remediation, exposure —
-        and the judge that produces the narrative arrives in #8.
+        and this is a count of verdicts.
+
+        **The narrative now exists and it is deliberately not here.** A run's
+        findings travel on its *result* (`calibration.TargetRun.narrations`,
+        ADR-0030) rather than on this record, for two reasons. `judge.py` imports
+        this module to annotate `Finding.of`, so a `Finding` field here would
+        invert the dependency the judge's constraints are held in. And this record
+        holds exactly two lists — `attempts` and `episodes` — kept apart because a
+        third that spanned neither is where a reader would reach for a `findings`
+        that spanned both (ADR-0010).
         """
         return [a for a in self.attempts if a.verdict is Verdict.SUCCEEDED]
 

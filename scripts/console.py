@@ -29,7 +29,7 @@ from backend.bench.adaptive.budget import DECLARED_ADAPTIVE_BUDGET, AdaptiveBudg
 from backend.bench.adaptive.discrimination import NoFamiliesInScope, measure
 from backend.bench.adaptive.episode import AdaptiveEpisode
 from backend.bench.admission import library_provenance, outcome_for
-from backend.bench.calibration import CalibrationResult, PlantNonce
+from backend.bench.calibration import CalibrationResult, PlantNonce, TargetRun
 from backend.bench.contract import TargetConfig
 from backend.bench.library import Case, Family, bar_for, trigger_counts
 from backend.bench.registration import ECHO_PROBE, NONCE_PREFIX, Attestation
@@ -199,6 +199,63 @@ def excerpt(text: str) -> str:
         f"{collapsed[:REPLY_EXCERPT]}… "
         f"[{len(collapsed)} chars, full transcript recorded]"
     )
+
+
+def print_findings(target_run: TargetRun) -> None:
+    """One target's findings and its review queue, printed."""
+    print(findings_section(target_run))
+
+
+def findings_section(target_run: TargetRun) -> str:
+    """What the two narrative instruments said about this target's successes.
+
+    Three readings, and the first is the one a reader is most likely to
+    misidentify. `narrations is None` is a run made with no narrative instrument:
+    it explained nothing, and printing an empty section under a heading would read
+    as a target with nothing to explain. An empty tuple *is* that second reading.
+    The third is findings, one per succeeded attempt.
+
+    The review queue is printed under the findings and never merged into them,
+    because a disagreement is a fact about the two *instruments* rather than about
+    the target: the verdict stands, the reading stands, and a human is handed the
+    list (ADR-0004, PLAN §3).
+    """
+    narrations = target_run.narrations
+    if narrations is None:
+        return (
+            "\n  findings: none written — this run was made with no narrative "
+            "instrument, so what it measured it did not explain. Not the same "
+            "statement as a target with nothing to explain"
+        )
+    lines = ["", "  findings — a verdict and the narrative written about it"]
+    if not narrations:
+        lines.append(
+            "    none: no attempt succeeded against this target, so there was "
+            "nothing to explain"
+        )
+    for narration in narrations:
+        finding = narration.finding
+        lines.extend(
+            (
+                f"    {finding.case_id} / {finding.family} "
+                f"[article {finding.narrative.article}, "
+                f"{finding.narrative.external_id.identifier}]",
+                f"      exposure:    {finding.narrative.exposure}",
+                f"      reason:      {finding.narrative.reason}",
+                f"      fix:         {narration.remediation.fix}",
+                f"      informed by: {len(narration.remediation.informed_by)} "
+                "precedent(s) recorded against this family",
+            )
+        )
+
+    queue = target_run.disagreements or ()
+    lines.append("")
+    lines.append(
+        f"  review queue — {len(queue)} disagreement(s), logged and not resolved"
+    )
+    for logged in queue:
+        lines.append(f"    {logged.stated()}")
+    return "\n".join(lines)
 
 
 def print_episodes(result: CalibrationResult, trivial: str, hardened: str) -> None:

@@ -3,9 +3,15 @@
 Everything in the pre-web scope is reached from here: the case library, the
 attestation, the approval interrupt and its budget, registration and the nonce
 protocol, the applicability and precondition checks, the attempt, and the verdict.
-Ten attempts per case (#4), the judge (#8) and the gate decision (`gate.py`, which
-reads what this returns and decides nothing else) extend this callable rather than
-adding a second way in.
+Ten attempts per case (#4), the judge (`narration.py`) and the gate decision
+(`gate.py`, which reads what this returns and decides nothing else) extend this
+callable rather than adding a second way in.
+
+`narrator` is the pair that explains what the run finds: for every succeeded
+attempt the judge writes the narrative and `suggest_remediation` writes the fix,
+and the two records travel on `TargetRun.narrations` (ADR-0030). It defaults to
+`None`, which is a run that measured what it measured and explained none of it —
+a stated absence rather than an empty result, and what every gate run is.
 
 The order below is the order ADR-0007 requires and is not an implementation
 detail: attestation, then the estimate, then the halt, and only then anything that
@@ -52,12 +58,20 @@ from backend.bench.applicability import SkippedCase, applicable, skipped_cases
 from backend.bench.attacker import run_case
 from backend.bench.contract import TargetConfig, TargetUnreachable
 from backend.bench.evaluator import Verdict
+from backend.bench.judge import Disagreement, Finding
 from backend.bench.library import Case, Family, LibraryVersion, VerdictClass
 from backend.bench.measurability import (
     NotMeasurable,
     contradicted_by_the_reply,
     not_measurable_families,
     runnable,
+)
+from backend.bench.narration import (
+    Narration,
+    Narrator,
+    disagreements_in,
+    findings_in,
+    narrate_successes,
 )
 from backend.bench.registration import (
     Attestation,
@@ -120,6 +134,23 @@ class TargetRun:
     number that a family-level skip would have to overwrite.
     """
 
+    narrations: tuple[Narration, ...] | None = None
+    """This target's succeeded attempts explained, or `None` for a run that
+    explained none.
+
+    A fourth field beside the three above and, like them, not a fifth value inside
+    `rates`: a finding is a verdict *plus* its narrative and a rate is a count of
+    verdicts, so a consumer reading one may not reach the other (CONTEXT.md,
+    ADR-0030).
+
+    **`None` and `()` are two facts.** `None` is a run made with no narrative
+    instrument — it explained nothing, and reading that as *nothing to explain*
+    would report a bench that did not look as a target that held. `()` is the two
+    instruments having run against a target that succeeded at nothing, which is a
+    measurement. Same distinction `budget.NOT_PRICED` draws about money and
+    `not_measurable` draws about a family.
+    """
+
     def __post_init__(self) -> None:
         both = set(self.not_measurable) & {attempt.family for attempt in self.attempts}
         if both:
@@ -154,6 +185,48 @@ class TargetRun:
                 "judged rate in the deterministic section — which is the one place "
                 "the two must never meet (ADR-0004)"
             )
+
+        if self.narrations is not None:
+            explained = sorted(
+                narration.finding.case_id for narration in self.narrations
+            )
+            succeeded = sorted(
+                attempt.case_id
+                for attempt in self.attempts
+                if attempt.verdict is Verdict.SUCCEEDED
+            )
+            if explained != succeeded:
+                raise ValueError(
+                    f"{len(explained)} finding(s) were carried for "
+                    f"{len(succeeded)} succeeded attempt(s). A run that explained "
+                    "some of its successes reports a subset nobody chose, and one "
+                    "that explained an attempt it did not make reports a failure "
+                    "that was never measured. Findings are all of them or the "
+                    "stated absence of all of them (ADR-0030)"
+                )
+
+    @property
+    def findings(self) -> tuple[Finding, ...] | None:
+        """The findings this target run produced, or `None` for a run with no
+        narrative instrument.
+
+        The record CONTEXT.md names, for the consumers that want it without the
+        fix beside it — the precedent writer, and a report. `None` carries through
+        from `narrations` rather than flattening to `()`, because the two are the
+        two facts that field exists to keep apart.
+        """
+        return None if self.narrations is None else findings_in(self.narrations)
+
+    @property
+    def disagreements(self) -> tuple[Disagreement, ...] | None:
+        """The review queue for this target: the transcripts the two instruments
+        read differently, or `None` for a run that ran only one of them.
+
+        Read off the findings rather than accumulated during the run, so it cannot
+        disagree with them, and it decides nothing: the verdict stands, the reading
+        stands, and a human is handed the list (ADR-0004, PLAN §3).
+        """
+        return None if self.narrations is None else disagreements_in(self.narrations)
 
     @property
     def rates(self) -> dict[Family, Rate]:
@@ -341,6 +414,7 @@ def run_calibration(
     plant_nonce: PlantNonce | None = None,
     approve: Approve | None = None,
     adjudicator: Completion | None = None,
+    narrator: Narrator | None = None,
     attacker: AttackerCompletion = SCRIPTED_ATTACKER,
     precedent: PrecedentStore = DURABLE_PRECEDENT,
     rule: GateRule = DECLARED_RULE,
@@ -459,6 +533,8 @@ def run_calibration(
                     run_state=state,
                     plant_nonce=plant_nonce,
                     adjudicator=adjudicator,
+                    narrator=narrator,
+                    precedent=precedent,
                     rule=rule,
                     planted=(planted_nonces or {}).get(target.name),
                     proof_waived=proof_waived,
@@ -538,6 +614,8 @@ def _run_target(
     run_state: RunState,
     plant_nonce: PlantNonce | None,
     adjudicator: Completion | None,
+    narrator: Narrator | None,
+    precedent: PrecedentStore,
     rule: GateRule,
     planted: str | None,
     proof_waived: bool = False,
@@ -620,4 +698,9 @@ def _run_target(
             **contradicted,
         },
         not_applicable=skipped_cases(cases, target),
+        # Read over the cases written for this target, for the reason the line
+        # above is: a narrative is briefed against the case record the attempt was
+        # made from, and a record from outside that set carries a coverage claim
+        # this target was never asked about (`narration._record_for`).
+        narrations=narrate_successes(attempts, written_for, narrator, precedent),
     )

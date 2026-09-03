@@ -40,7 +40,11 @@ from openai.types.chat.chat_completion import Choice
 from openai.types.completion_usage import CompletionTokensDetails
 
 from backend.bench import completion
-from backend.bench.completion import attacker_completion_for, completion_for
+from backend.bench.completion import (
+    attacker_completion_for,
+    completion_for,
+    narrator_for,
+)
 from backend.bench.unfinished import ReplyUnfinished
 from backend.bench.usage import (
     DISCARDED,
@@ -442,6 +446,32 @@ def test_the_benchs_own_instrument_records_what_its_call_returned(
     assert recorded.returned_model == "openai/gpt-4.1-mini-2025-04-14"
     assert recorded.request_id == "gen-1a2b3c"
     assert recorded.latency_seconds >= 0.0
+
+
+def test_both_narrative_instruments_report_into_the_layer_the_caller_bound(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`narrator_for` builds two clients, and one sink counts them both.
+
+    The builder three entry points reach for (ADR-0030), asserted here rather than
+    at each of them: two clients rather than one used twice, because the two
+    instruments are declared apart and may be pointed at separate models — and
+    both report into the sink the caller bound, which is the scored layer's,
+    because a narrative counted into the adaptive bucket would be a scored figure
+    inside an adaptive one (ADR-0010).
+    """
+    client = _Answering(_answered(usage=_reported()))
+    monkeypatch.setattr(completion, "_client", lambda: client)
+    ledger = UsageLedger()
+
+    narrator = narrator_for(A_SPEC, ledger.for_layer(Layer.SCORED))
+    assert narrator.assess is not narrator.remediate
+    narrator.assess("the judge's prompt", "a blinded brief")
+    narrator.remediate("the remediation prompt", "a finding")
+
+    assert ledger.totals_in(Layer.SCORED).calls == 2
+    assert ledger.totals_in(Layer.ADAPTIVE).calls == 0
+    assert not ledger.untagged()
 
 
 def test_the_attackers_tokens_are_recorded_in_the_adaptive_layer(

@@ -46,6 +46,7 @@ from backend.bench.capability import (
     accepts_reasoning_effort,
     accepts_temperature,
 )
+from backend.bench.narration import Narrator
 from backend.bench.unfinished import refuse_unfinished
 from backend.bench.usage import ASK_FOR_COST, DISCARDED, UsageSink, usage_from
 
@@ -333,6 +334,32 @@ def _openrouter_completion(
         return answered.choices[0].message.content or ""
 
     return complete
+
+
+def narrator_for(spec: str, usage: UsageSink = DISCARDED) -> Narrator:
+    """The pair that explains a run's findings, from one configuration string.
+
+    A third builder rather than a third call to `completion_for` at every entry
+    point, and the reason is a promise ADR-0030 makes: the judge and the
+    remediation tool share a declared string only until the report has a field for
+    a narrative, so the day a fourth string is declared this is the one place that
+    moves. Three entry points built the pair themselves before this existed and
+    the paraphrase of the reasoning was in all three.
+
+    Two clients rather than one used twice, because `judge.Completion` and
+    `remediation.Completion` are declared apart precisely so a deployment can point
+    them at separate models — a single client here would be the shared setting that
+    separation exists to prevent, arrived at from the builder instead of the call
+    site.
+
+    `usage` is one sink for both, and the caller binds it to the scored layer: the
+    narrative is a scored-layer instrument, and its tokens counted into the adaptive
+    bucket would be a scored figure inside an adaptive one (ADR-0010).
+    """
+    return Narrator(
+        assess=completion_for(spec, usage=usage),
+        remediate=completion_for(spec, usage=usage),
+    )
 
 
 def attacker_completion_for(

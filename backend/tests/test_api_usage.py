@@ -53,6 +53,7 @@ from backend.bench.adjudication import Completion
 from backend.bench.completion import ADJUDICATOR_MODEL_ENV, ATTACKER_MODEL_ENV
 from backend.bench.evaluator import Verdict
 from backend.bench.library import Case
+from backend.bench.narration import Narrator
 from backend.bench.payload import DeclaredModels
 from backend.bench.rule import DECLARED_RULE
 from backend.bench.signing import SIGNING_KEY_VARIABLE, encoded_private, generate
@@ -185,6 +186,10 @@ class Instrumenting:
         return Instruments(
             adjudicator=adjudicating(usage.for_layer(Layer.SCORED), step),
             attacker=attacking(usage.for_layer(Layer.ADAPTIVE), step),
+            # No narrator: what these tests follow is a token count from an
+            # instrument to a span, and the narrative pass has its own file
+            # (`test_narration.py`).
+            narrator=None,
         )
 
 
@@ -516,7 +521,7 @@ def test_a_gate_run_started_from_the_console_carries_its_own_figures(
 
 def unadjudicating(models: DeclaredModels, usage: UsageLedger) -> Instruments:
     """A builder that hands back no adjudicator, whatever the bench declared."""
-    return Instruments(adjudicator=None, attacker=SCRIPTED_ATTACKER)
+    return Instruments(adjudicator=None, attacker=SCRIPTED_ATTACKER, narrator=None)
 
 
 def test_a_per_run_build_that_disagrees_with_the_boot_pair_is_refused() -> None:
@@ -539,7 +544,7 @@ def test_a_per_run_build_that_disagrees_with_the_boot_pair_is_refused() -> None:
         cases=[],
         adjudicator=None,
         per_run_instruments=lambda models, usage: Instruments(
-            adjudicator=ADJUDICATING, attacker=SCRIPTED_ATTACKER
+            adjudicator=ADJUDICATING, attacker=SCRIPTED_ATTACKER, narrator=None
         ),
     )
     with pytest.raises(ValueError, match="does not agree"):
@@ -611,6 +616,21 @@ def _bound_attacker(
     return attacking(usage, ANOTHER_STEP)
 
 
+def _bound_narrator(spec: str, usage: UsageSink = DISCARDED) -> Narrator:
+    """`narrator_for`, stood in for, and it has to be stood in for separately.
+
+    The factory reaches the two narrative instruments through `narrator_for` rather
+    than through `completion_for` twice (ADR-0030), so a test that patched only the
+    latter would leave this one building a real client — and a real client needs a
+    credential, which is the difference between passing on the machine that has one
+    and failing in CI. Two closures, because the pair is two instruments.
+    """
+    assert spec == AN_ADJUDICATING_MODEL, spec
+    return Narrator(
+        assess=adjudicating(usage, A_STEP), remediate=adjudicating(usage, A_STEP)
+    )
+
+
 def test_the_deployed_factory_builds_each_run_its_own_bound_instruments(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -633,6 +653,7 @@ def test_the_deployed_factory_builds_each_run_its_own_bound_instruments(
     monkeypatch.setenv(ATTACKER_MODEL_ENV, AN_ATTACKING_MODEL)
     monkeypatch.setattr("backend.api.app.completion_for", _bound_adjudicator)
     monkeypatch.setattr("backend.api.app.attacker_completion_for", _bound_attacker)
+    monkeypatch.setattr("backend.api.app.narrator_for", _bound_narrator)
 
     config = cast(BenchRuns, create_app().state.bench).config
     first, second = UsageLedger(), UsageLedger()
@@ -652,6 +673,41 @@ def test_the_deployed_factory_builds_each_run_its_own_bound_instruments(
     other.adjudicator("brief", "transcript")
     assert second.totals_in(Layer.SCORED).input_tokens == A_STEP
     assert first.totals_in(Layer.SCORED).calls == 1
+
+
+def test_the_deployed_factory_binds_the_narrative_instruments_to_the_scored_layer(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A run started from the console explains what it finds, and pays for it here.
+
+    #37's fault was that no production code called the judge at all. This is the
+    half of the fix a run cannot show by itself: the pair a *deployment* builds,
+    bound to the run's own ledger and into the scored layer — the narrative is a
+    scored-layer instrument, and its tokens counted into the adaptive bucket would
+    be a scored figure inside an adaptive one (ADR-0010, ADR-0030).
+
+    Both halves come off `models.adjudicating`, which is ADR-0030's decision: a
+    fourth declared model would be a declared input the signed payload has no
+    field for.
+    """
+    for variable in DEPLOYMENT_VARIABLES:
+        monkeypatch.delenv(variable, raising=False)
+    monkeypatch.setenv(SIGNING_KEY_VARIABLE, encoded_private(generate()))
+    monkeypatch.setenv(ADJUDICATOR_MODEL_ENV, AN_ADJUDICATING_MODEL)
+    monkeypatch.setattr("backend.api.app.completion_for", _bound_adjudicator)
+    monkeypatch.setattr("backend.api.app.narrator_for", _bound_narrator)
+
+    config = cast(BenchRuns, create_app().state.bench).config
+    ledger = UsageLedger()
+    built = config.instruments_for(ledger)
+
+    assert built.narrator is not None
+    built.narrator.assess("the judge's prompt", "a blinded brief")
+    built.narrator.remediate("the remediation prompt", "a finding")
+
+    assert ledger.totals_in(Layer.SCORED).calls == 2
+    assert ledger.totals_in(Layer.ADAPTIVE).calls == 0
+    assert not ledger.untagged()
 
 
 def test_a_deployment_declaring_no_models_builds_the_same_two_absences(
@@ -674,3 +730,8 @@ def test_a_deployment_declaring_no_models_builds_the_same_two_absences(
 
     assert built.adjudicator is None
     assert built.attacker is SCRIPTED_ATTACKER
+    # And no narrator, which is the stated absence `TargetRun.narrations` carries
+    # as `None`: a bench with no declared model measures and explains nothing,
+    # rather than explaining nothing that a reader could mistake for a target
+    # with nothing to explain (ADR-0030).
+    assert built.narrator is None

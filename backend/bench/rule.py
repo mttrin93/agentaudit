@@ -49,7 +49,8 @@ class GateRule:
     kappa_floor: float = 0.6
     """The Cohen's κ below which a judged family is not fit to report.
 
-    Measured against the gold set by the judge reliability work (#8); declared
+    Measured against the gold set by the reliability work (#11, and the figure it
+    read is on `completion.DEFAULT_ADJUDICATOR_MODEL`); declared
     here so the bench's accuracy thresholds are stated in one place.
     """
 

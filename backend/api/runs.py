@@ -488,6 +488,10 @@ def _run(record: RunRecord, config: BenchConfig, pending: PendingApproval) -> No
             approve=approve,
             adjudicator=instruments.adjudicator,
             attacker=instruments.attacker,
+            # The pair that explains this run's successes. A run against a
+            # target is what a finding is about (ADR-0018), so this is the
+            # entry point that narrates and the gate's is not (ADR-0030).
+            narrator=instruments.narrator,
             # The ledger those two report into, handed to the run that holds them.
             # `run_calibration` refuses one that already holds calls, which is what
             # keeps this a fresh one per run rather than a shared slot (ADR-0026).
@@ -559,6 +563,20 @@ def _run(record: RunRecord, config: BenchConfig, pending: PendingApproval) -> No
         finished = (
             f"{finished}, against an endpoint whose control was declared and not "
             "proved — the nonce was never echoed and this run waived that proof"
+        )
+    queue = target_run.disagreements
+    if queue:
+        # The review queue, on the sentence a poller reads. The findings and the
+        # disagreements themselves are on `record.result`, which is the record they
+        # are logged in; what this adds is that a human is *told* there are some,
+        # because the weaker of the bench's two human-in-the-loop instances is a
+        # list somebody has to be handed rather than a field somebody has to think
+        # to look at (ADR-0004, PLAN §3). A count and never a resolution: neither
+        # instrument is corrected and the rates above do not move.
+        finished = (
+            f"{finished}. {len(queue)} of its findings are on the review queue, "
+            "where the success condition and the judge read one transcript "
+            "differently: the verdicts stand and the disagreements are for a human"
         )
     if isinstance(record.report, Unsigned):
         # Said here rather than left to the report route, because this is the

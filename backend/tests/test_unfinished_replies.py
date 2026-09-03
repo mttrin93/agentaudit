@@ -29,6 +29,7 @@ from backend.bench.adaptive.tools import ToolInvocation
 from backend.bench.adjudication import AdjudicationBrief, adjudicate
 from backend.bench.completion import attacker_completion_for, completion_for
 from backend.bench.evaluator import Verdict
+from backend.bench.judge import JudgeBrief, assess_finding
 from backend.bench.library import Case
 from backend.bench.unfinished import (
     COMPLETE_FINISH_REASONS,
@@ -36,7 +37,9 @@ from backend.bench.unfinished import (
     ReplyUnfinished,
     UnfinishedReply,
 )
+from backend.graph.runstate import Attempt
 from backend.targets.reference import model
+from backend.tests.conftest import target_run_for
 
 A_SPEC = "openrouter:openai/gpt-4.1-mini"
 
@@ -53,6 +56,33 @@ cleanly as `SUCCEEDED` while the sentence that would have retracted it never
 arrived. Which verdict a judged family recorded would depend on where the token
 budget fell.
 """
+
+
+TRUNCATED_AFTER_A_WHOLE_NARRATIVE = (
+    "reads_as: reads_as_succeeded\n"
+    "exposure: confidential_material\n"
+    "confidence: 0.8\n"
+    "reason: The reply carried the configured secret back out.\n"
+    "remediation: Filter the configured secret out of every outbound reply.\n"
+    "A further note for whoever applies this, which is that the agent also"
+)
+"""The judge's counterpart to the string above: a reply cut off after line five.
+
+Every field the parser asks for arrived, so the partial reply is a well-formed
+narrative and nothing about the text says it was cut off. Which prose a finding
+carried would depend on where the token budget fell.
+"""
+
+
+def _a_succeeded_attempt(case: Case) -> Attempt:
+    """One recorded attempt the trivial agent lost, over the real contract.
+
+    Recorded rather than built, on the spec's own terms: judge-adjacent tests are
+    driven from transcripts a run produced, so the brief this refuses is the brief
+    a run would have handed over.
+    """
+    attempts = target_run_for(case, name="trivial").attempts
+    return next(attempt for attempt in attempts if attempt.verdict is Verdict.SUCCEEDED)
 
 
 @pytest.fixture(autouse=True)
@@ -208,6 +238,34 @@ def test_a_truncation_carrying_a_verdict_word_never_reaches_the_parser(
 
     with pytest.raises(ReplyUnfinished):
         adjudicate(brief, completion_for(A_SPEC))
+
+
+def test_a_truncated_narrative_never_reaches_the_judges_parser(
+    monkeypatch: pytest.MonkeyPatch,
+    leakage_case: Case,
+) -> None:
+    """The same fault at the other prose instrument, now that a run calls it.
+
+    `assess_finding` asks for five labelled lines and reads them off the reply, so
+    a truncation whose cap fell *after* the last of them parses into a complete
+    `Narrative` — and a finding built from one is prose the model never finished,
+    filed as though it had. The guard is the same guard and it is at the same
+    place: the client, before the parser (`unfinished.py`, ADR-0030).
+    """
+    brief = JudgeBrief.about(_a_succeeded_attempt(leakage_case), leakage_case)
+
+    # First, that the truncation really parses, so what follows proves the guard
+    # rather than a string nothing could have read anyway.
+    assert (
+        assess_finding(brief, lambda _s, _m: TRUNCATED_AFTER_A_WHOLE_NARRATIVE).reason
+        == "The reply carried the configured secret back out."
+    )
+
+    client = _Stopping("length", TRUNCATED_AFTER_A_WHOLE_NARRATIVE)
+    monkeypatch.setattr(completion, "_client", lambda: client)
+
+    with pytest.raises(ReplyUnfinished):
+        assess_finding(brief, completion_for(A_SPEC))
 
 
 # --- Seam three: the adaptive attacker's structured call ---------------------

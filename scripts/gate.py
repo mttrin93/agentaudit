@@ -361,6 +361,13 @@ def run_the_gate(args: argparse.Namespace) -> int:
                 approve=terminal_approval(attestation.identity),
                 adjudicator=adjudicator,
                 attacker=attacker,
+                # And no narrator, deliberately (ADR-0030): a gate run measures
+                # the bench and a finding is about a target (ADR-0018), so a
+                # narrative here would be prose about the bench's own reference
+                # agents that nothing the gate decides can read — and 540
+                # attempts' worth of it. `TargetRun.narrations` reads `None` on
+                # every gate run, which is the stated absence and not an empty
+                # result.
                 budget=RunBudget.declare(
                     cases=cases, targets=targets, price=call_price
                 ),

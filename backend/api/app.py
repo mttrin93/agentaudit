@@ -229,6 +229,7 @@ from backend.bench.completion import (
     declared_model,
     declared_reasoning_effort,
     declared_turns_per_episode,
+    narrator_for,
 )
 from backend.bench.contract import NOT_A_SECURITY_RESULT, RetryPolicy, TargetConfig
 from backend.bench.evaluator import Verdict
@@ -662,6 +663,9 @@ class ScoredProgress(BaseModel):
 
     Not called findings, on `RunState.succeeded_attempts`' own reasoning: a
     **finding** is a verdict *plus* its narrative, and this is a count of verdicts.
+    A run's findings are on its result and not on the state a poller reads
+    (`calibration.TargetRun.narrations`, ADR-0030), so this figure stays a count
+    of verdicts however many of them have been explained.
 
     It is `None` rather than `0` until at least one attempt has produced one,
     because the two are different facts: a count over an empty population is not a
@@ -4293,9 +4297,17 @@ def declared_instruments(models: DeclaredModels, usage: UsageLedger) -> Instrume
     which reports nothing because it is not a model (`adaptive/scripted.py`).
 
     The layers are the caller's declaration and never the wrapper's guess: the
-    adjudicator's tokens are the scored layer's and the attacker's are the adaptive
-    layer's, and a sink bound the other way round would put an adaptive figure
-    inside a scored one (ADR-0010, `usage.UsageLedger.for_layer`).
+    adjudicator's tokens and the narrative instruments' are the scored layer's and
+    the attacker's are the adaptive layer's, and a sink bound the other way round
+    would put an adaptive figure inside a scored one (ADR-0010,
+    `usage.UsageLedger.for_layer`).
+
+    **The narrative instruments are built from `models.adjudicating` and are not
+    that field's meaning**, which is ADR-0030's decision and its stated cost: a
+    fourth declared model would be a declared input no artefact names, because the
+    signed payload has no narrative field for one to sit beside yet. Through
+    `narrator_for`, which is where that string is turned into the pair, so the day
+    a fourth one is declared this line is not one of the ones that move.
     """
     return Instruments(
         adjudicator=(
@@ -4320,6 +4332,11 @@ def declared_instruments(models: DeclaredModels, usage: UsageLedger) -> Instrume
                 models.attacking_reasoning_effort,
                 usage=usage.for_layer(Layer.ADAPTIVE),
             )
+        ),
+        narrator=(
+            None
+            if models.adjudicating == UNDECLARED_MODEL
+            else narrator_for(models.adjudicating, usage.for_layer(Layer.SCORED))
         ),
     )
 

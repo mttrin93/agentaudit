@@ -37,6 +37,7 @@ from backend.bench.adaptive.scripted import SCRIPTED_ATTACKER
 from backend.bench.adjudication import Completion
 from backend.bench.capability import ReasoningEffort
 from backend.bench.library import Case, Family, VerdictClass
+from backend.bench.narration import Narrator
 from backend.bench.payload import DeclaredModels
 from backend.bench.rule import DECLARED_RULE, GateRule
 from backend.bench.usage import UsageLedger
@@ -44,17 +45,37 @@ from backend.bench.usage import UsageLedger
 
 @dataclass(frozen=True)
 class Instruments:
-    """The two instrument clients one run is made with, bound to that run's ledger.
+    """The instrument clients one run is made with, bound to that run's ledger.
 
-    A pair rather than two returns, and the pairing is the point: both are built
-    from one call, against one `UsageLedger`, into two different layers of it. A
-    caller that could take the adjudicator without the attacker could bind half a
-    run's usage and leave the other half reporting into nothing, which is the state
-    #28 was about — a figure absent for a reason nobody stated.
+    A set rather than separate returns, and the grouping is the point: they are
+    built from one call, against one `UsageLedger`, into the layers of it their
+    caller declares. A caller that could take the adjudicator without the rest
+    could bind part of a run's usage and leave the remainder reporting into
+    nothing, which is the state #28 was about — a figure absent for a reason
+    nobody stated.
     """
 
     adjudicator: Completion | None
     attacker: AttackerCompletion
+
+    narrator: Narrator | None
+    """The pair that explains a run's successes, or `None` for a run that explains
+    none.
+
+    A third field **with no default**, which is the whole of what it enforces: a
+    builder added later has to state its answer rather than inherit one, and the
+    state #37 found — a bench that measures and never explains — is reachable only
+    by saying `None` out loud. `None` is the stated absence and reaches
+    `TargetRun.narrations` as one; what it is *not* is an empty result (ADR-0030).
+
+    **`instruments_for` does not check this against the boot-time pair, and the
+    adjudicator's check is not a precedent for one.** That check exists because
+    `plan_for` reads `config.adjudicator` to decide which cases a run may attempt
+    at all, so the two statements have to agree or an operator was shown an
+    estimate for a different run. This instrument decides no case, no rate and no
+    family, so there is no second statement for it to disagree with — a builder
+    that hands back `None` here produces a run whose `narrations` say so.
+    """
 
 
 class PerRunInstruments(Protocol):
@@ -126,6 +147,22 @@ class BenchConfig:
     nothing can score.
     """
 
+    narrator: Narrator | None = None
+    """The two narrative instruments this bench explains a run's findings with.
+
+    `None` by default and the consequence is stated rather than absorbed: the run
+    produces attempts and no findings, and `TargetRun.narrations` says so. A
+    deployment is handed a pair here — the factory builds one beside the
+    adjudicator, off the same declared string, for the reason ADR-0030 gives —
+    and a caller that builds its own `BenchConfig` is declaring that its runs
+    explain nothing when it leaves this out.
+
+    Beside `adjudicator` rather than inside it, because they are three
+    instruments and only one of them decides anything: `plan_for` reads the
+    adjudicator to choose which cases a run may attempt at all, and no case, rate
+    or family moves with this one.
+    """
+
     report: ReportConfig = field(default_factory=ReportConfig)
     """The key this bench signs a finished run's report with, and what it declares
     beside the figures.
@@ -189,7 +226,11 @@ class BenchConfig:
         the operator was shown an estimate for a narrower run than the one that ran.
         """
         if self.per_run_instruments is None:
-            return Instruments(adjudicator=self.adjudicator, attacker=self.attacker)
+            return Instruments(
+                adjudicator=self.adjudicator,
+                attacker=self.attacker,
+                narrator=self.narrator,
+            )
         built = self.per_run_instruments(self.report.models, usage)
         if (built.adjudicator is None) != (self.adjudicator is None):
             raise ValueError(

@@ -55,9 +55,14 @@ from dotenv import load_dotenv
 from backend.bench.adjudication import Completion
 from backend.bench.admission import NotAdmitted, admitted_library
 from backend.bench.calibration import TargetRun, run_calibration
-from backend.bench.completion import DEFAULT_ADJUDICATOR_MODEL, completion_for
+from backend.bench.completion import (
+    DEFAULT_ADJUDICATOR_MODEL,
+    completion_for,
+    narrator_for,
+)
 from backend.bench.contract import TargetConfig
 from backend.bench.library import Case, Family, VerdictClass
+from backend.bench.narration import Narrator
 from backend.bench.rule import DECLARED_RULE
 from backend.bench.scorer import Rate
 from backend.bench.usage import UsageLedger
@@ -73,6 +78,7 @@ from scripts.console import (
     interactive_planter,
     note_is_planted,
     price,
+    print_findings,
     rate_line,
     terminal_approval,
     traced_run,
@@ -240,6 +246,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     ledger = UsageLedger()
     adjudicator: Completion | None = None
     adjudicator_model: str | None = None
+    narrator: Narrator | None = None
     if not args.deterministic_only:
         spec = args.adjudicator_model or os.environ.get(
             ADJUDICATOR_ENV, DEFAULT_ADJUDICATOR_MODEL
@@ -250,6 +257,14 @@ def main(argv: Sequence[str] | None = None) -> int:
             # before discovering it had no instrument would already have spent the
             # operator's budget on attempts nothing can score.
             adjudicator = completion_for(spec, usage=ledger.for_layer(Layer.SCORED))
+            # And the pair that explains what the four deterministic families
+            # find, off the same declared string and into the same layer
+            # (ADR-0030). Behind the same flag as the adjudicator, because the
+            # docstring's promise about `--deterministic-only` is precisely *the
+            # wire and the four re-derivable families first, a judge and its cost
+            # second* — a probe that narrated without one would need a credential
+            # this flag exists to do without.
+            narrator = narrator_for(spec, ledger.for_layer(Layer.SCORED))
         except (KeyError, ValueError) as unusable:
             print(
                 f"No usable adjudicating model: {unusable}. Pass a working "
@@ -314,6 +329,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             plant_nonce=interactive_planter(),
             approve=terminal_approval(attestation.identity),
             adjudicator=adjudicator,
+            narrator=narrator,
             usage=ledger,
             budget=RunBudget.declare(cases=cases, targets=[target], price=call_price),
             # A probe is not a gate run: it decides nothing about the bench, so it
@@ -455,6 +471,11 @@ def print_target_run(target_run: TargetRun, gaps: dict[Family, OperatorGap]) -> 
     # spent on it, and it is in no denominator above (`applicability.py`).
     for skipped in target_run.not_applicable:
         print(f"\n  {skipped.stated()}")
+
+    # And under the rates, never among them: what the two narrative instruments
+    # said about the attempts that worked. A `--deterministic-only` probe has no
+    # narrative instrument and this says so rather than printing an empty section.
+    print_findings(target_run)
 
     print(
         "\nNot a gate result, and not calibration. This target is not a reference "

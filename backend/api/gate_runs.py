@@ -415,6 +415,11 @@ def _decide(
             approve=approve,
             adjudicator=instruments.adjudicator,
             attacker=instruments.attacker,
+            # And no narrator, which is a decision rather than an omission
+            # (ADR-0030): a gate run measures the bench and a finding is about a
+            # target (ADR-0018), so a narrative here would be prose about the
+            # bench's own test equipment that nothing the gate decides can read.
+            # `TargetRun.narrations` is `None` on every gate run and says so.
             # The ledger those two report into. One per gate run, for the reason
             # `run_calibration` refuses a reused one: a figure filed against the
             # wrong run is worse than an absent one (ADR-0026).

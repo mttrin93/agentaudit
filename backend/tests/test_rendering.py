@@ -144,7 +144,7 @@ def test_every_section_states_its_own_reproducibility_and_three_read_the_payload
 
 # --- The golden digest: one document, pinned to the byte ---------------------
 
-GOLDEN_ONE_FAMILY = "f953a54f8affbe510bdf954f2ce1e66c7a95594bf9b8b7e84aa9507cbebdd513"
+GOLDEN_ONE_FAMILY = "76aa817490638fadc414cbe7d1341e20d5ecb3ad484bedf358e7d62a37ea59e8"
 """The sha256 of `_one_family()`'s rendering, written down.
 
 **A tripwire, and it is deliberately a strict one.** Every other assertion in this
@@ -177,6 +177,16 @@ already there
 ([ADR-0035](../../docs/adr/0035-the-elective-family-tier-is-never-gate-deciding.md)).
 Every report gains it, because the tier is declared and a run that requested nothing
 from it is a run whose figures are the six and says so.
+
+Moved a fourth time, by #47, and it is the negative-coverage section that moved:
+three published categories left the untested list because three families now claim
+them, a third block prints each claimed category beside the half of it the claiming
+family does not reach, and the section is retitled for what it now holds
+([ADR-0037](../../docs/adr/0037-a-claimed-category-is-claimed-in-part.md)). A
+coverage claim getting wider is the one direction nobody checks, so the digest moving
+here is the intended noise: the section says less about what is untested and more
+about where what is claimed stops. The claim lines name no family, which is why the
+title moved and no line naming a family did.
 """
 
 
@@ -478,6 +488,51 @@ def test_the_negative_coverage_list_is_printed_with_a_reason_for_every_gap() -> 
     # published categories these four are missing from (ADR-0002, spec story 11).
     assert "OWASP GenAI LLM Top 10 2026" in text
     assert "OWASP Top 10 for Agentic Applications 2026" in text
+
+
+def test_a_claimed_category_prints_beside_the_half_it_does_not_reach() -> None:
+    # The block #47 added, and the reason it had to be added: three categories left
+    # the untested list because three families claim them, and a document that only
+    # dropped them would have made its coverage claim wider and said nothing. Each
+    # claimed category prints with the half of it the claiming family does not reach,
+    # and never with that family's name (ADR-0037).
+    payload = a_payload()
+    text = render(payload)
+    [gaps_section] = [
+        section for section in sections(payload) if section.number == "5a"
+    ]
+
+    assert payload.result.claimed_in_part
+    for claim in payload.result.claimed_in_part:
+        assert f"- {claim.stated()}." in gaps_section.body
+        assert claim.identifier in text
+        assert claim.not_reached in text
+        # And no claim names the family that carries it. This block is derived over
+        # the library's families and this document is about one target, which
+        # measured two of them here: a family named in the coverage section that the
+        # figures above do not carry would read as a family this target was tested on
+        # (ADR-0018). The pairing is #45's to print beside a family name.
+        #
+        # Asserted on the line's exact opening, because a search for the six wire
+        # names would pass a line that printed `Wrongful commitment` instead.
+        assert claim.stated().startswith(
+            f"{claim.identifier} {claim.title} — tested in part;"
+        )
+
+    # And the three the file used to argue against are on the claimed side of the
+    # section rather than absent from the document: each prints its published title,
+    # and none of them is in the untested block. The second assertion reads the
+    # payload's own list rather than the untested block's sentence shape, so it does
+    # not go quietly true if that sentence is reworded.
+    printed = " ".join(gaps_section.body)
+    untested = {category.identifier for category in payload.result.untested_categories}
+    for identifier, title in (
+        ("ASI03", "Identity & Privilege Abuse"),
+        ("ASI09", "Human-Agent Trust Exploitation"),
+        ("ASI10", "Rogue Agents"),
+    ):
+        assert f"{identifier} {title} — tested in part" in printed
+        assert identifier not in untested
 
 
 def test_the_untested_published_categories_print_with_their_identifiers() -> None:

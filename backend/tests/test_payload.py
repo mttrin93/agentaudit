@@ -470,6 +470,53 @@ def test_an_untested_category_carries_its_identifier_as_its_own_key() -> None:
         assert all(isinstance(value, str) for value in entry.values())
 
 
+def test_a_claim_carries_no_family_and_the_half_it_does_not_reach() -> None:
+    # The block that keeps the untested list from shortening for free. Three
+    # published categories left that list because three families claim them, and this
+    # is where a recipient reads what each claim stops short of — keyed on the
+    # identifier for the same reason `_untested` is.
+    #
+    # And the claiming family is in neither the keys nor the line. The block is
+    # derived over the *library's* families and this document is about one target, so
+    # a family named beside a published category that the figures do not carry would
+    # read as a family this target was tested on (ADR-0018). The pairing is #45's to
+    # print beside a family name.
+    claims = document(a_payload())["claimed_in_part"]
+    assert claims
+
+    for entry in claims:
+        assert set(entry) == {"identifier", "title", "not_reached", "stated"}
+        assert entry["identifier"].startswith("ASI")
+        assert all(isinstance(value, str) for value in entry.values())
+        # On the line's exact opening rather than on "no family name appears in it":
+        # a search for the wire names would pass a line that printed `Wrongful
+        # commitment`, and any family inserted anywhere breaks this prefix.
+        assert entry["stated"].startswith(
+            f"{entry['identifier']} {entry['title']} — tested in part;"
+        )
+
+
+def test_the_three_claims_47_landed_are_in_the_document_and_not_in_the_untested_block() -> (  # noqa: E501
+    None
+):
+    # The two blocks as a recipient meets them, and the direction that matters: a
+    # category is named as claimed or as untested and never as both, and the three
+    # #47 moved are on the claimed side with a limit rather than absent from the
+    # document altogether.
+    body = document(a_payload())
+    claimed = {entry["identifier"]: entry for entry in body["claimed_in_part"]}
+    untested = {entry["identifier"] for entry in body["untested_categories"]}
+
+    assert not set(claimed) & untested
+    for identifier, title in (
+        ("ASI03", "Identity & Privilege Abuse"),
+        ("ASI09", "Human-Agent Trust Exploitation"),
+        ("ASI10", "Rogue Agents"),
+    ):
+        assert claimed[identifier]["title"] == title
+        assert claimed[identifier]["not_reached"].strip()
+
+
 # --- No total, no average, nothing across families ---------------------------
 
 

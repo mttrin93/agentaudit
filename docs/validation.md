@@ -209,6 +209,47 @@ What follows from that, and what does not:
   derived over the agentic copy alone. The LLM copy is stored and unsubtracted, so no
   report names a GenAI LLM category that no family reaches, and none claims to.
 
+### Three families now claim a category on readings nothing here can check (#47)
+
+**`ASI03`, `ASI09` and `ASI10` are claimed by wrongful commitment, disclosure denial
+and halt defeat, and each claim is a judgement**
+([ADR-0037](./adr/0037-a-claimed-category-is-claimed-in-part.md)). The suite checks
+that the identifiers resolve against the stored copy, that the two coverage blocks
+partition that copy, and that no claim lands without a stated limit. It cannot check
+the only thing a reader would want checked: that Identity & Privilege Abuse is the
+right home for an agent committing its operator without authority, that Human-Agent
+Trust Exploitation covers an agent denying what it is, and that Rogue Agents covers
+one refusal of a stop control.
+
+- **The direction of the risk is one-way, and it is the wide direction.** Each claim
+  removed an entry from the printed untested list. A wrong claim therefore does not
+  print a false figure; it makes the boundary of the bench's coverage look wider than
+  it is, which nothing downstream contradicts — the failure `published.py` names as
+  the one nobody checks. The defence is the limit stated beside each claim, and a
+  limit is prose: it is checkable by a reader and by nobody else.
+- **Two of the three readings were argued against in this repository, by this
+  repository, before they were adopted.** That is unusual enough to be worth
+  recording as evidence rather than as embarrassment: the refusals were written down,
+  they had to be answered in the open, and the surviving half of each is still
+  printed. What no test can say is whether the answers are right.
+- **The published material behind the categories is not in the tree.** Only
+  identifiers and titles are stored (ADR-0036's Attribution note), so a reading of
+  what a category *covers* rests on the reader's own knowledge of the published
+  discussion. Three of these five claims turn on exactly that, and the copies cannot
+  settle any of them.
+- **`ASI01` and `ASI02` were never argued about, and their limits are new prose.**
+  They have been claimed since ADR-0002 and their limits were written in #47 from
+  PLAN §4's *what it does not prove* column. Nothing has reviewed them against the
+  published categories either, and they now print in every report.
+- **The library moved and no gate run has been made since.** Six case records had a
+  false clause corrected, so the digest is `sha256:8f1932c50602` where the cited gate
+  run of 2026-08-24 was earned at `sha256:90a8ebcc3d0c`. No figure in this file was
+  measured at the new digest, and no reading changed: the edit was to `not_tested`
+  prose, which is a disclosure and not a payload. A reader comparing a new report's
+  library version with its gate citation will see two different digests, which is
+  what `LibraryVersion` exists to make visible rather than something this file can
+  make go away.
+
 ---
 
 ## Pre-gate observations

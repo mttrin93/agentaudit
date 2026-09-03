@@ -109,7 +109,7 @@ from backend.bench.rendering._layout import Section as Section
 from backend.bench.rendering._measured import (
     BAND_IN_A_TARGET_REPORT as BAND_IN_A_TARGET_REPORT,
 )
-from backend.bench.rendering._measured import _adaptive, _figures, _not_tested_at_all
+from backend.bench.rendering._measured import _adaptive, _figures, _not_tested
 
 REPORT_MARKDOWN = "report.md"
 """The name of the document a human reads."""
@@ -263,7 +263,11 @@ def _sections_of(body: Mapping[str, Any]) -> tuple[Section, ...]:
         _how_the_run_was_made(body),
         _controls(body["declared"]),
         _figures(body["measured"], body["elective"]),
-        _not_tested_at_all(body["coverage_gaps"], body["untested_categories"]),
+        _not_tested(
+            body["coverage_gaps"],
+            body["untested_categories"],
+            body["claimed_in_part"],
+        ),
         _adaptive(body["adaptive"]),
         _lifecycle(),
         _standards(),

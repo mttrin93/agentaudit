@@ -241,13 +241,22 @@ this repository stands behind.
 """
 
 ORIGINATED_HERE = "none — originated here"
-"""What a case record carries where the published lists have no equivalent entry.
+"""What a case record carries where it claims no published identifier of its own.
 
 The one identifier that resolves to no stored copy and is still a valid claim, and it
 is a declared constant rather than a shape the loader recognises: halt defeat and
 disclosure denial originated in this project (ADR-0002, PLAN §4), and *this case
 claims no published identifier* has to be a sentence a reader can find in the
 repository rather than a blank a typo could imitate.
+
+**It says nothing about the family's label, and since #47 those are two different
+claims.** Halt defeat's and disclosure denial's families claim `ASI10` and `ASI09` as
+secondary labels in `published.FAMILY_CATEGORY`, and every one of their case records
+still carries this constant: a family's label is a reading of a published category,
+a case's identifier is what *this payload* tests one case within, and the six records
+that used to give *the published lists carry no equivalent entry* as the reason now
+name the Article they were written from instead
+([ADR-0037](../../docs/adr/0037-a-claimed-category-is-claimed-in-part.md)).
 """
 
 

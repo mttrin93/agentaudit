@@ -9,9 +9,9 @@ reader will act on is printed here, beside the counts it came from.
 **Nothing here reaches across two families** (ADR-0005, D12). No count of families,
 no rate over a run, no figure this module computes at all: every number is a number
 the payload already carries. The same rule is why `_withheld`, `_not_measurable`,
-`_elective` and `_not_tested_at_all` are four functions rather than one — a
-family absent for four different reasons is four different statements, and a single
-"not tested" list would be this module deciding they are the same thing.
+`_elective` and `_not_tested` are four functions rather than one — a family absent
+for four different reasons is four different statements, and a single "not tested"
+list would be this module deciding they are the same thing.
 
 **The adaptive layer reports in its own section and writes into no rate here**
 (ADR-0010). `_adaptive` prints episodes, and an episode is not an attempt; the only
@@ -290,28 +290,39 @@ def _elective(elective: Mapping[str, Any]) -> tuple[str, ...]:
     )
 
 
-def _not_tested_at_all(
+def _not_tested(
     gaps: Sequence[Mapping[str, Any]],
     untested: Sequence[Mapping[str, Any]],
+    claimed: Sequence[Mapping[str, Any]],
 ) -> Section:
-    """The negative-coverage list, in two blocks, because it makes two claims.
+    """The negative-coverage section, in three blocks, because it makes three claims.
+
+    Named `_not_tested` and not `_not_tested_at_all` since #47: one of its three
+    blocks is about a category this bench *does* reach and where its reach stops, and
+    a function whose name said *at all* over that block would be the section title's
+    own overclaim in miniature.
 
     Printed in every report, and not a defect. It uses the public category list as a
     coverage checklist rather than only as a label, which is the first thing a
     security analyst looks for — and the gaps are listed rather than closed.
 
-    The two blocks are not the same claim and are not merged. The first names
+    The three blocks are not the same claim and are not merged. The first names
     published categories no family in the library reaches, and it is **subtracted**
     from a stored copy of the list rather than written out by hand, so a family added
-    later shortens it without anyone editing this function. The second names limits of
-    the bench itself, which appear on no published register and can only be declared.
-    Printing them as one bulleted list would make the derived half look declared and
-    the declared half look checkable.
+    later shortens it without anyone editing this function. The second names the
+    categories a family *does* reach and where each claim stops, which is the only
+    thing that shortens the first — a category leaving the untested block with nothing
+    said about the boundary of the claim that took it is this document's coverage
+    statement getting wider in the one direction nobody checks
+    ([ADR-0037](../../../docs/adr/0037-a-claimed-category-is-claimed-in-part.md)). The
+    third names limits of the bench itself, which appear on no published register and
+    can only be declared. Printing them as one bulleted list would make the derived
+    halves look declared and the declared half look checkable.
     """
     return Section(
         point=5,
         part="a",
-        title="What this bench does not test at all",
+        title="What this bench does not test, at all and in part",
         body=(
             "The boundary of the claim, stated rather than left to be inferred from "
             "the labels above. These are listed and not closed: new families to cover "
@@ -326,13 +337,24 @@ def _not_tested_at_all(
             "",
             *(f"- {category['stated']}." for category in untested),
             "",
+            "**Published categories a family claims, and the half of each it does "
+            "not reach** — the same copy, and the only thing that shortens the list "
+            "above. A family *tests one case within* an identifier and it is not "
+            "that identifier (ADR-0002), so a claim is a claim on part of a "
+            "category, and the part it does not cover is stated beside it rather "
+            "than left to be inferred from the claim's absence from the block "
+            "above (ADR-0037).",
+            "",
+            *(f"- {claim['stated']}." for claim in claimed),
+            "",
             "**Limits of the bench**, which no published register carries and which "
             "are therefore declared rather than subtracted.",
             "",
             *(f"- {gap['stated']}." for gap in gaps),
             "",
-            "One list above is derived and one is declared, and the copy the "
-            "derivation reads is a transcription rather than the source: the OWASP "
+            "Two of the lists above are derived and one is declared, and the copy "
+            "the derivations read is a transcription rather than the source: the "
+            "OWASP "
             "resource page refuses automated retrieval, so the identifiers and titles "
             "were taken from two independent readings that agreed on all ten. What "
             "that supports is agreement between two readings, and a reader who needs "

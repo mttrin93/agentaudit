@@ -89,7 +89,7 @@ from backend.bench.capability import (
 )
 from backend.bench.elective import ElectiveSelection
 from backend.bench.library import ExternalId, LibraryVersion
-from backend.bench.published import UntestedCategory
+from backend.bench.published import ClaimedInPart, UntestedCategory
 from backend.bench.registration import AttestationRecord
 from backend.bench.rule import DECLARED_RULE, GateRule
 from backend.bench.scorer import GateOutcome, Interval, Reliability
@@ -685,6 +685,7 @@ def document(payload: TargetPayload) -> dict[str, Any]:
         "untested_categories": [
             _untested(category) for category in payload.result.untested_categories
         ],
+        "claimed_in_part": [_claim(one) for one in payload.result.claimed_in_part],
         "provenance": _provenance(payload),
         "rendered_sha256": payload.rendered_sha256,
         "key_id": payload.key_id,
@@ -951,6 +952,24 @@ def _untested(category: UntestedCategory) -> dict[str, str]:
         "title": category.title,
         "reason": category.reason,
         "stated": category.stated(),
+    }
+
+
+def _claim(claim: ClaimedInPart) -> dict[str, str]:
+    """One claimed agentic category, with the half of it the family does not reach.
+
+    The identifier is its own key on `_untested`'s terms — it is the part a recipient
+    looks up — and the claiming family is **not** here at all, for the reason
+    `ClaimedInPart.stated` gives: this block is scoped to the library's families and
+    travels in a document about one target, and a family named in it that the figures
+    do not carry would read as a family this target was tested on (ADR-0018). `stated`
+    carries the rendered line, so the document and the Markdown cannot drift.
+    """
+    return {
+        "identifier": claim.identifier,
+        "title": claim.title,
+        "not_reached": claim.not_reached,
+        "stated": claim.stated(),
     }
 
 

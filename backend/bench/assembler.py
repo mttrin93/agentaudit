@@ -57,7 +57,9 @@ from backend.bench.evaluator import Verdict
 from backend.bench.library import Case, ExternalId, Family, VerdictClass
 from backend.bench.measurability import NotMeasurable
 from backend.bench.published import (
+    CLAIMED_IN_PART,
     UNTESTED_AGENTIC_CATEGORIES,
+    ClaimedInPart,
     UntestedCategory,
 )
 from backend.bench.reproducibility import Reproducibility
@@ -528,9 +530,11 @@ ground truth for the target's domain" — so there is nothing to subtract them f
 declaring them is the only available form. The half of this disclosure that *is* a
 published list is now derived rather than declared: `published.py` holds the copy of
 the OWASP agentic list and subtracts the categories the library's families claim, so
-`UntestedCategory` and `CoverageGap` are two different claims and print in two
-different blocks. One says the bench cannot measure this at all; the other names a
-published category no family reaches yet.
+`UntestedCategory`, `ClaimedInPart` and `CoverageGap` are three different claims and
+print in three different blocks. The first names a published category no family
+reaches; the second names one a family *does* reach and where its reach stops
+([ADR-0037](../../docs/adr/0037-a-claimed-category-is-claimed-in-part.md)); this one
+says the bench cannot measure something at all, and no published register carries it.
 
 **The gap that is left.** Both lists are stored now — `editions.py` holds a copy of
 each, and the `LLM0x:2026` identifiers on the case records resolve against one or the
@@ -591,6 +595,21 @@ class TargetResult:
     also the honest scope: a category untested by the bench and a family this target
     could not answer are two different absences, and the second one is
     `NotMeasurable`.
+    """
+
+    claimed_in_part: tuple[ClaimedInPart, ...] = CLAIMED_IN_PART
+    """The published categories the library's families claim, and where each stops.
+
+    The other side of the field above and derived from the same declared records
+    (`published.py`), so the two are the whole of that list between them. It is here
+    rather than folded into `untested_categories` because it makes the opposite
+    claim — this category *is* reached, this far — and a reader who met the two in one
+    block could not tell a gap from a boundary
+    ([ADR-0037](../../docs/adr/0037-a-claimed-category-is-claimed-in-part.md)).
+
+    Same scope and same reason as the field above: the library's families, never the
+    run's, so it is the same tuple on every result at a given library version and
+    stays out of the way of the drop-a-family invariant in `payload.py`.
     """
 
     @property

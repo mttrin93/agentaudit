@@ -85,12 +85,12 @@ class Section:
     part: str = ""
     """`a` or `b` where one Annex IV point holds two sections, and empty otherwise.
 
-    Point 5 holds two, because what the bench does not test at all and what one
-    attacker found outside the recorded cases are both statements about the boundary
-    of the claim, and they are not the same evidentiary class. Two labelled sections
-    under one point is Annex IV's own shape — its points carry lettered sub-points —
-    and it is the honest alternative to one section with two labels or one label
-    covering both.
+    Point 5 holds two, because what the bench does not test — at all, or beyond where
+    a claim of its own stops — and what one attacker found outside the recorded cases
+    are both statements about the boundary of the claim, and they are not the same
+    evidentiary class. Two labelled sections under one point is Annex IV's own
+    shape — its points carry lettered sub-points — and it is the honest alternative to
+    one section with two labels or one label covering both.
     """
 
     title: str = ""

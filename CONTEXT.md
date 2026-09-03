@@ -216,6 +216,17 @@ _Avoid_: rating, grade, risk level, score
 A published risk category the bench does not test. Listed in every report; not a defect.
 _Avoid_: blind spot, limitation, exclusion
 
+**Claimed in part**:
+A published category a **family** claims, together with the half of that category the
+family does not reach. Not a **coverage gap** and not one of the absences: the category
+*is* tested, this far and no further. It exists because a claim is the only thing that
+shortens the list of categories nothing reaches, so every claim is a coverage statement
+getting wider, and the half it does not cover is declared beside it or the claim does
+not load. Printed in every report beside that list, and it names no family — the block
+is derived over the library's families and a report is about one target
+([ADR-0037](./docs/adr/0037-a-claimed-category-is-claimed-in-part.md)).
+_Avoid_: partial coverage, partially tested, mostly covered, gap
+
 ### Library lifecycle
 
 **Gate**:

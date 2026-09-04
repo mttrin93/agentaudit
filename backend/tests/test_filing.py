@@ -215,7 +215,7 @@ def test_the_second_run_is_shown_what_the_first_one_filed(leakage_case: Case) ->
     # And the attacker's tool, which is the other reader of the store and the one
     # that has answered "nothing" on every run to date (#38).
     answered = retrieve_precedent(
-        DURABLE_PRECEDENT, leakage_case.family, Blinding.over([])
+        DURABLE_PRECEDENT, Family(leakage_case.family), Blinding.over([])
     )
     assert first.result.filing.filed[0].failure in answered
 
@@ -223,7 +223,7 @@ def test_the_second_run_is_shown_what_the_first_one_filed(leakage_case: Case) ->
     # finding filed twice is the same row — a re-run adds to the corpus only when
     # it found something new, and never multiplies one route into copies of itself
     # (`Precedent.key`, #38).
-    assert len(DURABLE_PRECEDENT.for_family(leakage_case.family)) == 1
+    assert len(DURABLE_PRECEDENT.for_family(Family(leakage_case.family))) == 1
 
 
 def _narrations(run: Narrated) -> tuple[Narration, ...]:

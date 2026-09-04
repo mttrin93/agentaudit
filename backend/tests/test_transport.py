@@ -14,7 +14,7 @@ from backend.bench import contract
 from backend.bench.calibration import CalibrationResult, run_calibration
 from backend.bench.contract import TargetFailure, TargetUnreachable, send_message
 from backend.bench.evaluator import Verdict
-from backend.bench.library import Case
+from backend.bench.library import Case, Family
 from backend.bench.rule import DECLARED_RULE
 from backend.graph.budget import Layer
 from backend.tests.conftest import BENCH_ATTESTATION, CONFIRMING
@@ -36,7 +36,7 @@ def test_transient_failures_are_retried_and_do_not_count_as_attempts(
 
     [target_run] = result.target_runs
     assert target_run.registration.complete
-    rate = target_run.rates[leakage_case.family]
+    rate = target_run.rates[Family(leakage_case.family)]
 
     # The denominator is the declared sample size, not the number of round trips
     # it took to get there.

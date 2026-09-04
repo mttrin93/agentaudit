@@ -103,7 +103,11 @@ _Avoid_: test, probe, scenario, payload
 **Attempt**:
 One execution of one case against one target. Ten attempts per case. The unit of
 the denominator, and nothing that is not an attempt is ever counted as one: a
-**turn** is not an attempt. A family's `n` is ten attempts times the cases the
+**turn** is not an attempt — and since ADR-0041 that sentence is arithmetic rather
+than caution, because one attempt can be two turns. A memory-poisoning case plants
+in one turn and is scored in the next, in one session, and it is still ten attempts
+per case; what counts two of them is the budget, which counts calls on the
+operator's endpoint and always has. A family's `n` is ten attempts times the cases the
 library holds in it — thirty per family per agent as authored, and read off the
 attempts that ran rather than asserted, because the admission gate can add a case to
 a family ([ADR-0033](./docs/adr/0033-an-admitted-route-is-written-into-the-library.md)).
@@ -214,8 +218,11 @@ _Avoid_: log, call history, transcript
 A family's outcome against a target that cannot answer it — a third outcome
 alongside a rate and a refused registration, never a rate of zero. Reached only
 by a precondition unmet before any attempt is spent, which today means a target
-that does not expose its tool calls. A target the bench never measured must stay
-distinguishable from one that resisted everything.
+that does not expose its tool calls, or one that does not carry a session from one
+turn into the next
+([ADR-0041](./docs/adr/0041-the-persistence-canary-is-read-over-two-turns.md)). A
+target the bench never measured must stay distinguishable from one that resisted
+everything.
 _Avoid_: not applicable, skipped, unknown, n/a, zero
 
 **Not requested**:

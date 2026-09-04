@@ -146,7 +146,7 @@ def test_every_section_states_its_own_reproducibility_and_three_read_the_payload
 
 # --- The golden digest: one document, pinned to the byte ---------------------
 
-GOLDEN_ONE_FAMILY = "bae43e9671ee9ea3423f96ea6bb9a5d6b68ca1d7c143adbf01f0fc35c7a71b3d"
+GOLDEN_ONE_FAMILY = "37131e54630df468e9cf891bf03781e3fb3affefd33b8f4ef3a6f2c4b851b6ae"
 """The sha256 of `_one_family()`'s rendering, written down.
 
 **A tripwire, and it is deliberately a strict one.** Every other assertion in this
@@ -209,6 +209,16 @@ subtracted from here" is gone because it is no longer true
 longer in both derived blocks at once, which is what a second subtraction costs: five
 categories are named as unreached with a reason and five as reached-in-part with a
 limit, and no figure anywhere moved.
+
+Moved a seventh time, by #48, and it is one sentence in the negative-coverage section.
+`ASI06` Memory & Context Poisoning is still listed as untested and the *reason* beside
+it changed: the old one said the elective family carrying its label had no cases on
+disk, which stopped being true the day memory poisoning got three. The entry did not
+move to the claimed block, because the tier is requested rather than run — a category
+printed as covered in every report would be a coverage claim widened on runs that
+never asked for the family — ADR-0035, and
+[ADR-0018](../../docs/adr/0018-the-report-is-about-a-target-the-gate-is-about-the-bench.md).
+Nothing else in the document changed and no figure moved.
 """
 
 

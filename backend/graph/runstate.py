@@ -18,7 +18,13 @@ from dataclasses import dataclass, field, replace
 from backend.bench.adaptive.episode import AdaptiveEpisode, EpisodeOutcome
 from backend.bench.contract import Transcript
 from backend.bench.evaluator import Verdict
-from backend.bench.library import EMPTY_LIBRARY, Family, LibraryVersion, VerdictClass
+from backend.bench.library import (
+    EMPTY_LIBRARY,
+    AnyFamily,
+    Family,
+    LibraryVersion,
+    VerdictClass,
+)
 from backend.graph.budget import BudgetExceeded, Layer, RunBudget
 
 
@@ -28,17 +34,26 @@ class Attempt:
     its verdict."""
 
     case_id: str
-    family: Family
-    """Which family this attempt counts towards.
+    family: AnyFamily
+    """Which family this attempt counts towards, in either tier.
 
     Carried on the attempt rather than looked up from the case later, because a
     rate is per family per agent and every count that forgets its family is a
     count that can be pooled across six of them by accident.
+
+    `AnyFamily` and not `Family`, because an elective attempt is an attempt
+    (ADR-0035). What does *not* widen is anything that groups these into a rate the
+    gate reads: `TargetRun.rates` stays keyed on `Family` and the tier's counts
+    arrive in a second mapping beside it, which is the one seam the prohibition is
+    carried at.
     """
 
     target_name: str
     index: int
     transcript: Transcript
+    """The exchange the verdict was read over — the **scored** turn, where an
+    attempt took more than one."""
+
     verdict: Verdict
     verdict_class: VerdictClass
     """How this attempt's verdict was reached, copied off the case record.
@@ -50,6 +65,18 @@ class Attempt:
     from the family name, which is the inference spec story 18 exists to forbid.
     Reading it off the record at the moment the attempt is made is the only place
     that inference is impossible.
+    """
+
+    planting: Transcript | None = None
+    """The exchange that planted, for an attempt whose verdict is about a later turn.
+
+    `None` for every attempt answerable inside one exchange, which is every attempt
+    but memory poisoning's. Kept beside the scored transcript rather than instead of
+    it, because the verdict turns on both — the canary in the second reply and its
+    absence from this one — and a verdict has to be re-derivable by a reader holding
+    the record and the evidence
+    ([ADR-0041](../../docs/adr/0041-the-persistence-canary-is-read-over-two-turns.md),
+    ADR-0004).
     """
 
     started_at: float = field(default_factory=time.monotonic)
@@ -75,7 +102,13 @@ class Position:
     """
 
     target_name: str
-    family: Family
+    family: AnyFamily
+    """Which family the run is in, in either tier.
+
+    Not a denominator and never one — see `attempt_index` below — so it widens with
+    the attempt it reports the position of (ADR-0035).
+    """
+
     case_id: str
     attempt_index: int
     """Which of the case's attempts is in flight, counted from zero.
@@ -169,7 +202,7 @@ class RunState:
     spent: dict[Layer, int] = field(default_factory=lambda: dict.fromkeys(Layer, 0))
 
     def enter(
-        self, target_name: str, family: Family, case_id: str, attempt_index: int
+        self, target_name: str, family: AnyFamily, case_id: str, attempt_index: int
     ) -> None:
         """Move the scored position to the attempt about to be sent."""
         self.position = Position(target_name, family, case_id, attempt_index)

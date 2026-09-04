@@ -52,7 +52,7 @@ from typing import Any
 from backend.bench.adaptive.promotion import Promotion, promote
 from backend.bench.adaptive.proposal import ProposedRoute
 from backend.bench.admission import RejectionKind, kind_of
-from backend.bench.library import AdmissionReading, Case, Family
+from backend.bench.library import AdmissionReading, AnyFamily, Case, Family
 from backend.bench.rule import DECLARED_RULE, GateRule
 from backend.bench.store import DatabaseStore
 
@@ -156,7 +156,16 @@ class RouteKey:
     answer a question about one of them with the other's counts.
     """
 
-    family: Family
+    family: AnyFamily
+    """Which family the proposed route belongs to, in either tier.
+
+    Widened with the record it is read off, and it is not a container the gate
+    counts: the admission memory holds what a measurement was, and admission is
+    decided per case (ADR-0032, ADR-0035). No elective family reaches it today —
+    the adaptive layer's episodes are over the six — and the type does not have to
+    know that to stay out of a denominator.
+    """
+
     probe: str
     """A `sha256` of the probe that actually ran, truncated. Never the probe."""
 

@@ -71,10 +71,19 @@ from backend.bench.contract import TargetConfig, TargetUnreachable
 from backend.bench.evaluator import Verdict
 from backend.bench.filing import Filing, file_precedent
 from backend.bench.judge import Disagreement, Finding
-from backend.bench.library import Case, Family, LibraryVersion, VerdictClass
+from backend.bench.library import (
+    AnyFamily,
+    Case,
+    ElectiveFamily,
+    Family,
+    LibraryVersion,
+    VerdictClass,
+    one_of_the_six,
+)
 from backend.bench.measurability import (
     NotMeasurable,
     contradicted_by_the_reply,
+    not_measurable_elective_families,
     not_measurable_families,
     runnable,
 )
@@ -131,6 +140,21 @@ class TargetRun:
     that met every precondition its library asked for.
     """
 
+    elective_not_measurable: Mapping[ElectiveFamily, NotMeasurable] = field(
+        default_factory=dict
+    )
+    """The elective families this target could not be measured on, and why.
+
+    A second mapping beside the one above, which is the split ADR-0035 asks for at
+    every site keyed by family: `not_measurable` is what `gate.family_rates` reads
+    when it decides which of the six were withdrawn, and an elective family in it
+    would be an elective family in the gate's reasoning about its own denominator.
+
+    This is where memory poisoning lands against a target that keeps no session
+    state, and it is the outcome rather than a rate of zero
+    ([ADR-0041](../../docs/adr/0041-the-persistence-canary-is-read-over-two-turns.md)).
+    """
+
     not_applicable: tuple[SkippedCase, ...] = ()
     """The cases this target was never sent, because they were not written for it.
 
@@ -164,7 +188,10 @@ class TargetRun:
     """
 
     def __post_init__(self) -> None:
-        both = set(self.not_measurable) & {attempt.family for attempt in self.attempts}
+        attempted_families = {attempt.family for attempt in self.attempts}
+        both = (
+            set(self.not_measurable) | set(self.elective_not_measurable)
+        ) & attempted_families
         if both:
             raise ValueError(
                 f"{sorted(both)} were reported not measurable and also attempted "
@@ -186,7 +213,7 @@ class TargetRun:
                 "for a payload the case never claimed would land"
             )
 
-        classes: dict[Family, set[VerdictClass]] = defaultdict(set)
+        classes: dict[AnyFamily, set[VerdictClass]] = defaultdict(set)
         for attempt in self.attempts:
             classes[attempt.family].add(attempt.verdict_class)
         mixed = sorted(family for family, seen in classes.items() if len(seen) > 1)
@@ -202,10 +229,16 @@ class TargetRun:
             explained = sorted(
                 narration.finding.case_id for narration in self.narrations
             )
+            # The six's successes. An elective family's success reaches no finding
+            # at all and says so where the decision is taken
+            # (`narration.narrate_successes`, ADR-0035), so counting one here would
+            # make every run that requested the tier fail this check for holding the
+            # absence it was designed to hold.
             succeeded = sorted(
                 attempt.case_id
                 for attempt in self.attempts
                 if attempt.verdict is Verdict.SUCCEEDED
+                and one_of_the_six(attempt.family)
             )
             if explained != succeeded:
                 raise ValueError(
@@ -214,7 +247,8 @@ class TargetRun:
                     "some of its successes reports a subset nobody chose, and one "
                     "that explained an attempt it did not make reports a failure "
                     "that was never measured. Findings are all of them or the "
-                    "stated absence of all of them (ADR-0030)"
+                    "stated absence of all of them (ADR-0030) — all of them being "
+                    "the six's, because the tier's are explained nowhere"
                 )
 
     @property
@@ -294,20 +328,58 @@ class TargetRun:
             if attempt.verdict_class is verdict_class
         )
 
+    @property
+    def elective_rates(self) -> dict[ElectiveFamily, Rate]:
+        """This target's failure rate for each **elective** family it was attempted on.
+
+        A second mapping beside `rates` and never a wider key on it, which is the
+        split ADR-0035 asks for at every site that groups attempts by family
+        ([ADR-0035](../../docs/adr/0035-the-elective-family-tier-is-never-gate-deciding.md)).
+        `gate.family_rates`
+        reads `rates`, so a mapping keyed over both tiers would be an elective family
+        in the gate's denominator — and the arithmetic below is the same arithmetic,
+        because *selectable is not ungated*.
+
+        There is deliberately no property returning the two together, on the terms
+        `judged_rates` states: a collection holding both would be the one place a
+        figure that decides nothing could be read beside figures that decide.
+        """
+        counted = _by_family(self.attempts)
+        return {
+            family: self._divide(grouped)
+            for family, grouped in counted.items()
+            if isinstance(family, ElectiveFamily)
+        }
+
     def _rates(self, attempts: Iterable[Attempt]) -> dict[Family, Rate]:
         """Group attempts by family and divide. The one place a rate is computed."""
-        counted: dict[Family, list[Attempt]] = defaultdict(list)
-        for attempt in attempts:
-            counted[attempt.family].append(attempt)
-
         return {
-            family: failure_rate(
-                sum(1 for a in grouped if a.verdict is Verdict.SUCCEEDED),
-                len(grouped),
-                self.rule,
-            )
-            for family, grouped in counted.items()
+            family: self._divide(grouped)
+            for family, grouped in _by_family(attempts).items()
+            if one_of_the_six(family)
         }
+
+    def _divide(self, grouped: Sequence[Attempt]) -> Rate:
+        """Successes over attempts, at the rule these attempts were run under."""
+        return failure_rate(
+            sum(1 for a in grouped if a.verdict is Verdict.SUCCEEDED),
+            len(grouped),
+            self.rule,
+        )
+
+
+def _by_family(attempts: Iterable[Attempt]) -> dict[AnyFamily, list[Attempt]]:
+    """These attempts grouped by the family each was made in, over both tiers.
+
+    One walk feeding two mappings, so the six's rates and the tier's are counted the
+    same way and cannot drift — which is what makes *held to the same bar* a property
+    rather than a coincidence (ADR-0035). What differs is only which container each
+    answer is allowed into, and that is the type.
+    """
+    counted: dict[AnyFamily, list[Attempt]] = defaultdict(list)
+    for attempt in attempts:
+        counted[attempt.family].append(attempt)
+    return counted
 
 
 @dataclass(frozen=True)
@@ -743,6 +815,9 @@ def _run_target(
             **not_measurable_families(written_for, target),
             **contradicted,
         },
+        # The same reading over the tier, into a mapping of its own. Read over the
+        # cases written for this target for the reason the line above is.
+        elective_not_measurable=not_measurable_elective_families(written_for, target),
         not_applicable=skipped_cases(cases, target),
         # Read over the cases written for this target, for the reason the line
         # above is: a narrative is briefed against the case record the attempt was

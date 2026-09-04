@@ -430,6 +430,22 @@ class TargetConfig:
     conservative direction.
     """
 
+    retains_session_state: bool = False
+    """Whether this endpoint carries one turn of a session into the next.
+
+    A **registered** property on the same terms as `exposes_tool_calls` above, and
+    for the same reason: memory poisoning has to be refused *before* any attempt is
+    spent against a target that cannot answer it. It defaults to false, which is the
+    conservative direction — an endpoint whose operator did not say it remembers
+    anything is one the bench declines to measure on persistence rather than one it
+    reports a clean zero for
+    ([ADR-0041](../../docs/adr/0041-the-persistence-canary-is-read-over-two-turns.md)).
+
+    It is a declaration and never a measurement, so it moves no rate: what it decides
+    is whether the family is *attempted*, which is what ADR-0024 already establishes
+    a declaration of this kind may decide and no more.
+    """
+
     declared_tools: tuple[str, ...] = ()
     """The tools the operator declared their target has.
 

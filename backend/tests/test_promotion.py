@@ -27,6 +27,7 @@ from backend.bench.library import (
     AdmissionReading,
     Case,
     DiscoveredBy,
+    Family,
     bar_for,
 )
 from backend.tests.conftest import a_target, retired_case
@@ -48,7 +49,7 @@ def a_route(
     return proposed_from(
         objective=objective,
         target=a_target("trivial"),
-        family=objective.family,
+        family=Family(objective.family),
         payload="the probe that actually ran",
         description=description,
         today=date(2026, 8, 18),

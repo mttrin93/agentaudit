@@ -48,7 +48,7 @@ from backend.bench.judge import (
     assess_finding,
     disagreements,
 )
-from backend.bench.library import Case
+from backend.bench.library import Case, one_of_the_six
 from backend.bench.remediation import Completion as Remediate
 from backend.bench.remediation import Remediation, suggest_remediation
 from backend.graph.runstate import Attempt
@@ -141,9 +141,23 @@ def narrate_successes(
     with nothing to explain. `()` is the instruments having run over a target that
     succeeded at nothing, which is a measurement.
 
-    The successes are selected on `Attempt.verdict` and never on a family, a case
-    id or an index: the verdict is the fact that decides whether there is a failure
-    to explain, and it is the only fact read here.
+    Whether there is a failure to explain is read off `Attempt.verdict` and off
+    nothing else — never a case id, never an index, and never a family name. Which
+    *tier* the attempt belongs to is a second question and is answered below.
+
+    **The six's successes, and the tier's are stated as unexplained rather than
+    explained.** A `Finding` carries the EU AI Act articles its family bears, and an
+    elective family's label is a table of its own that nothing shortening a printed
+    coverage claim reads
+    ([ADR-0039](../../docs/adr/0039-a-familys-label-is-one-record.md)); a target
+    report says which elective families a run was not asked for and nothing else
+    about the tier
+    ([ADR-0018](../../docs/adr/0018-the-report-is-about-a-target-the-gate-is-about-the-bench.md),
+    ADR-0035). So an elective success reaches no `Finding`, no remediation and no
+    precedent — and `judge.narrated` refuses one at the type's own door, so this
+    filter is where the decision is taken rather than the only place it holds. A
+    narrated elective family is a decision with an ADR of its own, which is where the
+    articles question would be settled.
     """
     if narrator is None:
         return None
@@ -151,7 +165,7 @@ def narrate_successes(
     return tuple(
         narrate(attempt, _record_for(attempt, records), narrator, precedent)
         for attempt in attempts
-        if attempt.verdict is Verdict.SUCCEEDED
+        if attempt.verdict is Verdict.SUCCEEDED and one_of_the_six(attempt.family)
     )
 
 

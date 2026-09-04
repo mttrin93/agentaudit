@@ -41,7 +41,7 @@ from backend.bench.adjudication import Completion
 from backend.bench.calibration import CalibrationResult, run_calibration
 from backend.bench.contract import TargetFailure, TargetUnreachable
 from backend.bench.evaluator import Verdict
-from backend.bench.library import Case
+from backend.bench.library import Case, Family
 from backend.bench.signing import SIGNING_KEY_VARIABLE, encoded_private, generate
 from backend.bench.usage import ModelUsage, UsageLedger
 from backend.graph.budget import Layer
@@ -642,7 +642,7 @@ def test_no_adjudicator_narrative_precedent_or_remediation_is_emitted(
     """
     DURABLE_PRECEDENT.record(
         a_finding(
-            family=leakage_case.family,
+            family=Family(leakage_case.family),
             case_id=leakage_case.id,
             reason=A_PRECEDENT_REASON,
             remediation=A_PRECEDENT_REMEDIATION,

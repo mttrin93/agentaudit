@@ -42,6 +42,11 @@ from pathlib import Path
 
 from pydantic import BaseModel
 
+from backend.bench.elective import (
+    NOT_GATE_DECIDING,
+    ElectiveOutcome,
+    ElectiveSection,
+)
 from backend.bench.gate import GateResult, stated_outcome, stated_rate
 from backend.bench.library import Family
 from backend.bench.rule import DECLARED_RULE, GateRule
@@ -216,6 +221,88 @@ class FamilyFigures(BaseModel):
     stated: str
 
 
+class ElectiveFigures(BaseModel):
+    """One **elective** family at this gate run, and what its figures decide.
+
+    Every field `FamilyFigures` carries except the one that would make it a
+    contribution: there is no `excluded` here, because exclusion is a fact about a
+    family the decision *would otherwise have counted*, and nothing in this tier is
+    ever counted
+    ([ADR-0035](../../docs/adr/0035-the-elective-family-tier-is-never-gate-deciding.md)).
+    `passes` is the per-family rule read over these counts — the same
+    `scorer.separation` the six face — which is what makes the tier gate-measured
+    rather than merely measured.
+
+    A separate model from `FamilyFigures` and never a flag on it, for the reason
+    `ElectiveOutcome` is not a `FamilyOutcome`: a shape assignable into the list
+    `GateDecided.families` holds would be an elective family in the record a reader
+    counts the outcome from.
+    """
+
+    family: str
+    rates: list[MeasuredRate]
+    discrimination: float
+    intervals_separate: bool
+    inversions: int
+    monotonic: bool
+    passes: bool
+    stated: str
+
+
+class ElectiveTier(BaseModel):
+    """The elective section of one gate run, beside the decision and never inside it.
+
+    A sibling of `decision` on `RecordedGateRun` rather than a field of
+    `GateDecided`, which is the wire form of the placement ADR-0035 gives the tier
+    and ADR-0010 gave the adaptive layer: the part of a run that decides nothing is
+    recorded beside the decision, so there is no field of the decision an elective
+    figure could be reached through.
+
+    **It carries what was *not* asked for as well as what was.** ADR-0015 §6's rule
+    that an exclusion prints in the decision, read one level down: the scope of a
+    gate run has to be recoverable from the gate run rather than from whoever started
+    it. `requested_and_unmeasured` is the third answer — asked for, and no reading
+    taken, so no streak counted.
+    """
+
+    requested: list[str]
+    not_requested: list[str]
+    requested_and_unmeasured: list[str]
+    families: list[ElectiveFigures]
+    decides_nothing: str
+    """What an elective figure says about itself, in the one wording both documents
+    use (`elective.NOT_GATE_DECIDING`)."""
+
+    stated: str
+
+
+RECORDED_BEFORE_THE_TIER = (
+    "this record was written before a gate run could carry an elective reading, so "
+    "what it asked the tier for is not recoverable from it. Not the same fact as a "
+    "run that asked for nothing, which names the families it did not request"
+)
+"""What a record written before this field existed says about the tier.
+
+The same shape `adjudicating_model` uses for the same reason: a record on disk from
+before a field was added has to stay readable, or a report withholds a figure it
+holds for a reason nobody can see. It is deliberately distinguishable from a run that
+requested nothing — that run lists all three families under `not_requested`, and this
+lists none — because *nothing requested* is a statement about scope and this is the
+absence of one.
+"""
+
+
+NO_ELECTIVE_TIER = ElectiveTier(
+    requested=[],
+    not_requested=[],
+    requested_and_unmeasured=[],
+    families=[],
+    decides_nothing=NOT_GATE_DECIDING,
+    stated=RECORDED_BEFORE_THE_TIER,
+)
+"""The tier as a record written before it could hold one says it."""
+
+
 class ExcludedFamily(BaseModel):
     """One family barred from the counts, with the reason and the reading behind it.
 
@@ -323,6 +410,50 @@ def family_figures(outcome: FamilyOutcome, barred: Excluded | None) -> FamilyFig
     )
 
 
+def elective_figures(outcome: ElectiveOutcome) -> ElectiveFigures:
+    """One elective family's line, off the outcome `score_elective` produced.
+
+    Its own builder rather than a widened `family_figures`, because that function
+    takes a `FamilyOutcome` and returns the shape `GateDecided.families` holds — and
+    a builder that accepted both would be the widening `test_elective.py` asserts
+    against.
+    """
+    rates = outcome.rates
+    return ElectiveFigures(
+        family=str(outcome.family),
+        rates=[
+            _rate("hardened", rates.hardened),
+            _rate("weak", rates.weak),
+            _rate("trivial", rates.trivial),
+        ],
+        discrimination=outcome.discrimination,
+        intervals_separate=outcome.intervals_separate,
+        inversions=outcome.monotonicity.inversions,
+        monotonic=outcome.monotonicity.holds,
+        passes=outcome.passes,
+        stated=outcome.stated(),
+    )
+
+
+def elective_tier(section: ElectiveSection) -> ElectiveTier:
+    """The elective section as fields, off the section the gate run held in memory.
+
+    Fields and not only the prose `decision.stated` already carries: a reader who has
+    to parse a sentence to recover a `D` is a reader who cannot recover it, and the
+    promotion streak is read over a ledger of these (`elective.ElectiveReading`).
+    """
+    return ElectiveTier(
+        requested=[str(family) for family in section.selection.requested],
+        not_requested=[str(family) for family in section.selection.not_requested],
+        requested_and_unmeasured=[
+            str(family) for family in section.requested_and_unmeasured
+        ],
+        families=[elective_figures(outcome) for outcome in section.outcomes],
+        decides_nothing=NOT_GATE_DECIDING,
+        stated=section.stated(),
+    )
+
+
 def gate_decided(gate: GateResult) -> GateDecided:
     """The decision as it goes on the wire, read off the result held in memory.
 
@@ -411,6 +542,10 @@ class RecordedGateRun(BaseModel):
     **The scored layer alone.** There is no adaptive figure here — the layer runs in
     the same gate run and carries no rate, no interval, no band and no `D`, and it is
     recorded in the document's own second section (ADR-0010).
+
+    **The elective tier is beside the decision and not in it.** `elective` carries
+    every figure the tier measured and none of them is in either of the decision's
+    counts, which is the wire form of ADR-0035's placement.
     """
 
     decided_at: str
@@ -440,6 +575,21 @@ class RecordedGateRun(BaseModel):
 
     rule: DeclaredRule
     decision: GateDecided
+
+    elective: ElectiveTier = NO_ELECTIVE_TIER
+    """What this run measured in the elective tier, beside the decision it decides
+    nothing in.
+
+    The default is for a record **already on disk** and for nothing else, on
+    `adjudicating_model`'s own terms: a required field here would make every gate run
+    recorded before #48 unparsable, and both readers of a record answer an unparsable
+    one by withholding the figures it holds. It says it is that rather than saying a
+    run asked the tier for nothing, which is a different fact and names three families
+    (`RECORDED_BEFORE_THE_TIER`).
+
+    Every caller in the tree passes one, through `recorded_gate_run`, and a test says
+    so — the default is a reader's affordance and not a writer's.
+    """
 
     adjudicating_model: str | None = None
     """The instrument the κ figures above were measured on (ADR-0013).
@@ -478,6 +628,7 @@ def recorded_gate_run(
         record=record,
         rule=declared_rule(gate.decision.rule),
         decision=gate_decided(gate),
+        elective=elective_tier(gate.elective),
         adjudicating_model=adjudicating_model,
     )
 

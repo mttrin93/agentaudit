@@ -331,13 +331,20 @@ class RunBudget:
         limit cannot be declared against a different library than the figures the
         operator was shown.
         """
-        attempts = len(cases) * rule.attempts_per_case
+        # Turns and not cases, because a case can cost two calls per attempt: a
+        # memory-poisoning attempt plants in one turn and is scored in the next, in
+        # one session (`Case.turns`, ADR-0041). The denominator does not move — ten
+        # attempts per case, as everywhere — and this figure is calls on the
+        # operator's endpoint, which is a different number and always has been.
+        turns = sum(case.turns for case in cases)
+        attempts = turns * rule.attempts_per_case
         per_target = REGISTRATION_PROBES_PER_TARGET + attempts
         scored = CallFigure(
             calls=len(targets) * per_target,
             kind=FigureKind.EXACT,
             basis=(
-                f"{_count(len(cases), 'case')} × {rule.attempts_per_case} attempts "
+                f"{_count(len(cases), 'case')} at {_count(turns, 'turn')} "
+                f"× {rule.attempts_per_case} attempts "
                 f"+ {_count(REGISTRATION_PROBES_PER_TARGET, 'registration probe')}, "
                 f"× {_count(len(targets), 'target')}"
             ),

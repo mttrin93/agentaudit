@@ -119,7 +119,7 @@ def a_route(
     return proposed_from(
         objective=objective,
         target=a_target("trivial"),
-        family=objective.family,
+        family=Family(objective.family),
         payload=payload,
         description=description,
         today=date(2026, 8, 18),
@@ -466,7 +466,7 @@ def test_no_stored_record_carries_payload_text_or_a_target_identity(
     proposal = proposed_from(
         objective=leakage_case,
         target=target,
-        family=leakage_case.family,
+        family=Family(leakage_case.family),
         payload=PROBE,
         description="the attacker's own prose about what it did",
         today=DECIDED_ON,

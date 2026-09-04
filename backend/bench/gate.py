@@ -33,8 +33,21 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
 from backend.bench.calibration import TargetRun
-from backend.bench.elective import NOTHING_ELECTIVE, ElectiveSection
-from backend.bench.library import EMPTY_LIBRARY, Family, LibraryVersion
+from backend.bench.elective import (
+    NOTHING_ELECTIVE,
+    NOTHING_REQUESTED,
+    ElectiveRates,
+    ElectiveSection,
+    ElectiveSelection,
+    score_elective,
+)
+from backend.bench.library import (
+    EMPTY_LIBRARY,
+    Case,
+    Family,
+    LibraryVersion,
+    one_of_the_six,
+)
 from backend.bench.measurability import NotMeasurable
 from backend.bench.reproducibility import Reproducibility
 from backend.bench.rule import DECLARED_RULE, GateRule
@@ -276,6 +289,76 @@ def family_rates(
             )
         unmeasured[family] = reason
     return tuple(measured), unmeasured
+
+
+def cited_library(cases: Sequence[Case]) -> LibraryVersion:
+    """The library version a gate run cites: the six's, whatever else also ran.
+
+    A gate run asked for an elective family runs the tier's cases in the same suite,
+    and the version travels a long way — into the gate document, into the gate run
+    record, and onto every report's **gate citation**, which is what tells a reader
+    whether the bench's last gate run was made against the library in front of them
+    (ADR-0023). A version that moved with the selection would make two gate runs over
+    an identical six-family library read as incomparable because one of them was also
+    asked for the tier, which is a lever on comparability the operator should not
+    hold (ADR-0035).
+
+    So the filter is here rather than at the call site: a caller that hands over
+    everything that ran still cites the six, and the tier is named in the elective
+    section beside the decision instead.
+    """
+    return LibraryVersion.of(case for case in cases if one_of_the_six(case.family))
+
+
+def elective_section(
+    target_runs: Sequence[TargetRun],
+    *,
+    trivial: str,
+    weak: str,
+    hardened: str,
+    selection: ElectiveSelection = NOTHING_REQUESTED,
+    rule: GateRule = DECLARED_RULE,
+) -> ElectiveSection:
+    """What this gate run measured in the elective tier, scored by the gate's rule.
+
+    The counterpart of `family_rates` one tier down, and it reads
+    `TargetRun.elective_rates` — the second mapping ADR-0035 asks for beside the one
+    `family_rates` reads, so an elective count has no route into either of the gate's
+    two
+    ([ADR-0035](../../docs/adr/0035-the-elective-family-tier-is-never-gate-deciding.md)).
+    `score_elective` applies `scorer.separation`, which is the same implementation of
+    the per-family condition `score_family` reads: *selectable is not ungated*.
+
+    **It raises nothing, and that is the one place it deliberately differs from
+    `family_rates`.** A family measured against some of the three agents and not
+    others has no `D` and no ordering, and `family_rates` stops the run over it —
+    rightly, because the gate is decided over those figures. Here there is no
+    decision to protect: a family without three rates simply takes no reading, and
+    `ElectiveSection.requested_and_unmeasured` names it. A tier able to stop a gate
+    run would be a tier deciding something.
+    """
+    measured = {run.target.name: run.elective_rates for run in target_runs}
+    outcomes = []
+    for family in selection.requested:
+        rates = {
+            name: measured.get(name, {}).get(family)
+            for name in (trivial, weak, hardened)
+        }
+        present = {name: rate for name, rate in rates.items() if rate is not None}
+        if len(present) < 3:
+            continue
+        outcomes.append(
+            score_elective(
+                ElectiveRates(
+                    family=family,
+                    hardened=present[hardened],
+                    weak=present[weak],
+                    trivial=present[trivial],
+                ),
+                rule,
+            )
+        )
+    return ElectiveSection(selection=selection, outcomes=tuple(outcomes))
 
 
 def read_gate(

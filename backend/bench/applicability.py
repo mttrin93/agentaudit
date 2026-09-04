@@ -36,7 +36,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 
 from backend.bench.contract import TargetConfig
-from backend.bench.library import Case, Family
+from backend.bench.library import AnyFamily, Case
 
 
 class Inapplicable(StrEnum):
@@ -70,7 +70,13 @@ class SkippedCase:
     """
 
     case_id: str
-    family: Family
+    family: AnyFamily
+    """Which family the skipped case belongs to, in either tier.
+
+    A skip is per case and is reported per case, so this is not a container the gate
+    counts and it widens with the record (ADR-0035).
+    """
+
     agent_type: str
     """The type the target is registered as — the operator's own word for it."""
 

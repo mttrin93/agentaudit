@@ -19,6 +19,7 @@ stays here reads a copy and never checks one.
 
 import pytest
 
+from backend.bench.admission import admitted_elective
 from backend.bench.editions import (
     AGENTIC_TOP_10_2026,
     LLM_TOP_10_2026,
@@ -127,16 +128,30 @@ def test_the_untested_list_is_both_published_lists_minus_what_families_claim() -
 
 def test_an_elective_familys_label_does_not_shorten_the_untested_list() -> None:
     # `ASI06` is on an elective family's label and is still listed as untested, with
-    # a reason that says why. The tier's families have no cases on disk, so a
-    # subtraction that read `ELECTIVE_LABELS` would shorten a printed coverage claim
-    # for a family nothing has ever run — the widening direction nobody checks, from
-    # the one place ADR-0035 says the type has to keep closed.
+    # a reason that says why — and since #48 that family has three cases on disk, so
+    # this is no longer true by nobody having written any. A subtraction that read
+    # `ELECTIVE_LABELS` would print the category as covered in every report,
+    # including the runs never asked for the family, which is the widening direction
+    # nobody checks (ADR-0018, ADR-0035).
+    assert admitted_elective(CASES_DIR, ElectiveFamily) != []
     assert ELECTIVE_LABELS[ElectiveFamily.MEMORY_POISONING].agentic == ("ASI06:2026",)
     # Both halves on the tagged identifier, because that is the only form either
     # tuple carries: a bare `ASI06` is in neither, so an assertion written that way
     # would go on passing with the elective labels feeding the subtraction.
     assert "ASI06:2026" in [category.identifier for category in UNTESTED_CATEGORIES]
     assert "ASI06:2026" not in [claim.identifier for claim in CLAIMED_IN_PART]
+
+    # And the reason beside it no longer says the family has no cases, which is the
+    # sentence #48 falsified. Asserted on what it now says rather than on the absence
+    # of the old wording: an assertion that a phrase is gone goes on passing after the
+    # prose it was pinned to is reworded for some other reason.
+    [asi06] = [
+        category
+        for category in UNTESTED_CATEGORIES
+        if category.identifier == "ASI06:2026"
+    ]
+    assert "elective family" in asi06.reason
+    assert "only when a run asks for it" in asi06.reason
 
 
 def test_the_list_shortens_by_itself_when_a_family_claims_a_category() -> None:

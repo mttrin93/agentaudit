@@ -36,7 +36,7 @@ from backend.bench.adaptive.budget import DECLARED_ADAPTIVE_BUDGET, AdaptiveBudg
 from backend.bench.adaptive.scripted import SCRIPTED_ATTACKER
 from backend.bench.adjudication import Completion
 from backend.bench.capability import ReasoningEffort
-from backend.bench.library import Case, Family, VerdictClass
+from backend.bench.library import Case, Family, VerdictClass, one_of_the_six
 from backend.bench.narration import Narrator
 from backend.bench.payload import DeclaredModels
 from backend.bench.rule import DECLARED_RULE, GateRule
@@ -271,7 +271,9 @@ def plan_for(
 
     if config.adjudicator is None:
         judged = {
-            case.family for case in cases if case.verdict_class is VerdictClass.JUDGED
+            case.family
+            for case in cases
+            if case.verdict_class is VerdictClass.JUDGED and one_of_the_six(case.family)
         }
         gaps.update(dict.fromkeys(judged, DeclaredGap.NO_ADJUDICATOR))
         cases = [

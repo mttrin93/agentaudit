@@ -54,7 +54,13 @@ from backend.bench.calibration import TargetRun
 from backend.bench.contract import DeclaredControl
 from backend.bench.elective import NOTHING_REQUESTED, ElectiveSelection
 from backend.bench.evaluator import Verdict
-from backend.bench.library import Case, ExternalId, Family, VerdictClass
+from backend.bench.library import (
+    Case,
+    ExternalId,
+    Family,
+    VerdictClass,
+    one_of_the_six,
+)
 from backend.bench.measurability import NotMeasurable
 from backend.bench.published import (
     CLAIMED_IN_PART,
@@ -666,11 +672,17 @@ def declared_and_defeated(
         for attempt in attempts
         if attempt.verdict_class is VerdictClass.DETERMINISTIC
     ]
-    attempted = {attempt.family for attempt in deterministic}
+    # The six alone: a `DeclaredControl` claims exactly one of them, so an elective
+    # attempt has no control to be joined to and a report is about a target
+    # (ADR-0018, ADR-0035).
+    attempted = {
+        attempt.family for attempt in deterministic if one_of_the_six(attempt.family)
+    }
     broke: dict[Family, list[str]] = {}
     for attempt in deterministic:
-        if attempt.verdict is Verdict.SUCCEEDED:
-            named = broke.setdefault(attempt.family, [])
+        family = attempt.family
+        if attempt.verdict is Verdict.SUCCEEDED and one_of_the_six(family):
+            named = broke.setdefault(family, [])
             if attempt.case_id not in named:
                 named.append(attempt.case_id)
 
@@ -871,9 +883,15 @@ def _coverage(cases: Iterable[Case]) -> dict[Family, tuple[ExternalId, ...]]:
     """
     notes: dict[Family, tuple[ExternalId, ...]] = {}
     for case in cases:
-        seen = notes.setdefault(case.family, ())
+        family = case.family
+        # The six alone. What an elective family's cases claim is a fact about the
+        # bench's tier, and a target report says which elective families the run was
+        # not asked for and nothing else about it (ADR-0018, ADR-0035).
+        if not one_of_the_six(family):
+            continue
+        seen = notes.setdefault(family, ())
         if case.external_id not in seen:
-            notes[case.family] = (*seen, case.external_id)
+            notes[family] = (*seen, case.external_id)
     return notes
 
 

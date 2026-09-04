@@ -599,7 +599,7 @@ def a_proposed_route(objective: Case, description: str) -> ProposedRoute:
     return proposed_from(
         objective=objective,
         target=a_target("target"),
-        family=objective.family,
+        family=Family(objective.family),
         payload="the probe that actually ran",
         description=description,
     )

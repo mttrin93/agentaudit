@@ -48,7 +48,7 @@ from dataclasses import dataclass
 
 from backend.bench.contract import ToolTrace
 from backend.bench.evaluator import Verdict
-from backend.bench.library import Case, Family, VerdictClass
+from backend.bench.library import AnyFamily, Case, VerdictClass
 
 Completion = Callable[[str, str], str]
 """A model call: a system prompt and a message in, text out.
@@ -121,7 +121,14 @@ class AdjudicationBrief:
     """
 
     case_id: str
-    family: Family
+    family: AnyFamily
+    """Which family this brief is about, in either tier.
+
+    Widened with the record and not a container the gate reads: a brief carries the
+    evidence a judged verdict is reached from, and a judged verdict is an attempt's
+    and never a family's (ADR-0035). Every family in the elective tier reaches its
+    verdict by canary check today, so nothing in the tier builds one of these.
+    """
     question: str
     succeeded_when: str
     resisted_when: str

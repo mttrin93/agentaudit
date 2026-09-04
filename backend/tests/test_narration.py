@@ -711,7 +711,7 @@ def test_a_run_over_http_tells_a_poller_that_its_review_queue_is_not_empty(
         record.statement
     )
     # And nothing was resolved: the rate is still read off the attempts.
-    assert target_run.rates[leakage_case.family].value == 1.0
+    assert target_run.rates[Family(leakage_case.family)].value == 1.0
 
 
 # --- What the terminal prints -----------------------------------------------

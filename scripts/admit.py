@@ -5,6 +5,12 @@
     uv run python -m scripts.admit --identity "your name" --model stub:cooperative
     uv run python -m scripts.admit --identity "your name" --write
     uv run python -m scripts.admit --identity "your name" --all
+    uv run python -m scripts.admit --identity "your name" --elective memory_poisoning
+
+An **elective** family's cases are admitted here too, on the same bar and through the
+same run: *selectable is not ungated* (ADR-0035). What differs is that a caller has to
+name the family, because the tier's records live in a directory `load_library` does
+not reach and asking for one is a declared input rather than a default.
 
 A case earns its place by separating the three reference agents: `D >= 0.4` with
 non-overlapping Wilson intervals, the same stated quantity the gate later holds its
@@ -55,29 +61,34 @@ from backend.bench.admission import (
 )
 from backend.bench.calibration import TargetRun, run_calibration
 from backend.bench.completion import DEFAULT_ADJUDICATOR_MODEL, completion_for
-from backend.bench.contract import TargetConfig
 from backend.bench.entry import admission_block
 from backend.bench.evaluator import Verdict
 from backend.bench.library import (
+    ELECTIVE_DIRECTORY,
     AdmissionReading,
     Case,
+    ElectiveFamily,
     VerdictClass,
     bar_for,
+    load_elective,
     load_library,
+    one_of_the_six,
 )
 from backend.bench.registration import Attestation
 from backend.bench.rule import DECLARED_RULE
 from backend.graph.approval import Approve
 from backend.graph.budget import BudgetExceeded, CallPrice, RunBudget
 from backend.targets.reference.model import ModelConfig
-from backend.targets.reference.operator import nonce_planter
+from backend.targets.reference.operator import (
+    described_agents,
+    nonce_planter,
+)
 from backend.targets.reference.server import (
     REFERENCE_AGENTS,
     ReferenceConfig,
     create_reference_app,
 )
 from backend.targets.reference.serving import serve
-from backend.targets.reference.tools import DECLARED_TOOL_NAMES
 from scripts.console import (
     EXIT_ABORTED,
     EXIT_DECLINED,
@@ -150,6 +161,18 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="case ids to measure. Default: every case with no admission block",
     )
     parser.add_argument(
+        "--elective",
+        nargs="+",
+        default=(),
+        choices=[str(family) for family in ElectiveFamily],
+        help=(
+            "elective families to measure as well, from backend/cases/elective/. "
+            "The tier faces the same bar as the six and is never gate-deciding "
+            "(ADR-0035), so admission is the same run and the same arithmetic — "
+            "what differs is that a caller has to ask"
+        ),
+    )
+    parser.add_argument(
         "--all",
         action="store_true",
         help=(
@@ -183,7 +206,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"Not a usable price per call: {bad}")
         return EXIT_WITHHELD
 
-    library = load_library(CASES_DIR)
+    library = load_library(CASES_DIR) + load_elective(
+        CASES_DIR, [ElectiveFamily(name) for name in args.elective]
+    )
     cases = _selected(library, ids=args.cases, everything=args.all)
     if not cases:
         print(
@@ -334,17 +359,7 @@ def measure_on(
         ReferenceConfig(model=ModelConfig.parse(model), auth_token=auth_token)
     )
     with serve(app) as base_url:
-        targets = [
-            TargetConfig(
-                name=agent.name,
-                url=f"{base_url}/reference/{agent.name}/messages",
-                auth_token=auth_token,
-                agent_type="assistant",
-                exposes_tool_calls=True,
-                declared_tools=DECLARED_TOOL_NAMES,
-            )
-            for agent in REFERENCE_AGENTS
-        ]
+        targets = described_agents(base_url, auth_token)
         print(f"\nmeasuring on {model}")
         try:
             result = run_calibration(
@@ -438,11 +453,18 @@ def _write(cases: Sequence[Case], outcomes: Sequence[AdmissionOutcome]) -> None:
     """
     by_id = {case.id: case for case in cases}
     for outcome in outcomes:
-        path = CASES_DIR / f"{outcome.case_id}.toml"
+        # Beside the record it is about, whichever tier that record is in: an
+        # admission block is evidence on the case, and a case's evidence written
+        # into another directory is evidence a loader would never reach.
+        case = by_id[outcome.case_id]
+        directory = (
+            CASES_DIR if one_of_the_six(case.family) else CASES_DIR / ELECTIVE_DIRECTORY
+        )
+        path = directory / f"{outcome.case_id}.toml"
         if not outcome.admitted:
             print(f"not written: {outcome.case_id} did not clear its bar")
             continue
-        if by_id[outcome.case_id].admission is not None:
+        if case.admission is not None:
             print(f"not written: {outcome.case_id} already records an admission")
             continue
         with path.open("a", encoding="utf-8") as record:

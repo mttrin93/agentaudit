@@ -66,7 +66,7 @@ from backend.bench.adjudication import (
     adjudicate,
 )
 from backend.bench.evaluator import Verdict
-from backend.bench.library import Case, Family, VerdictClass
+from backend.bench.library import Case, Family, VerdictClass, one_of_the_six
 from backend.bench.rule import DECLARED_RULE, GateRule
 from backend.bench.scorer import Reliability, cohens_kappa
 
@@ -203,7 +203,15 @@ class GoldSet:
         is: a set moved between files cannot change which family its figure is
         about.
         """
-        return self.case.family
+        family = self.case.family
+        if not one_of_the_six(family):
+            raise ValueError(
+                f"{self.case.id} belongs to {family}, which is an elective family, "
+                "and κ is measured per judged family among the six. Every family in "
+                "the tier reaches its verdict by canary check, so there is no "
+                "instrument here for a reliability figure to be about (ADR-0035)"
+            )
+        return family
 
     def brief_for(self, transcript: GoldTranscript) -> AdjudicationBrief:
         """The blinded evidence for one labelled reply.

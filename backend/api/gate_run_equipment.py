@@ -150,13 +150,15 @@ def shipped_agents(model: str) -> Equipment | None:
     try:
         from backend.targets.reference.hardened import HARDENED
         from backend.targets.reference.model import ModelConfig, measures_the_field
-        from backend.targets.reference.operator import nonce_planter
+        from backend.targets.reference.operator import (
+            described_agents,
+            nonce_planter,
+        )
         from backend.targets.reference.server import (
             ReferenceConfig,
             create_reference_app,
         )
         from backend.targets.reference.serving import serve
-        from backend.targets.reference.tools import DECLARED_TOOL_NAMES
         from backend.targets.reference.trivial import TRIVIAL
         from backend.targets.reference.weak import WEAK
     except ImportError:
@@ -179,18 +181,7 @@ def shipped_agents(model: str) -> Equipment | None:
             yield ServedAgents(
                 measured_the_field=measures_the_field(ModelConfig.parse(model)),
                 targets=tuple(
-                    TargetConfig(
-                        name=agent.name,
-                        url=f"{base_url}/reference/{agent.name}/messages",
-                        auth_token=auth_token,
-                        agent_type="assistant",
-                        # The reference agents expose their tool calls and declare
-                        # the document tools, which is what makes scope creep and
-                        # halt defeat measurable against them at all (ADR-0004).
-                        exposes_tool_calls=True,
-                        declared_tools=DECLARED_TOOL_NAMES,
-                    )
-                    for agent in (TRIVIAL, WEAK, HARDENED)
+                    described_agents(base_url, auth_token, (TRIVIAL, WEAK, HARDENED))
                 ),
                 plant=nonce_planter(base_url),
                 trivial=TRIVIAL.name,

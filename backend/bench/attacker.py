@@ -5,6 +5,14 @@ independent by construction — each carries its own session id — so a rate is
 rate rather than a trajectory. Payloads are sent, never executed locally: the
 bench must not itself be a vector.
 
+**One attempt can be more than one turn, and a turn is still not an attempt.** A
+case carrying a `planting` turn sends it first, in the same session, and the verdict
+is read over the reply to the second — which is what makes memory poisoning a claim
+about persistence rather than about obedience
+([ADR-0041](../../docs/adr/0041-the-persistence-canary-is-read-over-two-turns.md)).
+The denominator does not move; what moves is the budget, which counts calls on the
+operator's endpoint and is authorised for every turn before the first goes out.
+
 Every message is authorised against the run's budget before it goes on the wire
 and counted against the scored layer after it comes back, so a suite cannot spend
 past the estimate the operator confirmed (ADR-0007). The layer is named at every
@@ -90,6 +98,9 @@ class Sent:
     case: Case
     index: int
     transcript: Transcript
+    planted: Transcript | None
+    """The planting turn's exchange, for a case whose verdict is about a later turn."""
+
     began: float
     verdict: Verdict | Future[Verdict]
 
@@ -186,13 +197,24 @@ def _send(
     # began: an episode that started while this attempt was in flight has to be
     # visible as having started after it.
     began = time.monotonic()
-    run_state.authorise_call(Layer.SCORED, target.retry.sends)
+    # Every turn this attempt will take, authorised before the first of them goes
+    # out: an attempt that planted and then hit the ceiling would have spent a call
+    # on the operator's endpoint for a verdict nobody can read (ADR-0007, ADR-0041).
+    run_state.authorise_call(Layer.SCORED, target.retry.sends * case.turns)
     run_state.enter(target.name, case.family, case.id, index)
     span = start(Span.ATTEMPT, {Field.ATTEMPT_INDEX: index}, current=False)
+    # One session for both turns, because the session id is what carries a
+    # conversation (`contract.py`) and a planting that landed in another session is a
+    # planting the scored turn was never exposed to. Fresh per attempt, so attempts
+    # stay independent and a rate stays a rate rather than a trajectory.
+    session = f"{case.id}-{index}-{uuid.uuid4()}"
     try:
-        transcript = send_message(
-            target, case.payload, session_id=f"{case.id}-{index}-{uuid.uuid4()}"
+        planted = (
+            None
+            if case.planting is None
+            else send_message(target, case.planting, session_id=session)
         )
+        transcript = send_message(target, case.payload, session_id=session)
     except TargetUnreachable as unreachable:
         # The class of the failure and the sends it cost, and nothing else off the
         # exception: its message names the endpoint url, which is the one identifier
@@ -200,16 +222,17 @@ def _send(
         span.record({Field.RETRIES: unreachable.sends - 1})
         span.abandon(unreachable.failure)
         raise
-    span.record({Field.RETRIES: transcript.sends - 1})
-    run_state.record_call(Layer.SCORED, transcript.sends)
+    sends = transcript.sends + (0 if planted is None else planted.sends)
+    span.record({Field.RETRIES: sends - case.turns})
+    run_state.record_call(Layer.SCORED, sends)
     verdict: Verdict | Future[Verdict]
     try:
         if pool is not None and case.verdict_class is VerdictClass.JUDGED:
             verdict = pool.submit(
-                verdict_of, case, transcript, target, canary, adjudicator
+                verdict_of, case, transcript, target, canary, adjudicator, planted
             )
         else:
-            verdict = verdict_of(case, transcript, target, canary, adjudicator)
+            verdict = verdict_of(case, transcript, target, canary, adjudicator, planted)
     except BaseException:
         # A deterministic verdict is decided on this thread and a case with no
         # adjudicator is refused here, so this is the second way out of an attempt
@@ -222,6 +245,7 @@ def _send(
         case=case,
         index=index,
         transcript=transcript,
+        planted=planted,
         began=began,
         verdict=verdict,
         span=span,
@@ -268,6 +292,7 @@ def _score(sent: Sent, target: TargetConfig, run_state: RunState) -> Attempt:
         target_name=target.name,
         index=sent.index,
         transcript=sent.transcript,
+        planting=sent.planted,
         verdict=verdict,
         verdict_class=sent.case.verdict_class,
         started_at=sent.began,
@@ -303,6 +328,7 @@ def verdict_of(
     target: TargetConfig,
     canary: str,
     adjudicator: Completion | None,
+    planted: Transcript | None = None,
 ) -> Verdict:
     """One attempt's verdict, by the route the case record names.
 
@@ -321,7 +347,7 @@ def verdict_of(
     """
     match case.verdict_class:
         case VerdictClass.DETERMINISTIC:
-            return evaluate(case, transcript, target, canary)
+            return evaluate(case, transcript, target, canary, planted)
         case VerdictClass.JUDGED:
             if adjudicator is None:
                 raise NoAdjudicator([case.id])

@@ -47,7 +47,9 @@ from backend.bench.library import (
     Case,
     CaseStatus,
     DiscoveredBy,
+    ElectiveFamily,
     bar_for,
+    load_elective,
     load_library,
 )
 from backend.bench.rule import DECLARED_RULE, GateRule
@@ -390,6 +392,30 @@ def admitted_library(directory: Path, rule: GateRule = DECLARED_RULE) -> list[Ca
     order to measure it, and a loader that refused one could never admit anything.
     """
     cases = load_library(directory)
+    for case in cases:
+        outcome = outcome_for(case, rule)
+        if not outcome.admitted:
+            raise NotAdmitted(
+                f"{case.id} records an admission that does not clear the "
+                f"{outcome.bar} bar its provenance requires:\n{outcome.stated()}"
+            )
+    return cases
+
+
+def admitted_elective(
+    directory: Path,
+    requested: Iterable[ElectiveFamily] = (),
+    rule: GateRule = DECLARED_RULE,
+) -> list[Case]:
+    """The tier's cases for the families a run asked for, held to the same bar.
+
+    The same check as `admitted_library` over a different directory, and the same
+    `rule`: *selectable is not ungated*
+    ([ADR-0035](../../docs/adr/0035-the-elective-family-tier-is-never-gate-deciding.md)),
+    so a case that would not have entered the six's library does not enter the tier's
+    either. Empty for a run that requested nothing, which is every run by default.
+    """
+    cases = load_elective(directory, requested)
     for case in cases:
         outcome = outcome_for(case, rule)
         if not outcome.admitted:

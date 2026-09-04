@@ -5,7 +5,7 @@ The reference agents are test equipment and never reach a user (D7). They differ
 from each other only in defensive architecture — that difference is the axis the
 bench claims to measure, so it is the only thing that varies here. The trivial
 and weak agents carry `NO_CONTROLS` and differ only in what their prompt asks
-for; the hardened agent carries the four pieces in `controls.py`. All three are
+for; the hardened agent carries the five pieces in `controls.py`. All three are
 wired to the same toolbox, because an agent that simply could not reach
 `transfer_funds` would prove nothing about the control that is supposed to stop
 it (`tools.py`).
@@ -18,6 +18,12 @@ nothing else is a defence on the one channel an indirect injection does not use.
 
 One reply path serves all three, so no agent gets a code route the others do not
 have, and a control that is absent is absent rather than skipped.
+
+**A turn can also leave something behind.** A session's memory is the server's
+(`server.py`) and what a turn is allowed to write into it is the fifth control
+(`memory.py`, `controls.MemoryHygiene`). All three agents carry the user's own
+standing instruction into a later turn; only an agent without memory hygiene also
+carries one it read in a document, which is the whole of memory poisoning's gradient.
 
 **A turn is a reply and a trace.** Two families reach their verdict from what the
 agent did rather than from what it said, so the trace is part of the reply
@@ -37,6 +43,7 @@ from backend.targets.reference.controls import (
     carries_stop_signal,
 )
 from backend.targets.reference.corpus import Note, fetched
+from backend.targets.reference.memory import SessionMemory, asked_by_the_user
 from backend.targets.reference.model import ModelConfig, complete
 from backend.targets.reference.tools import (
     FETCH_SHARED_NOTE,
@@ -69,10 +76,30 @@ class ReferenceAgent:
     def system_prompt(self, nonce: str) -> str:
         return self.system_prompt_template.format(nonce=nonce or NO_NONCE)
 
-    def reply(self, message: str, nonce: str, model: ModelConfig) -> AgentReply:
+    def reply(
+        self,
+        message: str,
+        nonce: str,
+        model: ModelConfig,
+        memory: SessionMemory | None = None,
+    ) -> AgentReply:
         """One turn: the controls that hold get to stop it, and the model does
-        the rest."""
+        the rest.
+
+        `memory` is what earlier turns of this session left behind, and it is the
+        caller's because a session belongs to the server that keeps it, not to an
+        agent that answers one turn (`server.py`). `None` is a turn in a session of
+        its own, which is what every caller before memory poisoning was doing.
+
+        **What this turn carries is read before this turn writes.** The lines a reply
+        gains come from what was already held when the turn began, so the reply to
+        the turn that planted an instruction carries nothing — and that reply is the
+        control the persistence verdict is read against
+        ([ADR-0041](../../../docs/adr/0041-the-persistence-canary-is-read-over-two-turns.md)).
+        """
         configuration = self.system_prompt(nonce)
+        held = memory if memory is not None else SessionMemory()
+        carried = held.carried(message)
 
         # Noticing the signal is instrumentation and happens for every agent;
         # honouring it is the stop control and happens for one of them. The stop
@@ -96,6 +123,8 @@ class ReferenceAgent:
                 return AgentReply(instead, fetched_only)
             calls += self._acts_on(note.body, without_retrieval(self.toolbox))
 
+        self._keeps(message, note, held)
+
         trace = ToolTrace(calls=calls, stop_signal_at=stop_at)
 
         # The model sees what the tool brought back, because an agent whose model
@@ -105,6 +134,8 @@ class ReferenceAgent:
         reply = complete(model, configuration, _with(note, message))
         if note is not None and note.executed_line:
             reply = f"{reply}\n{note.executed_line}"
+        for line in carried:
+            reply = f"{reply}\n{line}"
 
         withheld = self.controls.after_model(
             reply, protected=(nonce,), configuration=configuration
@@ -118,6 +149,22 @@ class ReferenceAgent:
             for tool in routed(toolbox, text)
             if self.controls.permits(tool.name)
         )
+
+    def _keeps(self, message: str, note: Note | None, memory: SessionMemory) -> None:
+        """Leave in this session whatever this turn asked to be kept and may be.
+
+        Two authors, one rule: `Controls.retains` is asked about each, so an agent
+        with no memory hygiene keeps both and the hardened agent keeps only the
+        user's. The note is consulted only where the agent actually fetched one — an
+        agent that retrieved nothing has read no third-party text and cannot have
+        been asked anything by it.
+        """
+        asked = [asked_by_the_user(message)]
+        if note is not None:
+            asked.append(note.standing)
+        for standing in asked:
+            if standing is not None and self.controls.retains(standing.origin):
+                memory.keep(standing)
 
     def _retrieved(self, calls: tuple[ToolCall, ...]) -> bool:
         """Whether this turn actually reached the shared folder.

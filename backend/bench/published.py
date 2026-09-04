@@ -40,9 +40,16 @@ wider is the one direction nobody checks.
 `labels.ELECTIVE_LABELS` is a second table keyed on `ElectiveFamily` and nothing here
 reads it. An elective family's label is a true statement about which published entry
 that family was selected from, and it is not a statement that the bench tests the
-entry: the tier's families have no cases on disk, and a subtraction that took them
-would shorten the printed untested list for a family nothing has ever run
-(ADR-0035, ADR-0039).
+entry.
+
+**Since #48 one of the tier's families has cases, and the rule did not change.**
+Memory poisoning holds three, and `ASI06` is still printed as untested — because the
+tier is **requested**, and a report is about one target (ADR-0018). A subtraction that
+read `ELECTIVE_LABELS` would print a category as covered in every report, including
+the runs that were never asked for the family; what a run *was* asked for is a fact
+about that run and is stated in the block `elective.ElectiveSelection` writes. So the
+reason beside `ASI06` moved and the entry did not, which is the direction this module
+errs in on purpose (ADR-0035, ADR-0039).
 
 Only the subtractions are computed — and they are computed over the **library's
 families**, never over the families one run happened to measure. That boundary is
@@ -113,10 +120,11 @@ OUT_OF_REACH: Mapping[str, str] = {
         "family for it is planned rather than ruled out"
     ),
     "ASI06:2026": (
-        "no family claims it yet — the elective family that carries its label has no "
-        "cases on disk — and unlike the categories beside it this one is reachable "
-        "in principle, against a target that retains state across a session, so a "
-        "family for it is planned rather than ruled out"
+        "a family for it now exists and it is not one this report's figures are "
+        "keyed on: memory poisoning is an elective family, run only when a run asks "
+        "for it and against a target that carries one turn of a session into the "
+        "next. So the entry stays listed here rather than counted as covered, and "
+        "which elective families this run was asked for is stated in its own block"
     ),
     "ASI07:2026": (
         "it needs a second agent. Registration takes one endpoint and the bench "

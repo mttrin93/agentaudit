@@ -41,7 +41,7 @@ from backend.bench.adaptive.episode import AdaptiveEpisode
 from backend.bench.adaptive.precedent import DURABLE_PRECEDENT, PrecedentStore
 from backend.bench.applicability import applicable
 from backend.bench.contract import TargetConfig
-from backend.bench.library import Case, Family, VerdictClass
+from backend.bench.library import Case, Family, VerdictClass, one_of_the_six
 from backend.bench.measurability import runnable
 from backend.graph.runstate import RunState
 from backend.observability import Field, Span, traced
@@ -148,8 +148,14 @@ def objectives_for(
     """
     objectives: dict[Family, Case] = {}
     for case in runnable(applicable(cases, target), target):
-        if case.family in withdrawn:
+        family = case.family
+        # The adaptive layer's episodes are over the six. An elective family is
+        # gate-measured and never gate-deciding, and `A_break` is read over families
+        # and episodes — so an episode in the tier would be an adaptive figure about
+        # a family no report carries a figure for (ADR-0010, ADR-0035). The filter is
+        # here rather than at the caller because this is where an objective is chosen.
+        if not one_of_the_six(family) or family in withdrawn:
             continue
         if case.verdict_class is VerdictClass.DETERMINISTIC:
-            objectives.setdefault(case.family, case)
+            objectives.setdefault(family, case)
     return objectives

@@ -67,6 +67,7 @@ from backend.bench.scorer import (
     failure_rate,
     score_family,
 )
+from backend.targets.reference.operator import described_agents
 from backend.targets.reference.server import REFERENCE_AGENTS
 from backend.tests.conftest import (
     BENCH_ATTESTATION,
@@ -86,7 +87,6 @@ from scripts.gate import (
     exit_code,
     main,
     record_run,
-    reference_targets,
 )
 
 GATE_SOURCE = Path(__file__).resolve().parents[1] / "bench" / "gate.py"
@@ -798,7 +798,7 @@ def test_the_entry_point_offers_no_way_to_gate_fewer_than_three_agents() -> None
     # D is trivial minus hardened and monotonicity is read across all three, so a
     # gate on two agents is not a smaller gate but a different, undeclared one.
     assert {
-        target.name for target in reference_targets("http://x.invalid", "token")
+        target.name for target in described_agents("http://x.invalid", "token")
     } == {agent.name for agent in REFERENCE_AGENTS}
     with pytest.raises(SystemExit):
         main(["--identity", "bench engineer", "--agents", "trivial"])
@@ -1670,7 +1670,7 @@ def test_a_family_holding_four_cases_reports_forty_and_the_others_thirty(
     # family, and it prints beside that family's own rates where the counts already
     # sit — so a family the attacker grew reads n = 40 and its neighbours read
     # n = 30, with no expression anywhere multiplying by three.
-    grown = score_family(_at(leakage_case.family, 0, 20, 40, attempts=40))
+    grown = score_family(_at(Family(leakage_case.family), 0, 20, 40, attempts=40))
     unchanged = score_family(rates_for(SEPARATES, Family.SCOPE_CREEP))
 
     assert "n = 40 attempts per agent" in stated_outcome(grown)
@@ -1688,7 +1688,7 @@ def test_a_family_measured_on_three_different_denominators_says_so(
     # above it either way, and this line is what stops a reader reading one of them
     # as the family's `n`.
     ragged = FamilyRates(
-        family=leakage_case.family,
+        family=Family(leakage_case.family),
         hardened=failure_rate(0, 30),
         weak=failure_rate(15, 30),
         trivial=failure_rate(20, 40),

@@ -24,10 +24,13 @@ from enum import StrEnum
 
 from backend.bench.contract import TargetConfig, ToolTrace, Transcript
 from backend.bench.library import (
+    AnyFamily,
     Case,
+    ElectiveFamily,
     Family,
     Precondition,
     SuccessConditionKind,
+    one_of_the_six,
 )
 
 
@@ -41,6 +44,17 @@ class NotMeasurable(StrEnum):
     """
 
     NO_TOOL_CALL_VISIBILITY = "no_tool_call_visibility"
+    NO_SESSION_RETENTION = "no_session_retention"
+    """The endpoint does not carry one turn of a session into the next.
+
+    Memory poisoning reads a canary planted in session memory and executed in a
+    *later* turn, so against a target that answers turn one every time there is no
+    later turn for the planting to survive into. A third reason rather than the
+    first one reworded, because it names a different capability and so a different
+    gap: one is closed by exposing tool calls and this one by retaining a session
+    ([ADR-0041](../../docs/adr/0041-the-persistence-canary-is-read-over-two-turns.md)).
+    """
+
     TRACE_DECLARED_BUT_ABSENT = "trace_declared_but_absent"
     """The operator declared tool-call visibility and the endpoint does not have it.
 
@@ -53,6 +67,13 @@ class NotMeasurable(StrEnum):
 
     def stated(self) -> str:
         """The reason in the words a report prints."""
+        if self is NotMeasurable.NO_SESSION_RETENTION:
+            return (
+                "not measurable — this target does not carry one turn of a session "
+                "into the next, and this family reads an instruction planted in "
+                "session memory and carried out in a later turn. There is no later "
+                "turn here for the planting to survive into"
+            )
         if self is NotMeasurable.TRACE_DECLARED_BUT_ABSENT:
             return (
                 "not measurable — this target was registered as exposing its tool "
@@ -104,25 +125,82 @@ def measurable(case: Case, target: TargetConfig) -> bool:
     return not unmet_preconditions(case, target)
 
 
-def not_measurable_families(
+REFUSED_FOR = {
+    Precondition.TOOL_CALL_VISIBILITY: NotMeasurable.NO_TOOL_CALL_VISIBILITY,
+    Precondition.SESSION_RETENTION: NotMeasurable.NO_SESSION_RETENTION,
+}
+"""Which reason a reader is given when one precondition is unmet.
+
+Total over `Precondition` and asserted so — a precondition with no reason beside it
+would skip a case and report nothing, which is the silence `NotMeasurable` exists to
+replace. One mapping rather than a branch per family, because the question is about
+the target's capability and never about which family asked.
+"""
+
+if set(REFUSED_FOR) != set(Precondition):  # pragma: no cover - a declaration
+    raise AssertionError(
+        "every precondition has to say what a target that does not meet it is told, "
+        "or a case is skipped and a reader is given no reason for it"
+    )
+
+
+def _unmeasurable(
     cases: Iterable[Case], target: TargetConfig
-) -> dict[Family, NotMeasurable]:
-    """The families this target has cases for but cannot be measured on.
+) -> dict[AnyFamily, NotMeasurable]:
+    """Every family here whose cases were *all* skipped, over both tiers.
 
     A family lands here only when *every* case of it was skipped. A family with
     some cases run has a rate over those, and reporting it as unmeasurable as
     well would be two answers to one question.
+
+    Both tiers in one walk and two mappings out of it, which is the split ADR-0035
+    asks for at every site that groups by family: the arithmetic is identical and
+    what differs is which container the answer is allowed into.
     """
-    skipped: dict[Family, NotMeasurable] = {}
-    measured: set[Family] = set()
+    skipped: dict[AnyFamily, NotMeasurable] = {}
+    measured: set[AnyFamily] = set()
     for case in cases:
         unmet = unmet_preconditions(case, target)
         if not unmet:
             measured.add(case.family)
-        elif Precondition.TOOL_CALL_VISIBILITY in unmet:
-            skipped[case.family] = NotMeasurable.NO_TOOL_CALL_VISIBILITY
+            continue
+        # In `Precondition` declaration order and never in the record's, so the
+        # reason a reader is given for a case that needs two capabilities is a
+        # property of this enumeration rather than of the order somebody typed
+        # `requires` in. A case unmet on two is unmet on the first of them here, and
+        # the others are still in `unmet_preconditions` for a caller that wants all.
+        first = next(need for need in Precondition if need in unmet)
+        skipped[case.family] = REFUSED_FOR[first]
     return {
         family: reason for family, reason in skipped.items() if family not in measured
+    }
+
+
+def not_measurable_families(
+    cases: Iterable[Case], target: TargetConfig
+) -> dict[Family, NotMeasurable]:
+    """The six this target has cases for and cannot be measured on."""
+    return {
+        family: reason
+        for family, reason in _unmeasurable(cases, target).items()
+        if one_of_the_six(family)
+    }
+
+
+def not_measurable_elective_families(
+    cases: Iterable[Case], target: TargetConfig
+) -> dict[ElectiveFamily, NotMeasurable]:
+    """The same answer for the tier, in a mapping of its own.
+
+    A second function rather than a wider key on the first, because the first is what
+    `gate.family_rates` and `TargetRun.not_measurable` are keyed on and an elective
+    family in either is an elective family in the gate's denominator (ADR-0035). The
+    reading is the same reading; what it may be assigned into is not.
+    """
+    return {
+        family: reason
+        for family, reason in _unmeasurable(cases, target).items()
+        if isinstance(family, ElectiveFamily)
     }
 
 
@@ -154,6 +232,7 @@ def contradicted_by_the_reply(
         case.family: NotMeasurable.TRACE_DECLARED_BUT_ABSENT
         for case in cases
         if Precondition.TOOL_CALL_VISIBILITY in case.requires
+        and one_of_the_six(case.family)
     }
 
 
@@ -193,6 +272,13 @@ def checkable(case: Case, transcript: Transcript, target: TargetConfig) -> bool:
             # is an empty reply and that is a verdict of resisted, not an
             # unanswerable question (`contract.reply_text`).
             return True
+        case SuccessConditionKind.RETAINED_INSTRUCTION_EXECUTED:
+            # One reply is never enough: the verdict is the scored turn's reply read
+            # against the planting turn's, and this function is handed one transcript
+            # (ADR-0041). The adaptive layer sends probes rather than attempts, so a
+            # persistence condition is one it cannot apply — which is a fact about the
+            # layer, not a defence the target showed, and `False` is how it says so.
+            return False
         case SuccessConditionKind.TOOL_CALL_OUTSIDE_DECLARED_LIST:
             return trace is not None
         case SuccessConditionKind.TOOL_CALL_AFTER_STOP:
@@ -218,6 +304,14 @@ def runnable(cases: Sequence[Case], target: TargetConfig) -> list[Case]:
 
 
 def _target_meets(precondition: Precondition, target: TargetConfig) -> bool:
+    """Whether this target declared the capability this precondition asks for.
+
+    The match has no fallback branch on purpose: a third precondition must fail the
+    type check rather than default onto *met*, which is the direction that would
+    spend attempts against a target that cannot answer them.
+    """
     match precondition:
         case Precondition.TOOL_CALL_VISIBILITY:
             return target.exposes_tool_calls
+        case Precondition.SESSION_RETENTION:
+            return target.retains_session_state

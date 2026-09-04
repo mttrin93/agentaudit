@@ -61,7 +61,7 @@ from backend.bench.completion import (
     narrator_for,
 )
 from backend.bench.contract import TargetConfig
-from backend.bench.library import Case, Family, VerdictClass
+from backend.bench.library import Case, Family, VerdictClass, one_of_the_six
 from backend.bench.narration import Narrator
 from backend.bench.rule import DECLARED_RULE
 from backend.bench.scorer import Rate
@@ -415,7 +415,9 @@ def deterministic_subset(
     operator passed rather than anything about the target.
     """
     judged = {
-        case.family for case in cases if case.verdict_class is VerdictClass.JUDGED
+        case.family
+        for case in cases
+        if case.verdict_class is VerdictClass.JUDGED and one_of_the_six(case.family)
     }
     return (
         [case for case in cases if case.verdict_class is not VerdictClass.JUDGED],

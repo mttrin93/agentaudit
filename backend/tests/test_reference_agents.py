@@ -75,7 +75,7 @@ def rate_of(
     """The failure rate of one hardened variant against one case."""
     target_run = target_run_for(case, name="hardened", model=model, agents=agents)
     assert target_run.registration.complete, "the variant never registered"
-    return target_run.rates[case.family].value
+    return target_run.rates[Family(case.family)].value
 
 
 def test_the_output_filter_holds_the_leakage_case_when_the_input_check_does_not(

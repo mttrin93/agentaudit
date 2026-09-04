@@ -56,7 +56,6 @@ from backend.bench.completion import (
     completion_for,
     narrator_for,
 )
-from backend.bench.contract import TargetConfig
 from backend.bench.library import Case, Family, VerdictClass
 from backend.bench.rule import DECLARED_RULE
 from backend.bench.scorer import discrimination
@@ -64,14 +63,16 @@ from backend.bench.usage import UsageLedger
 from backend.graph.budget import BudgetExceeded, Layer, RunBudget
 from backend.targets.reference.hardened import HARDENED
 from backend.targets.reference.model import ModelConfig
-from backend.targets.reference.operator import nonce_planter
+from backend.targets.reference.operator import (
+    described_agents,
+    nonce_planter,
+)
 from backend.targets.reference.server import (
     REFERENCE_AGENTS,
     ReferenceConfig,
     create_reference_app,
 )
 from backend.targets.reference.serving import serve
-from backend.targets.reference.tools import DECLARED_TOOL_NAMES
 from backend.targets.reference.trivial import TRIVIAL
 from scripts.console import (
     EXIT_ABORTED,
@@ -208,20 +209,10 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     app = create_reference_app(ReferenceConfig(model=model, auth_token=auth_token))
     with serve(app) as base_url:
-        targets = [
-            TargetConfig(
-                name=name,
-                url=f"{base_url}/reference/{name}/messages",
-                auth_token=auth_token,
-                agent_type="assistant",
-                # The reference agents expose their tool calls and declare the
-                # document tools, which is what makes scope creep and halt
-                # defeat measurable against them at all (ADR-0004).
-                exposes_tool_calls=True,
-                declared_tools=DECLARED_TOOL_NAMES,
-            )
-            for name in args.agents
-        ]
+        by_name = {agent.name: agent for agent in REFERENCE_AGENTS}
+        targets = described_agents(
+            base_url, auth_token, [by_name[name] for name in args.agents]
+        )
         try:
             result = run_calibration(
                 cases=cases,

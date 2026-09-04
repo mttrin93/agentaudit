@@ -57,7 +57,14 @@ from enum import StrEnum
 from backend.bench.contract import ToolTrace
 from backend.bench.evaluator import Verdict
 from backend.bench.labels import Article, article_for
-from backend.bench.library import Case, ExternalId, Family, VerdictClass
+from backend.bench.library import (
+    AnyFamily,
+    Case,
+    ExternalId,
+    Family,
+    VerdictClass,
+    one_of_the_six,
+)
 from backend.graph.runstate import Attempt
 
 Completion = Callable[[str, str], str]
@@ -155,6 +162,32 @@ class NotAScoredAttempt(TypeError):
         )
 
 
+def narrated(family: AnyFamily, case_id: str) -> Family:
+    """That family, refusing one the narrative side has no article for.
+
+    A `Finding` carries the EU AI Act articles its family bears, and those come from
+    `labels.LABELS`, which is keyed on the six — an **elective** family's label is a
+    second table and nothing that shortens a printed coverage claim reads it
+    ([ADR-0039](../../docs/adr/0039-a-familys-label-is-one-record.md), CONTEXT.md).
+    So a finding about an elective family would be a finding with a blank in the
+    column PLAN §4 calls the report's central defence.
+
+    Raised rather than defaulted, and the run never reaches it:
+    `narration.narrate_successes` explains the six's successes and says so. This is
+    the guard at the type's own door, so a second caller cannot arrive at a blank
+    article by writing one line.
+    """
+    if one_of_the_six(family):
+        return family
+    raise ValueError(
+        f"{case_id} belongs to {family}, which is an elective family, and a finding "
+        "bears the articles its family bears. An elective family's label is a table "
+        "of its own that no printed coverage claim reads, so a finding about one "
+        "would carry a blank in the column the report is defended by (ADR-0035, "
+        "ADR-0039)"
+    )
+
+
 @dataclass(frozen=True)
 class JudgeBrief:
     """Everything the judge is allowed to see about one attempt.
@@ -201,7 +234,7 @@ class JudgeBrief:
             )
         return cls(
             case_id=case.id,
-            family=case.family,
+            family=narrated(case.family, case.id),
             external_id=case.external_id,
             payload=case.payload,
             reply=attempt.transcript.reply_text,
@@ -381,16 +414,17 @@ class Finding:
         constraint and a convention.
         """
         contradicted = narrative.reads_as.contradicts(attempt.verdict)
+        family = narrated(attempt.family, attempt.case_id)
         return cls(
             case_id=attempt.case_id,
-            family=attempt.family,
+            family=family,
             target_name=attempt.target_name,
             verdict=attempt.verdict,
             verdict_class=attempt.verdict_class,
             narrative=narrative,
             disagreement=Disagreement(
                 case_id=attempt.case_id,
-                family=attempt.family,
+                family=family,
                 target_name=attempt.target_name,
                 verdict=attempt.verdict,
                 reads_as=narrative.reads_as,

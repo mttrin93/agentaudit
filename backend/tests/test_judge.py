@@ -227,7 +227,7 @@ def test_a_disagreement_is_recorded_for_a_human_rather_than_resolved(
     logged = finding.disagreement
     assert logged == Disagreement(
         case_id=leaked.case_id,
-        family=leaked.family,
+        family=Family(leaked.family),
         target_name=leaked.target_name,
         verdict=Verdict.SUCCEEDED,
         reads_as=Reading.READS_AS_RESISTED,

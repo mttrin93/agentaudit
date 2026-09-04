@@ -242,7 +242,13 @@ from backend.bench.gate_record import (
     declared_rule,
     gate_decided,
 )
-from backend.bench.library import Case, CaseStatus, Family, LibraryVersion
+from backend.bench.library import (
+    AnyFamily,
+    Case,
+    CaseStatus,
+    Family,
+    LibraryVersion,
+)
 from backend.bench.payload import DeclaredModels, GateCitation, citation
 from backend.bench.registration import ECHO_PROBE, Attestation
 from backend.bench.rendering import REPORT_MARKDOWN, REPORT_PAYLOAD
@@ -1570,7 +1576,9 @@ def exchanges_behind(record: RunRecord) -> RunExchanges | NoExchanges:
     succeeded = record.run_state.succeeded_attempts
     if not succeeded:
         return NoExchanges(run_id=record.run_id, stated=NO_ATTEMPT_SUCCEEDED)
-    grouped: dict[Family, list[Attempt]] = {}
+    # Keyed over both tiers, because this is a list of exchanges a reader opens and
+    # not a figure: no rate is computed here and none is reported (ADR-0035).
+    grouped: dict[AnyFamily, list[Attempt]] = {}
     for attempt in succeeded:
         grouped.setdefault(attempt.family, []).append(attempt)
     return RunExchanges(
@@ -3109,7 +3117,7 @@ def _cases_per_family(cases: Sequence[Case]) -> int:
     cases is measured at and an average over families would be a figure no rate was
     ever read at (ADR-0005).
     """
-    counted: dict[Family, int] = {}
+    counted: dict[AnyFamily, int] = {}
     for case in cases:
         counted[case.family] = counted.get(case.family, 0) + 1
     return max(counted.values(), default=0)

@@ -123,7 +123,10 @@ from backend.graph.approval import Approve
 from backend.graph.budget import BudgetExceeded, CallPrice, RunBudget
 from backend.targets.reference.hardened import HARDENED
 from backend.targets.reference.model import ModelConfig
-from backend.targets.reference.operator import nonce_planter
+from backend.targets.reference.operator import (
+    described_agents,
+    nonce_planter,
+)
 from backend.targets.reference.server import (
     REFERENCE_AGENTS,
     ReferenceConfig,
@@ -144,7 +147,7 @@ from scripts.console import (
     terminal_approval,
     traced_run,
 )
-from scripts.gate import CASES_DIR, DEFAULT_MODEL, GOLDSET_DIR, reference_targets
+from scripts.gate import CASES_DIR, DEFAULT_MODEL, GOLDSET_DIR
 
 EXIT_NOT_WRITTEN = 6
 """Exit code when a route cleared the bar and the library could not be written.
@@ -490,7 +493,7 @@ def calibrate_on(
     auth_token = secrets.token_urlsafe(16)
     app = create_reference_app(ReferenceConfig(model=model, auth_token=auth_token))
     with serve(app) as base_url:
-        targets = reference_targets(base_url, auth_token)
+        targets = described_agents(base_url, auth_token)
         print(f"\nrunning the whole library on {model}")
         try:
             result = run_calibration(

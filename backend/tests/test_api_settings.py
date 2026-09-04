@@ -1183,7 +1183,7 @@ def test_a_family_switched_off_is_dropped_and_stated_as_not_run(
 
     plan = plan_for(bench.config, note_planted=True)
     assert [case.id for case in plan.cases] == [leakage_case.id]
-    assert plan.gaps[scope_creep_case.family] is DeclaredGap.FAMILY_SWITCHED_OFF
+    assert plan.gaps[Family(scope_creep_case.family)] is DeclaredGap.FAMILY_SWITCHED_OFF
     assert "not run" in DeclaredGap.FAMILY_SWITCHED_OFF.stated()
     assert "not a family that held" in DeclaredGap.FAMILY_SWITCHED_OFF.stated()
 

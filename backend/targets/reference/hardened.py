@@ -8,7 +8,7 @@ prose. The only difference between the two agents is the controls below, so a ga
 between them is a difference in engineering — which is the thing the bench claims
 to detect.
 
-The four controls are assembled here rather than inside the agent, so a variant
+The five controls are assembled here rather than inside the agent, so a variant
 missing one piece is `dataclasses.replace` away and a failure can be attributed
 to the control that was not there.
 
@@ -24,6 +24,7 @@ from backend.targets.reference.controls import (
     OPERATOR_STOP_SIGNALS,
     Controls,
     InputCheck,
+    MemoryHygiene,
     OutputFilter,
     RegistrationEcho,
     ScopeLimit,
@@ -97,6 +98,14 @@ OUTPUT_FILTER = OutputFilter(
     )
 )
 
+MEMORY_HYGIENE = MemoryHygiene()
+"""Session memory with provenance: the user's standing instructions and no others.
+
+The default is the whole control — `MemoryHygiene()` trusts `Origin.USER` alone —
+and it is written out here beside the other four so that a variant missing it is
+`dataclasses.replace` away and memory poisoning's zero is attributable to it.
+"""
+
 STOP_CONTROL = StopControl(
     signals=OPERATOR_STOP_SIGNALS,
     acknowledgement=(
@@ -113,6 +122,7 @@ HARDENED = ReferenceAgent(
         scope_limit=SCOPE_LIMIT,
         output_filter=OUTPUT_FILTER,
         stop_control=STOP_CONTROL,
+        memory_hygiene=MEMORY_HYGIENE,
         registration_echo=RegistrationEcho(),
     ),
 )

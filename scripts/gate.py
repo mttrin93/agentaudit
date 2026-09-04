@@ -103,7 +103,11 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-from backend.bench.admission import NotAdmitted, admitted_library
+from backend.bench.admission import (
+    NotAdmitted,
+    admitted_elective,
+    admitted_library,
+)
 from backend.bench.calibration import CalibrationResult, run_calibration
 from backend.bench.capability import temperature_for
 from backend.bench.cited import cite
@@ -115,8 +119,14 @@ from backend.bench.completion import (
     completion_for,
     declared_reasoning_effort,
 )
-from backend.bench.contract import TargetConfig
-from backend.bench.gate import GateResult, NotAGateRun, read_gate
+from backend.bench.elective import ElectiveSelection
+from backend.bench.gate import (
+    GateResult,
+    NotAGateRun,
+    cited_library,
+    elective_section,
+    read_gate,
+)
 from backend.bench.gate_record import (
     RecordedGateRun,
     document_named,
@@ -126,7 +136,7 @@ from backend.bench.gate_record import (
 )
 from backend.bench.goldset import load_gold_sets, measure_reliability
 from backend.bench.lease import LibraryBusy, holding_the_library
-from backend.bench.library import Case
+from backend.bench.library import ELECTIVE_DIRECTORY, Case, ElectiveFamily
 from backend.bench.payload import DeclaredModels
 from backend.bench.retirement import live_library, readings_of, store
 from backend.bench.rule import DECLARED_RULE
@@ -134,14 +144,15 @@ from backend.bench.scorer import GateOutcome
 from backend.graph.budget import BudgetExceeded, Layer, RunBudget
 from backend.targets.reference.hardened import HARDENED
 from backend.targets.reference.model import ModelConfig, measures_the_field
-from backend.targets.reference.operator import nonce_planter
+from backend.targets.reference.operator import (
+    described_agents,
+    nonce_planter,
+)
 from backend.targets.reference.server import (
-    REFERENCE_AGENTS,
     ReferenceConfig,
     create_reference_app,
 )
 from backend.targets.reference.serving import serve
-from backend.targets.reference.tools import DECLARED_TOOL_NAMES
 from backend.targets.reference.trivial import TRIVIAL
 from backend.targets.reference.weak import WEAK
 from scripts.console import (
@@ -212,6 +223,19 @@ def main(argv: Sequence[str] | None = None) -> int:
         help=(
             "the model the adaptive attacker runs on. A third setting, and it "
             "decides nothing about the gate"
+        ),
+    )
+    parser.add_argument(
+        "--elective",
+        nargs="+",
+        default=(),
+        choices=[str(family) for family in ElectiveFamily],
+        help=(
+            "elective families to measure on this gate run. Measured on the gate's "
+            "own terms — the same D, the same floor, the same intervals — and "
+            "counted in neither of the gate's two counts (ADR-0035). A family this "
+            "run is not given is named in the document as not requested, and the "
+            "run counts toward no promotion streak for it"
         ),
     )
     parser.add_argument(
@@ -301,6 +325,15 @@ def run_the_gate(args: argparse.Namespace) -> int:
         library = admitted_library(cases_dir)
         cases = live_library(library)
         gold_sets = load_gold_sets(GOLDSET_DIR, cases)
+        # The tier, and only what this run was asked for. A declared input on the
+        # footing of the declared models: stated before the run and unmovable by
+        # anything the run measures (ADR-0035). It faces `admitted_elective`, which
+        # is `admitted_library`'s check over the tier's own directory — selectable
+        # is not ungated.
+        selection = ElectiveSelection(
+            requested=tuple(ElectiveFamily(name) for name in args.elective)
+        )
+        elective_cases = live_library(admitted_elective(cases_dir, selection.requested))
     except (NotAdmitted, ValueError, KeyError) as unusable:
         print(f"The gate cannot run against this library:\n{unusable}")
         return EXIT_WITHHELD
@@ -318,6 +351,7 @@ def run_the_gate(args: argparse.Namespace) -> int:
         return EXIT_WITHHELD
 
     print_declared(cases, model, models, len(gold_sets), library)
+    print(f"  {selection.stated()}")
 
     # No usage sink on these two, and the reason is this script's shape: the
     # adjudicator built here serves the run *and* the reliability measurement
@@ -353,10 +387,14 @@ def run_the_gate(args: argparse.Namespace) -> int:
     auth_token = secrets.token_urlsafe(16)
     app = create_reference_app(ReferenceConfig(model=model, auth_token=auth_token))
     with serve(app) as base_url:
-        targets = reference_targets(base_url, auth_token)
+        targets = described_agents(base_url, auth_token)
         try:
             result = run_calibration(
-                cases=cases,
+                # Both tiers in one suite, because an elective attempt is an
+                # attempt: the same ten per case, the same reference agents, the
+                # same wire. Where the two part company is the *counts*, and that
+                # parting is `TargetRun.elective_rates` (ADR-0035).
+                cases=cases + elective_cases,
                 targets=targets,
                 attestation=attestation,
                 plant_nonce=nonce_planter(base_url),
@@ -371,7 +409,9 @@ def run_the_gate(args: argparse.Namespace) -> int:
                 # every gate run, which is the stated absence and not an empty
                 # result.
                 budget=RunBudget.declare(
-                    cases=cases, targets=targets, price=call_price
+                    cases=cases + elective_cases,
+                    targets=targets,
+                    price=call_price,
                 ),
                 trace=traced_run(
                     gate=True,
@@ -413,7 +453,24 @@ def run_the_gate(args: argparse.Namespace) -> int:
             weak=WEAK.name,
             hardened=HARDENED.name,
             reliability=reliability,
-            library=result.run_state.library,
+            # The version of the library the gate was **decided over**, which is the
+            # six and not the run's whole case list. The run state holds the true
+            # version of everything that ran; this is what the gate document, the
+            # gate run record and every report's gate citation carry, and an
+            # elective selection must not move it — two gate runs over an identical
+            # six-family library would otherwise read as incomparable because one of
+            # them was also asked for the tier (ADR-0023, ADR-0035). What the tier
+            # ran is named in the elective section below.
+            library=cited_library(cases + elective_cases),
+            # Beside the decision and in neither of its counts: `read_gate` carries
+            # this onto the result and hands it to nothing (ADR-0035).
+            elective=elective_section(
+                result.target_runs,
+                trivial=TRIVIAL.name,
+                weak=WEAK.name,
+                hardened=HARDENED.name,
+                selection=selection,
+            ),
         )
     except NotAGateRun as ungated:
         print(f"\nThis run cannot be gated: {ungated}")
@@ -447,10 +504,32 @@ def run_the_gate(args: argparse.Namespace) -> int:
         adjudicator=args.adjudicator_model,
     )
     decisions = store(cases_dir, history)
+    # And the tier's own decay series, into the tier's own directory. One reading per
+    # case per gate run whichever tier the case is in: an elective family's cases face
+    # the retirement rule like any others, so a tier nobody has to pass cannot quietly
+    # accumulate cases that stopped discriminating (ADR-0035, spec story 7).
+    elective_history = readings_of(
+        elective_cases,
+        hardened=runs[HARDENED.name],
+        weak=runs[WEAK.name],
+        trivial=runs[TRIVIAL.name],
+        model=args.model,
+        measured_the_field=measures_the_field(model),
+        ran_on=history.ran_on,
+        excluded=gate.decision.excluded_families,
+        adjudicator=args.adjudicator_model,
+    )
+    elective_decisions = store(cases_dir / ELECTIVE_DIRECTORY, elective_history)
     # Reloaded, so the retired cases listed are the ones the library now holds —
     # including any this run retired a moment ago.
     library = admitted_library(cases_dir)
     print_retirement(history, decisions, library)
+    if elective_history.readings:
+        # The tier's series printed as its own block, below the six's, because a
+        # reader working through the retirement section must not meet a case whose
+        # family decided nothing beside the ones whose families decided.
+        elective_library = admitted_elective(cases_dir, selection.requested)
+        print_retirement(elective_history, elective_decisions, elective_library)
 
     # After everything is printed and before the exit code is read, so the document
     # holds the run the operator just saw rather than a subset of it. Written on all
@@ -730,24 +809,6 @@ def declared_instruments(args: argparse.Namespace) -> DeclaredModels:
         # dropping it silently was the fault (#23).
         attacking_reasoning_effort=declared_reasoning_effort(),
     )
-
-
-def reference_targets(base_url: str, auth_token: str) -> list[TargetConfig]:
-    """All three reference agents, described the way any target is described."""
-    return [
-        TargetConfig(
-            name=agent.name,
-            url=f"{base_url}/reference/{agent.name}/messages",
-            auth_token=auth_token,
-            agent_type="assistant",
-            # The reference agents expose their tool calls and declare the document
-            # tools, which is what makes scope creep and halt defeat measurable
-            # against them at all (ADR-0004).
-            exposes_tool_calls=True,
-            declared_tools=DECLARED_TOOL_NAMES,
-        )
-        for agent in REFERENCE_AGENTS
-    ]
 
 
 def print_declared(

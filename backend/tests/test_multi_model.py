@@ -573,7 +573,7 @@ def _a_proposal(objective: Case) -> ProposedRoute:
     return proposed_from(
         objective=objective,
         target=a_target("trivial"),
-        family=objective.family,
+        family=Family(objective.family),
         payload="the probe that actually ran",
         description="a route worth promoting",
     )
@@ -963,7 +963,7 @@ def _an_admitted_promotion(objective: Case) -> Promotion:
     proposal = proposed_from(
         objective=objective,
         target=a_target("trivial"),
-        family=objective.family,
+        family=Family(objective.family),
         payload="the probe that actually ran",
         description="a route worth promoting",
     )
@@ -1057,7 +1057,7 @@ def _a_model_run(
     if proposals:
         state.episodes.append(
             AdaptiveEpisode(
-                family=proposals[0].case.family,
+                family=Family(proposals[0].case.family),
                 target_name=TRIVIAL,
                 outcome=EpisodeOutcome.BROKEN,
                 turns=1,

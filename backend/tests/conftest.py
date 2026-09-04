@@ -809,6 +809,12 @@ def served_references(
                         # it would call every action a finding.
                         exposes_tool_calls=True,
                         declared_tools=DECLARED_TOOL_NAMES,
+                        # All three keep a session, and they differ in whose
+                        # instructions they carry into a later turn. An agent that
+                        # kept nothing would not meet memory poisoning's precondition
+                        # at all, and its zero would be `NotMeasurable` wearing a
+                        # rate's clothes (`targets/reference/memory.py`, ADR-0041).
+                        retains_session_state=True,
                     ),
                     plant_nonce=plant,
                 )

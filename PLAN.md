@@ -364,6 +364,16 @@ first gate run. Two further constraints: `ASI05`'s code tool must sit **inside**
 `ASI02` and already covered; and `ASI06` needs session retention declared at
 registration as a precondition, which is the shape #24 is already building.
 
+**Built for `ASI06` by #48, and the sentence above about `server.py` is now history.**
+All three reference agents keep a session and differ in *whose* standing instructions
+they carry into a later turn — a fifth removable control,
+`controls.MemoryHygiene` — because an agent that kept nothing would fail the family's
+own precondition and read as *not measurable* rather than as defended. `SESSION_RETENTION`
+is a `Precondition` declared at registration, and the verdict is read over two turns
+in one session with the planting turn as its own control
+([ADR-0041](./docs/adr/0041-the-persistence-canary-is-read-over-two-turns.md)). The
+gradient is unbuilt for `LLM01` and `LLM02`, which are #49 and #50.
+
 *Promotion, not accretion.* An elective family holding `D ≥ 0.4` across a declared
 number of consecutive gate runs becomes eligible to enter the six, and entry is a
 library-version event that re-declares the gate rule *before* the run rather than after

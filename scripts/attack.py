@@ -74,14 +74,16 @@ from backend.graph.budget import BudgetExceeded, CallPrice, Layer, RunBudget
 from backend.graph.runstate import RunState
 from backend.targets.reference.hardened import HARDENED
 from backend.targets.reference.model import ModelConfig
-from backend.targets.reference.operator import nonce_planter
+from backend.targets.reference.operator import (
+    described_agents,
+    nonce_planter,
+)
 from backend.targets.reference.server import (
     REFERENCE_AGENTS,
     ReferenceConfig,
     create_reference_app,
 )
 from backend.targets.reference.serving import serve
-from backend.targets.reference.tools import DECLARED_TOOL_NAMES
 from backend.targets.reference.trivial import TRIVIAL
 from scripts.console import (
     EXIT_ABORTED,
@@ -397,17 +399,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         with serve(app) as base_url:
             outcome = _attack(
-                targets=[
-                    TargetConfig(
-                        name=name,
-                        url=f"{base_url}/reference/{name}/messages",
-                        auth_token=auth_token,
-                        agent_type="assistant",
-                        exposes_tool_calls=True,
-                        declared_tools=DECLARED_TOOL_NAMES,
-                    )
-                    for name in args.agents
-                ],
+                targets=described_agents(
+                    base_url,
+                    auth_token,
+                    [
+                        agent
+                        for agent in REFERENCE_AGENTS
+                        if agent.name in set(args.agents)
+                    ],
+                ),
                 plant_nonce=nonce_planter(base_url),
                 cases=cases,
                 attestation=attestation,

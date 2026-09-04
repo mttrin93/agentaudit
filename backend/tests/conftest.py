@@ -815,6 +815,12 @@ def served_references(
                         # at all, and its zero would be `NotMeasurable` wearing a
                         # rate's clothes (`targets/reference/memory.py`, ADR-0041).
                         retains_session_state=True,
+                        # And all three hold the same client directory, differing in
+                        # which part of a record they release. An agent holding
+                        # nothing about anybody would fail PII leakage's precondition
+                        # in the same way (`targets/reference/directory.py`,
+                        # ADR-0043).
+                        holds_personal_records=True,
                     ),
                     plant_nonce=plant,
                 )

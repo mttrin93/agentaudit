@@ -52,9 +52,11 @@ def described_agents(
     statement of what their agent exposes and may do — and for these three the
     operator is this project. Each is what makes some family measurable at all rather
     than refused before the first attempt: the tool trace for scope creep and halt
-    defeat (ADR-0004), the declared tool list scope creep is read against, and session
+    defeat (ADR-0004), the declared tool list scope creep is read against, session
     retention for memory poisoning
-    ([ADR-0041](../../../docs/adr/0041-the-persistence-canary-is-read-over-two-turns.md)).
+    ([ADR-0041](../../../docs/adr/0041-the-persistence-canary-is-read-over-two-turns.md)),
+    and the client records PII leakage asks a target to disclose
+    ([ADR-0043](../../../docs/adr/0043-the-canary-a-nonce-cannot-be-confused-with.md)).
 
     `agents` is for a caller asking a narrower question — a hardened variant with one
     control removed, served under the same name, which is how a refusal is attributed
@@ -69,6 +71,7 @@ def described_agents(
             exposes_tool_calls=True,
             declared_tools=DECLARED_TOOL_NAMES,
             retains_session_state=True,
+            holds_personal_records=True,
         )
         for agent in agents
     ]

@@ -1,6 +1,6 @@
 """The hardened agent's defences, built as pieces that come off one at a time.
 
-Five controls, and the separation is the point. If the hardened agent resists a
+Six controls, and the separation is the point. If the hardened agent resists a
 case as a whole, the run has learned nothing about *why*; if the same case is run
 against the same agent with one control removed and the verdict flips, the
 failure is attributable to that control. That is what the spec asks the reference
@@ -19,9 +19,11 @@ matching is literal and case-folded, which is what a real pre-model filter looks
 like at this stage and is deliberately not a model call: a defence that needs
 inference to decide is a second agent, not a control.
 
-`MemoryHygiene` is the fifth and the newest, and it is the only one that does not
-end a turn: it decides what a turn may leave behind for the next one. Memory
-poisoning is measured against it (`memory.py`).
+`MemoryHygiene` is the fifth and `RecordMinimisation` the sixth, and they are the two
+that do not end a turn: one decides what a turn may leave behind for the next one and
+the other what it may hand back this one. Memory poisoning is measured against the
+first (`memory.py`) and PII leakage against the second (`directory.py`), and each
+family's hardened zero is attributable to its own piece.
 
 `RegistrationEcho` sits among them and is not a defence. It is the operator's
 side of the nonce protocol, and it is a named piece precisely so the one
@@ -31,6 +33,7 @@ exemption in the pipeline is visible rather than buried in a condition.
 from collections.abc import Sequence
 from dataclasses import dataclass
 
+from backend.targets.reference.directory import Detail
 from backend.targets.reference.memory import Origin
 
 OPERATOR_ECHO_PROBE = (
@@ -241,6 +244,43 @@ class MemoryHygiene:
 
 
 @dataclass(frozen=True)
+class RecordMinimisation:
+    """Decides which parts of a record the agent holds about a person may leave.
+
+    The sixth removable piece, and the one PII leakage is measured against. Like
+    `MemoryHygiene` it is deliberately **not** "release nothing": an agent that held
+    no records about anybody would fail the family's own precondition, and its zero
+    would be *not measurable* wearing a rate's clothes rather than a defence
+    ([ADR-0043](../../../docs/adr/0043-the-canary-a-nonce-cannot-be-confused-with.md)).
+    So what it reads is which **part** of a record is asked to leave — the summary
+    the agent's job needs, or the part that is about the person.
+
+    **A piece of its own, and never `OutputFilter` widened.** That one withholds a
+    reply carrying the operator's *configuration*, which is what `data_leakage`
+    measures; this one decides what leaves of the target's data about **third
+    parties**, which is Article 10 and a different family. Sharing a piece would make
+    the two families' hardened zeros attributable to one control and their two `D`s
+    move together — which is the second name #50 exists to refuse, arriving in the
+    test equipment rather than in the prose.
+
+    Not a `stops()` like the four request-side pieces, because nothing about it ends
+    a turn: it decides what a turn may *hand back*, on the same footing as
+    `MemoryHygiene.retains`, which decides what a turn may write.
+    """
+
+    released: tuple[Detail, ...] = (Detail.SUMMARY,)
+    """Which parts of a record may leave. The summary, and nothing else.
+
+    A tuple rather than a boolean so that the piece says what it permits rather than
+    that it is switched on, and so that widening it is a visible edit
+    (`MemoryHygiene.trusted`).
+    """
+
+    def releases(self, part: Detail) -> bool:
+        return part in self.released
+
+
+@dataclass(frozen=True)
 class RegistrationEcho:
     """The operator's side of the nonce protocol. Not a defence.
 
@@ -274,7 +314,22 @@ class Controls:
     output_filter: OutputFilter | None = None
     stop_control: StopControl | None = None
     memory_hygiene: MemoryHygiene | None = None
+    record_minimisation: RecordMinimisation | None = None
     registration_echo: RegistrationEcho | None = None
+
+    def discloses(self, part: Detail) -> bool:
+        """Whether this architecture lets a part of a record about a person leave.
+
+        An agent with no record minimisation releases everything it holds, which is
+        what having no record minimisation means — and it is why the trivial and weak
+        agents read a client's file out to whoever names them. Asked per part rather
+        than per record, because one record holds a line the agent's job needs and a
+        line that is about the person, and the control is the difference between them
+        (`directory.Detail`).
+        """
+        if self.record_minimisation is None:
+            return True
+        return self.record_minimisation.releases(part)
 
     def retains(self, origin: Origin) -> bool:
         """Whether this architecture lets a turn leave that author's instruction
@@ -337,7 +392,7 @@ class Controls:
         does not use, and an agent whose defences stop at the message boundary is
         controlled by whoever wrote the content behind it.
 
-        Two of the five pieces are deliberately absent here. The stop control is
+        Two of the six pieces are deliberately absent here. The stop control is
         the *operator's* halt and third-party content is not the operator, so a
         note that says "stop" must not be able to end a turn. The registration
         echo is the operator's protocol for the same reason: the exemption is one

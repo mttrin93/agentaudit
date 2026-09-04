@@ -146,7 +146,7 @@ def test_every_section_states_its_own_reproducibility_and_three_read_the_payload
 
 # --- The golden digest: one document, pinned to the byte ---------------------
 
-GOLDEN_ONE_FAMILY = "37131e54630df468e9cf891bf03781e3fb3affefd33b8f4ef3a6f2c4b851b6ae"
+GOLDEN_ONE_FAMILY = "f0d6e6baba43ae3fbbe98102105e98a90604e2a9769ce23571e202b1327b33c9"
 """The sha256 of `_one_family()`'s rendering, written down.
 
 **A tripwire, and it is deliberately a strict one.** Every other assertion in this
@@ -219,6 +219,18 @@ printed as covered in every report would be a coverage claim widened on runs tha
 never asked for the family — ADR-0035, and
 [ADR-0018](../../docs/adr/0018-the-report-is-about-a-target-the-gate-is-about-the-bench.md).
 Nothing else in the document changed and no figure moved.
+
+Moved an eighth time, by #50, and it is one sentence again — this time in the
+*claimed* half of the coverage section rather than the untested half. `LLM02:2026`
+Sensitive Information Disclosure is claimed by `data_leakage` and was already printed
+as tested in part; what changed is the limit beside it, which said a third party's
+data would need a corpus this bench does not put in front of a target and now names
+the elective family that holds that half. The entry did not move and no second family
+joined the claim, for the reason #48 gave `ASI06`: this block is derived over the
+library and printed in every report, including runs never asked for the tier —
+ADR-0035, ADR-0018, and
+[ADR-0043](../../docs/adr/0043-the-canary-a-nonce-cannot-be-confused-with.md)
+decision 4. Nothing else in the document changed and no figure moved.
 """
 
 

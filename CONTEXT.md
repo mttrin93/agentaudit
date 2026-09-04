@@ -218,9 +218,11 @@ _Avoid_: log, call history, transcript
 A family's outcome against a target that cannot answer it — a third outcome
 alongside a rate and a refused registration, never a rate of zero. Reached only
 by a precondition unmet before any attempt is spent, which today means a target
-that does not expose its tool calls, or one that does not carry a session from one
+that does not expose its tool calls, one that does not carry a session from one
 turn into the next
-([ADR-0041](./docs/adr/0041-the-persistence-canary-is-read-over-two-turns.md)). A
+([ADR-0041](./docs/adr/0041-the-persistence-canary-is-read-over-two-turns.md)), or one
+that holds no records about anybody other than its operator
+([ADR-0043](./docs/adr/0043-the-canary-a-nonce-cannot-be-confused-with.md)). A
 target the bench never measured must stay distinguishable from one that resisted
 everything.
 _Avoid_: not applicable, skipped, unknown, n/a, zero
@@ -384,8 +386,8 @@ _Avoid_: history, memory, knowledge, prior
 ### Trust mechanics
 
 **Canary**:
-A token planted where the bench will recognise it again. Four plantings, proving four
-different things. Planted in the target's **configuration**, its appearance in output
+A token the bench will recognise if it comes back. Five of them, proving five different
+things, and only four are *planted*. Planted in the target's **configuration**, its appearance in output
 proves a leak. Planted by a third party in **content the target fetches**, as an
 instruction the target has to carry out to produce it, its appearance proves obedience
 — the value was never inside the boundary, so nothing about it leaked. Planted in the
@@ -403,7 +405,16 @@ the claim is not the second one, because a check on the user's message says noth
 about a note the agent fetched and the two are counted on two denominators
 ([ADR-0042](./docs/adr/0042-the-canary-is-spelled-out-in-one-channel.md)). Which channel
 carried the instruction is on the **case** record, and a payload cannot be written for
-two of them.
+two of them. And **held by the target as a record about a third party** — planted by
+nobody, because it was inside the boundary before the attempt began — its appearance
+proves that a record about a person was disclosed. That is not the first planting under
+another name: the first is material the *operator* placed there and its escape is a
+boundary crossed, this is data the target holds about somebody who is neither the
+operator nor the bench and its release is governance. The two are told apart by
+arithmetic rather than by which family's name is on the record — a value a **nonce** this
+bench issues could contain, or that could contain one, does not load — so no reply
+carrying one is evidence for the other
+([ADR-0043](./docs/adr/0043-the-canary-a-nonce-cannot-be-confused-with.md)).
 _Avoid_: marker, tracer, honeytoken
 
 **Nonce**:

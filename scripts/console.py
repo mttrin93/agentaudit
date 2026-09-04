@@ -33,7 +33,8 @@ from backend.bench.calibration import CalibrationResult, PlantNonce, TargetRun
 from backend.bench.contract import TargetConfig
 from backend.bench.labels import articles_stated
 from backend.bench.library import Case, Family, bar_for, trigger_counts
-from backend.bench.registration import ECHO_PROBE, NONCE_PREFIX, Attestation
+from backend.bench.nonce import NONCE_PREFIX
+from backend.bench.registration import ECHO_PROBE, Attestation
 from backend.bench.retirement import (
     RetirementDecision,
     RunHistory,

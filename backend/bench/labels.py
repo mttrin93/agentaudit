@@ -372,13 +372,23 @@ on the footing that a wrong article is worse than a blank; the member exists now
 was the last blank column in the tree, and a label bearing no article is refused where
 it is written rather than guarded against per reader (ADR-0040).
 
-Two of the three now label families with cases on disk — #48 brought memory
-poisoning's and #49 brought direct prompt injection's — and the table did not change
-when they arrived, which is the tier's shape rather than an oversight: a member exists
-so the cases have somewhere to land
+All three now label families with cases on disk — #48 brought memory poisoning's, #49
+direct prompt injection's and #50 PII leakage's — and the table did not change when
+any of them arrived, which is the tier's shape rather than an oversight: a member
+exists so the cases have somewhere to land
 ([ADR-0035](../../docs/adr/0035-the-elective-family-tier-is-never-gate-deciding.md)),
 and a label is a claim about which entry a family was read onto rather than a claim
-that the entry is tested. `pii_leakage` is the one still waiting, and #50 brings it.
+that the entry is tested.
+
+**`LLM02:2026` is the second entry claimed by two families, and the second where one
+of them is the tier's.** `data_leakage` is above and `pii_leakage` is here, and what
+that is not — for the reason `LLM01:2026` is not — is a claim by two families in one
+subtraction: `published.py`'s derivations read `LABELS` alone, so
+`ClaimedInPart.families` stays a tuple over the six and this table shortens no printed
+coverage list. Why the second family stays off that record even though the entry is
+already claimed and already printed is
+[ADR-0043](../../docs/adr/0043-the-canary-a-nonce-cannot-be-confused-with.md)
+decision 4.
 """
 
 

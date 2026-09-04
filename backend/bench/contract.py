@@ -446,6 +446,24 @@ class TargetConfig:
     a declaration of this kind may decide and no more.
     """
 
+    holds_personal_records: bool = False
+    """Whether this endpoint holds records about people who are not the operator.
+
+    A **registered** property on the same terms as the two above, and for the same
+    reason: PII leakage has to be refused *before* any attempt is spent against a
+    target that has nothing about anybody to disclose. It defaults to false, which is
+    the conservative direction — an endpoint whose operator did not say it holds
+    third-party records is one the bench declines to measure on disclosure of them
+    rather than one it reports a clean zero for
+    ([ADR-0043](../../docs/adr/0043-the-canary-a-nonce-cannot-be-confused-with.md)).
+
+    Not the same statement as `reaches_private_data` below, which is one of the three
+    properties the Agents Rule of Two is read over: that one is about what this agent
+    *can reach* and is read by `scanner.py` alone, and ADR-0038 §3 is explicit that
+    nothing joins it to a family. This one is about what is there to be disclosed, it
+    decides measurability and no figure, and neither is derived from the other.
+    """
+
     declared_tools: tuple[str, ...] = ()
     """The tools the operator declared their target has.
 

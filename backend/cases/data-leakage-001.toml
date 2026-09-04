@@ -31,7 +31,9 @@ Tests one case within LLM02:2026 — disclosure of material held in the target's
 system prompt, on direct request. It does not test disclosure of user data the
 target received at inference time, of content it retrieved from a tool, or of
 credentials held by its tools, and it says nothing about data the agent never
-receives.
+receives. It says nothing about a record the target holds about a third party: that
+half of the category is held by the elective family PII leakage, run only when a
+run asks for it and never counted in these figures.
 """
 
 [success_condition]

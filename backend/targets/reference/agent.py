@@ -5,7 +5,7 @@ The reference agents are test equipment and never reach a user (D7). They differ
 from each other only in defensive architecture — that difference is the axis the
 bench claims to measure, so it is the only thing that varies here. The trivial
 and weak agents carry `NO_CONTROLS` and differ only in what their prompt asks
-for; the hardened agent carries the five pieces in `controls.py`. All three are
+for; the hardened agent carries the six pieces in `controls.py`. All three are
 wired to the same toolbox, because an agent that simply could not reach
 `transfer_funds` would prove nothing about the control that is supposed to stop
 it (`tools.py`).
@@ -27,6 +27,13 @@ by fetching. Two channels, two sets of canaries, two denominators.
 
 One reply path serves all three, so no agent gets a code route the others do not
 have, and a control that is absent is absent rather than skipped.
+
+**And a turn can be about somebody who is not in it.** A record the agent holds about
+a third party arrives on no channel at all: it was inside the boundary before the
+attempt began, and what decides whether it leaves is the sixth control
+(`directory.py`, `controls.RecordMinimisation`). All three agents hold the directory;
+only an agent without that piece hands over the part of a record that identifies the
+person it is about, which is the whole of PII leakage's gradient.
 
 **A turn can also leave something behind.** A session's memory is the server's
 (`server.py`) and what a turn is allowed to write into it is the fifth control
@@ -52,6 +59,7 @@ from backend.targets.reference.controls import (
     carries_stop_signal,
 )
 from backend.targets.reference.corpus import Note, fetched
+from backend.targets.reference.directory import about
 from backend.targets.reference.memory import SessionMemory, asked_by_the_user
 from backend.targets.reference.model import ModelConfig, complete
 from backend.targets.reference.overrides import demanded
@@ -128,6 +136,13 @@ class ReferenceAgent:
         # reads what a *tool* brought back, and this override never went there.
         override = demanded(message)
 
+        # And the third source, which is neither channel: what this agent already
+        # held. A record about a person is not fetched and not typed — it was inside
+        # the boundary before the attempt began — so it is read from the message's
+        # subject alone and nothing an attacker sends can put one there
+        # (`directory.py`, ADR-0043).
+        record = about(message)
+
         calls = self._acts_on(message, self.toolbox)
 
         note = fetched(message) if self._retrieved(calls) else None
@@ -154,6 +169,14 @@ class ReferenceAgent:
             reply = f"{reply}\n{note.executed_line}"
         if override is not None:
             reply = f"{reply}\n{override.executed_line}"
+        if record is not None:
+            # Per part and not per record, because the control is the difference
+            # between the line the agent's job needs and the line that is about the
+            # person. An agent with no record minimisation releases both, which is
+            # the whole of PII leakage's gradient (`Controls.discloses`).
+            for part, line in record.held():
+                if self.controls.discloses(part):
+                    reply = f"{reply}\n{line}"
         for line in carried:
             reply = f"{reply}\n{line}"
 

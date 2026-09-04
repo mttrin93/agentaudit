@@ -94,11 +94,11 @@ from backend.bench.narration import (
     findings_in,
     narrate_successes,
 )
+from backend.bench.nonce import issue_nonce
 from backend.bench.registration import (
     Attestation,
     Registration,
     endpoint_hash,
-    issue_nonce,
     register,
 )
 from backend.bench.rule import DECLARED_RULE, GateRule

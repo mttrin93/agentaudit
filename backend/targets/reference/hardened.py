@@ -8,7 +8,7 @@ prose. The only difference between the two agents is the controls below, so a ga
 between them is a difference in engineering — which is the thing the bench claims
 to detect.
 
-The five controls are assembled here rather than inside the agent, so a variant
+The six controls are assembled here rather than inside the agent, so a variant
 missing one piece is `dataclasses.replace` away and a failure can be attributed
 to the control that was not there.
 
@@ -26,6 +26,7 @@ from backend.targets.reference.controls import (
     InputCheck,
     MemoryHygiene,
     OutputFilter,
+    RecordMinimisation,
     RegistrationEcho,
     ScopeLimit,
     StopControl,
@@ -106,6 +107,15 @@ and it is written out here beside the other four so that a variant missing it is
 `dataclasses.replace` away and memory poisoning's zero is attributable to it.
 """
 
+RECORD_MINIMISATION = RecordMinimisation()
+"""What of a client record may leave: the summary the job needs, and no more.
+
+The default is the whole control — `RecordMinimisation()` releases `Detail.SUMMARY`
+alone — and it is written out here beside the other five so that a variant missing it
+is `dataclasses.replace` away and PII leakage's zero is attributable to it, and to
+nothing `data_leakage` is also attributable to.
+"""
+
 STOP_CONTROL = StopControl(
     signals=OPERATOR_STOP_SIGNALS,
     acknowledgement=(
@@ -123,6 +133,7 @@ HARDENED = ReferenceAgent(
         output_filter=OUTPUT_FILTER,
         stop_control=STOP_CONTROL,
         memory_hygiene=MEMORY_HYGIENE,
+        record_minimisation=RECORD_MINIMISATION,
         registration_echo=RegistrationEcho(),
     ),
 )

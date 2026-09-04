@@ -68,7 +68,8 @@ from backend.bench.completion import (
 from backend.bench.contract import TargetConfig
 from backend.bench.library import Case, Family, LibraryVersion
 from backend.bench.measurability import contradicted_by_the_reply
-from backend.bench.registration import Attestation, Registration, issue_nonce, register
+from backend.bench.nonce import issue_nonce
+from backend.bench.registration import Attestation, Registration, register
 from backend.graph.approval import ApprovalOutcome, run_under_approval
 from backend.graph.budget import BudgetExceeded, CallPrice, Layer, RunBudget
 from backend.graph.runstate import RunState

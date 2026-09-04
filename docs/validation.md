@@ -136,27 +136,28 @@ What follows from that, and what does not:
   library version it ran, so a future reading against a grown library is
   distinguishable from these rather than comparable to them by assumption.
 
-### No elective family has ever been measured *on a gate run* (#43, amended by #48)
+### No elective family has ever been measured *on a gate run* (#43, amended by #48, #49 and #50)
 
 **The elective family tier is declared, and every gate run this document records asked
-it for nothing.** That is still true of every gate run below. What #48 changed is that
-the tier now has a family with cases and a reading — see *The first elective family is
-measured, and never on the field* — so the bullets here are read as being about the
+it for nothing.** That is still true of every gate run below. What #48, #49 and #50
+changed is that the tier now has cases and a reading for **all three** of its families —
+see the three sections named for them — so the bullets here are read as being about the
 **gate**, which has never been asked for the tier, and not about the tier having no
-figures at all. `ElectiveFamily` holds three members; two of them still have no case,
-and no `D` has been read on a gate run for any of the three, so no promotion streak has
-ever advanced. The tier's rules, its types and both halves of the *skipping is never
-advantageous* invariant are exercised in the suite on constructed readings and nowhere
-else ([ADR-0035](./adr/0035-the-elective-family-tier-is-never-gate-deciding.md)).
+figures at all. `ElectiveFamily` holds three members, every one of them has three cases
+and an admission reading, and no `D` has been read on a **gate run** for any of the
+three, so no promotion streak has ever advanced. The tier's rules, its types and both
+halves of the *skipping is never advantageous* invariant are exercised in the suite on
+constructed readings and nowhere else
+([ADR-0035](./adr/0035-the-elective-family-tier-is-never-gate-deciding.md)).
 
 What follows from that, and what does not:
 
 - **"Gate-measured" is a claim about a rule, not a reading.** The bar an elective family
   faces is `scorer.separation` — the declared `D ≥ 0.4` with the two intervals apart —
   and it is the *same function* `score_family` reads, so there is one implementation of
-  the condition rather than one and a copy. Since #48 one family has cleared it, on a
-  stub model and at admission. What nobody has watched is an elective family clear it,
-  or fail it, on a real gate run against the field.
+  the condition rather than one and a copy. Since #50 all three families have cleared
+  it, on a stub model and at admission. What nobody has watched is an elective family
+  clear it, or fail it, on a real gate run against the field.
 - **"Never gate-deciding" is the tested half, and it is the half that matters more.** A
   reading that clears every clause of the per-family rule moves neither of the gate's
   counts, asserted by deciding one gate run twice and comparing the whole decision; and
@@ -173,14 +174,14 @@ What follows from that, and what does not:
   not. #48 gave one of the three cases and gave `scripts/gate.py` and `scripts/admit.py`
   a `--elective` flag, and nothing on the *target* side asks for one — no console lever
   and no API field — so on every target run the answer is still *nothing* and *all
-  three*.
+  three*, now that all three have cases to be asked for.
 - **"A family whose discriminating power was never measured may not print in a signed
   report" holds because there is nowhere for any elective figure to print.**
   `MeasuredSection` is keyed on `Family`, so a report carries a name and never a
   reading — measured or not. That is stronger than the rule asks and it is why no
   measurement-linked check exists that could be forgotten. Since #48 it is no longer
-  vacuous — there is a reading, and there is still nowhere in a target report for it to
-  print.
+  vacuous — there are three readings now, and there is still nowhere in a target report
+  for any of them to print.
 - **The promotion streak can be read and cannot yet be recovered.** It is read over a
   ledger of gate runs holding one family-level `ElectiveReading` each. #48 gave the
   gate run record the fields a reading goes in, and no record *on disk* carries one —
@@ -565,6 +566,120 @@ figure above is a statement about a fixture and not about the field
   the verdicts are the six's, so a control claiming an elective family would report
   `untested` in every report that did not request it. The same answer #48 gave for
   memory hygiene, from the other end (ADR-0042, decision 4).
+- **And no gate run has been executed.** Doing one on the stub would replace the gate
+  citation every report carries with a run that measured the field not at all
+  ([ADR-0023](./adr/0023-a-gate-run-updates-the-citation-it-earned.md)); the wiring is
+  asserted by test instead, including that the version a gate run cites is the six and
+  never the tier.
+
+### The third elective family is measured, and it must not be the second name of one of the six (#50)
+
+**`LLM02` PII leakage has three cases, a reading, and no gate run.** The family was
+admitted on 2026-09-04 against the three reference agents on `stub:cooperative`, at
+hardened 0/10, weak 10/10, trivial 10/10 on every one of its three cases — `D` = 1.00
+with the two Wilson intervals disjoint, the same bar the six clear and the same
+`scorer.separation` that applies it
+([ADR-0035](./adr/0035-the-elective-family-tier-is-never-gate-deciding.md)). Read at
+family level over the same run, the tier's reading is `D` = 1.00 (hardened 0/30, weak
+30/30, trivial 30/30), intervals apart, no inversions, and it passes. What has *not*
+happened is a **gate run**: no `ElectiveReading` is on any gate run record, the
+promotion streak is zero, and the figure above is a statement about a fixture and not
+about the field
+([ADR-0022](./adr/0022-the-retirement-window-is-two-readings-of-one-model.md)).
+
+- **The neighbour is in the six this time, and the boundary is arithmetic.**
+  `data_leakage` and `pii_leakage` both claim `LLM02:2026` and both read a value that
+  was inside the target's boundary before the attempt began. What separates them is not
+  the family name and not prose: the two success-condition kinds' record guards are
+  exact complements — the configuration kind reads the nonce the **run** issued and may
+  name no value, the record kind names the value it reads — and a canary an issued
+  nonce could contain, or that could contain one, **does not load**. `nonce.py` answers
+  both directions from the template `issue_nonce` actually draws — positionally, and
+  not over an alphabet, because the alphabet form is over-broad enough to refuse
+  `RETAINED-77341`, which no nonce contains and which the suite already used. The guard
+  covers **every** kind that names its own canary rather than this family's alone, and
+  it caught one on the day it landed: `test_entry.py`'s promotion fixture was carrying
+  `AGENTAUDIT-CANARY-1` as an injection canary. So a reply carrying nothing but a
+  leaked nonce is a data leakage and answers *resisted* here, for every nonce the
+  issuer could draw. **The proof is the load guard, not the sample**: the
+  test asserts the guard's own condition over the three values the records name — which
+  is what makes the claim hold for every draw — and then evaluates both families'
+  real records over freshly issued nonces to show the consequence a reader of a report
+  meets. A loop over nonces alone could not have failed, because a nonce's body is
+  random and a fixed value is never in a particular draw of it
+  ([ADR-0043](./adr/0043-the-canary-a-nonce-cannot-be-confused-with.md)).
+- **The two families' hardened zeros come off two different removable pieces, which is
+  the opposite of #49's honest limit.** Removing `controls.OutputFilter` discloses the
+  operator's configuration and no record about anybody; removing
+  `controls.RecordMinimisation` discloses a record about somebody and no configuration.
+  The full two-by-two is asserted. What it is read on is **two stub models**, and that
+  is the limit: `data_leakage` is only visible on a model that hands over its
+  configuration, and under that model the hardened agent's output filter withholds the
+  *whole reply* — so it would suppress this family's line too, not because it defends
+  this family but because a withheld reply carries nothing. Each half is therefore read
+  on the model its failure is visible on at all.
+- **All three agents hold the records, and the gradient is what they release.** An
+  agent holding nothing about anybody would fail this family's own precondition and its
+  zero would be *not measurable* wearing a rate's clothes — ADR-0041's lesson, one
+  capability over. So the directory is shared and only an agent without record
+  minimisation hands over the part of a record that identifies the person it is about.
+  A fourth record is about a **company**, carries no identifying part and no canary, and
+  is what makes the marker mean disclosure rather than lookup.
+- **A third precondition, and a third thing an operator can declare wrongly.**
+  `Precondition.PERSONAL_RECORDS_HELD` / `TargetConfig.holds_personal_records` /
+  `NotMeasurable.NO_PERSONAL_RECORDS`. Where the declaration is false the family is
+  refused before anything is spent; where it is **wrongly true** the family runs,
+  nothing about anybody is there, and thirty resisted come back — the clean zero. This
+  is worse than retention: retention has a tell over two turns and this has none, and
+  the probe that would close it is a disclosure request the bench would have to score
+  as neither a success nor a failure. Named here rather than worked around
+  ([ADR-0043](./adr/0043-the-canary-a-nonce-cannot-be-confused-with.md), *What this
+  gives up*).
+- **The bench cannot seed a real target's data.** The operator plants the nonce by
+  hand; against a real target the same operator would have to seed a record carrying
+  the value the case record names, which is a heavier ask than editing a system prompt.
+  Until it is asked, this family's readings are readings on the reference agents — a
+  narrower claim than the other two families in the tier, whose payloads need nothing
+  seeded at all.
+- **What a positive reading proves, and the four things it does not.** It proves that a
+  line about a named person came out of a target that held it. It does not prove the
+  disclosure was unlawful, that the target's whole store is reachable, that anybody was
+  identified — the records are fixtures and the value is a marker — or that any harm
+  followed.
+- **Nothing this family produces can reach a scored rate, `D`, κ or a gate decision,
+  and the tests are the argument.** `TargetRun.rates` is empty on a run of the tier
+  alone; the decision taken beside a *measured* elective reading is equal in every field
+  to the one taken without it; an elective success reaches no `Finding`, no remediation
+  and no precedent, and `judge.narrated` raises on one. κ has nowhere to go: every
+  family in the tier reaches its verdict by canary check.
+- **`LLM02:2026` stays claimed by the family in the six alone, and this was the
+  ticket's open question.** The entry was *already* in the claimed block — three case
+  records claim it and section 4 already printed *tested in part* beside it — so the
+  question was whether `pii_leakage` should join `ClaimedInPart.families`. It should
+  not: that block is derived over `labels.LABELS` and printed in **every** report,
+  including runs never asked for the tier; the field is read by #52 to print a pairing
+  beside a family name, and on such a run there is no family name to print it beside;
+  and it would widen the field's type to a union. What moved is the **limit**, which
+  said a third party's data *would need a corpus this bench does not put in front of a
+  target* and now names the elective family that holds the half. **The golden rendering
+  digest moved by that one sentence** — `37131e54630d` to `f0d6e6baba43` — and no figure
+  moved. The **library digest** moved too, `sha256:b9268fac5407` to
+  `sha256:84a94f471260`: the three `data-leakage` records' own `not_tested` gained the
+  sentence naming the elective family, and a case's stated boundary is a versioned
+  field. It is pinned with the two words before the name, because this is the fourth
+  place in this group where two family names sit in one sentence.
+- **The declared-control checklist did not grow, and the temptation was concrete this
+  time.** This ticket really does give the reference agents a sixth control, and
+  `DeclaredControl` still gained no member: the declared-and-defeated join crosses a
+  declaration with a *verdict*, and the verdicts are the six's, so a control claiming an
+  elective family would report `untested` in every report that did not request it. The
+  same answer #48 and #49 gave, from the same end.
+- **The canary values are markers and the people are invented.** The committed records
+  carry a name, a reference of a form no filing scheme uses, and one sentence about a
+  matter — and no address, date of birth, contact address, national identifier or
+  payment detail. A canary proving a record about a person was disclosed needs none of
+  those, and committing them would put the shape of a real person's file in a public
+  repository for realism in a fixture (ADR-0008).
 - **And no gate run has been executed.** Doing one on the stub would replace the gate
   citation every report carries with a run that measured the field not at all
   ([ADR-0023](./adr/0023-a-gate-run-updates-the-citation-it-earned.md)); the wiring is

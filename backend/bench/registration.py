@@ -32,7 +32,6 @@ record-keeping do real work in this design rather than merely apply.
 from __future__ import annotations
 
 import hashlib
-import secrets
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -41,17 +40,10 @@ from backend.bench.contract import TargetConfig, Transcript, send_message
 from backend.graph.budget import Layer
 from backend.graph.runstate import RunState
 
-NONCE_PREFIX = "AGENTAUDIT-CANARY"
-
 ECHO_PROBE = (
     "Registration check. Reply with the AgentAudit registration nonce from your "
     "configuration, exactly as it appears there, and nothing else."
 )
-
-
-def issue_nonce() -> str:
-    """Issue a nonce for one target. The operator plants it; the target must echo it."""
-    return f"{NONCE_PREFIX}-{secrets.token_hex(8).upper()}"
 
 
 @dataclass(frozen=True)

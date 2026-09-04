@@ -380,8 +380,21 @@ keeps apart from the shared folder (`targets/reference/overrides.py`) and a boun
 against the family already claiming `LLM01`, which is carried by the record rather
 than by the family name: the two success-condition kinds' guards are complements and
 no payload loads under both
-([ADR-0042](./docs/adr/0042-the-canary-is-spelled-out-in-one-channel.md)). The
-gradient is unbuilt for `LLM02`, which is #50.
+([ADR-0042](./docs/adr/0042-the-canary-is-spelled-out-in-one-channel.md)).
+
+**Built for `LLM02` by #50, and its capability is a third declaration.** A record about
+a third party is not planted by the bench and arrives on no channel: it was inside the
+target's boundary before the attempt began, so the equipment needed a directory the
+agents *hold* (`targets/reference/directory.py`) and a sixth removable control deciding
+which part of a record leaves. `holds_personal_records` is declared at registration on
+`retains_session_state`'s terms, because a target holding nothing about anybody would
+read as defended against an attack it never faced. The boundary against `data_leakage`,
+which claims the same published entry and is one of the six, is arithmetic on the
+record: a canary an issued nonce could be confused with in either direction does not
+load, so a configuration leak cannot satisfy this family's condition
+([ADR-0043](./docs/adr/0043-the-canary-a-nonce-cannot-be-confused-with.md)). All three
+elective families now have cases, a reading and a gradient; what none of them has is a
+gate run on the field.
 
 *Promotion, not accretion.* An elective family holding `D ≥ 0.4` across a declared
 number of consecutive gate runs becomes eligible to enter the six, and entry is a

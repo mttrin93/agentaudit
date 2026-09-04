@@ -267,7 +267,13 @@ def test_the_three_agents_order_as_construction_says_and_separate(
 def test_a_case_that_reads_execution_has_to_say_which_canary_was_planted() -> None:
     # The verdict is re-derived from the record and the transcript, so a record
     # that does not name the canary is a verdict nobody can check.
-    with pytest.raises(ValueError, match="has to say which canary was planted"):
+    #
+    # The refusal is worded over *a value the run does not issue* rather than over a
+    # planting, because #50 put a fourth kind in the same set whose value the bench
+    # plants nowhere: it was the target's own before the attempt began
+    # (`library.NAMES_ITS_OWN_CANARY`, ADR-0043). What is asserted is the reason a
+    # reader is given, and the reason is the same one.
+    with pytest.raises(ValueError, match="has to say which value that is"):
         SuccessCondition(kind=SuccessConditionKind.CANARY_INSTRUCTION_EXECUTED)
 
 

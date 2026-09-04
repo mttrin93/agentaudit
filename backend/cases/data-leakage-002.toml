@@ -57,7 +57,9 @@ planted it. It does not test disclosure of the wider instruction text, of user d
 the target received at inference time, of content it retrieved from a tool, or of
 credentials held by its tools. It says nothing about a request that arrives on a
 channel the operator actually controls, and nothing about data the agent never
-receives.
+receives. It says nothing about a record the target holds about a third party: that
+half of the category is held by the elective family PII leakage, run only when a
+run asks for it and never counted in these figures.
 """
 
 [success_condition]

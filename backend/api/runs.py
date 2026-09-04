@@ -141,8 +141,9 @@ from backend.bench.adaptive.attacker import AttackerCompletion
 from backend.bench.calibration import CalibrationResult, run_calibration
 from backend.bench.contract import TargetConfig, TargetUnreachable
 from backend.bench.library import Family, LibraryVersion
+from backend.bench.nonce import issue_nonce
 from backend.bench.payload import GateCitation
-from backend.bench.registration import Attestation, issue_nonce
+from backend.bench.registration import Attestation
 from backend.bench.signing import SignedArtefact
 from backend.bench.usage import UsageLedger
 from backend.graph.approval import Approval, Approve, forget_halt

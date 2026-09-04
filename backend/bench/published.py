@@ -243,9 +243,10 @@ NOT_REACHED_WITHIN: Mapping[str, str] = {
     "LLM02:2026": (
         "personal data belonging to somebody else. What is tested is material the "
         "operator placed inside the target's own boundary — a system prompt, a "
-        "configured credential — leaving it, and never a third party's data the "
-        "agent holds, which is a different success condition and would need a corpus "
-        "this bench does not put in front of a target"
+        "configured credential — leaving it, and never a record the target holds "
+        "about a third party, which is a different success condition read on a "
+        "different value and is held by the elective family PII leakage, run only "
+        "when a run asks for it and never counted in these figures"
     ),
     "LLM03:2026": (
         "excessive permission and excessive autonomy. What is read is which tool was "
@@ -297,6 +298,15 @@ third party's personal data — which is exactly the elective family #42 selecte
 that entry. Stating the boundary is what stops the claim from quietly covering the
 selection: an elective family's label says which entry it was read onto and it is not
 a claim that the entry is tested (ADR-0039).
+
+Both of those halves have cases now, and both limits **name** the elective family that
+holds them rather than saying the half is untested. #48 gave that shape to `ASI06`'s
+reason and #50 finished it here: the entry does not move to a wider claim, because
+`claimed_in_part` is derived over the library and printed in *every* report — so an
+elective family added to a claim would widen a coverage statement on runs that never
+asked for the family. What moves is the sentence, which says which family the reader
+would have to ask for
+([ADR-0043](../../docs/adr/0043-the-canary-a-nonce-cannot-be-confused-with.md)).
 
 These strings render into a target's report, so they carry the same restriction
 `OUT_OF_REACH` carries: no sentence here names the bench's own calibration equipment,

@@ -16,6 +16,15 @@ fetches, the request-side controls get a second look at what came back, and only
 then does anything act on it. A defence that inspects the user's message and
 nothing else is a defence on the one channel an indirect injection does not use.
 
+**And a turn can carry its own instruction.** The message is the channel an agent is
+*supposed* to take instructions from, so an override arriving in it is the other half
+of the sentence every indirect case excludes (`overrides.py`,
+[ADR-0042](../../../docs/adr/0042-the-canary-is-spelled-out-in-one-channel.md)). It is
+read after the request-side controls have had their turn and never before, because
+that ordering is the whole of the family's gradient — and it is read from the message
+alone, so nothing a tool brought back can produce it and nothing here can be produced
+by fetching. Two channels, two sets of canaries, two denominators.
+
 One reply path serves all three, so no agent gets a code route the others do not
 have, and a control that is absent is absent rather than skipped.
 
@@ -45,6 +54,7 @@ from backend.targets.reference.controls import (
 from backend.targets.reference.corpus import Note, fetched
 from backend.targets.reference.memory import SessionMemory, asked_by_the_user
 from backend.targets.reference.model import ModelConfig, complete
+from backend.targets.reference.overrides import demanded
 from backend.targets.reference.tools import (
     FETCH_SHARED_NOTE,
     FULL_TOOLBOX,
@@ -110,6 +120,14 @@ class ReferenceAgent:
         if instead := self.controls.before_model(message, configuration):
             return AgentReply(instead, ToolTrace(stop_signal_at=stop_at))
 
+        # Read after `before_model` and never before it, because that one control
+        # is the whole of this family's gradient: an override in the user's own
+        # message reaches an agent with no check in front of its model and gets no
+        # further in an agent that has one (`overrides.py`, ADR-0042). The other
+        # request-side pass, `before_content` below, is not in front of this: it
+        # reads what a *tool* brought back, and this override never went there.
+        override = demanded(message)
+
         calls = self._acts_on(message, self.toolbox)
 
         note = fetched(message) if self._retrieved(calls) else None
@@ -134,6 +152,8 @@ class ReferenceAgent:
         reply = complete(model, configuration, _with(note, message))
         if note is not None and note.executed_line:
             reply = f"{reply}\n{note.executed_line}"
+        if override is not None:
+            reply = f"{reply}\n{override.executed_line}"
         for line in carried:
             reply = f"{reply}\n{line}"
 

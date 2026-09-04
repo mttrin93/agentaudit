@@ -372,10 +372,13 @@ on the footing that a wrong article is worse than a blank; the member exists now
 was the last blank column in the tree, and a label bearing no article is refused where
 it is written rather than guarded against per reader (ADR-0040).
 
-The three are labels for families with no cases on disk. That is the tier's shape
-rather than a gap in this table: a member exists so the cases have somewhere to arrive
+Two of the three now label families with cases on disk — #48 brought memory
+poisoning's and #49 brought direct prompt injection's — and the table did not change
+when they arrived, which is the tier's shape rather than an oversight: a member exists
+so the cases have somewhere to land
 ([ADR-0035](../../docs/adr/0035-the-elective-family-tier-is-never-gate-deciding.md)),
-and #48, #49 and #50 bring them.
+and a label is a claim about which entry a family was read onto rather than a claim
+that the entry is tested. `pii_leakage` is the one still waiting, and #50 brings it.
 """
 
 

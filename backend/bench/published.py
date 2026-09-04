@@ -42,14 +42,19 @@ reads it. An elective family's label is a true statement about which published e
 that family was selected from, and it is not a statement that the bench tests the
 entry.
 
-**Since #48 one of the tier's families has cases, and the rule did not change.**
-Memory poisoning holds three, and `ASI06` is still printed as untested — because the
-tier is **requested**, and a report is about one target (ADR-0018). A subtraction that
-read `ELECTIVE_LABELS` would print a category as covered in every report, including
-the runs that were never asked for the family; what a run *was* asked for is a fact
-about that run and is stated in the block `elective.ElectiveSelection` writes. So the
-reason beside `ASI06` moved and the entry did not, which is the direction this module
-errs in on purpose (ADR-0035, ADR-0039).
+**Since #48 two of the tier's families have cases, and the rule did not change.**
+Memory poisoning holds three and direct prompt injection holds three, and `ASI06` is
+still printed as untested — because the tier is **requested**, and a report is about
+one target (ADR-0018). A subtraction that read `ELECTIVE_LABELS` would print a
+category as covered in every report, including the runs that were never asked for the
+family; what a run *was* asked for is a fact about that run and is stated in the block
+`elective.ElectiveSelection` writes. So the reason beside `ASI06` moved and the entry
+did not, which is the direction this module errs in on purpose (ADR-0035, ADR-0039).
+
+**`LLM01:2026` is the entry where nothing here moved at all.** Its limit was written
+with the tier already declared and is still exactly true, so neither the reason nor
+the block it sits in changed when #49 gave the direct half a family; the argument is
+[ADR-0042](../../docs/adr/0042-the-canary-is-spelled-out-in-one-channel.md) decision 5.
 
 Only the subtractions are computed — and they are computed over the **library's
 families**, never over the families one run happened to measure. That boundary is

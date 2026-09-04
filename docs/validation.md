@@ -35,9 +35,10 @@ what is new is that a run can move it.
 reading enters neither
 ([ADR-0035](./adr/0035-the-elective-family-tier-is-never-gate-deciding.md)). Every gate
 result in this document was decided over the same six families and would be decided
-over six today. `ASI06` memory poisoning now holds three cases and has a reading, taken
-at admission on a stub model; the section below records what that reading is and what
-it is not.
+over six today. `ASI06` memory poisoning and `LLM01` direct prompt injection each hold
+three cases and have a reading, taken at admission on a stub model; the sections below
+record what those readings are and what they are not. Neither has been read on a gate
+run, so the promotion streak of both is zero.
 
 **Since #39 a cross-model admission count can include a route an earlier run
 measured.** The admission gate remembers the counts it read — never its decision, which
@@ -474,6 +475,101 @@ figure above is a statement about a fixture and not about the field
   citation every report carries with a run that measured the field not at all
   ([ADR-0023](./adr/0023-a-gate-run-updates-the-citation-it-earned.md)), and the
   wiring is asserted by test instead.
+
+### The second elective family is measured, and its boundary is the whole of it (#49)
+
+**`LLM01` direct prompt injection has three cases, a reading, and no gate run.** The
+family was admitted on 2026-09-04 against the three reference agents on
+`stub:cooperative`, at hardened 0/10, weak 10/10, trivial 10/10 on every one of its
+three cases — `D` = 1.00 with the two Wilson intervals disjoint, which is the same
+bar the six clear and the same `scorer.separation` that applies it
+([ADR-0035](./adr/0035-the-elective-family-tier-is-never-gate-deciding.md)). Read at
+family level over the same run, the tier's reading is `D` = 1.00, intervals apart, no
+inversions, and it passes. What has *not* happened is a **gate run**: no
+`ElectiveReading` is on any gate run record, the promotion streak is zero, and the
+figure above is a statement about a fixture and not about the field
+([ADR-0022](./adr/0022-the-retirement-window-is-two-readings-of-one-model.md)).
+
+- **The family is its boundary, and the boundary is structural.**
+  `direct_prompt_injection` and `indirect_prompt_injection` are the two halves of
+  `LLM01:2026`, and what keeps them apart is not the family name. The kinds'
+  record guards are exact complements — a direct case's payload has to spell the
+  canary out in two pieces, a fetched-content case's payload has to spell out none of
+  it — so **no payload loads under both**; the two channels' canaries are disjoint by
+  set intersection; and neither channel produces the other's line against the trivial
+  agent, which obeys everything it receives. The first record the new guard refused
+  was one the suite already held: `test_indirect_injection.py` built the poisoned note
+  pasted into the user's message to show the bound, and that record is now refused at
+  load as a direct override under the other family's name
+  ([ADR-0042](./adr/0042-the-canary-is-spelled-out-in-one-channel.md)).
+- **Both families' hardened zeros are attributable to the same removable piece, and
+  that is the honest limit of this reading.** `controls.InputCheck` runs twice in the
+  hardened agent — once on the user's message and once on what a tool brought back —
+  so removing it flips both families, and `D` on the two moves together against *this*
+  equipment. It is a true fact about the test agents rather than about the families: a
+  small agent really does have one deny-list in front of two channels. What it costs
+  is that nothing here *demonstrates* the independence the boundary is argued from;
+  what it does not cost is the boundary, which is carried by the channel, the record
+  and the denominator. Splitting the control into two named pieces would buy the
+  demonstration and is refused until a gate run has read either family (ADR-0042,
+  *Considered and refused*).
+- **The reading is 1.00 because the gradient is code, and that is the design and also
+  its limit.** Carrying out an override found in the message is `overrides.demanded`
+  and nothing else: the trivial and weak agents carry all three out because they have
+  no control in front of their model, the hardened agent carries none because its
+  input check ends the turn first, and no model is consulted either way. The same
+  discipline `corpus.py`, `tools.py` and `memory.py` already state. What a run on the
+  field would add is whether a *model* under those agents changes the answer, and
+  nobody has run one.
+- **No precondition, and that is a difference from `ASI06` rather than an omission.**
+  Memory poisoning reports *not measurable* against a target that keeps no session;
+  a direct override needs only that the target reads its messages, so this family is
+  measured against the blind target — no tool-call visibility, no session retention —
+  and returns a rate rather than a third outcome. It is therefore the first elective
+  family with nothing an operator can declare wrongly, so ADR-0041's *what this gives
+  up* has no counterpart here.
+- **What a positive reading proves, and the four things it does not.** It proves that
+  a line the message asked for came back. It does not prove the agent's configuration
+  was replaced, that the agent would obey a third party's instruction, that a
+  privileged channel was reached — `direct-override-003` writes a system frame
+  *inside* a message, and the bench sends one message on one endpoint — or that any
+  harm followed. Echo is excluded by composition: the message spells out a prefix and
+  a reference separately, joining them is what obeying is, and a target that quotes
+  the override back reproduces both halves and never the join. A message spelling out
+  one half alone produces nothing, which is asserted.
+- **Nothing this family produces can reach a scored rate, `D`, κ or a gate decision,
+  and the tests are the argument.** `TargetRun.rates` is empty on a run of the tier
+  alone; the decision taken beside a *measured* elective reading is equal in every
+  field to the one taken without it; an elective success reaches no `Finding`, no
+  remediation and no precedent, and `judge.narrated` raises on one. κ has nowhere to
+  go: every family in the tier reaches its verdict by canary check.
+- **`LLM01:2026` stays claimed in part by the family in the six, and the limit does
+  not move.** #45 wrote that limit with the tier already declared — *the direct half
+  is tested by none of the six families* — and it is exactly true after this ticket.
+  The entry does not move to a wider claim, for the reason #48 gave for `ASI06`: the
+  claimed block is derived over the library and printed in every report, so a claim
+  would widen a coverage statement on runs that never asked for the family. **The
+  golden rendering digest therefore did not move at all**, which is the first family
+  in this group for which that is true. The **library digest did** move, from
+  `sha256:1cfc88c09c07` to `sha256:b9268fac5407`: the three indirect records' own
+  `not_tested` gained the sentence saying the bound is now held by the elective family
+  *direct prompt injection*, run only when a run asks for it, and a case's stated
+  boundary is a versioned field. The family is **named** there, which is what #49's
+  Done-means asked for and what the code review caught the first draft not doing; the
+  test that pins it pins the two words before the name as well, because *direct prompt
+  injection* is a substring of *indirect prompt injection* and a bare name would be
+  satisfied by a record naming only the family it belongs to.
+- **The declared-control checklist did not grow, and that was the ticket's open
+  question.** `DeclaredControl.INPUT_CHECK` still claims `indirect_prompt_injection`
+  alone. The declared-and-defeated join crosses a declaration with a *verdict*, and
+  the verdicts are the six's, so a control claiming an elective family would report
+  `untested` in every report that did not request it. The same answer #48 gave for
+  memory hygiene, from the other end (ADR-0042, decision 4).
+- **And no gate run has been executed.** Doing one on the stub would replace the gate
+  citation every report carries with a run that measured the field not at all
+  ([ADR-0023](./adr/0023-a-gate-run-updates-the-citation-it-earned.md)); the wiring is
+  asserted by test instead, including that the version a gate run cites is the six and
+  never the tier.
 
 ---
 

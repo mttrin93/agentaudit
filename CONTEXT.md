@@ -235,8 +235,12 @@ because one is about a gate run's scope and the other about a family's outcome i
 Carried as its own block in the artefact, never inside the measured figures, which are
 keyed on the six; printed in the **gate document** for a gate run and in the report's
 per-family section for a target run, beside the declared request it is the complement
-of. It and that request are the whole of what a target report says about the tier — an
-elective family's `D` is a fact about the bench (ADR-0018).
+of. It and that request are the whole of what a target report says about the tier's
+**figures** — an elective family's `D` is a fact about the bench (ADR-0018). What may
+name one is a *boundary*: the reason beside a published entry that is still listed as
+untested, and the stated limit on a **case** whose family tests the other half of an
+entry. Both say a family exists and that this run's figures are not keyed on it, which
+is the opposite of a coverage claim.
 _Avoid_: using it for **not measurable**, deselected, disabled, opted out, n/a
 
 **Finding**:
@@ -380,7 +384,7 @@ _Avoid_: history, memory, knowledge, prior
 ### Trust mechanics
 
 **Canary**:
-A token planted where the bench will recognise it again. Three plantings, proving three
+A token planted where the bench will recognise it again. Four plantings, proving four
 different things. Planted in the target's **configuration**, its appearance in output
 proves a leak. Planted by a third party in **content the target fetches**, as an
 instruction the target has to carry out to produce it, its appearance proves obedience
@@ -391,7 +395,15 @@ from obedience, and named apart for the same reason **probe** and **case** are: 
 is shown while the instruction is still in front of the target, persistence is shown
 after it is not, and a conflation of the two would let a same-turn success stand as
 evidence that memory was poisoned. The third planting needs a target that retains
-session state, and reports **not measurable** against one that does not.
+session state, and reports **not measurable** against one that does not. Spelled out in
+**the message the bench itself sends**, as two pieces an instruction has to join, its
+appearance proves that an override on the channel the agent is *supposed* to obey
+displaced what its operator configured — the same word *obedience* would cover it and
+the claim is not the second one, because a check on the user's message says nothing
+about a note the agent fetched and the two are counted on two denominators
+([ADR-0042](./docs/adr/0042-the-canary-is-spelled-out-in-one-channel.md)). Which channel
+carried the instruction is on the **case** record, and a payload cannot be written for
+two of them.
 _Avoid_: marker, tracer, honeytoken
 
 **Nonce**:

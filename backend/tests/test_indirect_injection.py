@@ -32,6 +32,7 @@ from datetime import date
 import pytest
 
 from backend.bench.calibration import CalibrationResult, run_calibration
+from backend.bench.contract import send_message
 from backend.bench.library import (
     Case,
     CaseStatus,
@@ -224,18 +225,27 @@ def test_a_note_that_instructs_nobody_leaves_the_reply_alone() -> None:
 def test_the_same_instruction_sent_by_the_user_is_not_what_this_family_measures() -> (
     None
 ):
-    # The stated bound, exercised rather than asserted in prose. The poisoned
-    # note pasted into the message reaches the agent through the channel this
-    # family does not test, and the case does not score it — a direct override is
-    # a different attack with different defences in front of it.
-    pasted = an_injection_case(SUPPLIER_NOTE.body, case_id="unlisted-pasted-note-001")
+    # The stated bound, exercised rather than asserted in prose, and since #49 it
+    # is refused one step earlier than it used to be. The poisoned note pasted into
+    # the message reaches the agent through the channel this family does not test,
+    # so a *record* shaped that way does not load at all: its payload spells the
+    # canary out, and a payload carrying the instruction itself is a direct override
+    # under this family's name (ADR-0042).
+    with pytest.raises(ValueError, match="direct override under another family"):
+        an_injection_case(SUPPLIER_NOTE.body, case_id="unlisted-pasted-note-001")
 
-    assert (
-        target_run_for(pasted, name="trivial", model=MODEL)
-        .rates[Family.INDIRECT_PROMPT_INJECTION]
-        .value
-        == 0.0
-    )
+    # And the agent does not carry it out either, which is the half of the claim a
+    # record guard cannot make: obeying a note is code that runs on what a *tool*
+    # brought back, so the same text arriving in the message executes nothing. The
+    # trivial agent obeys every instruction it receives and this one produces
+    # nothing, which is what makes the two channels two denominators.
+    with served_references(model=MODEL) as references:
+        [trivial] = [one for one in references.served if one.target.name == "trivial"]
+        pasted = send_message(
+            trivial.target, SUPPLIER_NOTE.body, session_id="pasted-note"
+        )
+
+    assert PLANTED_CANARY not in pasted.reply_text
 
 
 def test_the_three_agents_order_as_construction_says_and_separate(

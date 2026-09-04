@@ -371,8 +371,17 @@ they carry into a later turn — a fifth removable control,
 own precondition and read as *not measurable* rather than as defended. `SESSION_RETENTION`
 is a `Precondition` declared at registration, and the verdict is read over two turns
 in one session with the planting turn as its own control
-([ADR-0041](./docs/adr/0041-the-persistence-canary-is-read-over-two-turns.md)). The
-gradient is unbuilt for `LLM01` and `LLM02`, which are #49 and #50.
+([ADR-0041](./docs/adr/0041-the-persistence-canary-is-read-over-two-turns.md)).
+
+**Built for `LLM01` by #49, and it needed no capability at all.** A direct override
+arrives in the message every target already reads, so the family has no precondition
+and no `NotMeasurable` route of its own — what it needed was a channel the equipment
+keeps apart from the shared folder (`targets/reference/overrides.py`) and a boundary
+against the family already claiming `LLM01`, which is carried by the record rather
+than by the family name: the two success-condition kinds' guards are complements and
+no payload loads under both
+([ADR-0042](./docs/adr/0042-the-canary-is-spelled-out-in-one-channel.md)). The
+gradient is unbuilt for `LLM02`, which is #50.
 
 *Promotion, not accretion.* An elective family holding `D ≥ 0.4` across a declared
 number of consecutive gate runs becomes eligible to enter the six, and entry is a

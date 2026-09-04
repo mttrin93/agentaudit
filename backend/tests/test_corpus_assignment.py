@@ -291,32 +291,37 @@ def test_a_marker_a_line_break_runs_through_still_fires() -> None:
     assert "word for word + the text above" in wrapped.matched
 
 
-def test_two_declared_queries_search_for_families_nothing_may_assign_to() -> None:
-    # A pinned reading and a tripwire, on `test_the_library_version_did_not_move`'s
-    # terms: the ticket that is *supposed* to trip it is #67.
+def test_every_declared_query_searches_for_a_family_something_may_assign_to() -> None:
+    # #64's mismatch, resolved by #67 — and resolved by re-keying rather than by
+    # deleting the test that pinned it, because what was pinned is a *reading* about
+    # the corpus and the reading has not changed.
     #
-    # #63 declared three queries. Two of the three name families this instrument
-    # refuses, so nothing that comes back from either can be assigned to the family
-    # that searched for it — and the `indirect_prompt_injection` query is worse than
-    # unusable, because its text is verbatim the shape of a `direct_prompt_injection`
-    # payload, so its results are material for a *different* family on a *different*
-    # denominator. Measured over the whole corpus: 739 of 28,214 rows are proposed as
-    # direct prompt injection and none of the six reaches double figures
-    # (docs/validation.md).
+    # What #64 measured: two of the three declared queries named families
+    # `NOT_PROPOSABLE` refuses, so nothing either returned could be assigned to the
+    # family that searched for it. The `indirect_prompt_injection` query was the
+    # sharper case, its text being verbatim the shape of a `direct_prompt_injection`
+    # payload — 739 of 28,214 rows propose as that family, and not one of the six
+    # reaches twenty candidates, the closest being `data_leakage` at nineteen and
+    # hand-read as zero cases (docs/validation.md). *Double figures* was the earlier
+    # wording and nineteen reaches it; the claim was always about twenty.
     #
-    # The query text is #63's declared input and this ticket does not rewrite it, for
-    # the reason ADR-0046 gives. What it does is make the mismatch fail a test rather
-    # than sit in prose, so that #67 has to decide about it rather than inherit it.
+    # What #67 decides: the corpus is searched for the one family it can supply.
+    # The override query is re-keyed to the family whose payloads it was always
+    # returning, and the other two are dropped rather than re-keyed, because a query
+    # for a family the corpus holds nothing usable for is a search whose result a
+    # person has to read to discover is empty.
     searching = set(DECLARED_QUERIES)
-    assert searching & set(NOT_PROPOSABLE) == {
-        Family.INDIRECT_PROMPT_INJECTION,
-        Family.SCOPE_CREEP,
-    }
-    assert searching & set(PROPOSABLE) == {Family.DATA_LEAKAGE}
 
-    # And no query has been added for either family the corpus can actually supply,
-    # which is the other half of the same mismatch: both are on the elective tier.
+    assert searching == {ElectiveFamily.DIRECT_PROMPT_INJECTION}
+    assert searching & set(NOT_PROPOSABLE) == set()
+    assert searching <= set(PROPOSABLE)
+
+    # And the two proposable families left without a query are exactly the two #64
+    # hand-read at zero: 19 candidates for `data_leakage` and none of the nineteen a
+    # case, 23 for `pii_leakage` and none of the twenty-three. Asserted so that
+    # adding a query back for either is a decision somebody makes against the
+    # reading rather than a line somebody adds.
     assert set(PROPOSABLE) - searching == {
-        ElectiveFamily.DIRECT_PROMPT_INJECTION,
+        Family.DATA_LEAKAGE,
         ElectiveFamily.PII_LEAKAGE,
     }

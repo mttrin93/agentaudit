@@ -1,20 +1,34 @@
 """Prints candidate phrasings from the corpus, for a person to read and judge.
 
-    uv run python -m scripts.retrieve_candidates --family data_leakage --k 20
-    uv run python -m scripts.retrieve_candidates --family scope_creep --k 20
+    uv run python -m scripts.retrieve_candidates --family direct_prompt_injection --k 70
+
+**One family is searchable and `k` is about seventy.** #64 hand-read the corpus and
+measured what is in it: the one family it holds at volume is
+`direct_prompt_injection`, on the elective tier, and yield *falls* as `k` rises — 40%
+at `k = 20`, 30% at 60, 22.5% at 120 — so twenty usable candidates need `k ≈ 70`, or
+roughly 420 rows at `OVERSAMPLE`. The other queries were dropped rather than re-keyed
+([docs/validation.md](../docs/validation.md), `corpus/queries.py`).
 
 **What comes back is candidates and never cases.** Each line is a published row, its
 address, its distance from the declared query, and the publisher's own content-safety
 label — which is not one of the six and cannot be turned into one by this script
-(`corpus/queries.py`). Which family a phrasing belongs to is a judgement, and #64 is
-the ticket that has to make that judgement into an instrument before it may sit
-upstream of a scored rate
-([ADR-0045](../docs/adr/0045-the-corpus-is-a-search-surface-and-never-a-library.md)).
+(`corpus/queries.py`). Which family a phrasing belongs to is a judgement, and #64 tried
+to make that judgement into an instrument and **measured it unfit**: κ = 0.16 against a
+declared floor of 0.40, so `assignment.propose` proposes and a person decides, and the
+person's name travels onto the record
+([ADR-0045](../docs/adr/0045-the-corpus-is-a-search-surface-and-never-a-library.md),
+[ADR-0046](../docs/adr/0046-a-family-assignment-is-proposed-here-and-decided-by-a-person.md)).
 
 **The suppressed rows are printed too, with what suppressed them.** A selection is
 only reviewable if the rejections are visible: twenty rows that all say *ignore all
 previous instructions* is the failure this group is guarding against, and the way to
 see that the guard worked is to read what it threw away and agree.
+
+**And this floor cannot see the failure it is named for.** It reads distances *within
+one selection*, so a template repeating across the corpus survives it — #64 read
+twenty-one of twenty-five candidates as one prompt-marketplace phrasing. That is why
+the population has a second floor a loader enforces, on a technique a person names
+([ADR-0048](../docs/adr/0048-a-retrieved-family-grows-by-technique-and-not-by-count.md)).
 
 **The near-duplicate floor is not an argument, and that is deliberate.** It is a
 declared input with a measurement behind it (`selection.NEAR_DUPLICATE_FLOOR`), and a
@@ -53,8 +67,11 @@ def main(argv: list[str] | None = None) -> int:
         "--family",
         required=True,
         choices=searchable(),
-        help="the family whose declared query to search with. The three families "
-        "absent from this list are absent for reasons corpus/queries.py states.",
+        help="the family whose declared query to search with. The families absent "
+        "from this list are absent for reasons corpus/queries.py states, and they "
+        "are not one reason: two are judged, one cannot be attacked by a sent prompt "
+        "at all, one is decided by the target's tool list, two were hand-read at a "
+        "yield of zero, and one was never searched.",
     )
     parser.add_argument("--k", type=int, default=20)
     parser.add_argument(

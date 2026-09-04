@@ -132,14 +132,16 @@ def case_record(case: Case) -> str:
 def _retrieval(retrieval: RetrievedFrom) -> list[str]:
     """The `[retrieval]` block a case retrieved from a published corpus carries.
 
-    Four values and all four are written, because a record that lost any of them
+    Five values and all five are written, because a record that lost any of them
     reads back as a payload with no provenance and `Case.__post_init__` refuses it
     — the round trip `enter` performs is where that would be caught, which is the
     point of writing the whole block rather than the fields a caller thought of
     ([ADR-0047](../../docs/adr/0047-a-retrieved-case-cites-its-row-and-a-person-signs-for-its-family.md)).
 
     The attribution is multi-line because it is a notice a person reads and it does
-    not fit a line; the other three are single-line values on `_basic`'s terms.
+    not fit a line, and it is written last so that a hand-edit dropping an earlier
+    line cannot leave a stray delimiter behind it; the other four are single-line
+    values on `_basic`'s terms.
     """
     return [
         "",
@@ -147,6 +149,7 @@ def _retrieval(retrieval: RetrievedFrom) -> list[str]:
         f"address = {_basic(retrieval.address)}",
         f"licence = {_basic(retrieval.licence)}",
         f"assigned_by = {_basic(retrieval.assigned_by)}",
+        f"technique = {_basic(retrieval.technique)}",
         f"attribution = {_multiline(retrieval.attribution)}",
     ]
 

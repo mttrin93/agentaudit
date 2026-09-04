@@ -14,7 +14,7 @@ side takes its input from `load_library`, and the adaptive layer reaches it thro
 ([ADR-0010](../../docs/adr/0010-two-layers-in-one-run-the-adaptive-layer-is-never-scored.md));
 a candidate that reached either would be a second edge into a scored rate that no
 declared threshold stands in front of. So the dependency runs one way — this
-package imports `Family` from the bench to key its declared queries, and the bench
+package imports `AnyFamily` from the bench to key its declared query, and the bench
 imports nothing from here — and a test asserts it
 ([ADR-0045](../../docs/adr/0045-the-corpus-is-a-search-surface-and-never-a-library.md)).
 

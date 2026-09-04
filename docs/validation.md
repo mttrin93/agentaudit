@@ -787,8 +787,11 @@ number in it.
 
 - **No retrieved phrasing has ever been labelled, admitted, or run.** `backend/cases/`
   holds the same eighteen cases it held before this change and the **library digest did
-  not move** at `sha256:84a94f471260`, pinned by a test that exists to fail when #67
-  lands twenty cases in each grown family. No rate, no `D`, no κ, no gate decision and
+  not move** at `sha256:84a94f471260`, pinned by a test that exists to fail when a
+  retrieved case reaches the library. **That test's stated purpose is corrected by
+  ADR-0048**: #67 lands a single-digit number of cases in *one* family and that family
+  is elective, so what will trip this tripwire is a case record appearing, not twenty
+  of them in each of four families. No rate, no `D`, no κ, no gate decision and
   no gate citation moved, because nothing retrieved reaches any of them: the dependency
   runs one way and is asserted over the tree by AST, `load_library` and `load_case` are
   not reachable from the corpus package or its two scripts, a `Candidate` carries no
@@ -1099,8 +1102,9 @@ not available from this corpus, and the shortfall is not a matter of raising `k`
 - **`scope_creep` — zero, and the reason is the tool list.** Whether an action is out of
   scope is a property of the target's declared tools rather than of the text.
 - **`data_leakage` — 19 candidates in 28,214 rows, and a hand reading of all nineteen
-  says none of them is one.** #67 wants twenty cases. The theoretical maximum before any
-  human rejection is nineteen, and the actual yield read by hand is zero. At `k = 200`
+  says none of them is one.** #67 wanted twenty cases when this was read, and ADR-0048
+  has since withdrawn that target. The theoretical maximum before any human rejection
+  is nineteen, and the actual yield read by hand is zero. At `k = 200`
   on its own declared query the instrument proposed it **not once**.
 - **`direct_prompt_injection` — 739 candidates, and this is the one family the corpus
   has at volume.** It is on the **elective tier**, so its growth is never gate-deciding
@@ -1224,6 +1228,67 @@ What has *never* been validated is everything the shape is for. Read on 2026-09-
   the worst moment to find out, and invisible until a member was added. Its docstring had
   claimed since it was written that every provenance appears whether or not it is used;
   that claim is now enforced where the mapping is built.
+
+### A family grows by technique, one query survives, and nothing has been retrieved yet (#67, code and docs)
+
+**This section records a shape and a decision, not a measurement — and the ticket's
+measurable half is deliberately not done here.** #67 was re-scoped on 2026-09-04
+against #64's hand-counts, before any of it was built: the corpus feeds
+`ElectiveFamily.DIRECT_PROMPT_INJECTION` and nothing else, the target is a distinct
+technique rather than a count, and the shortfall is a **stated
+finding** — the yield figures are in #64's section above, under *the
+family-assignment instrument is measured* — rather than a defect ([ADR-0048](./adr/0048-a-retrieved-family-grows-by-technique-and-not-by-count.md)).
+Steps 2 to 4 of the ticket — confirm every family assignment by hand, apply the floor,
+argue each payload past ADR-0008 in its own record header — are a person's and are
+not done. Read on 2026-09-04.
+
+- **The distinct-technique floor exists and has never refused a real record.** Two
+  refusals: `RetrievedFrom` refuses a technique nobody named, and `load_library`
+  refuses a second retrieved case in one family naming a technique already taken.
+  Both were driven red once for the right reason — a `TypeError`, then `DID NOT RAISE`
+  on the field alone, then `DID NOT RAISE` on each loader refusal — and the delegation
+  claim was driven red by *breaking the delegation*, not the floor. **What no reading
+  covers is whether the floor leaves enough cases to matter.** #64's sample suggests
+  two or three distinct techniques in the 739 candidates, so the grown family may hold
+  three cases rather than the twenty #62 planned; nobody has run the floor over real
+  candidates and counted what survives, and that count is #67's measurable half.
+- **`n` is what the floor decides, and nothing here decides it.** The family holds
+  three authored cases today. A single-digit retrieved addition puts its `n` somewhere
+  between 60 and 120 at `attempts_per_case = 10`, against 30 for an agentic family —
+  and because the family is elective, no gate decision moves either way (ADR-0035).
+  **The one number this ticket did not produce is the one #62 was about.**
+- **One declared query where there were three, and the mismatch is resolved rather
+  than deleted.** #64 left a tripwire asserting that two of three queries named
+  families nothing may assign to. The override query is re-keyed to the family whose
+  payloads it was always returning; the other two are dropped. The test now asserts
+  the resolved state and that the two proposable families left without a query are
+  exactly the two hand-read at zero — 19 candidates for `data_leakage`, 23 for
+  `pii_leakage`, none of either a case. **No new retrieval has been run against the
+  re-keyed query**, so every yield figure in this document still comes from #64's
+  reading under the old key, and the text of the query did not change.
+- **`DECLARED_QUERIES` keys over `AnyFamily` and no gate container did.** The one
+  family with material is elective, so a `Mapping[Family, str]` could not name it. The
+  widening is a build-time retrieval input rather than a container the gate decides
+  over; `FamilyRates`, `FamilyOutcome`, `GateDecision`, `TargetRun.rates` and
+  `MeasuredSection` are untouched and `test_elective.py` still asserts they are keyed
+  over `Family` alone. `direct_prompt_injection` was **not** promoted into `Family`.
+- **The library digest did not move, and #67 predicted that it would.** It is still
+  `18 cases, sha256:d0a4deb2789e`. `_versioned` hashes each case's field *values*, and
+  every record on disk has `retrieval = None`, so a fifth field on a block nothing
+  carries changes no digest. ADR-0047's field addition moved it because `Case` gained a
+  field; this did not, because `Case` did not. The prediction is corrected in ADR-0048
+  rather than left standing.
+- **Nothing retrieved exists, so five claims made about retrieved cases remain
+  unread.** `test_no_case_in_the_library_claims_the_seventh_trigger_yet` still pins the
+  library at zero. So: ADR-0047 decision 1's single-model bar has never been given a
+  reading; no retrieved payload has been argued past ADR-0008's transferability test;
+  `source.RETRIEVAL.resolves` still has no caller outside a test; the floor's effect on
+  a family's `D` is unknown; and whether a single-digit family can clear
+  `discrimination_floor` at all is the open question #67's gate run answers.
+- **No rate, `D`, κ, band, gate decision, gate citation or rendering digest moved.**
+  1269 tests pass, `mypy` clean over 191 source files, lint and format clean. The two
+  AST direction tests in `test_corpus_isolation.py` are unchanged and still pass, so
+  retrieval is still not a second edge into the scored side.
 
 ---
 

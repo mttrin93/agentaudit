@@ -1020,7 +1020,7 @@ class RetrievedFrom:
     `retirement` are paired on
     ([ADR-0047](../../docs/adr/0047-a-retrieved-case-cites-its-row-and-a-person-signs-for-its-family.md)).
 
-    **Four fields and each one answers a different reader.** `address` is the
+    **Five fields and each one answers a different reader.** `address` is the
     publisher's own row id under a pinned revision, so *which* text this is can be
     checked against the publisher without this repository's help. `licence` and
     `attribution` are the terms it was published under and the notice those terms ask
@@ -1031,6 +1031,16 @@ class RetrievedFrom:
     [ADR-0046](../../docs/adr/0046-a-family-assignment-is-proposed-here-and-decided-by-a-person.md)
     can never supply: it proposes, a person decides, and a record with nobody on it is
     the instrument's answer wearing a record's type.
+
+    `technique` is the fifth and the newest, and it is the field a *count* of cases
+    cannot substitute for: which attack this phrasing is an instance of, in a person's
+    words, so that `load_library` can refuse a second case in the same family claiming
+    the same one
+    ([ADR-0048](../../docs/adr/0048-a-retrieved-family-grows-by-technique-and-not-by-count.md)).
+    It is a judgement and never a derivation — `selection.NEAR_DUPLICATE_FLOOR` reads
+    a cosine distance within one selection and cannot see a template that repeats
+    across a population. The reading that licenses the floor sits with the floor, in
+    `_refuse_a_repeated_technique`.
 
     **Nothing here is resolved by anything that runs.** The payload is on the record,
     so a run needs no corpus, no index and no network, and there is no load-time
@@ -1047,6 +1057,18 @@ class RetrievedFrom:
     licence: str
     attribution: str
     assigned_by: str
+    technique: str
+
+    @property
+    def normalised_technique(self) -> str:
+        """The technique as the floor compares it: stripped and case-folded.
+
+        Here rather than at the comparison, so that the refusal in `__post_init__`
+        and the floor in `load_library` cannot disagree about what *the same
+        technique* means — two normalisations of one prose value is the shape that
+        drifts into agreeing about the easy cases and nothing else.
+        """
+        return self.technique.strip().casefold()
 
     def __post_init__(self) -> None:
         """Refuse a record that cites nothing, says nothing, or names nobody.
@@ -1084,6 +1106,13 @@ class RetrievedFrom:
                 "assignment is a person's judgement (ADR-0046), so an unattributed "
                 "one is an instrument's proposal wearing a record's type — and the "
                 "instrument was read at kappa 0.16 against a floor of 0.40"
+            )
+        if not self.technique.strip():
+            raise ValueError(
+                f"{self.address!r} names no technique. Which attack this phrasing is "
+                "an instance of is what keeps a family from filling with one attack "
+                "wearing many row ids, and the floor in `load_library` has nothing "
+                "to compare (ADR-0048)"
             )
 
 
@@ -1626,12 +1655,20 @@ def load_library(directory: Path) -> list[Case]:
     """Load every case record in a directory, ordered by file name for a
     stable run order.
 
-    One cross-record refusal, on `load_elective`'s terms: a retrieved case may not
-    join a family that a judged case belongs to. `Case.__post_init__` refuses a
-    retrieved case that is *itself* judged and cannot see this half — the reason both
-    ends refuse is
+    Two cross-record refusals, on `load_elective`'s terms, and both are about a
+    retrieved case because a record cannot see the library it is joining.
+
+    A retrieved case may not join a family that a judged case belongs to.
+    `Case.__post_init__` refuses a retrieved case that is *itself* judged and cannot
+    see this half — the reason both ends refuse is
     [ADR-0047](../../docs/adr/0047-a-retrieved-case-cites-its-row-and-a-person-signs-for-its-family.md)
-    decision 4.
+    decision 4. And two retrieved cases in one family may not name the same
+    technique: `_refuse_a_repeated_technique` below, ADR-0048.
+
+    **This is where the elective tier gets the floor too**, without a line of its
+    own: `load_elective` loads through this function, so the family the corpus can
+    actually grow is held to it by delegation rather than by a second
+    implementation somebody has to remember to keep in step.
 
     **The judged set is read off the records in this directory**, which is what makes
     a third family becoming judged cost nothing here, and is also the limit of the
@@ -1656,7 +1693,45 @@ def load_library(directory: Path) -> list[Case]:
             "(ADR-0013), and a retrieved phrasing in that denominator is material "
             "nothing here measured reaching the one figure this bench has to earn"
         )
+    _refuse_a_repeated_technique(cases)
     return cases
+
+
+def _refuse_a_repeated_technique(cases: Iterable[Case]) -> None:
+    """Keep one family from filling with one attack wearing many row ids.
+
+    The distinct-technique floor
+    ([ADR-0048](../../docs/adr/0048-a-retrieved-family-grows-by-technique-and-not-by-count.md)),
+    and it sits here because a population is what a loader holds: `RetrievedFrom`
+    refuses a blank technique and can see one record, and
+    `corpus.selection.NEAR_DUPLICATE_FLOOR` reads a cosine distance inside one
+    selection and cannot see a template that repeats across the corpus. #64 read
+    twenty-one of twenty-five candidates as a single prompt-marketplace template, so
+    twenty cases drawn from there would have raised `n` to two hundred at a coverage
+    of roughly one.
+
+    **Keyed on the family as well as the technique**, because a technique is a way of
+    attacking one thing: the same override phrasing tests a different defence when the
+    family's success condition reads a different channel, and families are separate
+    denominators (ADR-0015). What *the same technique* means is
+    `RetrievedFrom.normalised_technique` and deliberately not spelled again here.
+    """
+    first: dict[tuple[AnyFamily, str], str] = {}
+    for case in cases:
+        retrieval = case.retrieval
+        if retrieval is None:
+            continue
+        held = (case.family, retrieval.normalised_technique)
+        already = first.get(held)
+        if already is not None:
+            raise ValueError(
+                f"{case.id} is retrieved into {case.family} naming the technique "
+                f"{retrieval.technique.strip()!r}, which {already} already tests. A "
+                "second phrasing of one attack raises this family's n and not its "
+                "coverage, which is the dilution the gate cannot see: twenty such "
+                "cases would read as twenty at a coverage of one (ADR-0048)"
+            )
+        first[held] = case.id
 
 
 ELECTIVE_DIRECTORY = "elective"
@@ -1744,10 +1819,10 @@ def load_case(path: Path) -> Case:
     )
 
 
-RETRIEVAL_FIELDS = ("address", "licence", "attribution", "assigned_by")
+RETRIEVAL_FIELDS = ("address", "licence", "attribution", "assigned_by", "technique")
 """What a `[retrieval]` block has to say, named once for the reader and the refusal.
 
-A tuple rather than four `block[...]` lookups, because the four lookups raise a
+A tuple rather than five `block[...]` lookups, because the five lookups raise a
 `KeyError` naming the first key missing and nothing else — and the reader of a
 half-written record needs the whole list, in a sentence of the shape every other
 refusal in this module raises.
@@ -1771,14 +1846,16 @@ def _retrieval(block: dict[str, Any] | None) -> RetrievedFrom | None:
         raise ValueError(
             f"a retrieval block naming {missing} is a citation with a hole in it: a "
             "retrieved payload's provenance is the row, the licence, that licence's "
-            "notice and the person who assigned the family, and a record missing any "
-            "of the four does not say where its payload came from (ADR-0047)"
+            "notice, the person who assigned the family and the technique the "
+            "phrasing is an instance of, and a record missing any of the five does "
+            "not say where its payload came from (ADR-0047, ADR-0048)"
         )
     return RetrievedFrom(
         address=block["address"],
         licence=block["licence"],
         attribution=block["attribution"],
         assigned_by=block["assigned_by"],
+        technique=block["technique"],
     )
 
 

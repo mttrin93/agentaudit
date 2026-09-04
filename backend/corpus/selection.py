@@ -86,8 +86,9 @@ NEAR_DUPLICATE_FLOOR = 0.25
 called rephrasings of one another sat **below ~0.20** — two copies of one jailbreak
 template at 0.020, the same template with an added prefix at 0.107 — and pairs that
 were different attacks sat **above ~0.30**. Read over the whole index, 28,214
-documents: at `k = 20` this figure selected twenty for each of the three searchable
-families and suppressed ten, four and five, with no shortfall.
+documents: at `k = 20` this figure selected twenty for each of the three families
+searchable *then* — #67 has since dropped two of those queries — and suppressed ten,
+four and five, with no shortfall.
 
 **The boundary is not clean, and 0.25 errs toward suppressing.** Both readings are in
 [docs/validation.md](../../docs/validation.md), including the pair at 0.222 that two

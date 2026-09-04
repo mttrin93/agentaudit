@@ -440,6 +440,26 @@ wearing a record's type
 ([ADR-0047](./docs/adr/0047-a-retrieved-case-cites-its-row-and-a-person-signs-for-its-family.md)).
 _Avoid_: label, labelling, labeller, classification, tagging, the candidate's family
 
+**Technique**:
+The attack one **payload** is an instance of, in a person's words — *the
+prompt-marketplace role-swap template*, `DAN` — and the unit a **family** grown from a
+**corpus** grows in. It exists because a count is the wrong measure of that growth: a
+published corpus holds one phrasing many times, so twenty **cases** can be twenty
+denominators' worth of **attempts** at a coverage of one, which raises `n` and nothing
+else. So no two `retrieved` cases in one family may name the same technique, refused at
+load, and the number of cases a family gains is whatever its distinct techniques support
+([ADR-0048](./docs/adr/0048-a-retrieved-family-grows-by-technique-and-not-by-count.md)).
+
+**A judgement and never a derivation.** It is prose rather than a closed set, because a
+technique vocabulary is a taxonomy nobody here has validated and every closed set in
+this project argues each member in a sentence. It is also not what
+`NEAR_DUPLICATE_FLOOR` measures: that figure is a cosine distance between two rows of
+one **selection**, and a technique repeating across the whole corpus is invisible to it
+— which is the gap this word names. Like the **family assignment** beside it, the person
+decides and the record carries the answer.
+_Avoid_: attack type, category, cluster, variant, near-duplicate, template (for the
+judgement rather than for one instance of it)
+
 ### Human input
 
 **Approval interrupt**:

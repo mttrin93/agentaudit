@@ -62,9 +62,13 @@ def test_the_library_version_did_not_move() -> None:
     # The whole ticket, in one line. A corpus that had become a second library would
     # show up here first, and so would a case quietly written by an ingestion run.
     #
-    # A deliberate tripwire, and the ticket that is *supposed* to trip it is #67,
-    # which lands twenty cases in each grown family. A digest change with no case
-    # record in the diff is the failure this pins.
+    # A deliberate tripwire, and the ticket that is *supposed* to trip it is #67. A
+    # digest change with no case record in the diff is the failure this pins.
+    #
+    # What #67 lands was re-scoped after #64 hand-read the corpus: a single-digit
+    # number of cases in one *elective* family, not twenty in each of four (ADR-0048).
+    # It trips this the moment a retrieved case record exists, which is what the
+    # tripwire was for either way.
     #
     # **It tripped in #65 with no case record in the diff, and that was the designed
     # answer rather than the failure.** `Case` gained a `retrieval` field, and

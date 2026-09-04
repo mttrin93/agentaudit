@@ -1,12 +1,14 @@
 """Prints what the family-assignment instrument says about retrieved candidates.
 
-    uv run python -m scripts.assign_candidates --family data_leakage --k 20
+    uv run python -m scripts.assign_candidates --family direct_prompt_injection --k 70
     uv run python -m scripts.assign_candidates --whole-corpus
 
 `scripts/retrieve_candidates.py` prints candidates for a person to read. This prints
 the same selection with a **proposal** beside each row, and a tally underneath — so a
-person deciding which of the six a phrasing belongs to starts from a shortlist rather
-than from twenty rows.
+person deciding which family a phrasing belongs to starts from a shortlist rather
+than from twenty rows. **Which family, and not which of the six**: the one family this
+corpus can supply is on the elective tier (`corpus/queries.py`), so the proposal is
+over `AnyFamily` and always was.
 
 **Every line says whether the instrument is fit to propose, and today it is not.** The
 sentence is `assignment.stated_fitness()` and the figures behind it are on

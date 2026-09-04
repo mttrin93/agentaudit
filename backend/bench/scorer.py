@@ -10,12 +10,11 @@ rule that decided a run can be printed next to the run.
 """
 
 import math
-from collections.abc import Mapping, Sequence
+from collections.abc import Hashable, Mapping, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
 from statistics import NormalDist
 
-from backend.bench.evaluator import Verdict
 from backend.bench.library import Family
 from backend.bench.measurability import NotMeasurable
 from backend.bench.rule import DECLARED_RULE, GateRule
@@ -230,28 +229,47 @@ class Reliability:
         )
 
 
-def cohens_kappa(pairs: Sequence[tuple[Verdict, Verdict]]) -> float:
+def cohens_kappa[Rated: Hashable](pairs: Sequence[tuple[Rated, Rated]]) -> float:
     """Cohen's κ over paired labels: agreement beyond what chance would give.
 
-    `(gold_label, instrument_label)` per transcript, in that order. The order does
+    `(reference_label, instrument_label)` per item, in that order. The order does
     not change κ — the statistic is symmetric — and it is fixed anyway so that a
-    caller reading the argument knows which rater the gold set is.
+    caller reading the argument knows which rater the reference is.
 
     Raw agreement is not the figure ADR-0004 asks for. Both judged families' gold
     sets are close to balanced by construction, but an instrument that answered
     `succeeded` every time would still agree with about half of a balanced set, and
     "50% agreement" reads as a weak instrument rather than as no instrument at all.
     κ scores that case at exactly 0.
+
+    **Generic over the label, and over the label only.** The two raters this
+    repository has to compare are `Verdict` against the gold set
+    ([ADR-0013](../../docs/adr/0013-adjudication-is-a-third-instrument.md)) and a
+    **family assignment** against the family a case record already names
+    ([ADR-0046](../../docs/adr/0046-a-family-assignment-is-proposed-here-and-decided-by-a-person.md)),
+    and the second's answer space includes *no family at all*. One implementation
+    rather than two, because #64 asks that the labelling figure be *the same kind of
+    object* as adjudication's κ — which is a claim about arithmetic and would be
+    false if a second copy of this function computed it. Nothing else is widened:
+    what enters a rate is still a `Verdict`, and a family assignment reaches no rate
+    at all.
+
+    The chance term therefore sums over the categories the two raters actually used
+    rather than over a fixed enumeration. Identical for a `Verdict` pair, where an
+    unused member contributes a zero product either way.
+
+    `Rated` is bounded on `Hashable` and no narrower, because grouping the labels the
+    raters used is the whole of what the chance term needs from them.
     """
     if not pairs:
         raise KappaUndefined("κ over no transcripts is not a figure")
 
     total = len(pairs)
-    observed = sum(1 for gold, instrument in pairs if gold is instrument) / total
+    observed = sum(1 for gold, instrument in pairs if gold == instrument) / total
     expected = sum(
-        (sum(1 for gold, _ in pairs if gold is verdict) / total)
-        * (sum(1 for _, instrument in pairs if instrument is verdict) / total)
-        for verdict in Verdict
+        (sum(1 for gold, _ in pairs if gold == category) / total)
+        * (sum(1 for _, instrument in pairs if instrument == category) / total)
+        for category in {label for pair in pairs for label in pair}
     )
     if expected >= 1.0:
         raise KappaUndefined(

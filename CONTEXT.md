@@ -83,7 +83,9 @@ entry it names stays listed as untested until a family with cases claims it — 
 reaches no report, because what prints beside a family name in a **signed report** is a
 claim about one of the six
 ([ADR-0044](./docs/adr/0044-a-familys-label-prints-beside-its-figures.md)).
-_Avoid_: the family's OWASP number, category, mapping, taxonomy
+_Avoid_: the family's OWASP number, category, mapping, taxonomy, using it for a
+**family assignment** — which is a judgement about a **candidate** and not a record
+about a family
 
 **Article**:
 An EU AI Act duty a **family**'s failure bears on, from a fixed table this project
@@ -388,11 +390,28 @@ One row a **corpus** search returned, before anybody has judged it. Deliberately
 **case** and deliberately not labelled: it has no **family**, no verdict, no
 **trigger** and no criterion, and it acquires none by being retrieved. The word exists
 so that *retrieved* can never be read as *admitted* — the step from a candidate to a
-case is a human judgement about which of the six a phrasing belongs to, and a
-published safety taxonomy answers no part of that question. A **canary** is not a
+case is a **family assignment**, which is a human judgement about which of the six a
+phrasing belongs to, and a published safety taxonomy answers no part of that question. A **canary** is not a
 candidate and neither is a **payload**: a candidate is somebody else's published text
 that nothing in this bench has yet decided anything about.
 _Avoid_: retrieved case, hit, match, result, proposal
+
+**Family assignment**:
+The judgement that one **candidate** belongs to one **family**, and the instrument that
+proposes one. Named apart from **label**, which is already spent: a label is the
+published entries and articles a *family* carries, one record per family
+([ADR-0039](./docs/adr/0039-a-familys-label-is-one-record.md)), so an instrument that
+produced *labels* would produce those and this one does not. **An assignment is a
+person's**: the instrument proposes, the person's answer is the record, and there is no
+constructor that takes one without the other
+([ADR-0046](./docs/adr/0046-a-family-assignment-is-proposed-here-and-decided-by-a-person.md)).
+It carries a **family** and never a name, and never one of the two judged families —
+every case grown from a **corpus** is `deterministic`, so no retrieved phrasing can
+reach a κ. The instrument carries a measured agreement figure and a declared floor on
+the terms adjudication's κ is held to, and as read on 2026-09-04 it is **below that
+floor**: what licenses its use is not the figure but the seam, and its proposals say so
+on every line they print (docs/validation.md).
+_Avoid_: label, labelling, labeller, classification, tagging, the candidate's family
 
 ### Human input
 

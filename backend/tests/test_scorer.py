@@ -395,6 +395,22 @@ def test_kappa_goes_negative_on_systematic_disagreement() -> None:
     assert kappa_over(0, 8, 8, 0) == pytest.approx(-1.0)
 
 
+def test_kappa_reads_labels_that_are_not_verdicts() -> None:
+    # The one arithmetic, over the one other pair of raters this repository has: a
+    # family assignment against the family a case record already names, where the
+    # answer space is three categories and one of them is *no family at all*
+    # (`corpus/assignment.py`, ADR-0046). Worked by hand from the same four pairs:
+    # po = 3/4, and the marginals are 2/4, 1/4, 1/4 against 1/4, 1/4, 2/4, so
+    # pe = 0.125 + 0.0625 + 0.125 = 0.3125 and kappa = 0.4375 / 0.6875.
+    pairs: list[tuple[Family | None, Family | None]] = [
+        (Family.DATA_LEAKAGE, Family.DATA_LEAKAGE),
+        (Family.DATA_LEAKAGE, None),
+        (Family.SCOPE_CREEP, Family.SCOPE_CREEP),
+        (None, None),
+    ]
+    assert cohens_kappa(pairs) == pytest.approx(0.6363636363)
+
+
 def test_kappa_over_no_transcripts_is_refused() -> None:
     with pytest.raises(KappaUndefined, match="no transcripts"):
         cohens_kappa([])

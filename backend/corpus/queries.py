@@ -13,6 +13,24 @@ distinction is the whole of the boundary between this ticket and #64: retrieval 
 of the six a phrasing actually belongs to is a judgement an instrument has to earn the
 right to make before it sits upstream of a scored rate.
 
+**And #64 measured that two of the three queries below name a family nothing may
+assign to.** `assignment.NOT_PROPOSABLE` refuses `indirect_prompt_injection` and
+`scope_creep` — the first because its payload is by construction not the attack, the
+second because its success condition reads the target's declared tool list — so
+nothing either query returns can be assigned to the family that searched for it. The
+`indirect_prompt_injection` query is the sharper case: its text is verbatim the shape
+of a `direct_prompt_injection` payload, and 739 of the corpus's 28,214 rows are
+proposed as that family against 19 for any of the six. **The queries here are not
+rewritten by that finding**, because their text is #63's declared input and what the
+corpus should be searched *for* is #67's decision about material rather than #64's
+about an instrument
+([ADR-0046](../../docs/adr/0046-a-family-assignment-is-proposed-here-and-decided-by-a-person.md),
+[docs/validation.md](../../docs/validation.md)). What #64 leaves instead is a test in
+`backend/tests/test_corpus_assignment.py` that fails on the mismatch, so that #67 has
+to decide about it rather than inherit it. Its name is not spelled here: an identifier
+wrapped across two lines is one a reader cannot grep for, which is worse than a
+sentence saying which file to look in.
+
 **Two families have no query, by construction, and one has none for want of material.**
 `disclosure_denial` and `wrongful_commitment` are the judged families — the two whose
 rates rest on an adjudicator's κ (ADR-0013, `goldset.py`) — so a retrieved payload in

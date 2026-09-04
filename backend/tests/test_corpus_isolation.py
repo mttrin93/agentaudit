@@ -4,6 +4,10 @@ Five claims, each of which would be prose without a test: the case library did n
 move, nothing in the bench can read a **candidate**, nothing in the corpus can write a
 case, no family a query searches for has a judged case — so no retrieved phrasing can
 reach a κ — and nothing the suite imports needs `chromadb`, which CI does not install.
+What the corpus may read *from* the bench is the family enumerations and nothing
+else — three closed sets where ADR-0045 decision 6 allowed one, widened by
+[ADR-0046](../../docs/adr/0046-a-family-assignment-is-proposed-here-and-decided-by-a-person.md)
+decision 7. The instrument that reads them is tested in `test_corpus_assignment.py`.
 
 The last three are asserted over the tree rather than over a fixture, because what
 they forbid is a future edit rather than a present value. An import added in six
@@ -28,6 +32,7 @@ CORPUS = ROOT / "backend" / "corpus"
 CORPUS_SCRIPTS = (
     ROOT / "scripts" / "index_corpus.py",
     ROOT / "scripts" / "retrieve_candidates.py",
+    ROOT / "scripts" / "assign_candidates.py",
 )
 
 
@@ -77,18 +82,31 @@ def test_nothing_in_the_bench_can_read_a_retrieval_result() -> None:
     assert reaching == set()
 
 
-def test_the_corpus_reaches_into_the_bench_for_one_closed_set_and_no_further() -> None:
-    # `Family` is a closed enumeration of six names, and reading it is not an edge:
-    # nothing flows back. Anything else — a loader, a scorer, a case record — would be.
-    # `imports_of` yields the module *and* each name taken from it, so the assertion
-    # names the one symbol read rather than only the module it came from.
+def test_the_corpus_reaches_into_the_bench_for_closed_family_sets_and_no_further() -> (
+    None
+):
+    # `Family` and `ElectiveFamily` are closed enumerations of names and `AnyFamily`
+    # is their union, and reading them is not an edge: nothing flows back. Anything
+    # else — a loader, a scorer, a case record — would be. `imports_of` yields the
+    # module *and* each name taken from it, so the assertion names the symbols read
+    # rather than only the module they came from.
+    #
+    # Three names where ADR-0045 decision 6 said one. #64's instrument proposes two
+    # of the six and two of the elective tier, so it needs both sets and the union
+    # the record is annotated over; the widening and why it is still not an edge are
+    # ADR-0046's amendment to that decision.
     reaching = {
         imported
         for path in CORPUS.rglob("*.py")
         for imported in imports_of(path)
         if imported.startswith("backend.bench")
     }
-    assert reaching == {"backend.bench.library", "backend.bench.library.Family"}
+    assert reaching == {
+        "backend.bench.library",
+        "backend.bench.library.AnyFamily",
+        "backend.bench.library.ElectiveFamily",
+        "backend.bench.library.Family",
+    }
 
 
 def test_nothing_in_the_corpus_or_its_scripts_can_write_a_case() -> None:

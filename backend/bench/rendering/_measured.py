@@ -7,16 +7,27 @@ it that was not known before the run started — every rate, interval, band and 
 reader will act on is printed here, beside the counts it came from.
 
 **Nothing here reaches across two families** (ADR-0005, D12). No count of families,
-no rate over a run, no figure this module computes at all: every number is a number
-the payload already carries. The same rule is why `_withheld`, `_not_measurable`,
-`_elective` and `_not_tested` are four functions rather than one — a family absent
-for four different reasons is four different statements, and a single "not tested"
-list would be this module deciding they are the same thing.
+no rate over a run, and every *figure* is a figure the payload already carries. The
+same rule is why `_withheld`, `_not_measurable`, `_elective` and `_not_tested` are
+four functions rather than one — a family absent for four different reasons is four
+different statements, and a single "not tested" list would be this module deciding
+they are the same thing.
+
+**One number is counted here rather than read, and it is not a figure**: the count of
+episodes a family's row carries beside its rate. Every reported episode already names
+its family and its outcome, so counting them is arithmetic a recipient can do over
+bytes that are already signed — which is why `AdaptiveSection` still refuses to count
+and why the artefact gains no figure
+([ADR-0056](../../../docs/adr/0056-a-discovery-count-shares-a-row-with-a-rate-and-is-a-summand-of-nothing.md)).
+It reaches no family but its own.
 
 **The adaptive layer reports in its own section and writes into no rate here**
 (ADR-0010). `_adaptive` prints episodes, and an episode is not an attempt; the only
 edge to the scored side is `propose_case` into the admission gate, and it is not in
-this module.
+this module. Since #77 the count of a family's episodes prints in the family's row
+too — permitted, because ADR-0010's rule is that no adaptive result may write into a
+scored *rate*, and this one is a count of episodes in a field of its own with its own
+denominator named as absent (ADR-0056).
 
 **The bands are stated in ADR-0014's own words and the reference agents are not named**
 — `BAND_IN_A_TARGET_REPORT` is that wording, which is why it is here rather than
@@ -29,9 +40,12 @@ changed (ADR-0017).
 
 from __future__ import annotations
 
+from collections import Counter
 from collections.abc import Iterable, Mapping, Sequence
+from dataclasses import dataclass
 from typing import Any
 
+from backend.bench.adaptive.episode import EpisodeOutcome
 from backend.bench.editions import AGENTIC_TOP_10_2026, LLM_TOP_10_2026
 from backend.bench.rendering._layout import Section, _listed
 from backend.bench.reproducibility import Reproducibility
@@ -64,7 +78,118 @@ cut points that were those rates are printed beside every band.
 """
 
 
-def _figures(measured: Mapping[str, Any], elective: Mapping[str, Any]) -> Section:
+NO_EPISODE_HERE = (
+    "no episode is recorded against this family — an absence and not a count of "
+    "zero, because a family this attacker never worked in is a fact about the "
+    "attacker rather than about this target"
+)
+"""The second reading, where there is none: an absence and never a nought.
+
+The refusal a family with no attempts already makes by having no rate at all
+([ADR-0056](../../../docs/adr/0056-a-discovery-count-shares-a-row-with-a-rate-and-is-a-summand-of-nothing.md)).
+Stated rather than left blank because the document is the surface that travels, and
+`_discrimination` two blocks down states its own absence for the same reason.
+"""
+
+
+@dataclass(frozen=True)
+class Discoveries:
+    """What one adaptive attacker found in one family, as a sentence and never a
+    number.
+
+    **The pairing type #77 asked for, and the whole of the type-level prohibition.**
+    An `AdaptiveEpisode` is not an `Attempt` and no adaptive result may write into a
+    scored rate (ADR-0010), and this row is the place a reader is most likely to add
+    the two anyway (ADR-0056) — so the count reaches this module as a **string** and
+    there is no numeric field anywhere for anybody to lift it off.
+    `entry.rate.successes + <the count>` is a type error under `mypy --strict` rather
+    than a line that type-checks and means nothing, and the ints the sentence is
+    built from die inside `of`.
+
+    One field, because a second one holding the same count as a number would undo
+    the paragraph above. The censored count is inside the sentence and not beside it
+    for the same reason, and it is in the sentence rather than optional because an
+    attacker that ran out of turns is not a target that held (CONTEXT.md,
+    **censored**).
+    """
+
+    stated: str
+
+    @classmethod
+    def of(cls, episodes: Sequence[Mapping[str, Any]]) -> Discoveries:
+        """Those episodes as one sentence. Refused where there are none.
+
+        **A `Discoveries` always says the search worked here**, so *no episodes at
+        all* is expressed by the family being absent from `_discoveries` and never by
+        a sentence reading *0 episodes* — one representation of that absence rather
+        than two, and `VariantCounts` refuses zero attempts for the same reason
+        (ADR-0055 §2). Built here rather than passed in, so no caller can hand a row
+        a count no episode supports.
+        """
+        if not episodes:
+            raise ValueError(
+                "a discovery count over no episode is a count of zero wearing a "
+                "sentence: a family the search never worked in is absent from the "
+                "mapping, on the terms NO_EPISODE_HERE states (ADR-0056)"
+            )
+        # Each outcome counted for itself and neither derived from the other, so an
+        # episode whose outcome is a third thing is counted as neither — the
+        # refusal `EpisodeOutcome` would otherwise leave to a subtraction.
+        outcomes = Counter(str(episode["outcome"]) for episode in episodes)
+        broke = outcomes[EpisodeOutcome.BROKEN]
+        censored = outcomes[EpisodeOutcome.CENSORED]
+        return cls(
+            stated=(
+                f"{_episodes_worded(broke)} broke this family, and "
+                f"{censored if censored else 'none'} stopped out of turns. A count "
+                "of episodes and never a rate: an episode has no denominator, "
+                "because its length varies with what the attacker decides to do "
+                "(CONTEXT.md). So it is a summand of nothing on this page, and of "
+                "the counts beside it least of all (ADR-0010)"
+            )
+        )
+
+
+def _episodes_worded(count: int) -> str:
+    """A count of episodes as words: `2 episodes`, `1 episode`, or `no episode`.
+
+    Never `0 episodes`, so that a family the search worked in and broke nothing in
+    reads as *no episode broke this family* rather than as a nought.
+    """
+    if not count:
+        return "no episode"
+    return f"{count} episode" if count == 1 else f"{count} episodes"
+
+
+def _discoveries(adaptive: Mapping[str, Any]) -> Mapping[str, Discoveries]:
+    """One sentence per family the search worked in, keyed by the family's name.
+
+    Counted here rather than read off a figure, for the reason the module header
+    gives (ADR-0056 §1). A family absent from this mapping is a family the search
+    never worked in, and it is absent rather than present at zero.
+    """
+    grouped: dict[str, list[Mapping[str, Any]]] = {}
+    for episode in adaptive["episodes"]:
+        grouped.setdefault(str(episode["family"]), []).append(episode)
+    return {family: Discoveries.of(episodes) for family, episodes in grouped.items()}
+
+
+def _found(discoveries: Discoveries | None) -> str:
+    """The row's second reading, in one wording for the three places a row is drawn.
+
+    One writer for a family with a published rate, a family whose rate is withheld
+    and a family that could not be measured, because the **join is the family and
+    never the figure**: an attacker may have broken a family this target was never
+    measurable on, and that is the only reading such a family has.
+    """
+    return NO_EPISODE_HERE if discoveries is None else discoveries.stated
+
+
+def _figures(
+    measured: Mapping[str, Any],
+    elective: Mapping[str, Any],
+    adaptive: Mapping[str, Any],
+) -> Section:
     """The per-family figures, each with the counts and the limits behind it.
 
     Every family stands alone. Nothing here reads two of them, which is why a reader
@@ -85,8 +210,18 @@ def _figures(measured: Mapping[str, Any], elective: Mapping[str, Any]) -> Sectio
     It prints in this section, under its own heading, because a reader comparing the
     reasons a family is missing from the figures above should find all of them in one
     place — and in its own block, because five reasons are five statements.
+
+    `adaptive` arrives here for the second time in the document and on the same
+    terms — **required, not defaulted** — because every family row on this page
+    carries what the search found beside what the suite measured
+    ([ADR-0056](../../../docs/adr/0056-a-discovery-count-shares-a-row-with-a-rate-and-is-a-summand-of-nothing.md)).
+    A default would let a caller that forgot it print *no episode is recorded against
+    this family* under every family of a run whose attacker broke three, which is a
+    false statement about the run rather than a missing block. What it is **not** is a
+    figure this section may read against its own — see the module header.
     """
     cuts = measured["cuts"]
+    found = _discoveries(adaptive)
     return Section(
         point=4,
         title="What was measured, per family, with the counts behind it",
@@ -107,14 +242,14 @@ def _figures(measured: Mapping[str, Any], elective: Mapping[str, Any]) -> Sectio
             f"**One rate per family, over every construction it sent.** "
             f"{measured['variants_stated']}",
             "",
-            *_family_blocks(measured),
+            *_family_blocks(measured, found),
             "### Families whose rate this report does not publish",
             "",
-            *_withheld(measured["withheld"]),
+            *_withheld(measured["withheld"], found),
             "",
             "### Families this target could not be measured on",
             "",
-            *_not_measurable(measured["not_measurable"]),
+            *_not_measurable(measured["not_measurable"], found),
             "",
             "### The elective families, requested and not",
             "",
@@ -123,7 +258,9 @@ def _figures(measured: Mapping[str, Any], elective: Mapping[str, Any]) -> Sectio
     )
 
 
-def _family_blocks(measured: Mapping[str, Any]) -> tuple[str, ...]:
+def _family_blocks(
+    measured: Mapping[str, Any], found: Mapping[str, Discoveries]
+) -> tuple[str, ...]:
     """One block per family whose figures this report publishes.
 
     Deterministic families first, then judged, in the order the payload carries them.
@@ -145,16 +282,30 @@ def _family_blocks(measured: Mapping[str, Any]) -> tuple[str, ...]:
             "resisted anything.",
             "",
         )
-    return tuple(line for entry in entries for line in _family_block(entry))
+    return tuple(
+        line
+        for entry in entries
+        for line in _family_block(entry, found.get(str(entry["family"])))
+    )
 
 
-def _family_block(entry: Mapping[str, Any]) -> tuple[str, ...]:
+def _family_block(
+    entry: Mapping[str, Any], discoveries: Discoveries | None
+) -> tuple[str, ...]:
     """One family: its counts, its interval, its band, its limits and its instrument.
 
     The coverage note sits **inside** this block rather than in a table of its own,
     because ADR-0002's disclosure is only doing its job beside the figure it
     qualifies: a family reported as holding, with nothing beside it, reads as a
     cleared category.
+
+    **What one adaptive attacker found sits below the verdict class and above the
+    mix**, which is as close to the rate as it goes: near enough that a reader who
+    read the band reads it too, and separated from the rate by two lines that name
+    the rate's own denominator, so the two headings cannot be taken for one unit
+    (ADR-0056 §3). It prints on a family with a published figure and on one without —
+    `_withheld` and `_not_measurable` carry the same sentence — because the join is
+    the family and never the figure.
     """
     interval = entry["interval"]
     return (
@@ -169,6 +320,8 @@ def _family_block(entry: Mapping[str, Any]) -> tuple[str, ...]:
         f"- **Band — {entry['band']}**: "
         f"{BAND_IN_A_TARGET_REPORT[Band(entry['band'])]}.",
         f"- **Verdict class**: {entry['verdict_class']}.",
+        f"- **Discoveries — what one adaptive attacker found here** — "
+        f"{_found(discoveries)}.",
         *_variants(entry["variants"]),
         *_label(entry["label"]),
         *_reliability(entry["reliability"]),
@@ -317,7 +470,9 @@ def _coverage(identifiers: Iterable[Mapping[str, Any]]) -> tuple[str, ...]:
     )
 
 
-def _withheld(withheld: Sequence[Mapping[str, Any]]) -> tuple[str, ...]:
+def _withheld(
+    withheld: Sequence[Mapping[str, Any]], found: Mapping[str, Discoveries]
+) -> tuple[str, ...]:
     """The judged families whose rate this document may not print, and why.
 
     The reason travels with the absence, because a withheld family with no reading
@@ -327,7 +482,8 @@ def _withheld(withheld: Sequence[Mapping[str, Any]]) -> tuple[str, ...]:
         (
             f"- {one['stated']}. The family {one['label']['bears_stated']}, and "
             f"{one['label']['claims_stated']} — neither is altered by a rate this "
-            "report does not publish."
+            "report does not publish. Discoveries — what one adaptive attacker "
+            f"found here: {_found(found.get(str(one['family'])))}."
             for one in withheld
         ),
         "- None. Every judged family in this run reached the declared κ floor, so no "
@@ -335,7 +491,9 @@ def _withheld(withheld: Sequence[Mapping[str, Any]]) -> tuple[str, ...]:
     )
 
 
-def _not_measurable(unanswerable: Sequence[Mapping[str, Any]]) -> tuple[str, ...]:
+def _not_measurable(
+    unanswerable: Sequence[Mapping[str, Any]], found: Mapping[str, Discoveries]
+) -> tuple[str, ...]:
     """The families this target could not answer, with the reason that closes them.
 
     A third outcome beside a rate and a refused registration, and never a rate of
@@ -347,7 +505,9 @@ def _not_measurable(unanswerable: Sequence[Mapping[str, Any]]) -> tuple[str, ...
             f"- **{one['family']}**: {one['stated']}. This is not a rate of zero — "
             "nothing was measured, so there is no rate to read. The family "
             f"{one['label']['bears_stated']}, and {one['label']['claims_stated']} — "
-            "both hold whether or not anything was measured."
+            "both hold whether or not anything was measured. Discoveries — what "
+            "one adaptive attacker found here: "
+            f"{_found(found.get(str(one['family'])))}."
             for one in unanswerable
         ),
         "- None. Every family's precondition was met by this target, so no family is "

@@ -57,6 +57,7 @@ from backend.bench.rendering import (
     render,
     sections,
 )
+from backend.bench.rendering._measured import NO_EPISODE_HERE
 from backend.bench.reproducibility import Reproducibility
 from backend.bench.rule import DECLARED_RULE, NOT_A_GATE_RESULT
 from backend.bench.scanner import RuleOfTwo, Supervision
@@ -146,7 +147,7 @@ def test_every_section_states_its_own_reproducibility_and_three_read_the_payload
 
 # --- The golden digest: one document, pinned to the byte ---------------------
 
-GOLDEN_ONE_FAMILY = "85037fa011ea5de138bc227fa4ea30a86718150aab2af19885a002a7e4003c92"
+GOLDEN_ONE_FAMILY = "4a930269912ed5988198da01c835825f1e2d86a15b6c67eed51f7a900058dd19"
 """The sha256 of `_one_family()`'s rendering, written down.
 
 **A tripwire, and it is deliberately a strict one.** Every other assertion in this
@@ -259,6 +260,20 @@ holds no variant yet: what moved is that the document now says so, which is exac
 the fact the comparability sentence rests on. A reader of a report whose families
 sent one construction has to be able to tell it from one whose families sent six, and
 before this the pooled rate looked the same either way.
+
+Moved an eleventh time, by #77, and it is section 4 again: **every family row now
+carries what one adaptive attacker found beside what the fixed suite measured**, as a
+count of episodes
+([ADR-0056](../../docs/adr/0056-a-discovery-count-shares-a-row-with-a-rate-and-is-a-summand-of-nothing.md)).
+One line inside each family's block and one clause on each withheld and each
+unmeasurable family, because the row's join is the family and never the figure. **No
+figure moved and no figure arrived**: the count is derived in the *view* from the
+episodes the payload already carries, so `test_payload.py` asserts that dropping the
+whole adaptive section leaves every other byte of the artefact unchanged — and the
+count prints under the word **discoveries** as episodes with the censored count beside
+it, with no denominator, because an episode has none. Here it reads *no episode is
+recorded against this family*, because the fixture's one episode is in a family this
+payload does not measure.
 """
 
 
@@ -982,11 +997,16 @@ def test_a_withheld_family_is_named_with_its_reading_and_never_with_its_rate() -
     assert "rate 0.40" not in text
     # Whole-line equality, not containment: the guard is that this is the *only*
     # line in the document naming the family, and that nothing else was appended to
-    # it. The duty is part of that line since #52 and is asserted as part of it.
+    # it. The duty is part of that line since #52 and is asserted as part of it; what
+    # one adaptive attacker found here is part of it since #77, because the row's
+    # join is the family and never the figure — a family whose rate is withheld is
+    # still a family an attacker may have broken (ADR-0056), and the count of
+    # episodes is not the rate this line refuses to print.
     barred = (
         f"- {withheld['stated']}. The family {withheld['label']['bears_stated']}, "
         f"and {withheld['label']['claims_stated']} — neither is altered by a rate "
-        "this report does not publish."
+        "this report does not publish. Discoveries — what one adaptive attacker "
+        f"found here: {NO_EPISODE_HERE}."
     )
     for line in text.splitlines():
         if "wrongful_commitment" in line:

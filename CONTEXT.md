@@ -205,6 +205,20 @@ A route an episode found. Reported in its own section, and **never a Finding** i
 the sense below: it carries no rate, no interval, no band and no `D`.
 _Avoid_: finding, vulnerability, breach, result
 
+**Discovery count**:
+How many **episodes** the adaptive layer broke one **family** with, printed on that
+family's row beside what the scored layer measured, and always with the count of the
+family's **censored** episodes beside it — two counts, each counted for itself and
+neither derived from the other, so an episode that is neither is counted as neither.
+A count of episodes and never a rate: it has no denominator, prints as no fraction and
+no percentage, sits under no heading shared with a rate, and is a summand of nothing — the pairing is a **view**, so the signed artefact
+gains no figure and the count is derived from the episodes it already carries
+([ADR-0010](./docs/adr/0010-two-layers-in-one-run-the-adaptive-layer-is-never-scored.md),
+[ADR-0056](./docs/adr/0056-a-discovery-count-shares-a-row-with-a-rate-and-is-a-summand-of-nothing.md)).
+A family the attacker never worked in has **no** count rather than a count of zero, and a
+family measured *holds* with two discoveries against it is a reading nothing reconciles.
+_Avoid_: adaptive rate, breaks, successes, adaptive findings count, episodes broken rate
+
 **Censored**:
 The status of an episode that reached the turn cap, or was aborted on budget,
 without breaking the target. Distinct from "the target resisted", because the

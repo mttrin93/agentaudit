@@ -1951,6 +1951,63 @@ against a model.
   test-only for exactly that reason. #79's selection is the second half of the
   comparability sentence and has a place waiting for it.
 
+### The adaptive layer joins the family view as a discovery count (#77)
+
+A view change, and the claim worth checking is a negative one: **the signed artefact
+gains no figure at all.** The decisions are
+[ADR-0056](./adr/0056-a-discovery-count-shares-a-row-with-a-rate-and-is-a-summand-of-nothing.md).
+Nothing here has run against a model — what a family's row now carries is counted out of
+the episodes a payload already holds, so the readings below are over constructed payloads
+and the rendered document, and the only measured consequence is that
+`GOLDEN_ONE_FAMILY` moved.
+
+- **The artefact carries no new key, and the assertion is structural.** Drop the whole
+  adaptive section from a result and every other byte of the document is unchanged; and no
+  key outside that section names an episode or a discovery. Driven red by adding
+  `adaptive_discoveries: int` to `FamilyEntry` and serialising it in `payload._entry` —
+  three paths came back changed, `measured.deterministic[0].adaptive_discoveries` among
+  them — and by the type-hint assertion that fails on the same field. Both reverted.
+- **The count is a sentence, and no type holds it as a number.** `Discoveries` has one
+  field, `stated: str`, built inside `Discoveries.of` from ints that never leave it;
+  `DiscoveriesReading` on the screen is three strings. So `entry.rate.successes + <the
+  count>` is a `mypy --strict` error rather than a line that type-checks and means
+  nothing. Driven red by adding `broke: int` beside `stated`.
+- **Two denominators in one row, and one of them named as absent.** The row prints
+  *Discoveries — … 2 episodes broke this family, and 1 stopped out of turns* with the
+  sentence saying an episode has no denominator; the rate line beside it still reads
+  *30 of 30 attempts succeeded*. Asserted as no fraction, no `%`, the word *attempt*
+  absent from the discovery line, and the column named *discoveries* rather than
+  breaks, successes or an adaptive rate. Driven red by removing the line from
+  `_family_block`.
+- **The broken and censored counts are each counted for themselves.** The screen
+  derived the censored count by subtracting the broken from the total, which labels a
+  third outcome *out of turns* and puts the two surfaces at odds — the refusal
+  `report.ts`'s `readOutcome` already states, missing from the count. Driven red with an
+  episode whose outcome is `stood_down`: *1 episode out of turns* before, *no episode
+  out of turns* after.
+- **A family the search never worked in has no count and not a zero.** The screen draws
+  an empty cell; the document states the absence in words and prints no digit. Driven red
+  by having `_found` return *0 episodes broke this family, and 0 stopped out of turns*.
+  `Discoveries.of` refuses an empty sequence rather than wording it, so the absence has
+  one representation — the family missing from the mapping — and `VariantCounts` refuses
+  zero attempts for the same reason.
+- **Nothing reconciles a family that holds with a discovery against it.** Rendered with
+  the search and without it, every other line of the family's block is byte-identical, and
+  on the screen the paired answer is the answer computed with no search at all. Driven red
+  by printing the band as `weak` wherever a family carried a discovery — which is the edit
+  this test exists to catch, and it is one line.
+- **The join is the family and never the figure.** A withheld family and an unmeasurable
+  one carry the count too, because for them it is the only reading the row has. Driven red
+  by dropping the clause from the withheld bullet.
+- **`GOLDEN_ONE_FAMILY` moved to `4a930269912e`** — the eleventh recorded move of the
+  rendered document, for a line that was missing rather than a line reworded. `test_
+  rendering.py`'s header says what moved and why.
+- **What downstream tickets inherit.** `rendering._measured.Discoveries` /
+  `NO_EPISODE_HERE` / `_discoveries` / `_found`; `report.ts`'s `FamilyRow`,
+  `DiscoveriesReading`, `familyRows` and `NO_DENOMINATOR` — and `ReportView.answers` is
+  now `ReportView.rows`, so a screen reading the old field fails `tsc`. #79's selection
+  changes what a run *sent* and not how either reading is drawn.
+
 ---
 
 ## Pre-gate observations

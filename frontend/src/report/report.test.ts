@@ -42,7 +42,9 @@ import {
   NOT_PART_OF_THE_ARTEFACT,
   attemptCounts,
   exchangesReading,
+  NO_DENOMINATOR,
   familyAnswers,
+  familyRows,
   reportView,
   routeReading,
   verificationReading,
@@ -407,19 +409,20 @@ describe('the view over the whole payload', () => {
     // nothing anywhere is computed from more than one (ADR-0005, D12).
     const fewer = reportView(without('data_leakage'))
 
-    expect(fewer.answers).toEqual(
-      view.answers.filter(
-        (answer) => !(answer.kind === 'measured' && answer.family === 'data_leakage'),
+    expect(fewer.rows).toEqual(
+      view.rows.filter(
+        (row) => !(row.answer.kind === 'measured' && row.family === 'data_leakage'),
       ),
     )
-    expect(withoutTheAnswers(fewer)).toEqual(withoutTheAnswers(view))
+    expect(withoutTheRows(fewer)).toEqual(withoutTheRows(view))
   })
 
   it('orders the families as the payload does, and never by rate', () => {
     // A table sorted worst-first is a rank across families, and a rank is the
     // composite ADR-0005 refuses arriving as a layout decision.
     const view = reportView(SERVED)
-    const rates = view.answers
+    const rates = view.rows
+      .map((row) => row.answer)
       .filter((answer) => answer.kind === 'measured')
       .map((answer) => answer.figures.rate)
 
@@ -457,7 +460,7 @@ describe('the view over the whole payload', () => {
     for (const named of ['hardened', 'trivial', 'reference agent']) {
       expect(printed).not.toContain(named)
     }
-    expect(view.answers[0]).toMatchObject({
+    expect(view.rows[0].answer).toMatchObject({
       figures: { bandReads: BAND_IN_A_TARGET_REPORT.fails },
     })
   })
@@ -522,6 +525,92 @@ describe('verification status', () => {
   })
 })
 
+describe('what the search found, beside what was measured', () => {
+  it('pairs the two readings by family, in two fields, with no number in the cell', () => {
+    // The row #77 draws. The join is the family and never the figure — this
+    // fixture's one episode is in a family the target could not be measured on, and
+    // that is the only reading such a family has (ADR-0056).
+    const rows = familyRows(SERVED.measured, SERVED.adaptive)
+
+    expect(rows.map((row) => row.family)).toEqual(
+      familyAnswers(SERVED.measured).map((answer) => answer.family),
+    )
+    const [found] = rows.filter((row) => row.discoveries !== null)
+    expect(found.family).toBe('halt_defeat')
+    expect(found.discoveries).toEqual({
+      broke: '1 episode broke it',
+      censored: 'no episode out of turns',
+      note: NO_DENOMINATOR,
+    })
+
+    // Every value on the reading is a **string**, so the count arrives already
+    // worded and there is no numeric property for a later edit to lift off and add
+    // to `figures.rate`. `tsc` is what enforces it; this is what fails when the
+    // shape changes (ADR-0010, ADR-0056).
+    expect(
+      Object.values(found.discoveries ?? {}).map((said) => typeof said),
+    ).toEqual(['string', 'string', 'string'])
+  })
+
+  it('leaves a family the search never worked in with an empty cell, not a zero', () => {
+    // The same refusal a family with no attempts makes by having no rate at all.
+    const rows = familyRows(SERVED.measured, { ...SERVED.adaptive, episodes: [] })
+
+    expect(rows.map((row) => row.discoveries)).toEqual(rows.map(() => null))
+    expect(JSON.stringify(rows)).not.toContain('0 episode')
+  })
+
+  it('counts the censored outcome rather than everything that is not broken', () => {
+    // `report.ts` already refuses to reword an outcome it has no entry for — *a
+    // seventh outcome added upstream reaches the screen as itself*. The same
+    // refusal has to hold for the count: an episode that is neither broken nor
+    // censored is neither, and subtracting would label it *out of turns* and put
+    // this screen's censored count at odds with the document's (ADR-0056 §3).
+    const seventh = structuredClone(SERVED)
+    const [episode] = seventh.adaptive.episodes
+    seventh.adaptive.episodes = [
+      { ...episode, family: 'data_leakage' },
+      { ...episode, family: 'data_leakage', outcome: 'stood_down' },
+    ]
+
+    const [row] = familyRows(seventh.measured, seventh.adaptive).filter(
+      (one) => one.family === 'data_leakage',
+    )
+
+    expect(row.discoveries).toEqual({
+      broke: '1 episode broke it',
+      censored: 'no episode out of turns',
+      note: NO_DENOMINATOR,
+    })
+  })
+
+  it('changes no scored figure when the search found something in that family', () => {
+    // A family measured `holds` with two discoveries against it is the reading the
+    // bench exists to be able to produce (PLAN §3, trigger 2). Nothing reconciles
+    // it: the answer beside the count is the answer computed without the search.
+    const searched = structuredClone(SERVED)
+    const [episode] = searched.adaptive.episodes
+    searched.adaptive.episodes = [
+      { ...episode, family: 'data_leakage' },
+      { ...episode, family: 'data_leakage', outcome: 'censored' },
+    ]
+
+    const rows = familyRows(searched.measured, searched.adaptive)
+    const [row] = rows.filter((one) => one.family === 'data_leakage')
+
+    expect(row.discoveries).toEqual({
+      broke: '1 episode broke it',
+      censored: '1 episode out of turns',
+      note: NO_DENOMINATOR,
+    })
+    expect(row.answer).toEqual(
+      familyAnswers(SERVED.measured).filter(
+        (answer) => answer.family === 'data_leakage',
+      )[0],
+    )
+  })
+})
+
 describe('the adaptive section', () => {
   it('is labelled not reproducible where it appears, and carries no figure', () => {
     const view = reportView(SERVED)
@@ -541,7 +630,8 @@ describe('the adaptive section', () => {
       },
     ])
     // A turn is not an attempt, so nothing here is counted into a scored figure.
-    const scored = view.answers
+    const scored = view.rows
+      .map((row) => row.answer)
       .filter((answer) => answer.kind === 'measured')
       .map((answer) => answer.figures.counts)
     for (const counts of scored) {
@@ -1134,7 +1224,7 @@ function sentencesIn(node: unknown): string[] {
  *
  * What is left is everything that must not vary with which families were measured.
  */
-function withoutTheAnswers(view: ReturnType<typeof reportView>) {
-  const { answers: _answers, ...rest } = view
+function withoutTheRows(view: ReturnType<typeof reportView>) {
+  const { rows: _rows, ...rest } = view
   return rest
 }

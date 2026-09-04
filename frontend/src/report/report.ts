@@ -334,6 +334,121 @@ export function familyAnswers(measured: MeasuredSection): FamilyAnswer[] {
   }
 }
 
+
+/**
+ * Why the count on a family's row is not a figure, printed on the row that pairs it
+ * with one.
+ *
+ * The load-bearing sentence of the pairing rather than decoration: this is the one
+ * place in the app where an adaptive number and a scored rate are a few pixels
+ * apart, and CONTEXT.md's **episode** entry is the reason the second one has no
+ * denominator to read the first against (ADR-0010, ADR-0056).
+ */
+export const NO_DENOMINATOR =
+  'a count of episodes, and never a rate — an episode has no denominator, because ' +
+  'its length varies with what the attacker decides to do, so there is nothing ' +
+  'here to add to the counts beside it'
+
+/**
+ * What one adaptive attacker found in one family: two sentences, and no number.
+ *
+ * **Three string fields and nothing arithmetical**, which is the whole of the
+ * type-level prohibition on this screen. The count reaches the card already worded —
+ * *2 episodes broke it* — so there is no numeric property for a later edit to lift
+ * off and add to `figures.rate`, and the censored count is a field of its own
+ * because an attacker that ran out of turns is not a target that held (CONTEXT.md,
+ * **censored**).
+ *
+ * Named for **discoveries**, matching CONTEXT.md's **adaptive finding**: not breaks,
+ * not successes, and never an adaptive rate.
+ */
+export interface DiscoveriesReading {
+  /** The count, as episodes: `2 episodes broke it`, or `no episode broke it`. */
+  broke: string
+  /** How many stopped on the turn cap instead, beside it and never inside it. */
+  censored: string
+  /** `NO_DENOMINATOR`, carried on the reading so no card can print one without it. */
+  note: string
+}
+
+/**
+ * One family's row: what the fixed suite measured, and what the search found.
+ *
+ * **Two readings in two fields, and the row is where they meet.** ADR-0010 permits
+ * this and forbids the sum — no adaptive result may write into a scored rate — and
+ * #77 puts the two closer together than they have ever been, at the exact place a
+ * reader is most likely to add them. What stops the addition is that there is
+ * nothing to add: `answer` carries the rate and its counts, `discoveries` carries
+ * sentences, and no third field holds a total of anything (ADR-0056).
+ *
+ * **The join is the family and never the figure.** A family whose rate is withheld
+ * and a family whose precondition was unmet are both families an attacker may have
+ * broken, and for such a family the count is the only reading the row has.
+ *
+ * **`null` and never a zero.** A family the search never worked in has an empty
+ * cell, on the same terms a family with no attempts has no rate: an attacker that
+ * never worked there must stay distinguishable from one that worked there and found
+ * nothing.
+ */
+export interface FamilyRow {
+  family: string
+  answer: FamilyAnswer
+  discoveries: DiscoveriesReading | null
+}
+
+/**
+ * A count of episodes as words: `2 episodes`, `1 episode`, or `no episode`.
+ *
+ * Never `0 episodes`, so a family the search worked in and broke nothing in reads as
+ * *no episode broke it* rather than as a nought.
+ */
+function episodesWorded(count: number): string {
+  if (count === 0) {
+    return 'no episode'
+  }
+  return count === 1 ? '1 episode' : `${count} episodes`
+}
+
+/**
+ * Every family the report has an answer for, each paired with what the search found.
+ *
+ * Grouped by family in the payload's own order and **never sorted by what an episode
+ * found**: an ordering by outcome is a rank, and this layer is not scored. The
+ * counting happens here, over the episodes the payload already carries — every
+ * reported episode names its family and its outcome — which is why the artefact
+ * gains no figure and `AdaptiveSection` still refuses to count (ADR-0056).
+ */
+export function familyRows(
+  measured: MeasuredSection,
+  adaptive: AdaptiveSection,
+): FamilyRow[] {
+  return familyAnswers(measured).map((answer) => ({
+    family: answer.family,
+    answer,
+    discoveries: found(answer.family),
+  }))
+
+  function found(family: string): DiscoveriesReading | null {
+    const here = adaptive.episodes.filter((episode) => episode.family === family)
+    if (here.length === 0) {
+      return null
+    }
+    // Each outcome counted for itself and neither derived from the other, on the
+    // terms `readOutcome` states below: an episode that is neither broken nor
+    // censored is neither, and subtracting would report a seventh outcome as *out
+    // of turns* and disagree with the document's own count (ADR-0056 §3).
+    return {
+      broke: `${episodesWorded(counting('broken'))} broke it`,
+      censored: `${episodesWorded(counting('censored'))} ${readOutcome('censored')}`,
+      note: NO_DENOMINATOR,
+    }
+
+    function counting(outcome: string): number {
+      return here.filter((episode) => episode.outcome === outcome).length
+    }
+  }
+}
+
 /** One episode of the search: what it proposed in that family, and over how long. */
 export interface AdaptiveEpisodeReading {
   /**
@@ -822,8 +937,14 @@ export function verificationReading(
 /** Everything the report screen draws, as data, with nothing spanning a family. */
 export interface ReportView {
   target: string
-  /** One answer per family, in the payload's order and never sorted by rate. */
-  answers: FamilyAnswer[]
+  /**
+   * One row per family, in the payload's order and never sorted by rate.
+   *
+   * A row rather than an answer since #77: each one pairs what the fixed suite
+   * measured with what the search found in the same family, in two fields of two
+   * types that share no number (ADR-0056).
+   */
+  rows: FamilyRow[]
   adaptive: AdaptiveReading
 }
 
@@ -838,7 +959,7 @@ export interface ReportView {
 export function reportView(report: TargetReport): ReportView {
   return {
     target: report.target,
-    answers: familyAnswers(report.measured),
+    rows: familyRows(report.measured, report.adaptive),
     adaptive: adaptiveReading(report.adaptive),
   }
 }

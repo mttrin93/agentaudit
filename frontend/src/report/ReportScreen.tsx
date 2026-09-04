@@ -81,11 +81,12 @@ import {
   reportView,
   routeReading,
   type AdaptiveFamilyReading,
+  type DiscoveriesReading,
   type EpisodeRouteReading,
   type ExchangesReading,
   type FamilyBreakReading,
-  type FamilyAnswer,
   type FamilyExchangeReading,
+  type FamilyRow,
   type LabelReading,
   type ReportView,
   type RouteReading,
@@ -298,11 +299,11 @@ function TheReport({
       <section>
         <h2>The scored layer, one family at a time</h2>
         <div className="families per-family">
-          {view.answers.map((answer) => (
+          {view.rows.map((row) => (
             <TheFamily
-              answer={answer}
-              counted={counts[answer.family] ?? ''}
-              key={`${answer.kind}-${answer.family}`}
+              row={row}
+              counted={counts[row.family] ?? ''}
+              key={`${row.answer.kind}-${row.family}`}
             />
           ))}
         </div>
@@ -434,13 +435,8 @@ function TheLabel({ label }: { label: LabelReading }) {
  * for the same reason the two cost figures are blocks — a table wants a total row,
  * and this grid has nowhere to put one.
  */
-function TheFamily({
-  answer,
-  counted,
-}: {
-  answer: FamilyAnswer
-  counted: string
-}) {
+function TheFamily({ row, counted }: { row: FamilyRow; counted: string }) {
+  const answer = row.answer
   if (answer.kind === 'withheld') {
     return (
       <div className="family absent">
@@ -468,6 +464,7 @@ function TheFamily({
             a restart. */}
         {counted ? <p className="aside">{counted}</p> : null}
         {answer.kappa ? <p className="aside">{answer.kappa.counts}</p> : null}
+        <TheDiscoveries discoveries={row.discoveries} />
       </div>
     )
   }
@@ -479,6 +476,7 @@ function TheFamily({
         <p className="at">not measurable — {answer.reason}</p>
         <p>{answer.stated}</p>
         <p className="aside">{answer.note}</p>
+        <TheDiscoveries discoveries={row.discoveries} />
       </div>
     )
   }
@@ -514,7 +512,43 @@ function TheFamily({
       </ul>
       <p className="aside">{figures.counts}</p>
       {figures.kappa ? <p className="aside">{figures.kappa.counts}</p> : null}
+      <TheDiscoveries discoveries={row.discoveries} />
     </div>
+  )
+}
+
+/**
+ * What the search found in this family, under what the suite measured.
+ *
+ * **Nothing at all where the search never worked in this family**, which is the
+ * empty cell #77 asks for: a card that printed *0 episodes* would say the attacker
+ * tried and found nothing, and the same refusal is why a family with no attempts
+ * carries no rate.
+ *
+ * **Not styled as a figure.** The count is drawn in the card's plain aside type and
+ * not on the `rate-line`; it takes no tint and no class of its own, and the word
+ * beside it is *discoveries* — the idiom `SettingsScreen.tsx` states, *colour
+ * carries identity and order and
+ * never a judgement*, applied to the one number on this screen a reader could
+ * mistake for a worse rate (ADR-0056). The sentence saying an episode has no
+ * denominator is on the card rather than in a legend, because a fact carried
+ * somewhere else is a fact a screenshot loses.
+ */
+function TheDiscoveries({
+  discoveries,
+}: {
+  discoveries: DiscoveriesReading | null
+}) {
+  if (discoveries === null) {
+    return null
+  }
+  return (
+    <>
+      <p className="aside">
+        discoveries — {discoveries.broke}, {discoveries.censored}
+      </p>
+      <p className="aside">{discoveries.note}</p>
+    </>
   )
 }
 

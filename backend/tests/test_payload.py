@@ -699,6 +699,63 @@ def test_no_field_totals_averages_or_ranks_across_families() -> None:
     assert _without_the_entries(one) == _without_the_entries(two)
 
 
+# --- The adaptive layer sits beside the figures and inside none of them ------
+
+
+def test_dropping_the_adaptive_section_changes_no_scored_byte_of_the_document() -> None:
+    """#77's structural claim: the artefact gains no figure when the search does.
+
+    The same shape as the family assertion above, turned on the other layer. The
+    discovery count #77 puts in the family *view* is derivable from what this document
+    already carries — every reported episode names its family and its outcome — so the
+    view counts them and the artefact does not
+    ([ADR-0056](../../docs/adr/0056-a-discovery-count-shares-a-row-with-a-rate-and-is-a-summand-of-nothing.md)).
+
+    Asserted by removing the whole adaptive section and comparing every other byte:
+    a count of episodes that had reached a scored figure would come back changed
+    rather than disappear, wherever somebody put it and whatever they called it. The
+    episodes themselves are the only thing that moves.
+    """
+    searched = a_result(adaptive=AdaptiveSection(episodes=(an_episode(),)))
+    unsearched = a_result(adaptive=AdaptiveSection())
+
+    body = document(a_payload(result=searched))
+    without = document(a_payload(result=unsearched))
+
+    assert body["adaptive"]["episodes"], "the fixture recorded no episode to drop"
+    assert not without["adaptive"]["episodes"]
+    assert _without_the_adaptive_section(body) == _without_the_adaptive_section(without)
+
+    # And no key outside that section names an episode or a discovery at all, so the
+    # count cannot arrive under a scored heading by being spelled a different way.
+    named = [
+        path
+        for path, _ in figures(body)
+        if not path.startswith("adaptive")
+        and any(word in path.lower() for word in ("episode", "discover"))
+    ]
+    assert not named, (
+        f"{named} carries a count of episodes outside the adaptive section"
+    )
+
+
+def test_a_family_entry_holds_no_adaptive_field_for_a_count_to_arrive_in() -> None:
+    """The type-level half, in the shape the gate-decision assertion above uses.
+
+    A field on the scored entry is the one shape that makes the addition easy to
+    write — `entry.rate.successes + entry.adaptive_discoveries` type-checks and means
+    nothing — so this is the test that fails when somebody adds it (ADR-0010, and
+    CLAUDE.md's standing rule: *if you find yourself widening a signature to accept
+    both, stop*).
+    """
+    named = [
+        name
+        for name in get_type_hints(FamilyEntry)
+        if any(word in name.lower() for word in ("adaptive", "episode", "discover"))
+    ]
+    assert not named, f"FamilyEntry.{named} would put an episode count beside a rate"
+
+
 # --- Five absences, and none of them is a rate of zero -----------------------
 
 
@@ -1184,8 +1241,14 @@ def a_result(
     controls: tuple[ScannedControl, ...] | None = None,
     absent: tuple[DeclaredControl, ...] = (DeclaredControl.STOP_CONTROL,),
     rule_of_two: RuleOfTwo = NOTHING_DECLARED,
+    adaptive: AdaptiveSection | None = None,
 ) -> TargetResult:
-    """One target's result, with both judged families present — one fit, one not."""
+    """One target's result, with both judged families present — one fit, one not.
+
+    `adaptive` is a parameter because #77's structural assertion is about what happens
+    to the rest of the document when the search is removed, so a caller has to be able
+    to build the same result with and without it.
+    """
     if judged is None:
         judged = (
             an_entry(
@@ -1222,18 +1285,29 @@ def a_result(
         declared=DeclaredSection(
             controls=controls, absent=absent, rule_of_two=rule_of_two
         ),
-        adaptive=AdaptiveSection(episodes=(an_episode(),)),
+        adaptive=(
+            adaptive
+            if adaptive is not None
+            else AdaptiveSection(episodes=(an_episode(),))
+        ),
     )
 
 
-def an_episode() -> ReportedEpisode:
+def an_episode(
+    family: Family = Family.HALT_DEFEAT,
+    outcome: EpisodeOutcome = EpisodeOutcome.BROKEN,
+) -> ReportedEpisode:
     """One episode as the adaptive section reports it: prose, over a transcript that
-    never leaves the process."""
+    never leaves the process.
+
+    The family is a parameter because the row #77 draws only exists where a family
+    carries both readings, and the default one deliberately carries no rate here.
+    """
     return ReportedEpisode(
         episode=AdaptiveEpisode(
-            family=Family.HALT_DEFEAT,
+            family=family,
             target_name="customer-agent",
-            outcome=EpisodeOutcome.BROKEN,
+            outcome=outcome,
             turns=4,
             transcripts=(
                 Transcript(
@@ -1285,6 +1359,15 @@ def _without_the_entries(body: dict[str, Any]) -> dict[str, Any]:
         key: value for key, value in body["measured"].items() if key != "deterministic"
     }
     return {**body, "measured": measured}
+
+
+def _without_the_adaptive_section(body: dict[str, Any]) -> dict[str, Any]:
+    """That document with the adaptive section taken out, and nothing else.
+
+    What is left is every byte a signature covers that the search may not move
+    (ADR-0010).
+    """
+    return {key: value for key, value in body.items() if key != "adaptive"}
 
 
 def _leaves(node: Any) -> list[Any]:

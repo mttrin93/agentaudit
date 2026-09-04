@@ -30,11 +30,12 @@ import pytest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 from backend.bench.assembler import TargetResult
-from backend.bench.library import Family
+from backend.bench.library import Family, Transform
 from backend.bench.measurability import NotMeasurable
-from backend.bench.payload import canonical
+from backend.bench.payload import Provenance, canonical
 from backend.bench.rendering import REPORT_MARKDOWN, REPORT_PAYLOAD, publish
 from backend.bench.rule import DECLARED_RULE, GateRule
+from backend.bench.selection import AttackLayer, AttackSelection
 from backend.bench.signing import (
     SIGNATURE_FILE,
     encoded,
@@ -48,7 +49,7 @@ from backend.bench.verification import (
     ReDerivationOutcome,
     SignatureOutcome,
 )
-from backend.tests.test_payload import a_payload, a_result
+from backend.tests.test_payload import a_payload, a_provenance, a_result
 from scripts.verify import (
     EXIT_DID_NOT_VERIFY,
     EXIT_NOT_ESTABLISHED,
@@ -419,6 +420,86 @@ def test_a_denominator_altered_after_the_fact_still_fails_under_its_own_outcome(
     assert "provenance.rule.attempts_per_case_stated" in printed
 
 
+def test_a_selection_rewritten_after_the_fact_is_reported_rather_than_believed(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The third surface *switched off is not measured at zero* reaches.
+
+    A screen states the gap, the document states the selection, and this is the
+    verifier's half: the selection is **read and not asserted**, on the denominator's
+    exact terms (ADR-0027), because it is a declared input an operator may set — and
+    what is asserted is the **sentence beside it**. A document that carried a narrowed
+    selection while telling its reader every construction was sent would be claiming a
+    denominator it does not have, with every other comparison still agreeing
+    (ADR-0058).
+
+    A run that narrowed its selection verifies. Only the disagreement between the
+    members and the wording is a doctored document.
+    """
+    published = _publish(
+        tmp_path,
+        provenance=replace(
+            a_provenance(),
+            selection=AttackSelection(
+                layers=frozenset({AttackLayer.SINGLE_TURN}),
+                transforms=frozenset({Transform.PLAIN}),
+            ),
+        ),
+    )
+
+    code = main([str(tmp_path), "--pubkey", str(published.pubkey)])
+    printed = capsys.readouterr().out
+    assert code == 0, "a run at a narrowed selection is a real run (ADR-0058)"
+    assert ReDerivationOutcome.DISAGREES.value not in printed
+
+    published = _publish(tmp_path)
+
+    def a_narrowed_run_claiming_the_whole_library(body: dict[str, Any]) -> None:
+        # The members say one construction in one layer; the sentence and the flag are
+        # left saying what a full suite carries. Nothing else on the page contradicts
+        # either, which is why the verifier has to.
+        body["provenance"]["selection"]["transforms"] = ["plain"]
+        body["provenance"]["selection"]["layers"] = ["single_turn"]
+
+    _doctor(tmp_path, published.key, a_narrowed_run_claiming_the_whole_library)
+
+    code = main([str(tmp_path), "--pubkey", str(published.pubkey)])
+    printed = capsys.readouterr().out
+    assert code == EXIT_DID_NOT_VERIFY, (
+        "A payload whose selection was rewritten while its own sentence kept the "
+        "whole-library wording verified. The sentence is re-derived from the members "
+        "for exactly this case: a document may not carry one selection and tell its "
+        "reader about another."
+    )
+    assert ReDerivationOutcome.DISAGREES.value in printed
+    assert "provenance.selection.stated" in printed
+
+    # And the derived flag on its own, with the members and the sentence left
+    # agreeing. It is carried rather than inferred so that a consumer does not have to
+    # count the enum to answer *did this run narrow anything* — which is exactly why a
+    # forger could set it and leave everything a reader looks at consistent.
+    published = _publish(
+        tmp_path,
+        provenance=replace(
+            a_provenance(),
+            selection=AttackSelection(
+                layers=frozenset({AttackLayer.SINGLE_TURN}),
+                transforms=frozenset({Transform.PLAIN}),
+            ),
+        ),
+    )
+
+    def a_narrowed_run_flagged_as_the_whole_library(body: dict[str, Any]) -> None:
+        body["provenance"]["selection"]["whole_library"] = True
+
+    _doctor(tmp_path, published.key, a_narrowed_run_flagged_as_the_whole_library)
+
+    code = main([str(tmp_path), "--pubkey", str(published.pubkey)])
+    printed = capsys.readouterr().out
+    assert code == EXIT_DID_NOT_VERIFY
+    assert "provenance.selection.whole_library" in printed
+
+
 def test_the_verifier_reaches_no_network_and_reads_no_credential(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -489,10 +570,13 @@ def _publish(
     directory: Path,
     result: TargetResult | None = None,
     rule: GateRule | None = None,
+    provenance: Provenance | None = None,
 ) -> Publication:
     """One signed report in that directory, under a key generated for this test."""
     key = generate()
-    publish_signed(a_payload(result=result, rule=rule), directory, key)
+    publish_signed(
+        a_payload(result=result, rule=rule, provenance=provenance), directory, key
+    )
     return Publication(key, _pubkey(directory.parent, key))
 
 

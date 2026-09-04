@@ -19,8 +19,9 @@ from backend.bench.adaptive.budget import DECLARED_ADAPTIVE_BUDGET, AdaptiveBudg
 from backend.bench.attacker import run_attempt
 from backend.bench.calibration import run_calibration
 from backend.bench.contract import RetryPolicy
-from backend.bench.library import Case, Family
+from backend.bench.library import Case, Family, Transform
 from backend.bench.rule import DECLARED_RULE
+from backend.bench.selection import AttackLayer, AttackSelection
 from backend.graph.budget import (
     NOT_PRICED,
     REGISTRATION_PROBES_PER_TARGET,
@@ -71,6 +72,42 @@ def test_the_adaptive_figure_is_the_worst_case_and_never_an_average() -> None:
         * adaptive.turns_per_episode
     )
     assert budget.estimate.adaptive.kind is FigureKind.CEILING
+
+
+def test_the_adaptive_layer_switched_off_is_nothing_on_the_wire_and_says_so() -> None:
+    """The estimate moves when the selection moves — the operator sees the price.
+
+    A layer switched off puts no call on the operator's endpoint, so the figure they
+    are asked to confirm drops to nothing for it and the basis says why rather than
+    reading as a bound somebody mistyped. Still a `CEILING`: nothing about a layer
+    that ran is exact, and a bound of zero is the one bound that cannot be exceeded
+    (ADR-0007, ADR-0058).
+
+    The ceiling drops with it, which is the half that is enforced rather than shown:
+    a run that somehow opened an episode against a switched-off layer is refused at
+    the counter before the first probe.
+    """
+    scored_only = AttackSelection(
+        layers=frozenset({AttackLayer.SINGLE_TURN, AttackLayer.FIXED_MULTI_TURN}),
+        transforms=frozenset(Transform),
+    )
+    whole = a_budget(cases=3, targets=2)
+    narrowed = RunBudget.declare(
+        cases=some_cases(3),
+        targets=[a_target(f"target-{i}", sends=SENDS) for i in range(2)],
+        selection=scored_only,
+    )
+
+    assert whole.estimate.adaptive.calls > 0
+    assert narrowed.estimate.adaptive.calls == 0
+    assert narrowed.estimate.adaptive.kind is FigureKind.CEILING
+    assert "switched off" in narrowed.estimate.adaptive.basis
+    assert narrowed.adaptive_ceiling == 0
+    # And the scored half is untouched: switching the agent off buys a cheaper run
+    # and costs no scored attempt, which is why it is the switch with no denominator
+    # behind it (ADR-0010).
+    assert narrowed.estimate.scored == whole.estimate.scored
+    assert narrowed.estimate.total.calls < whole.estimate.total.calls
 
 
 def test_the_declared_adaptive_budget_is_the_stated_one() -> None:

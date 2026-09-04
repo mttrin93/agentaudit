@@ -196,6 +196,28 @@ const CONFIGURED: BenchSettings = {
       'a family switched off is not run: its cases are not attempted, no episode ' +
       'opens against it, and the report states it as not run rather than as a rate ' +
       'of zero.',
+    // The selection, on the reading this screen does not draw: the switches are on the
+    // front door beside the family switches, and the fields are here because this is
+    // one settings response. A block this screen offers no control for still has to be
+    // in the fixture, or the scan below is a scan over a narrower response than the
+    // route serves.
+    layers: [
+      { layer: 'single_turn', selected: true, sends: 'one message in one session' },
+      { layer: 'adaptive', selected: true, sends: 'the model-driven attacker' },
+    ],
+    transforms: [
+      {
+        transform: 'plain',
+        layer: 'single_turn',
+        selected: true,
+        does: 'sent as the record commits it',
+      },
+    ],
+    selection_off_statement:
+      'a construction switched off is not sent, and a family whose every ' +
+      'construction is off is stated as not run rather than measured at zero.',
+    selection_stated:
+      'This run sent every construction the library holds, in every layer.',
     statement:
       'these are the declared inputs of a run, printed in the report of every run ' +
       'made under them, and a change is refused while a run is going.',

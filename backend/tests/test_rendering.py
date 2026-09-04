@@ -39,7 +39,7 @@ from backend.bench.capability import (
 from backend.bench.contract import AgentCapability, DeclaredControl
 from backend.bench.editions import AGENTIC_TOP_10_2026, LLM_TOP_10_2026
 from backend.bench.elective import ElectiveSelection
-from backend.bench.library import ElectiveFamily, Family
+from backend.bench.library import ElectiveFamily, Family, Transform
 from backend.bench.measurability import NotMeasurable
 from backend.bench.payload import TargetPayload, canonical_bytes, document, figures
 from backend.bench.rendering import (
@@ -62,6 +62,7 @@ from backend.bench.reproducibility import Reproducibility
 from backend.bench.rule import DECLARED_RULE, NOT_A_GATE_RESULT
 from backend.bench.scanner import RuleOfTwo, Supervision
 from backend.bench.scorer import Band, GateOutcome
+from backend.bench.selection import EVERY_CONSTRUCTION, AttackLayer, AttackSelection
 from backend.tests.test_payload import (
     FORBIDDEN_IN_A_KEY,
     MODELS,
@@ -147,7 +148,7 @@ def test_every_section_states_its_own_reproducibility_and_three_read_the_payload
 
 # --- The golden digest: one document, pinned to the byte ---------------------
 
-GOLDEN_ONE_FAMILY = "4a930269912ed5988198da01c835825f1e2d86a15b6c67eed51f7a900058dd19"
+GOLDEN_ONE_FAMILY = "679698ba19682236bc041e0511b60b7fedf42449a55236e1815bc12e8dbaae61"
 """The sha256 of `_one_family()`'s rendering, written down.
 
 **A tripwire, and it is deliberately a strict one.** Every other assertion in this
@@ -274,6 +275,19 @@ count prints under the word **discoveries** as episodes with the censored count 
 it, with no denominator, because an episode has none. Here it reads *no episode is
 recorded against this family*, because the fixture's one episode is in a family this
 payload does not measure.
+
+Moved a twelfth time, by #79, and it is section 2 rather than section 4: the
+provenance block gained a subsection naming **the constructions this run sent** and
+the layers it sent them in, beside the library version it sent them from
+([ADR-0058](../../docs/adr/0058-the-console-selects-layers-and-constructions.md)).
+The two are one condition — section 4 has said since #76 that two runs are comparable
+only at equal library version and **equal selection**, and until this the document
+carried the first half of that and left the second to be trusted. **No figure moved
+and no figure arrived**: what is printed is what the run was asked to send, which is a
+declared input like the models above it and not a measurement of anything. Here it
+reads that every construction was sent, because the fixture narrowed nothing — and a
+narrowed run's block says which constructions it sent and that the rest are *not
+measured*, which is the fact an absent line in a family's mix cannot state on its own.
 """
 
 
@@ -505,6 +519,46 @@ def test_the_document_says_when_its_figures_are_not_a_gate_result() -> None:
     # will compare the reading against ones taken at the declared rule.
     assert NOT_A_GATE_RESULT in probed
     assert "1 attempt per case where the declared rule reads 10" in probed
+
+
+def test_the_document_says_which_constructions_this_run_sent(  # noqa: D103
+) -> None:
+    """The selection, beside the library version, in section 2.
+
+    `VARIANTS_STATED` in section 4 says two runs are comparable only at equal library
+    version and equal selection, and section 2 is where a reader looks for how the run
+    was made. Both halves of that condition are now on the page: the library version
+    it sent from, and what it was asked to send (ADR-0058).
+
+    **Switched off reads apart from measured at zero here too.** A construction that
+    was not sent has no line in any family's mix, because a breakdown holds no entry
+    at zero attempts (ADR-0055) — so without this block an absent construction and a
+    construction the library holds no case for look identical on the page.
+    """
+    whole = render(a_payload())
+    narrowed = render(
+        a_payload(
+            provenance=replace(
+                a_provenance(),
+                selection=AttackSelection(
+                    layers=frozenset({AttackLayer.SINGLE_TURN}),
+                    transforms=frozenset({Transform.PLAIN}),
+                ),
+            )
+        )
+    )
+
+    assert EVERY_CONSTRUCTION.stated() in whole
+    assert "The constructions this run sent" in whole
+    # A run that narrowed nothing says so; a narrowed one names what it sent and says
+    # the rest is not measured, which is the whole distinction.
+    assert "not measured" not in EVERY_CONSTRUCTION.stated()
+    assert "**not measured**" in narrowed
+    assert "single_turn" in narrowed
+    assert (
+        "adaptive"
+        not in narrowed.split("The constructions this run sent")[1].split("###")[0]
+    )
 
 
 def test_the_document_prints_both_claims_and_scopes_re_derivability_to_the_scored() -> (

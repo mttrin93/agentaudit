@@ -50,6 +50,7 @@ from backend.bench.library import (
     ExternalId,
     Family,
     LibraryVersion,
+    Transform,
     VerdictClass,
 )
 from backend.bench.measurability import NotMeasurable
@@ -84,6 +85,7 @@ from backend.bench.scorer import (
     band_for,
     failure_rate,
 )
+from backend.bench.selection import EVERY_CONSTRUCTION, AttackLayer, AttackSelection
 from backend.graph.budget import Layer
 from backend.tests.conftest import imports_of, plain_breakdown
 
@@ -249,6 +251,51 @@ def test_the_provenance_block_says_how_this_was_made_and_what_it_cost_per_layer(
     assert set(block["calls_spent"]) == {layer.value for layer in Layer}
 
 
+def test_the_artefact_carries_the_selection_beside_the_library_version() -> None:
+    """The other half of the comparability claim, in the document that travels.
+
+    `payload.VARIANTS_STATED` says two runs are comparable only at **equal library
+    version and equal selection**, and until #79 the artefact carried one of those
+    two. So two runs at one library version and different selections signed
+    artefacts that were byte-identical in everything a reader could check the claim
+    against — different denominators, and nothing on the page saying which
+    (ADR-0058).
+
+    **Switched off is not measured at zero, and this is where a document reader meets
+    the difference.** A construction that was not sent is absent from every family's
+    variant breakdown (`scorer.VariantCounts` refuses an entry at zero attempts), and
+    an absence with no reason beside it is a reader guessing whether the bench holds
+    no such case or this run declined to send one. The selection is the reason.
+    """
+    full = document(a_payload())["provenance"]
+    whole = full["selection"]
+
+    # Sorted, because a set has no order and a serialiser that printed one would
+    # make two identical selections two different documents (ADR-0016).
+    assert whole["layers"] == sorted(str(layer) for layer in AttackLayer)
+    assert whole["transforms"] == sorted(str(transform) for transform in Transform)
+    assert whole["stated"] == EVERY_CONSTRUCTION.stated()
+    assert whole["whole_library"] is True
+
+    narrowed = AttackSelection(
+        layers=frozenset({AttackLayer.SINGLE_TURN}),
+        transforms=frozenset({Transform.PLAIN, Transform.BASE64}),
+    )
+    thinner = document(
+        a_payload(provenance=replace(a_provenance(), selection=narrowed))
+    )["provenance"]
+    assert thinner["selection"]["transforms"] == ["base64", "plain"]
+    assert thinner["selection"]["layers"] == ["single_turn"]
+    assert thinner["selection"]["whole_library"] is False
+    assert "not measured" in thinner["selection"]["stated"]
+
+    # The two documents differ, which is the property the block exists for: the
+    # library version is the same in both, so nothing else on the page could have
+    # told a recipient holding one of each that they measured different suites.
+    assert thinner["library"] == full["library"]
+    assert thinner["selection"] != whole
+
+
 def test_a_temperature_undeclared_and_a_model_that_takes_none_are_two_statements() -> (
     None
 ):
@@ -375,6 +422,7 @@ def test_a_provenance_block_that_names_one_layers_spending_is_refused() -> None:
             attestation=ATTESTED,
             models=MODELS,
             library=LibraryVersion(cases=18, digest="90a8ebcc3d0c"),
+            selection=EVERY_CONSTRUCTION,
             calls_spent={Layer.SCORED: 181},
         )
 
@@ -1328,6 +1376,7 @@ def a_provenance(gate: GateCitation | None = CITATION) -> Provenance:
         models=MODELS,
         library=LibraryVersion(cases=18, digest="90a8ebcc3d0c"),
         calls_spent={Layer.SCORED: 181, Layer.ADAPTIVE: 96},
+        selection=EVERY_CONSTRUCTION,
         gate=gate,
     )
 

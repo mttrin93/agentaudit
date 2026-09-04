@@ -21,7 +21,7 @@ from __future__ import annotations
 import subprocess
 import sys
 import threading
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
@@ -44,8 +44,13 @@ from backend.api.recorded import (
     RunDatabase,
 )
 from backend.api.run_config import BenchConfig, plan_for
-from backend.api.runs import BenchRuns, RunRecord, RunStatus
-from backend.bench.library import Family, LibraryVersion
+from backend.api.runs import BenchRuns, RunRecord, RunsInFlight, RunStatus
+from backend.bench.library import Family, LibraryVersion, Transform
+from backend.bench.selection import (
+    EVERY_CONSTRUCTION,
+    AttackLayer,
+    AttackSelection,
+)
 from backend.graph import approval
 from backend.graph.approval import Approval, ApprovalRun, checkpoint_kept
 from backend.graph.runstate import RunState
@@ -171,6 +176,58 @@ def test_the_record_names_the_halt_the_run_is_waiting_at(
             "the id a restart would look the checkpoint up by is not the id the "
             "run halted under"
         )
+
+
+def test_no_declared_input_moves_while_a_run_is_holding_its_halt(
+    recorded: RecordedRuns,
+) -> None:
+    """Condition 2 of ADR-0025, at the one guard all three console writes share.
+
+    A run awaiting approval has been shown an estimate built from the instruments, the
+    families **and** the selection it was declared with, and ADR-0007's whole mechanism
+    is that nothing exceeds what a human confirmed — so a change under an open halt
+    would make the confirmation a statement about a run that never happened. The three
+    writers refuse together because they refuse through one method
+    (`_refuse_while_a_run_is_going`), and the refusal names the run so an operator can
+    wait for it or decline it rather than guess.
+
+    Asserted at the registry rather than at the routes, on `a_bench`'s reasoning: what
+    is under test is the guard, and a route would add a second thing that could be the
+    reason a change was refused. The routes' own job is to turn this into a `409`
+    rather than a `422`, which is `test_api_settings.py`'s.
+    """
+    with a_bench(recorded) as bench:
+        record = a_run(bench)
+        held = bench.config
+
+        narrowed = AttackSelection(
+            layers=frozenset({AttackLayer.SINGLE_TURN}),
+            transforms=frozenset({Transform.PLAIN}),
+        )
+        changes: tuple[Callable[[], None], ...] = (
+            lambda: bench.cover(frozenset({Family.DATA_LEAKAGE})),
+            lambda: bench.select(narrowed),
+        )
+        for change in changes:
+            with pytest.raises(RunsInFlight) as refused:
+                change()
+            assert record.run_id in str(refused.value)
+
+        # And nothing moved on the way to either refusal: the run in flight is still
+        # held to the configuration it was estimated against.
+        assert bench.config is held
+        assert bench.config.selection == EVERY_CONSTRUCTION
+
+    # The halt answered, the write goes through. `a_bench` declines every run it
+    # opened, so what this asserts is that the guard is about a run *in flight* and
+    # not about a bench that has ever started one.
+    bench.select(
+        AttackSelection(
+            layers=frozenset({AttackLayer.SINGLE_TURN}),
+            transforms=frozenset({Transform.PLAIN}),
+        )
+    )
+    assert bench.config.selection.scored == frozenset({Transform.PLAIN})
 
 
 # --- the run around the halt is on disk ------------------------------------------

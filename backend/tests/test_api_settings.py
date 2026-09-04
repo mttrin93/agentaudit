@@ -1,9 +1,9 @@
 """What this instrument is configured to do, and the four ways stating it goes wrong.
 
 `GET /bench/settings` is the second route whose subject is the bench. It is a
-reader, and the two writes on the prefix are the settings `PUT`s below (ADR-0025 as
-amended by #57). Rotation stays in the environment, because the factory reads its
-key from one place and refuses to boot without it (ADR-0020), and the library stays
+reader, and the three writes on the prefix are the settings `PUT`s below (ADR-0025 as
+amended by #57 and #79). Rotation stays in the environment, because the factory reads
+its key from one place and refuses to boot without it (ADR-0020), and the library stays
 what was mounted. Every assertion here is about a way this response could quietly
 become something else.
 
@@ -58,6 +58,7 @@ from backend.api.app import (
     BENCH_GATE_RECORD_ROUTE,
     BENCH_GATE_ROUTE,
     BENCH_NOTES_ROUTE,
+    BENCH_SELECTION_ROUTE,
     BENCH_SETTINGS_ROUTE,
     BENCH_TUNING_ROUTE,
     GATE_RUN_APPROVAL_ROUTE,
@@ -79,9 +80,15 @@ from backend.bench.capability import (
     accepts_temperature,
     capabilities_of,
 )
-from backend.bench.library import Case, Family, LibraryVersion
+from backend.bench.library import Case, Family, LibraryVersion, Transform
 from backend.bench.payload import DeclaredModels
 from backend.bench.rule import DECLARED_RULE, GateRule
+from backend.bench.selection import (
+    EVERY_CONSTRUCTION,
+    AttackLayer,
+    AttackSelection,
+    layer_of,
+)
 from backend.bench.signing import (
     encoded_private,
     fingerprint,
@@ -89,9 +96,9 @@ from backend.bench.signing import (
     public_key,
 )
 from backend.bench.verification import SignatureOutcome
-from backend.graph.budget import REGISTRATION_PROBES_PER_TARGET
+from backend.graph.budget import REGISTRATION_PROBES_PER_TARGET, RunBudget
 from backend.targets.reference.model import ModelConfig, Provider
-from backend.tests.conftest import retired_case, some_cases
+from backend.tests.conftest import a_target, retired_case, some_cases
 
 DECLARED = DeclaredModels(
     calibration="openrouter:openai/gpt-4.1-nano",
@@ -563,8 +570,10 @@ def test_the_declared_figures_are_read_off_the_records_that_declare_them() -> No
     assert "adaptive/budget.py" in str(adaptive["declared_in"])
 
 
-def test_two_routes_under_the_bench_prefix_write_and_both_are_declared_inputs() -> None:
-    """`/bench` holds exactly two writes: the tuning route and the families route.
+def test_three_routes_under_the_bench_prefix_write_and_all_are_declared_inputs() -> (
+    None
+):
+    """`/bench` holds exactly three writes: tuning, families, and the selection.
 
     Over the route table rather than over this module, because the claim is about the
     whole surface. The line is not *no writes* any more and it is not *any write*: a
@@ -582,7 +591,14 @@ def test_two_routes_under_the_bench_prefix_write_and_both_are_declared_inputs() 
     the same four conditions as the tuning route, which is what makes the two below a
     decision rather than an accretion.
 
-    A **third** write appearing under this prefix fails here whatever it is called,
+    **Three since #79**, and the third is `PUT /bench/settings/selection`: which
+    layers the next run runs and which constructions inside them. It is the second
+    setting on this prefix that moves the scored denominator, admitted on ADR-0025's
+    four conditions and argued in ADR-0058 — condition 1 is met by a printed field
+    rather than by an absence, because the artefact carries the selection in
+    provenance.
+
+    A **fourth** write appearing under this prefix fails here whatever it is called,
     which is the protection this test is. Every route is named rather than counted for
     exactly that reason: an assertion on how *many* writes there are would pass on a
     route that swapped one of these for something else.
@@ -603,6 +619,7 @@ def test_two_routes_under_the_bench_prefix_write_and_both_are_declared_inputs() 
         (BENCH_SETTINGS_ROUTE, "GET"),
         (BENCH_TUNING_ROUTE, "PUT"),
         (BENCH_FAMILIES_ROUTE, "PUT"),
+        (BENCH_SELECTION_ROUTE, "PUT"),
     }
 
     # And nothing anywhere on this bench takes a key: the two setting routes take the
@@ -627,6 +644,9 @@ def test_two_routes_under_the_bench_prefix_write_and_both_are_declared_inputs() 
         # And the second: which families the next run covers. Its own statement from
         # its own screen, and it takes no instrument.
         BENCH_FAMILIES_ROUTE,
+        # And the third, since #79: how the next run attacks what it covers. Two
+        # closed enumerations resolved server-side, and no key, model or threshold.
+        BENCH_SELECTION_ROUTE,
         # The gate-run family, since ADR-0021: one route that records the attestation
         # and declares the estimate, one that answers the halt. Neither is under
         # `/bench`, and neither takes a key, a model or a threshold — a gate run
@@ -1215,3 +1235,290 @@ def test_a_family_this_bench_does_not_have_is_refused_by_name() -> None:
     assert answered.status_code == 422
     assert "sql_injection" in answered.json()["detail"]
     assert "data_leakage" in answered.json()["detail"]
+
+
+def a_base64_variant(base: Case) -> Case:
+    """That case's base64 variant, built here because the library holds none.
+
+    Eighteen records and every one of them `PLAIN`: admission is per variant and needs
+    a person at a tty (ADR-0052 §5), so no variant has been admitted yet. The
+    selection has to be correct over a library that holds one construction, and the
+    only way to assert what it does over a library that holds two is to build the
+    second here — which is a statement about this test and not about the bench: **the
+    two-construction reading below is held by a test and is not measured today.**
+    """
+    return replace(
+        base,
+        id=f"{base.id}-base64",
+        transform=Transform.BASE64,
+        derived_from=base.id,
+        payload=tuple(
+            base64.b64encode(turn.encode("utf-8")).decode("ascii")
+            for turn in base.payload
+        ),
+    )
+
+
+def test_a_construction_switched_off_is_dropped_and_its_family_stated_as_not_run(
+    leakage_case: Case,
+) -> None:
+    """Not run, and never a rate of zero — one level below the family switch.
+
+    The family switch answers *was this family asked*; this answers *was this
+    construction sent*. A family whose only remaining variants were switched off has
+    no attempt behind it, so it is reported with a gap of its own rather than measured
+    on a thinner library — and never as a rate over zero attempts, which is the
+    reading `DeclaredGap` exists to make unavailable (ADR-0004, ADR-0058).
+
+    The distinction from #72's *no new absence type*: that was a variant the **bench**
+    never wrote, and a family measured by the variants that exist needs no reason
+    beside it. This is one the **caller** turned off, and `DeclaredGap` is the surface
+    for the caller's gaps.
+    """
+    variant = a_base64_variant(leakage_case)
+    family = Family(leakage_case.family)
+
+    # Both constructions selected: both cases are attempted and there is no gap.
+    everything = BenchConfig(cases=[leakage_case, variant])
+    whole = plan_for(everything, note_planted=True)
+    assert [case.id for case in whole.cases] == [leakage_case.id, variant.id]
+    assert whole.gaps == {}
+
+    # The plain construction switched off: the variant is still attempted, so the
+    # family is measured on what remains and acquires no gap. A ragged selection is
+    # a narrower reading and not an absent one.
+    encodings_only = replace(
+        everything,
+        selection=AttackSelection(
+            layers=frozenset(AttackLayer),
+            transforms=frozenset(Transform) - {Transform.PLAIN},
+        ),
+    )
+    narrowed = plan_for(encodings_only, note_planted=True)
+    assert [case.id for case in narrowed.cases] == [variant.id]
+    assert narrowed.gaps == {}
+
+    # And the family's last remaining construction switched off: no attempt, and the
+    # gap says *not run* in its own words.
+    nothing_left = replace(
+        everything,
+        selection=AttackSelection(
+            layers=frozenset(AttackLayer),
+            transforms=frozenset(Transform) - {Transform.PLAIN, Transform.BASE64},
+        ),
+    )
+    emptied = plan_for(nothing_left, note_planted=True)
+    assert emptied.cases == ()
+    assert emptied.gaps[family] is DeclaredGap.TRANSFORMS_SWITCHED_OFF
+    stated = DeclaredGap.TRANSFORMS_SWITCHED_OFF.stated()
+    assert "not run" in stated
+    assert "not measured rather than measured at zero" in stated
+    # Two gaps and never one: a family nobody asked for and a family whose
+    # constructions were all switched off are two different things the caller did.
+    assert stated != DeclaredGap.FAMILY_SWITCHED_OFF.stated()
+
+
+def test_fewer_constructions_is_a_cheaper_run_and_the_operator_sees_the_price(
+    leakage_case: Case,
+) -> None:
+    """The estimate moves when the selection moves — the scored half of it.
+
+    `test_budget.py` holds the adaptive half: a layer switched off is nothing on the
+    wire. This is the other half and it is the one that moves a **denominator** —
+    fewer constructions is a cheaper run and a narrower reading, which is the same
+    sentence `families` already earns (ADR-0058). Priced through the composition the
+    run actually uses, `plan_for` then `RunBudget.declare`, because that is where an
+    operator's figure comes from: the plan drops the cases and the estimate charges
+    for what is left, and a selection that narrowed the plan and not the estimate
+    would put an operator's confirmation on a run nobody asked for (ADR-0007).
+    """
+    variant = a_base64_variant(leakage_case)
+    whole = BenchConfig(cases=[leakage_case, variant])
+    encodings_only = replace(
+        whole,
+        selection=AttackSelection(
+            layers=frozenset(AttackLayer),
+            transforms=frozenset(Transform) - {Transform.PLAIN},
+        ),
+    )
+
+    def priced(config: BenchConfig) -> RunBudget:
+        plan = plan_for(config, note_planted=True)
+        return RunBudget.declare(
+            cases=plan.cases,
+            targets=[a_target("customer-agent")],
+            rule=config.rule,
+            adaptive=config.adaptive,
+            selection=config.selection,
+        )
+
+    full = priced(whole)
+    narrowed = priced(encodings_only)
+
+    assert narrowed.estimate.scored.calls < full.estimate.scored.calls
+    assert narrowed.scored_ceiling < full.scored_ceiling
+    # One construction of two, and the registration probe is charged either way: the
+    # figure is the arithmetic of what was sent and not a fraction of the library.
+    assert full.estimate.scored.calls - narrowed.estimate.scored.calls == (
+        leakage_case.turns * whole.rule.attempts_per_case
+    )
+    # And the adaptive figure is untouched, because no construction is scheduled by
+    # that layer: the two switches move two different figures (ADR-0010).
+    assert narrowed.estimate.adaptive == full.estimate.adaptive
+
+
+def test_a_family_switched_off_keeps_its_own_gap_when_constructions_are_off_too(
+    leakage_case: Case, scope_creep_case: Case
+) -> None:
+    """The coarser statement wins: a family nobody asked for was not asked.
+
+    Both gaps could apply to one family at once, and the reason it reports the family
+    switch is that the two are not equally true of it: a family switched off had no
+    construction *offered* to it, so saying its constructions were switched off would
+    be reporting the narrower reason for the wider fact.
+    """
+    config = BenchConfig(
+        cases=[leakage_case, scope_creep_case],
+        families=frozenset({Family(leakage_case.family)}),
+        selection=AttackSelection(
+            layers=frozenset(AttackLayer),
+            transforms=frozenset(Transform) - {Transform.PLAIN},
+        ),
+    )
+    plan = plan_for(config, note_planted=True)
+
+    assert plan.cases == ()
+    assert plan.gaps[Family(scope_creep_case.family)] is DeclaredGap.FAMILY_SWITCHED_OFF
+    assert plan.gaps[Family(leakage_case.family)] is DeclaredGap.TRANSFORMS_SWITCHED_OFF
+
+
+def test_the_console_reads_the_layers_and_the_constructions_it_may_select() -> None:
+    """The reading the form is drawn from: three layers, seven constructions.
+
+    Read off the closed enumerations rather than listed here, on `families`' terms one
+    level up: a construction the bench performs and a screen does not offer is a
+    reading no operator can ask for, and a screen offering one the route refuses is a
+    control whose every value fails.
+
+    Each row carries what it *is* in the bench's own words, so the screen states the
+    consequence of switching one off rather than paraphrasing it.
+    """
+    app = create_app(BenchConfig(cases=[]))
+    with TestClient(app) as client:
+        tuning = client.get(BENCH_SETTINGS_ROUTE).json()["tuning"]
+
+    assert [row["layer"] for row in tuning["layers"]] == [
+        str(layer) for layer in AttackLayer
+    ]
+    assert all(row["selected"] for row in tuning["layers"])
+    assert all(
+        row["sends"] == AttackLayer(row["layer"]).stated() for row in tuning["layers"]
+    )
+
+    assert [row["transform"] for row in tuning["transforms"]] == [
+        str(transform) for transform in Transform
+    ]
+    assert all(row["selected"] for row in tuning["transforms"])
+    assert all(
+        row["does"] == Transform(row["transform"]).stated()
+        for row in tuning["transforms"]
+    )
+    # Which layer each construction is scheduled by, so a screen can group them under
+    # the switch that turns them off — and never a second mapping of its own.
+    assert {row["transform"]: row["layer"] for row in tuning["transforms"]} == {
+        str(transform): str(layer_of(transform)) for transform in Transform
+    }
+
+    assert "not measured" in tuning["selection_off_statement"]
+    assert tuning["selection_stated"] == EVERY_CONSTRUCTION.stated()
+
+
+def test_the_layers_and_constructions_the_next_run_sends_can_be_set() -> None:
+    """The third write under `/bench`, on ADR-0025's four conditions (ADR-0058).
+
+    What it changed is legible in what the run produced: the cases are dropped from
+    the plan, a family it empties is stated as *not run*, and the artefact carries the
+    selection in provenance — which is condition 1 met by a printed field rather than
+    by an absence, and is the reason this write is admissible at all.
+    """
+    app = create_app(BenchConfig(cases=[]))
+    with TestClient(app) as client:
+        answered = client.put(
+            BENCH_SELECTION_ROUTE,
+            json={
+                "layers": [str(AttackLayer.SINGLE_TURN)],
+                "transforms": [str(Transform.PLAIN), str(Transform.BASE64)],
+            },
+        )
+        bench = cast(BenchRuns, app.state.bench)
+        after = client.get(BENCH_SETTINGS_ROUTE).json()["tuning"]
+
+    assert answered.status_code == 200
+    assert bench.config.selection == AttackSelection(
+        layers=frozenset({AttackLayer.SINGLE_TURN}),
+        transforms=frozenset({Transform.PLAIN, Transform.BASE64}),
+    )
+    # The whole reading back, so the screen renders what the bench holds rather than
+    # what it hoped it sent.
+    selected = {row["layer"]: row["selected"] for row in after["layers"]}
+    assert selected == {
+        str(AttackLayer.SINGLE_TURN): True,
+        str(AttackLayer.FIXED_MULTI_TURN): False,
+        str(AttackLayer.ADAPTIVE): False,
+    }
+    assert after["selection_stated"] == bench.config.selection.stated()
+    assert "not measured" in after["selection_stated"]
+
+
+def test_a_selection_the_bench_has_no_member_for_is_refused_by_name() -> None:
+    """Closed lists, resolved server-side before anything is stored.
+
+    Condition 3 one level down: a name turned into a member first, so a bench cannot
+    be put on a construction it has no function for and an unknown name is a refusal
+    rather than a silently empty run.
+    """
+    app = create_app(BenchConfig(cases=[]))
+    with TestClient(app) as client:
+        unknown_transform = client.put(
+            BENCH_SELECTION_ROUTE,
+            json={"layers": [str(AttackLayer.SINGLE_TURN)], "transforms": ["dan"]},
+        )
+        unknown_layer = client.put(
+            BENCH_SELECTION_ROUTE,
+            json={"layers": ["tree_jailbreak"], "transforms": [str(Transform.PLAIN)]},
+        )
+        after = client.get(BENCH_SETTINGS_ROUTE).json()["tuning"]
+
+    assert unknown_transform.status_code == 422
+    assert "dan" in unknown_transform.json()["detail"]
+    assert unknown_layer.status_code == 422
+    assert "tree_jailbreak" in unknown_layer.json()["detail"]
+    # And nothing was stored on the way to either refusal.
+    assert all(row["selected"] for row in after["transforms"])
+
+
+def test_a_run_that_would_score_nothing_is_refused_rather_than_widened() -> None:
+    """Condition 4 where this route could have clamped.
+
+    A bench that read *nothing* as *everything* would run a selection nobody chose,
+    and one that accepted it would start a run whose every family reports *not run*
+    while still spending a registration probe per target.
+    """
+    app = create_app(BenchConfig(cases=[]))
+    with TestClient(app) as client:
+        nothing = client.put(
+            BENCH_SELECTION_ROUTE, json={"layers": [], "transforms": []}
+        )
+        adaptive_only = client.put(
+            BENCH_SELECTION_ROUTE,
+            json={
+                "layers": [str(AttackLayer.ADAPTIVE)],
+                "transforms": [str(Transform.PLAIN)],
+            },
+        )
+        after = client.get(BENCH_SETTINGS_ROUTE).json()["tuning"]
+
+    assert nothing.status_code == 422
+    assert "scores nothing" in nothing.json()["detail"]
+    assert adaptive_only.status_code == 422
+    assert all(row["selected"] for row in after["layers"])

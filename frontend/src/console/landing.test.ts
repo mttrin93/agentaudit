@@ -23,6 +23,7 @@ import {
   A_FACT_ABOUT_THE_BENCH,
   gateReading,
   type GateReading,
+  selectionReading,
   THE_FAMILIES,
 } from './landing'
 
@@ -243,5 +244,96 @@ describe('the subject of every sentence here is the bench', () => {
         expect(key).not.toMatch(/rate|band|verdict|score|total/i)
       }
     }
+  })
+})
+
+describe('what the next run sends', () => {
+  /**
+   * The wire's own answer, in the order and the grouping the bench gave it.
+   *
+   * Seven constructions and three layers, with `layer` on every construction row,
+   * because which switch turns a construction off is the bench's answer and not this
+   * console's (`selection.layer_of`).
+   */
+  const OFFERED = {
+    layers: [
+      { layer: 'single_turn', selected: true, sends: 'one message in one session' },
+      {
+        layer: 'fixed_multi_turn',
+        selected: true,
+        sends: 'a fixed script of turns in one session',
+      },
+      { layer: 'adaptive', selected: false, sends: 'the model-driven attacker' },
+    ],
+    transforms: [
+      { transform: 'plain', layer: 'single_turn', selected: true, does: 'as committed' },
+      { transform: 'base64', layer: 'single_turn', selected: false, does: 'encoded' },
+      {
+        transform: 'scripted_crescendo',
+        layer: 'fixed_multi_turn',
+        selected: true,
+        does: 'escalated over a fixed script',
+      },
+    ],
+    selection_off_statement:
+      'a construction switched off is not sent, and is not measured rather than ' +
+      'measured at zero.',
+    selection_stated: 'This run sent these constructions and no others: plain.',
+  }
+
+  it('groups every construction under the layer the bench says schedules it', () => {
+    const reading = selectionReading(OFFERED)
+
+    expect(reading.layers.map((one) => one.layer)).toEqual([
+      'single_turn',
+      'fixed_multi_turn',
+      'adaptive',
+    ])
+    expect(
+      reading.layers.map((one) => one.constructions.map((sent) => sent.transform)),
+    ).toEqual([['plain', 'base64'], ['scripted_crescendo'], []])
+    // The adaptive layer holds none, and that is the point rather than an omission:
+    // what it would hold are the two loops the bench's closed set of constructions
+    // deliberately does not name, so the operator's question about it is whether the
+    // agent runs at all.
+    expect(reading.layers.at(-1)?.constructions).toEqual([])
+  })
+
+  it('draws each switch from the bench’s answer and never from a local default', () => {
+    const reading = selectionReading(OFFERED)
+    const runs = Object.fromEntries(reading.layers.map((one) => [one.layer, one.runs]))
+
+    expect(runs).toEqual({
+      single_turn: true,
+      fixed_multi_turn: true,
+      adaptive: false,
+    })
+    const [single] = reading.layers
+    expect(single.constructions.map((one) => one.sent)).toEqual([true, false])
+  })
+
+  it('says a construction switched off is not measured, and carries no figure', () => {
+    const reading = selectionReading(OFFERED)
+
+    // The distinction the whole selection exists to keep: a construction that was not
+    // sent has no line in any family's mix, so *not measured* is what the screen has
+    // to say and *zero* is what it must never let a reader infer.
+    expect(reading.caveat).toMatch(/not measured/)
+    expect(reading.caveat).not.toMatch(/[0-9]/)
+    // And what a run made now would print in its provenance, read off the wire: the
+    // artefact's own wording, so an operator narrowing a run sees what a recipient
+    // will read.
+    expect(reading.stated).toBe(OFFERED.selection_stated)
+    // No rate, no count and no denominator in the switches themselves. A selection is
+    // what a run was asked to send and never a measurement of anything, and the only
+    // two sentences here that may name a figure at all are the bench's own two — the
+    // caveat, whose whole job is to say *not* a rate of zero, and the wording the
+    // artefact will carry.
+    // A digit is not banned here the way it is on the six families' sentences: one
+    // construction is *named* `base64`, and a screen renaming it would be a screen
+    // whose switch and the record's `transform` field are two different words.
+    expect(everyString(reading.layers).join(' ')).not.toMatch(
+      /rate|denominator|interval|κ|zero|attempts/,
+    )
   })
 })

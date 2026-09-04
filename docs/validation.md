@@ -2085,6 +2085,111 @@ over turns.
   techniques, and the schedule is a declared input of the adaptive layer waiting for the
   mechanism `T` already has.
 
+### The console selects layers and constructions, and switched off is not zero (#79)
+
+The decisions are
+[ADR-0058](./adr/0058-the-console-selects-layers-and-constructions.md). Nothing here
+ran against a model, and one thing has to be said before anything else: **the library
+holds eighteen records and every one of them is `plain`**, because admission is per
+variant and needs a person at a tty (ADR-0052 §5). So a selection over constructions
+changes what today's runs send only when the layer switch takes the crescendo layer
+off, and every reading below about a run over *two* constructions is **held by a test
+that builds its own variant and is not measured today**. No admission was faked and the
+library digest is unmoved.
+
+- **A construction switched off is not run, and a family it empties says so.** Both
+  constructions selected: both cases attempted, no gap. The plain one off: the variant
+  still attempted, the family measured on what remains and **no gap**, because a ragged
+  selection is a narrower reading and not an absent one. Both off: no attempt, and
+  `DeclaredGap.TRANSFORMS_SWITCHED_OFF` — *not measured rather than measured at zero*.
+  Driven red twice: once by dropping the cases with no gap written, which is the silent
+  narrowing the enum exists to prevent, and once by writing the gap for a family that
+  still held a construction.
+- **The two gaps stay two, and the coarser one wins.** A family switched off *and*
+  emptied by the selection reports `FAMILY_SWITCHED_OFF`: it had no construction offered
+  to it at all, so the narrower reason would be the wrong true sentence.
+- **The counts already refused the other half, and were left alone.**
+  `scorer.VariantCounts` raises on `attempts <= 0` since #76 — *a transform that was
+  never sent is absent from the breakdown rather than present at zero*. #79 adds the
+  reason for the absence and touches neither the type nor its sentence.
+- **The estimate moves when the selection moves.** Adaptive layer off: the call figure
+  is 0 and still a `CEILING`, with a basis saying *the adaptive layer was switched off
+  for this run* rather than reading as a budget somebody zeroed; the ceiling falls with
+  it, and the scored figure is byte-identical to the full run's. Driven red by leaving
+  the figure at the full ceiling (192 against 0).
+- **The layer that is off opens no episode, and the counter is the enforcement.** A run
+  under a scored-only selection records no episode and spends nothing adaptive, while
+  its attempts and its scored spending are unchanged. Driven red by inverting the guard:
+  `BudgetExceeded: the adaptive layer has spent 0 of a declared 0 calls` — which is the
+  belt beside the brace, since the ceiling refuses the call even if the guard is gone.
+- **Fewer constructions is a cheaper run, priced through the composition a run uses.**
+  `plan_for` then `RunBudget.declare`: two cases in a family at one construction each,
+  the plain one off, and the scored figure falls by exactly one case's turns times the
+  attempts per case while the adaptive figure does not move. Driven red by letting
+  `plan_for` keep the cases — 21 against 21, which is a plan narrowed and an estimate
+  that charged for the wider run (ADR-0007).
+- **The construction switch reaches the adaptive layer through the cases, and what it
+  does there is asserted.** Both layers are handed the plan's cases, so switching the
+  plain construction off makes the *variant* a family's adaptive objective, and
+  switching both off leaves the family no objective and so no episode. It changes no
+  episode's subject — an objective supplies the family and the success condition, its
+  payload is never sent, and the surviving objective's criterion is asserted equal to
+  the base's — so `A_effort` stays a reading about the attacker. Driven red by letting
+  `plan_for` keep the cases: the objective stayed the plain record under a selection
+  that had switched it off.
+- **No declared input moves while a run holds its halt.** Condition 2 of ADR-0025 at
+  the guard all three console writes now share: `cover` and `select` both raise
+  `RunsInFlight` naming the run, nothing on the configuration moves on the way to
+  either refusal, and the write goes through once the halt is answered. Driven red by
+  removing the guard — *DID NOT RAISE RunsInFlight* — which is the state in which an
+  operator's confirmed estimate describes a run that never happened.
+- **The artefact carries the selection, and two selections make two documents.** At one
+  library version, a full selection and a narrowed one now differ in
+  `provenance.selection` — two sorted member lists, a derived `whole_library` flag and
+  the sentence. Driven red by leaving the selection out of the payload, which is the
+  state #76 left and named: `VARIANTS_STATED` claims comparability *at equal library
+  version and equal selection* and the document carried the first half only.
+- **The document says it too, and the digest moved for it.** Section 2 gains *The
+  constructions this run sent* beside the library version, so an absent line in a
+  family's mix has a reason on the page. `GOLDEN_ONE_FAMILY` moved a twelfth time, to
+  `679698ba1968`, with the reason written beside the constant. No figure moved and no
+  figure arrived.
+- **The verifier reads the selection and asserts the sentence.** A run at a narrowed
+  selection verifies with no disagreement — it is a declared input an operator may set,
+  on `attempts_per_case`'s exact terms (ADR-0027). A document whose members were
+  rewritten while the wording kept the whole-library sentence fails at
+  `provenance.selection.stated`, and one whose `whole_library` flag alone was flipped
+  fails at `provenance.selection.whole_library`. Both driven red by disabling each
+  comparison in turn; both forgeries were re-signed with the key first, so what fails is
+  the arithmetic and not the signature.
+- **A third write under `/bench`, and both route-table tripwires fired on it.**
+  `PUT /bench/settings/selection`, admitted on ADR-0025's four conditions. Unknown
+  layer or construction names are a `422` naming the closed set; a selection that would
+  score nothing is a `422` carrying the type's own sentence; nothing is stored on the
+  way to either. `test_api_settings.py` and `test_api_gate.py` both failed on the new
+  route before they were updated to three writes, which is the protection they are — a
+  **fourth** still fails.
+- **`scripts/gate.py` takes no selection.** It constructs no `AttackSelection` and stays
+  on `DECLARED_RULE`: the gate is a claim about the bench over the whole library
+  (ADR-0018), and a gate run over a chosen subset would be a gate for a bench nobody
+  has.
+- **The type is named `AttackSelection`.** `backend/corpus/selection.py` already holds a
+  `Selection` and `elective.ElectiveSelection` is qualified for the same reason; the
+  concept word in prose and in the artefact stays *selection*, which is what
+  `VARIANTS_STATED` published.
+- **The branch schedule is still not selectable, and that is now a decision rather than
+  a gap.** ADR-0058 §7: it is neither a construction nor a layer, its home is a seventh
+  field on `Instrumented` beside `T` and `k`, and offering a tree means either a gate run
+  under it or a stated sentence that a tree run is not a gate result. It wants its own
+  ticket, and every recorded adaptive reading in this document is still on the line.
+- **What downstream tickets inherit.** `bench/selection.py`'s `AttackLayer`, `layer_of`,
+  `AttackSelection` and `EVERY_CONSTRUCTION`; `BenchConfig.selection`;
+  `DeclaredGap.TRANSFORMS_SWITCHED_OFF`; `RunBudget.declare(selection=...)` and
+  `run_calibration(selection=...)`; `Provenance.selection`, required with no default;
+  `verification._selection`; the `layers` / `transforms` / `selection_off_statement` /
+  `selection_stated` fields of the settings reading, and `landing.selectionReading` on
+  the screen.
+
 ---
 
 ## Pre-gate observations

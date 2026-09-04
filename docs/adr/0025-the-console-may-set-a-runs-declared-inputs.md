@@ -34,6 +34,17 @@ on the same four conditions, argued below under *the second write*, and everythi
 else on the prefix still only reads. Read *one* as *two* throughout, and read the
 conditions as the bar both routes clear.
 
+*Amended by #79*: **three routes under `/bench` write.** The third is
+`PUT /bench/settings/selection`, taking **which layers the next run runs and which
+constructions inside them**, and it is admitted on the same four conditions — argued in
+[ADR-0058](./0058-the-console-selects-layers-and-constructions.md), which is where the
+decision is recorded rather than here. It is the **second** setting on this prefix that
+moves the scored denominator, which is why it needed a record of its own: the section
+below argues one scalar, and a selection is not a scalar. ADR-0058 §4 also answers the
+question the families amendment below explicitly left open — whether such a setting
+should travel in the signed payload — **for the selection and for the selection only**.
+Read *two* as *three* throughout.
+
 *Amended by #5*: the reasoning effort joined on exactly these conditions and through
 the same seams. It is the attacker's second sampling setting, offered only for a model
 the capability table says has one, and refused rather than dropped for a model that
@@ -138,6 +149,17 @@ It is admitted on the four conditions above, and each one is enforced there too.
    read *none* as *all six* would run a coverage nobody chose — which is condition 4's
    own argument about clamping, in the one place this route could have clamped.
 
+## The third write: what the next run sends
+
+*Added by #79, and decided in
+[ADR-0058](./0058-the-console-selects-layers-and-constructions.md).* Its own route
+rather than a field on either of the other two, on the families route's reasoning: that
+one is *what the next run covers* and this is *how it attacks what it covers*. The four
+conditions are enforced there too, and one of them is met differently — condition 1 by a
+**printed field** rather than by an absence, because `Provenance.selection` carries the
+selection into the signed artefact. That is the half the families route could not do and
+the reason ADR-0058 exists as a separate record.
+
 **Why this is an amendment and not a new decision.** Nothing about the route moved,
 and no condition was relaxed to fit it: the four conditions were the bar the tuning
 route was admitted at, the families route already cleared all four, and the record
@@ -169,6 +191,12 @@ to be argued here before it lands.
   the families route and neither the tests' names nor this sentence was. The
   protection was real the whole time and it was a line further out than the record
   claimed. The count is now the thing the tests say they assert.
+
+  *Amended by #79*: **three, and a fourth is what fails.** Both tests failed on
+  `PUT /bench/settings/selection` before they were updated to admit it, which is the
+  protection working rather than the protection being widened: the route is named in
+  each set and the count moved in the same diff as the record that argues it
+  (ADR-0058).
 - `SettingsScreen.tsx` has a form, and its test now asserts that the form is the only
   write and that it cannot reach anything else on the bench — no run started, no
   interrupt answered, no nonce issued, no gate run, no `fetch` of its own.

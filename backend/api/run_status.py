@@ -108,6 +108,20 @@ class DeclaredGap(StrEnum):
     NOTE_NOT_PLANTED = "note_not_planted"
     NONCE_NOT_PLANTED = "nonce_not_planted"
     FAMILY_SWITCHED_OFF = "family_switched_off"
+    TRANSFORMS_SWITCHED_OFF = "transforms_switched_off"
+    """Every construction this family holds a case for was switched off for this run.
+
+    Beside `FAMILY_SWITCHED_OFF` and one level below it: that one is *this family was
+    not asked*, and this is *this family was asked and nothing was left to ask it
+    with*. Two members rather than one, because the two are different things the
+    caller did and a reader owed a reason is owed the right one
+    ([ADR-0058](../../docs/adr/0058-the-console-selects-layers-and-constructions.md)).
+
+    Not the absence #72 refused a type for. A family whose *library* holds no variant
+    of some construction is measured by the variants that exist and needs no reason
+    beside it (ADR-0055); this is a construction the **caller** turned off, which is
+    what this enumeration is the surface for.
+    """
 
     def stated(self) -> str:
         match self:
@@ -138,4 +152,12 @@ class DeclaredGap(StrEnum):
                     "case in it was attempted and no episode opened against it. "
                     "Nothing here is a reading about the target — a family that was "
                     "not asked is not a family that held"
+                )
+            case DeclaredGap.TRANSFORMS_SWITCHED_OFF:
+                return (
+                    "not run: every construction this family holds a case for was "
+                    "switched off for this run, so no attempt was made against it "
+                    "and it is not measured rather than measured at zero. The family "
+                    "was asked and there was nothing left to ask it with — a "
+                    "construction that was not sent is not a construction that failed"
                 )

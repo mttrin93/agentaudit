@@ -269,6 +269,36 @@ export interface FamilyCovered {
   covered: boolean
 }
 
+/**
+ * One layer, whether the next run runs it, and what a run of it sends.
+ *
+ * Three of them: one message in one session, a fixed script of turns, and the
+ * model-driven attacker. `sends` is the bench's own sentence about the layer, so a
+ * screen states what switching it off costs rather than paraphrasing it.
+ */
+export interface LayerSelected {
+  layer: string
+  selected: boolean
+  sends: string
+}
+
+/**
+ * One construction, the layer that schedules it, and whether the next run sends it.
+ *
+ * `layer` is read off the wire and never derived here: which switch turns a
+ * construction off is the bench's answer (`selection.layer_of`), and a console holding
+ * a second copy of that mapping would be a console that could disagree with it.
+ *
+ * `does` is what the construction does to the payload a record commits — an operation
+ * on text and never an attack somebody published — in the bench's own words.
+ */
+export interface TransformSelected {
+  transform: string
+  layer: string
+  selected: boolean
+  does: string
+}
+
 /** One model this console offers as the attacker, and what it is for. */
 export interface ModelChoice {
   identifier: string
@@ -340,6 +370,12 @@ export interface Tuning {
   attempts_warning: string
   families: FamilyCovered[]
   families_off_statement: string
+  layers: LayerSelected[]
+  transforms: TransformSelected[]
+  /** What switching a construction off does, and what it does not. */
+  selection_off_statement: string
+  /** What a run made now would print in its provenance about what it sent. */
+  selection_stated: string
   statement: string
 }
 
@@ -420,6 +456,39 @@ export async function coverFamilies(families: string[]): Promise<BenchSettings> 
   })
   if (!response.ok) {
     throw new Error(`the bench did not take these families: ${await refusalIn(response)}`)
+  }
+  return (await response.json()) as BenchSettings
+}
+
+export const BENCH_SELECTION_PATH = '/bench/settings/selection'
+
+/**
+ * Set what the next run sends, and read back what the bench now holds.
+ *
+ * The third write under `/bench` (ADR-0025 as amended by #79, ADR-0058), and its own
+ * statement rather than a field on either of the other two: that one is *how the
+ * instruments are set*, the families one is *what the next run covers*, and this is
+ * *how it attacks what it covers*.
+ *
+ * Both lists go every time, because they are one statement — a request that sent the
+ * layers alone would leave the constructions declared by an earlier one, and the pair
+ * is what decides whether anything is sent at all.
+ *
+ * A selection under which nothing would be scored is refused rather than widened: the
+ * run would measure nothing and still spend a registration probe per target. A `409`
+ * is the bench refusing while a run is going, and the screen shows the sentence.
+ */
+export async function selectConstructions(
+  layers: string[],
+  transforms: string[],
+): Promise<BenchSettings> {
+  const response = await fetch(BENCH_SELECTION_PATH, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ layers, transforms }),
+  })
+  if (!response.ok) {
+    throw new Error(`the bench did not take this selection: ${await refusalIn(response)}`)
   }
   return (await response.json()) as BenchSettings
 }

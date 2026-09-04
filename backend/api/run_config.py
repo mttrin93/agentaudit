@@ -40,6 +40,7 @@ from backend.bench.library import Case, Family, VerdictClass, one_of_the_six
 from backend.bench.narration import Narrator
 from backend.bench.payload import DeclaredModels
 from backend.bench.rule import DECLARED_RULE, GateRule
+from backend.bench.selection import EVERY_CONSTRUCTION, AttackSelection
 from backend.bench.usage import UsageLedger
 
 
@@ -192,6 +193,40 @@ class BenchConfig:
     the layer opens no episode against it (`adaptive/layer.objectives_for`).
     """
 
+    selection: AttackSelection = EVERY_CONSTRUCTION
+    """Which layers the next run runs, and which constructions inside them.
+
+    Beside `families` because it is the same kind of switch one level down — that one
+    says which failures are asked about, this one says how they are attacked — and it
+    is the **second** setting in the class ADR-0025 put `attempts_per_case` in alone:
+    it moves the scored denominator
+    ([ADR-0058](../../docs/adr/0058-the-console-selects-layers-and-constructions.md)).
+
+    **A construction switched off is *not sent*, never measured at zero.** `plan_for`
+    drops the cases that attack by it, and a family it leaves with nothing is recorded
+    as `DeclaredGap.TRANSFORMS_SWITCHED_OFF` — so the report says the family was not
+    attempted, on the same discipline `families` keeps one level up. The complement is
+    in the counts: `scorer.VariantCounts` refuses an entry at zero attempts, so a
+    construction that was not sent is absent from a family's breakdown rather than
+    present reading nothing (ADR-0055).
+
+    **It reaches the adaptive layer as a layer switch and not as a construction.**
+    `AttackSelection.adaptive` is a boolean, because what an adaptive construction
+    would be named is a thing `Transform` does not hold (ADR-0051 §3, ADR-0010).
+
+    **The construction half reaches that layer too, through the cases, and here is
+    what it does there.** Both layers are handed what this function returns, so a
+    construction switched off narrows the pool `adaptive/layer.objectives_for` picks
+    each family's objective from — the same mechanism the family switch uses on
+    purpose, one level down. It changes no episode's subject: an objective supplies
+    the family and the success condition and its payload is never sent, and every
+    variant of a family measures the same failure against the same criterion, which is
+    the premise pooling already rests on (ADR-0055). What it can do is leave a family
+    with no objective at all, which is the correct reading — that family was not run —
+    and it is asserted rather than left to be discovered
+    (`test_layer_ordering.py::test_a_construction_selection_narrows_what_the_adaptive_layer_aims_at`).
+    """
+
     approval_wait_seconds: float = APPROVAL_WAIT_SECONDS
 
     per_run_instruments: PerRunInstruments | None = None
@@ -300,6 +335,29 @@ def plan_for(
         if any(case.family is family for case in cases):
             gaps[family] = DeclaredGap.FAMILY_SWITCHED_OFF
     cases = [case for case in cases if case.family in config.families]
+
+    # The caller's other switch, one level below the family's, and last of the four
+    # because it is the narrowest reason a family can be missing: a family nobody
+    # asked for already has its gap, and the two are not equally true of it — a
+    # family switched off had no construction offered to it at all.
+    # Only a family the selection *emptied* gets it: one that keeps a construction is
+    # measured on what remains, which is a narrower reading and not an absent one
+    # (ADR-0055 — a ragged variant set per family is representable and needs no
+    # reason beside it).
+    dropped = [case for case in cases if not config.selection.runs(case.transform)]
+    cases = [case for case in cases if config.selection.runs(case.transform)]
+    still_asked = {case.family for case in cases}
+    # `one_of_the_six` and never an `isinstance` here: the narrowing is named once in
+    # the tree because every site is the same decision, and `gaps` is keyed on `Family`
+    # (ADR-0035). An elective family reaches this line already dropped by the family
+    # filter above, so what the guard buys is the type check rather than a case.
+    emptied = {
+        case.family
+        for case in dropped
+        if one_of_the_six(case.family) and case.family not in still_asked
+    }
+    for family in sorted(emptied, key=str):
+        gaps.setdefault(family, DeclaredGap.TRANSFORMS_SWITCHED_OFF)
 
     if not nonce_planted:
         leakage = Family.DATA_LEAKAGE

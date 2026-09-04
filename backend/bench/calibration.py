@@ -112,6 +112,7 @@ from backend.bench.scorer import (
     VariantCounts,
     failure_rate,
 )
+from backend.bench.selection import EVERY_CONSTRUCTION, AttackSelection
 from backend.bench.usage import LayerTotals, UsageLedger
 from backend.graph.approval import ApprovalOutcome, Approve, run_under_approval
 from backend.graph.budget import Layer, RunBudget
@@ -666,6 +667,7 @@ def run_calibration(
     precedent: DurablePrecedents = DURABLE_PRECEDENT,
     rule: GateRule = DECLARED_RULE,
     adaptive: AdaptiveBudget = DECLARED_ADAPTIVE_BUDGET,
+    selection: AttackSelection = EVERY_CONSTRUCTION,
     budget: RunBudget | None = None,
     run_state: RunState | None = None,
     usage: UsageLedger | None = None,
@@ -752,7 +754,7 @@ def run_calibration(
         raise NoAdjudicator(unscorable)
 
     declared = budget or RunBudget.declare(
-        cases=cases, targets=targets, rule=rule, adaptive=adaptive
+        cases=cases, targets=targets, rule=rule, adaptive=adaptive, selection=selection
     )
     ledger = usage if usage is not None else UsageLedger()
     if any(ledger.recorded_in(layer) for layer in Layer) or ledger.untagged():
@@ -796,26 +798,35 @@ def run_calibration(
         # for all of them while leaving target order free to be randomised per
         # family, which ADR-0011 requires and a per-target interleaving would not
         # allow.
-        run_adaptive_layer(
-            attackable=[
-                AttackableTarget(
-                    target=completed.target,
-                    canary=completed.registration.nonce,
-                    # What the scored layer learned from this target's own replies.
-                    # This layer applies the declared preconditions, so a declaration
-                    # the endpoint contradicted has to be carried across rather than
-                    # re-derived.
-                    withdrawn=frozenset(completed.not_measurable),
-                )
-                for completed in target_runs
-                if completed.registration.complete
-            ],
-            cases=cases,
-            run_state=state,
-            attacker=attacker,
-            budget=adaptive,
-            precedent=precedent,
-        )
+        #
+        # And not at all when the operator switched the layer off. Guarded here rather
+        # than by handing the layer an empty list, because *the layer did not run* and
+        # *the layer ran and found no target* are two different facts and the second
+        # one is what an empty list says (ADR-0058). The estimate the operator
+        # confirmed already said nothing would reach the endpoint from it and the
+        # ceiling is nothing, so a call from here would be refused at the counter in
+        # any case — this line is the statement, and the counter is the enforcement.
+        if selection.adaptive:
+            run_adaptive_layer(
+                attackable=[
+                    AttackableTarget(
+                        target=completed.target,
+                        canary=completed.registration.nonce,
+                        # What the scored layer learned from this target's own replies.
+                        # This layer applies the declared preconditions, so
+                        # a declaration the endpoint contradicted has to be
+                        # carried across rather than re-derived.
+                        withdrawn=frozenset(completed.not_measurable),
+                    )
+                    for completed in target_runs
+                    if completed.registration.complete
+                ],
+                cases=cases,
+                run_state=state,
+                attacker=attacker,
+                budget=adaptive,
+                precedent=precedent,
+            )
         # And last of all, the one write. Here rather than beside each target's
         # narration, so that **nothing in this run reads what this run filed**:
         # `suggest_remediation` has run for every target and the adaptive layer's

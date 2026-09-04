@@ -84,6 +84,7 @@ from backend.api.app import (
     BENCH_GATE_RECORD_ROUTE,
     BENCH_GATE_ROUTE,
     BENCH_NOTES_ROUTE,
+    BENCH_SELECTION_ROUTE,
     BENCH_SETTINGS_ROUTE,
     BENCH_TUNING_ROUTE,
     GATE_RUN_APPROVAL_ROUTE,
@@ -375,10 +376,12 @@ def test_only_the_two_settings_routes_write_under_the_bench_prefix() -> None:
     and it is started at `POST /gate-runs` — a route whose path says plainly that it
     is not a read. Nothing moved under `/bench` to do it.
 
-    **ADR-0025, as amended, admits two writes here**, and the set below is how narrow
-    they are: the instruments the next run is set with, and the families it covers.
-    The decision paragraph said *one* and the families route already existed, which
-    is a claim the tree had outgrown before it was written down (#57). A gate run is
+    **ADR-0025, as amended, admits three writes here**, and the set below is how
+    narrow they are: the instruments the next run is set with, the families it covers,
+    and — since #79 — the layers and constructions it sends. The decision paragraph
+    said *one* and the families route already existed, which is a claim the tree had
+    outgrown before it was written down (#57); the third is argued in ADR-0058 on the
+    same four conditions. A gate run is
     still not one of them — it spends money and rewrites the case library, and it
     stays at its own `POST`.
     """
@@ -398,13 +401,14 @@ def test_only_the_two_settings_routes_write_under_the_bench_prefix() -> None:
         (BENCH_SETTINGS_ROUTE, "GET"),
         (BENCH_TUNING_ROUTE, "PUT"),
         (BENCH_FAMILIES_ROUTE, "PUT"),
+        (BENCH_SELECTION_ROUTE, "PUT"),
     }
 
-    # And the writes on this bench are the seven that are named — five `POST`s and
-    # the two settings `PUT`s. Two of the five start something that spends — a run
+    # And the writes on this bench are the eight that are named — five `POST`s and
+    # the three settings `PUT`s. Two of the five start something that spends — a run
     # and a gate run — and each is behind an attestation that cannot be constructed
     # incomplete and a halt in front of the figures (ADR-0007). The count is asserted
-    # by naming every pair rather than by its length, because an **eighth** is either
+    # by naming every pair rather than by its length, because a **ninth** is either
     # a spend nobody declared or a setting no ADR admitted, and the failure has to
     # name which route it is.
     writes = {
@@ -422,6 +426,7 @@ def test_only_the_two_settings_routes_write_under_the_bench_prefix() -> None:
         (GATE_RUN_APPROVAL_ROUTE, "POST"),
         (BENCH_TUNING_ROUTE, "PUT"),
         (BENCH_FAMILIES_ROUTE, "PUT"),
+        (BENCH_SELECTION_ROUTE, "PUT"),
     }
 
 

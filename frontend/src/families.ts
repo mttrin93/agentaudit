@@ -23,5 +23,25 @@
  * sentence the bench wrote.
  */
 export function readFamily(family: string): string {
-  return family.replace(/_/g, ' ')
+  return readName(family)
+}
+
+/**
+ * A wire name as a screen says it — the underscore becomes a space, and nothing else.
+ *
+ * `readFamily` above is this function under the name of the one thing it may be called
+ * on, and it stays that way: its rule is *called where a family is printed, and nowhere
+ * else*, because every `family` field in this app is also a lookup key. This is the
+ * same single character changed, for the other closed sets whose members a screen
+ * prints — the three **layers** and the seven **transforms** an operator selects, whose
+ * names are `single_turn` and `scripted_crescendo` on the wire, in the record and in
+ * the signed report.
+ *
+ * **Not a place to make a name friendlier.** No title case, no expansion, no synonym:
+ * an operator reading `fixed multi turn` here and grepping `fixed_multi_turn` in a
+ * settings response is looking at the same word. One function rather than two copies of
+ * `replace(/_/g, ' ')`, so a screen cannot acquire a second spelling of a member name.
+ */
+export function readName(name: string): string {
+  return name.replace(/_/g, ' ')
 }

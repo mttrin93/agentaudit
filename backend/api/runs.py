@@ -145,6 +145,7 @@ from backend.bench.narration import NarrativeFailure
 from backend.bench.nonce import issue_nonce
 from backend.bench.payload import GateCitation
 from backend.bench.registration import Attestation
+from backend.bench.selection import AttackSelection
 from backend.bench.signing import SignedArtefact
 from backend.bench.usage import UsageLedger
 from backend.graph.approval import Approval, Approve, forget_halt
@@ -227,6 +228,29 @@ class BenchRuns:
         """
         return self._config
 
+    def _refuse_while_a_run_is_going(self) -> None:
+        """Refuse to move a declared input while any run of this bench is in flight.
+
+        One guard for the three named writers below, and the same guard rather than
+        three: a run awaiting approval has been shown an estimate built from the
+        settings, the families and the selection it was declared with, and ADR-0007's
+        whole mechanism is that nothing exceeds what a human confirmed. Three copies
+        would only have to differ once for one of the three writes to move under an
+        open halt.
+
+        **Called under `self._lock`, by every caller, and it does not take the lock
+        itself** — the check and the `replace` that follows it are one critical
+        section, or a run could start between them. `RunsInFlight` names the runs so
+        an operator can wait for them or decline them rather than guess; `cite` is
+        deliberately not a caller, because a gate citation is provenance a run in
+        flight has already copied into its own payload.
+        """
+        in_flight = [
+            run_id for run_id, record in self._runs.items() if record.status.in_flight
+        ]
+        if in_flight:
+            raise RunsInFlight(in_flight)
+
     def instrument(self, declared: Instrumented, attacker: AttackerCompletion) -> None:
         """Set the declared inputs of every run this bench starts from now on.
 
@@ -248,13 +272,7 @@ class BenchRuns:
         never ran (`app.declared_instrument` makes the same pairing at boot).
         """
         with self._lock:
-            in_flight = [
-                run_id
-                for run_id, record in self._runs.items()
-                if record.status.in_flight
-            ]
-            if in_flight:
-                raise RunsInFlight(in_flight)
+            self._refuse_while_a_run_is_going()
             self._config = replace(
                 self._config,
                 attacker=attacker,
@@ -286,14 +304,27 @@ class BenchRuns:
         about a different run (ADR-0007).
         """
         with self._lock:
-            in_flight = [
-                run_id
-                for run_id, record in self._runs.items()
-                if record.status.in_flight
-            ]
-            if in_flight:
-                raise RunsInFlight(in_flight)
+            self._refuse_while_a_run_is_going()
             self._config = replace(self._config, families=families)
+
+    def select(self, selection: AttackSelection) -> None:
+        """Set which layers the next run runs, and which constructions inside them.
+
+        The fourth named writer on `BenchConfig` and the **third** of the console's
+        writes — `cite` is the fourth writer's senior and is no route at all
+        (ADR-0023). Same lock, refused while a run is going for the
+        reason `cover` is: a run awaiting approval was shown an estimate built from
+        the selection it was declared with, and narrowing it under that halt would
+        make the confirmation a statement about a cheaper run than the one that ran
+        (ADR-0007, ADR-0058).
+
+        It takes a constructed `AttackSelection` rather than two sets of names, so a
+        selection that scores nothing is refused before it reaches this bench — the
+        type is where that refusal lives, and the route turns it into a 422.
+        """
+        with self._lock:
+            self._refuse_while_a_run_is_going()
+            self._config = replace(self._config, selection=selection)
 
     def cite(self, citation: GateCitation) -> None:
         """Start citing this gate run, in this process, from now on.
@@ -450,6 +481,11 @@ class BenchRuns:
             rule=self._config.rule,
             adaptive=self._config.adaptive,
             price=price,
+            # The estimate moves when the selection moves: a layer switched off is
+            # nothing on the wire, and the operator sees the price of what they just
+            # turned off rather than confirming a figure for a run nobody asked for
+            # (ADR-0058). The scored half of that narrowing is already in `plan.cases`.
+            selection=self._config.selection,
         )
         pending = PendingApproval(self._config.approval_wait_seconds)
         run_id = str(uuid.uuid4())
@@ -740,6 +776,10 @@ def _run(record: RunRecord, config: BenchConfig, pending: PendingApproval) -> No
             usage=ledger,
             rule=config.rule,
             adaptive=config.adaptive,
+            # Which layers run, and which constructions inside them. The cases were
+            # filtered against it before the estimate; what it decides here is whether
+            # the second layer opens an episode at all (ADR-0058).
+            selection=config.selection,
             # The ceiling on the record, never one re-declared here: the operator
             # confirmed these figures in an earlier request, and a run held to a
             # limit recomputed against whatever the library holds by now would be
@@ -892,7 +932,13 @@ def _published(
     lifetime of the process.
     """
     try:
-        return artefact_for(result, record.plan.cases, config.rule, config.report)
+        return artefact_for(
+            result,
+            record.plan.cases,
+            config.rule,
+            config.report,
+            config.selection,
+        )
     except Exception as unpublished:
         return Unsigned(
             "this run has no signed report: the run finished and its artefact could "

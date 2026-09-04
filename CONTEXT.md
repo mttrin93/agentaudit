@@ -562,6 +562,28 @@ technique carry the address it was published at, and `plain` copies nothing from
 the seventh escalates over turns and waits for a payload that is a sequence.
 _Avoid_: technique, strategy, enhancement, encoding, wrapper, mutation
 
+**Attack selection**:
+Which of the three **layers** a **run** runs — one message in one session, a fixed
+script of turns, the adaptive attacker — and which **transforms** inside them. A
+declared input the console sets, and the second one that moves a scored denominator:
+fewer constructions is a cheaper run and a narrower reading, so a **case** whose
+transform is switched off is **not sent** and a **family** left with nothing is reported
+as *not run* rather than measured at zero
+([ADR-0058](./docs/adr/0058-the-console-selects-layers-and-constructions.md)). It
+travels in the signed **artefact** beside the **library version**, because two runs are
+comparable only at equal library version and equal selection and a reader holding two
+documents can check both halves of that or neither. The adaptive layer is one of the
+three and carries no transform: what it would carry are the two loops **transform**
+deliberately does not name, so its switch is the whole of the question about it
+(ADR-0010).
+
+**Named `AttackSelection` in code**, because *selection* is already spent twice — on the
+**corpus** rows a person was shown (the sentence under **technique**) and on
+`ElectiveSelection`. In prose the word is this one where a run is the subject, and the
+qualifier is there so a reader of the code never has to guess which of the three.
+_Avoid_: strategy set, attack config, technique selection, using it for the corpus's
+selection
+
 **Variant**:
 One **case** carrying a transform, and a record of its own rather than something a run
 wraps round a payload at send time — `data-leakage-001-base64` has its own id, its own

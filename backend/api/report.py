@@ -56,6 +56,7 @@ from backend.bench.payload import (
 )
 from backend.bench.rule import GateRule
 from backend.bench.scorer import Reliability
+from backend.bench.selection import AttackSelection
 from backend.bench.signing import SignedArtefact, encoded, public_key, signed
 from backend.bench.verification import Published, Verification, checked
 
@@ -181,6 +182,7 @@ def payload_for(
     cases: Sequence[Case],
     rule: GateRule,
     config: ReportConfig,
+    selection: AttackSelection,
 ) -> TargetPayload:
     """The unsigned, unbound payload for one completed run.
 
@@ -218,6 +220,13 @@ def payload_for(
             library=state.library,
             # Per layer, as the record keeps them. Nothing adds these two.
             calls_spent=dict(state.spent),
+            # What this run was asked to send, beside the version of the library it
+            # sent it from: the two together are the condition under which a reader
+            # holding two of these documents may compare them (ADR-0058). An argument
+            # rather than a field on `ReportConfig`, because it is not a statement
+            # about how a report is made — it is what the run did, and it reaches the
+            # plan and the estimate from the same record (`BenchConfig.selection`).
+            selection=selection,
             gate=config.gate,
         ),
         rule=rule,
@@ -262,6 +271,7 @@ def artefact_for(
     cases: Sequence[Case],
     rule: GateRule,
     config: ReportConfig,
+    selection: AttackSelection,
 ) -> SignedArtefact | Unsigned:
     """The signed artefact for one completed run, or the reason there is none.
 
@@ -271,7 +281,7 @@ def artefact_for(
     key = config.signing_key
     if key is None:
         return Unsigned()
-    return signed(payload_for(result, cases, rule, config), key)
+    return signed(payload_for(result, cases, rule, config, selection), key)
 
 
 VERIFY_SCRIPT = "uv run python -m scripts.verify"

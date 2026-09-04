@@ -51,6 +51,7 @@ from backend.bench.adaptive.budget import DECLARED_ADAPTIVE_BUDGET, AdaptiveBudg
 from backend.bench.contract import TargetConfig
 from backend.bench.library import Case
 from backend.bench.rule import DECLARED_RULE, GateRule
+from backend.bench.selection import EVERY_CONSTRUCTION, AttackSelection
 
 REGISTRATION_PROBES_PER_TARGET = 1
 """The nonce echo probe, which is a call on the operator's endpoint like any other.
@@ -324,12 +325,22 @@ class RunBudget:
         rule: GateRule = DECLARED_RULE,
         adaptive: AdaptiveBudget = DECLARED_ADAPTIVE_BUDGET,
         price: CallPrice | None = None,
+        selection: AttackSelection = EVERY_CONSTRUCTION,
     ) -> RunBudget:
         """Work out both numbers from the run's own inputs.
 
         One constructor for the estimate and the ceiling together, so that the
         limit cannot be declared against a different library than the figures the
         operator was shown.
+
+        **The selection reaches the adaptive figure and nothing else here.** Its
+        effect on the scored half arrived before this call — `plan_for` dropped the
+        cases whose construction was switched off, so `cases` is already what the run
+        will send, and reading the selection again over them would price the same
+        narrowing twice. What it decides here is the layer that has no case to drop:
+        a layer switched off puts nothing on the wire, so both the figure an operator
+        confirms and the ceiling that is enforced fall to nothing
+        ([ADR-0058](../../docs/adr/0058-the-console-selects-layers-and-constructions.md)).
         """
         # Turns and not cases, because a case can cost two calls per attempt: a
         # memory-poisoning attempt plants in one turn and is scored in the next, in
@@ -349,20 +360,32 @@ class RunBudget:
                 f"× {_count(len(targets), 'target')}"
             ),
         )
+        # Zero and a `CEILING`, not zero and a fact: nothing about a layer that ran
+        # is exact, and a bound of nothing is the one bound that cannot be exceeded.
+        # The basis says which of the two zeros this is — a layer nobody asked for,
+        # rather than a budget somebody set to nothing.
+        per_target_turns = adaptive.turn_ceiling if selection.adaptive else 0
         adaptive_figure = CallFigure(
-            calls=len(targets) * adaptive.turn_ceiling,
+            calls=len(targets) * per_target_turns,
             kind=FigureKind.CEILING,
             basis=(
                 f"{adaptive.family_count} families × T={adaptive.turns_per_episode}"
                 f" × k={adaptive.episodes_per_family},"
                 f" × {_count(len(targets), 'target')}"
+                if selection.adaptive
+                else (
+                    "the adaptive layer was switched off for this run: no episode is "
+                    "opened, nothing reaches the endpoint from it, and the run's "
+                    "family view carries no discovery count rather than a count of "
+                    "zero"
+                )
             ),
         )
         sends = [target.retry.sends for target in targets]
         return cls(
             estimate=Estimate(scored=scored, adaptive=adaptive_figure, price=price),
             scored_ceiling=sum(per_target * send for send in sends),
-            adaptive_ceiling=sum(adaptive.turn_ceiling * send for send in sends),
+            adaptive_ceiling=sum(per_target_turns * send for send in sends),
             retry_allowance=max(sends, default=1),
         )
 

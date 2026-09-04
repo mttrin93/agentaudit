@@ -248,12 +248,14 @@ from backend.bench.library import (
     CaseStatus,
     Family,
     LibraryVersion,
+    Transform,
 )
 from backend.bench.payload import DeclaredModels, GateCitation, citation
 from backend.bench.registration import ECHO_PROBE, Attestation
 from backend.bench.rendering import REPORT_MARKDOWN, REPORT_PAYLOAD
 from backend.bench.retirement import retired_cases
 from backend.bench.rule import DECLARED_RULE, GateRule
+from backend.bench.selection import AttackLayer, AttackSelection, layer_of
 from backend.bench.signing import (
     SIGNATURE_FILE,
     SIGNING_KEY_VARIABLE,
@@ -2964,7 +2966,75 @@ class Tuning(BaseModel):
     """
 
     families_off_statement: str
+
+    layers: list[LayerSelected]
+    """The three layers and whether each runs, in the enum's own order.
+
+    Beside `families` because it is the same kind of switch one level down — that one
+    says which failures are asked about, this one says how they are attacked — and it
+    is the **second** setting on this screen that moves the scored denominator
+    (ADR-0058).
+    """
+
+    transforms: list[TransformSelected]
+    """The seven constructions and whether each is sent, in the enum's own order.
+
+    Each row names the layer that schedules it, read off `selection.layer_of` rather
+    than grouped by a screen, so a console cannot invent a second answer to *which
+    switch turns this off*.
+    """
+
+    selection_off_statement: str
+    selection_stated: str
+    """What a run made now would print in its provenance about what it sent.
+
+    The payload's own sentence, on `temperature_stated`'s terms: the screen shows what
+    the artefact will say rather than a paraphrase of it, so an operator narrowing a
+    run sees the wording a recipient will read.
+    """
+
     statement: str
+
+
+class LayerSelected(BaseModel):
+    """One layer, whether the next run runs it, and what a run of it sends."""
+
+    layer: str
+    selected: bool
+    sends: str
+
+
+class TransformSelected(BaseModel):
+    """One construction, whether the next run sends it, and what it does.
+
+    `does` is `Transform.stated()` verbatim — an operation on the committed payload
+    and never an attack somebody published (ADR-0051 §2) — because a screen that
+    reworded it would be describing a construction this bench performs in words
+    nothing checks.
+    """
+
+    transform: str
+    layer: str
+    selected: bool
+    does: str
+
+
+A_CONSTRUCTION_SWITCHED_OFF_IS_NOT_SENT = (
+    "a construction switched off is not sent: no case that attacks by it is "
+    "attempted, and a family whose every construction is off is stated as not run "
+    "rather than measured at zero. Fewer constructions is a cheaper run and a "
+    "narrower reading, and the artefact carries the selection beside the library "
+    "version because two runs are comparable only at equal library version and equal "
+    "selection — a construction that was not sent is **not measured** here and is "
+    "absent from every family's mix rather than present reading nothing (ADR-0055, "
+    "ADR-0058)"
+)
+"""What the screen says about a selection before anybody narrows one.
+
+`A_FAMILY_SWITCHED_OFF_IS_NOT_RUN`'s counterpart one level down, and its own sentence
+for the same reason: this one is about an offer on a screen, and the sentence
+`AttackSelection.stated()` carries is what a produced artefact says.
+"""
 
 
 THE_CONSOLE_MAY_SET_THESE = (
@@ -3073,8 +3143,58 @@ def tuning(config: BenchConfig) -> Tuning:
             for family in Family
         ],
         families_off_statement=A_FAMILY_SWITCHED_OFF_IS_NOT_RUN,
+        layers=[
+            LayerSelected(
+                layer=str(layer),
+                selected=layer in config.selection.layers,
+                sends=layer.stated(),
+            )
+            for layer in AttackLayer
+        ],
+        transforms=[
+            TransformSelected(
+                transform=str(transform),
+                layer=str(layer_of(transform)),
+                selected=transform in config.selection.transforms,
+                does=transform.stated(),
+            )
+            for transform in Transform
+        ],
+        selection_off_statement=A_CONSTRUCTION_SWITCHED_OFF_IS_NOT_SENT,
+        selection_stated=config.selection.stated(),
         statement=THE_CONSOLE_MAY_SET_THESE,
     )
+
+
+def _members[M: StrEnum](
+    names: Sequence[str], closed: type[M], refusal: str
+) -> list[M]:
+    """Every name resolved into a member of that closed set, or a `422` naming the set.
+
+    The three `/bench` writes each take names off a closed enumeration and each has to
+    refuse an unknown one *before* anything is stored — condition 3 of ADR-0025, and
+    the reason it exists is that a bench put on a family the library has no cases for,
+    or a construction it has no function for, is a run nothing could send. One
+    resolver rather than three loops, because three copies would only have to differ
+    once for one of the writes to accept a name the bench cannot act on.
+
+    `refusal` is the caller's own sentence about what kind of thing was not found: the
+    set is named here, off the enum, and what it *is* has to come from the route,
+    because *not a family this bench has* and *not a construction this bench performs*
+    are different facts about the same shape of mistake.
+    """
+    resolved: list[M] = []
+    for name in names:
+        try:
+            resolved.append(closed(name))
+        except ValueError as unknown:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    f"{name!r} {refusal} {', '.join(str(member) for member in closed)}"
+                ),
+            ) from unknown
+    return resolved
 
 
 def _offered(attacking: str) -> tuple[tuple[str, str], ...]:
@@ -3469,6 +3589,30 @@ class CoverRequest(BaseModel):
     """The families the next run covers, by name. At least one."""
 
     families: list[str]
+
+
+BENCH_SELECTION_ROUTE = "/bench/settings/selection"
+"""Where the layers and constructions the next run sends are set. The third write.
+
+Its own route rather than a field on either of the other two, on
+`BENCH_FAMILIES_ROUTE`'s reasoning: the tuning request is *how the instruments are
+set* and takes all six settings every time, the families request is *what the next run
+covers*, and this is *how it attacks what it covers*. A caller sending one has no
+business restating the others (ADR-0025 as amended by #79, ADR-0058).
+"""
+
+
+class SelectRequest(BaseModel):
+    """The layers the next run runs and the constructions it sends, by name.
+
+    Both lists every time, because they are one statement: a caller that could send
+    the layers without restating the constructions would leave a bench whose two
+    halves were declared by two different requests, and the pair is what decides
+    whether anything is sent at all.
+    """
+
+    layers: list[str]
+    transforms: list[str]
 
 
 BENCH_NOTES_ROUTE = "/bench/notes"
@@ -5139,18 +5283,9 @@ def create_app(
         Refused while a run is going, on `instrument`'s reasoning: a run awaiting
         approval was shown an estimate built from the families it was declared with.
         """
-        named: list[Family] = []
-        for name in asked.families:
-            try:
-                named.append(Family(name))
-            except ValueError as unknown:
-                raise HTTPException(
-                    status_code=422,
-                    detail=(
-                        f"{name!r} is not a family this bench has. The six are "
-                        f"{', '.join(str(family) for family in Family)}"
-                    ),
-                ) from unknown
+        named = _members(
+            asked.families, Family, "is not a family this bench has. The six are"
+        )
         if not named:
             raise HTTPException(
                 status_code=422,
@@ -5161,6 +5296,61 @@ def create_app(
             )
         try:
             bench.cover(frozenset(named))
+        except RunsInFlight as busy:
+            raise HTTPException(status_code=409, detail=str(busy)) from busy
+        return bench_settings(bench.config)
+
+    @app.put(BENCH_SELECTION_ROUTE)
+    def set_what_the_next_run_sends(asked: SelectRequest) -> BenchSettings:
+        """Set the layers and constructions the next run sends, and answer with the
+        reading.
+
+        **The third write on this prefix** (ADR-0025 as amended by #79), and the
+        second setting on it that moves the scored denominator: `plan_for` drops every
+        case whose construction is switched off and prices what remains, so fewer
+        constructions is a cheaper run and a narrower reading.
+
+        **Switching one off is not measuring it at zero**, and the difference is
+        carried in three places rather than trusted. The plan records
+        `DeclaredGap.TRANSFORMS_SWITCHED_OFF` for a family the selection emptied,
+        whose sentence says the family was not attempted. The artefact carries the
+        selection in provenance, so an absent line in a family's mix has a reason
+        beside it — `scorer.VariantCounts` refuses an entry at zero attempts, so the
+        counts cannot say it themselves (ADR-0055). And the verifier re-derives the
+        sentence from the members, so a document cannot carry one selection and tell
+        its reader about another (ADR-0058).
+
+        **The names come from two closed enumerations and are resolved here**, before
+        anything is stored: a bench cannot be put on a construction it has no function
+        for, and an unknown name is a refusal rather than a silently empty run.
+
+        **A selection that scores nothing is refused, never widened.** The refusal
+        is `AttackSelection.__post_init__`'s — every caller that can construct one can
+        start a run — and this route turns it into a `422` with the type's sentence.
+
+        Refused while a run is going, on `cover`'s reasoning: a run awaiting approval
+        was shown an estimate built from the selection it was declared with, and the
+        adaptive figure in it is zero or a ceiling depending on this setting.
+        """
+        layers = _members(
+            asked.layers, AttackLayer, "is not a layer this bench runs. The three are"
+        )
+        # A member of this set is a construction with a *function* behind it, so an
+        # unknown name is not a taxonomy this bench has not heard of — it is a run
+        # nothing could send (ADR-0051 §2).
+        transforms = _members(
+            asked.transforms,
+            Transform,
+            "is not a construction this bench performs. The seven are",
+        )
+        try:
+            selection = AttackSelection(
+                layers=frozenset(layers), transforms=frozenset(transforms)
+            )
+        except ValueError as nothing:
+            raise HTTPException(status_code=422, detail=str(nothing)) from nothing
+        try:
+            bench.select(selection)
         except RunsInFlight as busy:
             raise HTTPException(status_code=409, detail=str(busy)) from busy
         return bench_settings(bench.config)

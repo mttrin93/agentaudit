@@ -53,20 +53,23 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 
-import { readFamily } from '../families'
+import { readFamily, readName } from '../families'
 import {
   benchArtefacts,
   benchRuns,
   benchSettings,
   coverFamilies,
+  selectConstructions,
   type ArtefactList,
   type FamilyCovered,
   type RunList,
 } from '../api/bench'
 import {
+  selectionReading,
   WHAT_THIS_CONSOLE_DOES,
   WHAT_THIS_INSTRUMENT_IS,
   type ConsoleDoes,
+  type SelectionReading,
   THE_FAMILIES,
 } from './landing'
 import {
@@ -107,6 +110,19 @@ export function LandingScreen() {
    */
   const [families, setFamilies] = useState<FamilyCovered[] | null>(null)
   const [refused, setRefused] = useState('')
+  /*
+   * What the next run sends, on its own state and its own refusal beside the families'.
+   *
+   * Two states rather than one, because they are two writes: a bench refusing to
+   * narrow the constructions while a run is going has not refused to switch a family
+   * off, and one alert standing for both would tell an operator that a change they did
+   * not make was rejected.
+   *
+   * `null` until the bench answers, and the switches are drawn from its answer rather
+   * than from a local copy — so what a reader sees is what the next run will send.
+   */
+  const [sends, setSends] = useState<SelectionReading | null>(null)
+  const [refusedSelection, setRefusedSelection] = useState('')
 
   useEffect(() => {
     let current = true
@@ -163,12 +179,14 @@ export function LandingScreen() {
         const bench = await benchSettings()
         if (current) {
           setFamilies(bench.tuning.families)
+          setSends(selectionReading(bench.tuning))
         }
       } catch {
         // The switches simply do not draw. A families block that reported a failed
         // settings read would be this section explaining somebody else's problem.
         if (current) {
           setFamilies(null)
+          setSends(null)
         }
       }
     }
@@ -190,6 +208,53 @@ export function LandingScreen() {
       setRefused(`${refusal}`)
     }
   }
+
+  /*
+   * One switch moved, and both lists sent: the pair is one statement about what the
+   * next run sends, and the answer is the whole reading back rather than an
+   * acknowledgement.
+   *
+   * Two handlers rather than one taking *which kind of switch this was*: exactly one
+   * of the two is ever the thing that moved, and a single function would say so with a
+   * pair of nullable arguments only one of which is ever set. What they share is the
+   * request and its refusal, which is `sent`.
+   *
+   * A selection under which nothing would be scored is refused by the bench rather
+   * than widened here — a run that measures nothing still spends a registration probe
+   * per target — so the switches stay where they were and the refusal says why.
+   */
+  const switches = sends?.layers ?? []
+  const sent = async (layers: string[], transforms: string[]) => {
+    setRefusedSelection('')
+    try {
+      const bench = await selectConstructions(layers, transforms)
+      setSends(selectionReading(bench.tuning))
+    } catch (refusal: unknown) {
+      setRefusedSelection(`${refusal}`)
+    }
+  }
+
+  /** One layer switched, and every construction left where the operator put it. */
+  const selectLayer = (layer: string, on: boolean) =>
+    sent(
+      switches
+        .filter((one) => (one.layer === layer ? on : one.runs))
+        .map((one) => one.layer),
+      switches
+        .flatMap((one) => one.constructions)
+        .filter((one) => one.sent)
+        .map((one) => one.transform),
+    )
+
+  /** One construction switched, and every layer left where the operator put it. */
+  const selectConstruction = (transform: string, on: boolean) =>
+    sent(
+      switches.filter((one) => one.runs).map((one) => one.layer),
+      switches
+        .flatMap((one) => one.constructions)
+        .filter((one) => (one.transform === transform ? on : one.sent))
+        .map((one) => one.transform),
+    )
 
   return (
     <main className="screen">
@@ -330,6 +395,82 @@ export function LandingScreen() {
           ))}
         </dl>
       </section>
+
+      {/*
+        What a run sends, under the families it sends it about.
+
+        The same switches in the same idiom, one level down: the families say *which
+        failures are asked about* and these say *how they are attacked*. Three layers,
+        and the constructions each one schedules nested under it, because the operator's
+        question is answered by the layers — do I want the encodings, the ladders, or
+        the agent — and the list inside is the finer grain.
+
+        **Switching one off is not measuring it at zero.** A construction that was not
+        sent has no line in any family's mix on the signed report, so the bench's own
+        caveat is printed here and the sentence the artefact will carry is printed
+        beside it: an operator narrowing a run sees what a recipient will read.
+
+        The adaptive layer holds no construction, and the empty list is the shape: what
+        it would hold are the two loops the bench's closed set of constructions
+        deliberately does not name, so its switch is the whole of what there is to ask
+        about it.
+      */}
+      {sends === null ? null : (
+        <section>
+          <h2>What a run sends</h2>
+          <p className="aside">{sends.caveat}</p>
+          {refusedSelection ? (
+            <div className="citation uncited" role="alert">
+              <h3>Nothing was changed</h3>
+              <p>{refusedSelection}</p>
+            </div>
+          ) : null}
+          <dl className="said">
+            {sends.layers.map((layer) => (
+              <div key={layer.layer}>
+                <dt>
+                  <input
+                    className="tick"
+                    type="checkbox"
+                    checked={layer.runs}
+                    aria-label={readName(layer.layer)}
+                    onChange={(event) =>
+                      void selectLayer(layer.layer, event.target.checked)
+                    }
+                  />
+                  {readName(layer.layer)}
+                </dt>
+                <dd>{layer.sends}</dd>
+                {layer.constructions.length === 0 ? null : (
+                  <dd>
+                    <ul className="sent">
+                      {layer.constructions.map((one) => (
+                        <li key={one.transform}>
+                          <label>
+                            <input
+                              className="tick"
+                              type="checkbox"
+                              checked={one.sent}
+                              onChange={(event) =>
+                                void selectConstruction(
+                                  one.transform,
+                                  event.target.checked,
+                                )
+                              }
+                            />
+                            {readName(one.transform)}
+                          </label>
+                        </li>
+                      ))}
+                    </ul>
+                  </dd>
+                )}
+              </div>
+            ))}
+          </dl>
+          <p className="aside">{sends.stated}</p>
+        </section>
+      )}
     </main>
   )
 }

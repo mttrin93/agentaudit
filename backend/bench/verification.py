@@ -57,6 +57,7 @@ from typing import Any
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 
+from backend.bench.library import Transform
 from backend.bench.payload import ARTEFACT, ARTEFACT_VERSION
 from backend.bench.rendering import REPORT_MARKDOWN, REPORT_PAYLOAD
 from backend.bench.rule import DECLARED_RULE, GateRule
@@ -68,6 +69,7 @@ from backend.bench.scorer import (
     failure_rate,
     reaches,
 )
+from backend.bench.selection import EVERY_CONSTRUCTION, AttackLayer, AttackSelection
 from backend.bench.signing import (
     ALGORITHM,
     SIGNATURE_FILE,
@@ -810,6 +812,7 @@ def _declared_bar(
     comparisons.same(
         "provenance.rule", stated_rule, "kappa_floor", DECLARED_RULE.kappa_floor
     )
+    _selection(body, comparisons)
     stated_cuts = _mapping(measured, "cuts")
     comparisons.same(
         "measured.cuts",
@@ -836,6 +839,77 @@ def _declared_bar(
         ),
     )
     return None if rule.at_the_declared_denominator() else rule.denominator_stated()
+
+
+def _selection(body: Mapping[str, Any], comparisons: _Comparisons) -> None:
+    """The selection this payload states, against the sentence it states beside it.
+
+    **Read and not asserted, and it is the second thing that is** (ADR-0027). The
+    selection is a declared input the console offers, so a payload naming fewer
+    constructions than the library holds may be an operator narrowing a run
+    deliberately — asserting the full set against every document would report such a
+    run as arithmetic that disagrees, which is the state in which a real tampering
+    goes unnoticed. What is asserted is the *wording*: it is re-derived here from the
+    members beside it, so a document cannot carry a narrowed selection while telling
+    its reader every construction was sent
+    ([ADR-0058](../../docs/adr/0058-the-console-selects-layers-and-constructions.md)).
+
+    Rebuilt through `AttackSelection` rather than compared as strings, so what this
+    checks the sentence against is the same type the bench wrote it from. A payload
+    naming a layer or a construction this bench has no member for is a disagreement
+    and not an exception: a recipient is owed the reading, and the two names travel in
+    the message rather than in a traceback.
+
+    **It is a check about the bar and never about a figure**, so it is counted before
+    `_re_derive` takes its `bar` reading and does not make a report that states no
+    per-family figure look as though something was recomputed.
+    """
+    stated = _mapping(_mapping(body, "provenance"), "selection")
+    layers = [str(name) for name in _sequence_of_strings(stated, "layers")]
+    transforms = [str(name) for name in _sequence_of_strings(stated, "transforms")]
+    try:
+        selection = AttackSelection(
+            layers=frozenset(AttackLayer(name) for name in layers),
+            transforms=frozenset(Transform(name) for name in transforms),
+        )
+    except ValueError as refused:
+        comparisons.agrees(
+            "provenance.selection",
+            False,
+            f"{layers} and {transforms}",
+            (
+                "layers and constructions this bench has members for, in a selection "
+                f"that sends something: {refused}"
+            ),
+        )
+        return
+    comparisons.agrees(
+        "provenance.selection.stated",
+        stated.get("stated") == selection.stated(),
+        "wording that does not follow from the selection beside it",
+        "the wording for these layers and these constructions",
+    )
+    comparisons.agrees(
+        "provenance.selection.whole_library",
+        stated.get("whole_library") == (selection == EVERY_CONSTRUCTION),
+        repr(stated.get("whole_library")),
+        repr(selection == EVERY_CONSTRUCTION),
+    )
+
+
+def _sequence_of_strings(node: Mapping[str, Any], key: str) -> Sequence[str]:
+    """That key as a list of strings, refusing anything else by name.
+
+    `_sequence` next door reads a list of mappings, which is what every other list in
+    this payload is. This one reads a list of member names, and it refuses as
+    `NotThisArtefact` rather than coercing: a document whose selection is a string, a
+    number or a list of objects is not the shape this verifier knows, and silently
+    making a list out of it would report a check over something nothing here wrote.
+    """
+    found = node.get(key)
+    if not isinstance(found, list) or any(not isinstance(name, str) for name in found):
+        raise NotThisArtefact(f"{key} is not a list of names in this payload")
+    return [name for name in found if isinstance(name, str)]
 
 
 def _entry(

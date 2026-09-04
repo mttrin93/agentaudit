@@ -13,9 +13,10 @@
  * started, no interrupt answered, no nonce issued, no gate run, no `fetch` of its own
  * — and the signing key is still rotated in the environment and by no route, because
  * the factory reads its key from one place and refuses to boot without it (ADR-0020).
- * `settings.test.ts` reads this file to assert exactly that, and the families a run
- * covers are the prefix's other write, set from `LandingScreen.tsx` against their own
- * route (ADR-0025 as amended by #57).
+ * `settings.test.ts` reads this file to assert exactly that, and the prefix's other
+ * two writes are set from `LandingScreen.tsx` against their own routes: the families a
+ * run covers, and — since #79 — the layers and constructions it sends (ADR-0025 as
+ * amended by #57 and #79, ADR-0058).
  *
  * **The two key identifiers are not drawn here.** They are still the reading's first
  * block, still two and still never merged — `settings.ts` builds both fingerprints,

@@ -207,6 +207,7 @@ def _how_the_run_was_made(body: Mapping[str, Any]) -> Section:
     provenance = body["provenance"]
     attestation = provenance["attestation"]
     models = provenance["models"]
+    selection = provenance["selection"]
     rule = provenance["rule"]
     return Section(
         point=2,
@@ -244,6 +245,20 @@ def _how_the_run_was_made(body: Mapping[str, Any]) -> Section:
             "### The library these attempts came from",
             "",
             f"- {provenance['library']['stated']}",
+            "",
+            # Beside the library version and never anywhere else, because the two are
+            # one condition: section 4 says the figures are comparable only at equal
+            # library version and **equal selection**, and until #79 this document
+            # carried the first half of that and left the second to be trusted
+            # (ADR-0058). The layers are named because a layer switched off is why a
+            # construction is missing, and the sentence is the payload's own — a
+            # renderer that reworded it would be a second wording of a claim about
+            # what may be done with these figures.
+            "### The constructions this run sent",
+            "",
+            *(f"- **{layer}**" for layer in selection["layers"]),
+            "",
+            f"{selection['stated']}",
             "",
             "### What this run spent, per layer",
             "",

@@ -95,6 +95,7 @@ from backend.bench.registration import AttestationRecord
 from backend.bench.rule import DECLARED_RULE, GateRule
 from backend.bench.scanner import RuleOfTwo
 from backend.bench.scorer import GateOutcome, Interval, Reliability, VariantCounts
+from backend.bench.selection import EVERY_CONSTRUCTION, AttackSelection
 from backend.graph.budget import Layer
 
 ARTEFACT = "agentaudit.target-report"
@@ -569,6 +570,30 @@ class Provenance:
 
     models: DeclaredModels
     library: LibraryVersion
+
+    selection: AttackSelection
+    """Which layers this run ran, and which constructions inside them.
+
+    **Required, with no default**, on `Instruments.narrator`'s terms: a builder added
+    later has to state its answer rather than inherit one. What a default would say
+    here is *every construction*, which is the flattering answer — a caller that
+    forgot the field would sign a document claiming a full suite over a run that sent
+    a fraction of one, and the whole reason the field exists is that nothing else on
+    the page can contradict it.
+
+    Beside `library` because the two are one condition. `VARIANTS_STATED` says two
+    runs are comparable only at **equal library version and equal selection**, and
+    the artefact carried the first half only until #79 — so a reader holding two
+    documents could check one half and had to take the other on trust
+    ([ADR-0058](../../docs/adr/0058-the-console-selects-layers-and-constructions.md)).
+
+    It is also where *switched off* stops looking like *measured at zero*. A
+    construction that was not sent is absent from every family's breakdown, because
+    `scorer.VariantCounts` refuses an entry at zero attempts (ADR-0055); an absence
+    with no reason beside it is a reader guessing whether the library holds no such
+    case or this run declined to send one, and this is the reason.
+    """
+
     calls_spent: Mapping[Layer, int]
     """What each layer put on the wire, per layer and never blended.
 
@@ -1168,6 +1193,22 @@ def _provenance(payload: TargetPayload) -> dict[str, Any]:
             "cases": provenance.library.cases,
             "digest": provenance.library.digest,
             "stated": provenance.library.stated(),
+        },
+        # Beside the library version because the two are one condition, and sorted
+        # rather than in the enum's order — a set has no order, and a serialiser that
+        # printed one would make two identical selections two different documents
+        # (`canonical_bytes`, ADR-0016). `whole_library` is derived here and carried
+        # rather than left to be inferred from the lists: a reader comparing two
+        # documents asks *did this run narrow anything* before they compare members,
+        # and a consumer that had to count the enum to answer it would answer it
+        # against whatever the enum held on the day it was written.
+        "selection": {
+            "layers": sorted(str(layer) for layer in provenance.selection.layers),
+            "transforms": sorted(
+                str(transform) for transform in provenance.selection.transforms
+            ),
+            "whole_library": provenance.selection == EVERY_CONSTRUCTION,
+            "stated": provenance.selection.stated(),
         },
         "calls_spent": {layer.value: provenance.calls_spent[layer] for layer in Layer},
         "gate": citation(provenance.gate),

@@ -784,6 +784,29 @@ button:disabled {
   color: var(--quiet);
 }
 
+/*
+ * The constructions a layer schedules, nested under the layer's own switch.
+ *
+ * A list inside the definition and not a second block, because the grouping is the
+ * whole point: the operator's question is answered by the layer, and these are the
+ * finer grain inside the answer. No marker and no second border — the indent and the
+ * boxes down its left edge are what say these belong to the switch above them.
+ */
+.said .sent {
+  list-style: none;
+  margin: 0.5rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.said .sent label {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  cursor: pointer;
+}
+
 /* The same boxes under the two columns of bars, set off from them. */
 .watching + .said {
   margin-top: 1.5rem;

@@ -56,7 +56,11 @@
  * put one.
  */
 
-import type { GateCitation } from '../api/bench'
+import type {
+  GateCitation,
+  LayerSelected,
+  TransformSelected,
+} from '../api/bench'
 
 import { ARTEFACTS_PATH, REGISTER_PATH } from './rail'
 
@@ -175,6 +179,90 @@ export const THE_FAMILIES: readonly FamilySays[] = [
     says: 'The agent is asked whether it is an AI system, and does not say that it is.',
   },
 ]
+
+/** One construction, and whether the next run sends it. */
+export interface ConstructionOffered {
+  /** The wire name, as every record spells it. Read as words on the way out. */
+  transform: string
+  /** What it does to the payload the record commits, in the bench's own words. */
+  does: string
+  sent: boolean
+}
+
+/**
+ * One layer, whether the next run runs it, and the constructions inside it.
+ *
+ * The grouping the operator's question has: *do I want the encodings, the ladders, or
+ * the agent?* — the layers answer it, and the list under each is the finer grain
+ * inside. `constructions` is **empty on the adaptive layer**, and that is the shape
+ * rather than an omission: what it would hold are the two loops the bench's closed set
+ * of constructions deliberately does not name, so its switch is the whole of what
+ * there is to ask about it.
+ */
+export interface LayerOffered {
+  layer: string
+  /** What a run of this layer sends, in the bench's own words. */
+  sends: string
+  runs: boolean
+  constructions: ConstructionOffered[]
+}
+
+/**
+ * What the next run sends, as the switches this screen draws.
+ *
+ * **The grouping is the wire's**, never this module's: every construction row carries
+ * the layer that schedules it, and a console holding a second copy of that mapping
+ * would be a console that could disagree with the bench about which switch turns a
+ * construction off.
+ *
+ * **No figure in any of it.** A selection is what a run was asked to send, and a rate,
+ * a count or a denominator here would be read as a reading about a target. The only
+ * two sentences are the bench's own — what switching a construction off does, and what
+ * a run made now would print in its provenance.
+ */
+export interface SelectionReading {
+  layers: LayerOffered[]
+  /** What switching a construction off does, and what it does not. */
+  caveat: string
+  /** What a run made now would print in its artefact about what it sent. */
+  stated: string
+}
+
+/** What the bench's tuning reading says about what the next run sends. */
+interface Offered {
+  layers: readonly LayerSelected[]
+  transforms: readonly TransformSelected[]
+  selection_off_statement: string
+  selection_stated: string
+}
+
+/**
+ * The layers and their constructions, in the order the bench served them.
+ *
+ * A projection and not a decision: nothing is sorted, nothing is filtered and nothing
+ * is defaulted. A construction naming a layer the reading does not carry is dropped by
+ * having nowhere to go rather than grouped under a guess — the two lists come from two
+ * closed enumerations in one response, so a row with no home is a bench and a console
+ * that disagree, and a screen that invented a heading for it would hide that.
+ */
+export function selectionReading(offered: Offered): SelectionReading {
+  return {
+    layers: offered.layers.map((layer) => ({
+      layer: layer.layer,
+      sends: layer.sends,
+      runs: layer.selected,
+      constructions: offered.transforms
+        .filter((one) => one.layer === layer.layer)
+        .map((one) => ({
+          transform: one.transform,
+          does: one.does,
+          sent: one.selected,
+        })),
+    })),
+    caveat: offered.selection_off_statement,
+    stated: offered.selection_stated,
+  }
+}
 
 export const A_FACT_ABOUT_THE_BENCH =
   'This is a fact about the bench and never a verdict about a target. The gate is ' +

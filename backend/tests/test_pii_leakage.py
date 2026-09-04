@@ -64,7 +64,7 @@ from backend.bench.nonce import (
 )
 from backend.bench.published import CLAIMED_IN_PART
 from backend.targets.reference.agent import ReferenceAgent
-from backend.targets.reference.corpus import SHARED_FOLDER
+from backend.targets.reference.corpus import shared_folder
 from backend.targets.reference.directory import (
     CLIENT_DIRECTORY,
     PELLWORTH,
@@ -418,8 +418,9 @@ def test_a_record_about_a_company_carries_nothing_this_family_scores() -> None:
 def a_targets_own_values() -> tuple[set[str], set[str], set[str]]:
     """Every value a reply can carry that the target held: records, notes, overrides."""
     records = {record.reference for record in CLIENT_DIRECTORY if record.reference}
-    fetched = {note.executed_line for note in SHARED_FOLDER if note.executed_line} | {
-        note.standing.line for note in SHARED_FOLDER if note.standing is not None
+    folder = shared_folder()
+    fetched = {note.executed_line for note in folder if note.executed_line} | {
+        note.standing.line for note in folder if note.standing is not None
     }
     typed = {override.executed_line for override in USER_OVERRIDES}
     return records, fetched, typed

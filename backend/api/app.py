@@ -286,7 +286,6 @@ from backend.observability import (
     install,
     trace_config,
 )
-from backend.targets.reference.corpus import SHARED_FOLDER
 
 CASES_DIR = Path(__file__).resolve().parents[1] / "cases"
 """The case library a bench serves when it was not given one.
@@ -3621,18 +3620,18 @@ BENCH_NOTES_ROUTE = "/bench/notes"
 The one thing this walk asked an operator to do and never told them how to do. The
 registration form has a box declaring that the hostile content the family reads is
 in place, `plan_for` drops every case in the family when it is not, and until this
-route there was no way to learn *what* to plant: the notes are committed in
-`backend/targets/reference/corpus.py`, which is the bench's source and not a screen.
-An operator who planted content of their own invention would have the family run
-against an attack whose canary can never appear, and read the clean zero as a
-defence — which is the exact failure the declaration box exists to prevent, arriving
-through the other door.
+route there was no way to learn *what* to plant. An operator who planted content of
+their own invention would have the family run against an attack whose canary can
+never appear, and read the clean zero as a defence — which is the exact failure the
+declaration box exists to prevent, arriving through the other door.
 
-**Paired by the canary and never by name.** What is served against a case is the
-note whose `executed_line` is that case's `planted_canary`, so the pairing is the
-same string the verdict is decided on (`evaluator.py`). A note that pairs with no
-live case is not served, and a live case in the family that pairs with no note is
-named as one this bench holds no content for rather than quietly omitted.
+**Read off the case record and paired with nothing.** The content is the case's own
+`[planted_artefact]` block and the canary is that artefact's two halves joined, so
+what is served and what is scored are one fact rather than two this route matched up
+([ADR-0060](../../docs/adr/0060-a-planted-artefact-is-part-of-the-case-record.md)).
+A live case in the family whose record plants nothing is named as one this bench
+holds no content for rather than quietly omitted — which is a record no loader
+accepts today, and is reported rather than assumed away.
 
 **It is under `/bench` because the subject is the instrument.** Nothing here is a
 measurement of anybody's target and nothing about a target is reachable from it
@@ -3700,15 +3699,15 @@ class NotesToPlant(BaseModel):
 
 
 def notes_to_plant(cases: Sequence[Case]) -> NotesToPlant:
-    """The notes the live indirect-injection cases are scored against, paired by canary.
+    """The content the live indirect-injection cases plant, off their own records.
 
     The live half only, for the reason the agent types are read off the live half: a
     case that has retired is a case no run attempts, and content planted for one is
     content planted for nothing.
+
+    Nothing is matched here and nothing can be mismatched: the body and the canary
+    come off one record, which is what moving the content onto it bought (ADR-0060).
     """
-    by_canary = {
-        note.executed_line: note for note in SHARED_FOLDER if note.executed_line
-    }
     notes: list[NoteToPlant] = []
     unpaired: list[str] = []
     for case in sorted(cases, key=lambda case: case.id):
@@ -3716,18 +3715,16 @@ def notes_to_plant(cases: Sequence[Case]) -> NotesToPlant:
             continue
         if case.family is not Family.INDIRECT_PROMPT_INJECTION:
             continue
-        canary = (
-            case.success_condition.planted_canary
-            if case.success_condition is not None
-            else None
-        )
-        note = by_canary.get(canary) if canary else None
-        if note is None:
+        artefact = case.planted_artefact
+        if artefact is None:
             unpaired.append(case.id)
             continue
         notes.append(
             NoteToPlant(
-                case=case.id, key=note.key, body=note.body, canary=note.executed_line
+                case=case.id,
+                key=artefact.key,
+                body=artefact.body,
+                canary=artefact.executed_line,
             )
         )
     return NotesToPlant(notes=notes, unpaired=unpaired)

@@ -8,11 +8,13 @@ fetched — so an operator who planted something of their own would have thirty
 attempts run against an attack whose canary can never appear, and read the clean zero
 as a defence.
 
-**The pairing is the canary and nothing else.** A note is served against a case when
-its executed line is that case's `planted_canary`, which is the exact string
-`evaluator.py` searches the reply for. Asserted here from both ends: every live case
-in the family is served content, and the content served is the content whose
-execution produces that case's canary.
+**There is no pairing left to get wrong.** The content is the case's own
+`[planted_artefact]` block and the canary is that artefact's two halves joined, so
+what this route serves and what `evaluator.py` searches the reply for come off one
+record
+([ADR-0060](../../docs/adr/0060-a-planted-artefact-is-part-of-the-case-record.md)).
+Asserted here from both ends anyway: every live case in the family is served content,
+and the content served is the content whose execution produces that case's canary.
 
 **The canary is composed, and the served body must not carry it joined.** The note
 spells out a prefix in one place and a reference in another; only obeying the
@@ -89,29 +91,34 @@ def test_the_body_carries_the_two_halves_and_never_the_finished_canary(
         assert reference in note["body"]
 
 
-def test_a_case_this_bench_holds_no_note_for_is_named_rather_than_dropped(
+def test_a_case_this_bench_holds_no_content_for_is_named_rather_than_dropped(
     library: list[Case],
 ) -> None:
     """A shorter list would look complete.
 
-    A case scored on a canary no note produces is a case an operator cannot plant
-    for, and the honest answer is its id — not an omission that reads as *there are
-    two of these* to somebody who never counted the family.
+    A case in this family that plants nothing is a case an operator cannot plant for,
+    and the honest answer is its id — not an omission that reads as *there are two of
+    these* to somebody who never counted the family.
+
+    **The drift this test used to model is gone**, and the case built here is the one
+    that is left. It could once name a canary no note produced; now the canary *is*
+    the record's own content joined, so the two cannot disagree and `Case` refuses a
+    record that tries (ADR-0060). What can still reach this route is a case in the
+    family whose verdict reads something the bench plants nowhere — no artefact, and
+    nothing to serve.
     """
     [first, *rest] = injection_cases(library)
-    drifted = replace(
+    plants_nothing = replace(
         first,
-        success_condition=SuccessCondition(
-            kind=SuccessConditionKind.CANARY_INSTRUCTION_EXECUTED,
-            planted_canary="NOTE-PROCESSED-NOTHING-WROTE-THIS",
-        ),
+        success_condition=SuccessCondition(kind=SuccessConditionKind.CANARY_IN_REPLY),
+        planted_artefact=None,
     )
-    client = TestClient(create_app(BenchConfig(cases=[drifted, *rest])))
+    client = TestClient(create_app(BenchConfig(cases=[plants_nothing, *rest])))
 
     served = client.get(BENCH_NOTES_ROUTE).json()
 
-    assert served["unpaired"] == [drifted.id]
-    assert drifted.id not in {note["case"] for note in served["notes"]}
+    assert served["unpaired"] == [plants_nothing.id]
+    assert plants_nothing.id not in {note["case"] for note in served["notes"]}
     assert {note["case"] for note in served["notes"]} == {case.id for case in rest}
 
 

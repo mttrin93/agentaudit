@@ -99,8 +99,18 @@ def test_the_library_version_did_not_move() -> None:
     # was written, no payload edited and no script committed, and the library is
     # still eighteen single-turn base cases. Recorded in docs/validation.md; the
     # previous value was `89288dbf94f9`.
+    #
+    # And a fifth time, on the same precedent and with three records edited as well:
+    # `Case` gained `planted_artefact`, and the three indirect-injection records
+    # gained the poisoned note they are attacked with and gave up the
+    # `planted_canary` line the note's two halves now derive (ADR-0060,
+    # docs/adr/0060-a-planted-artefact-is-part-of-the-case-record.md).
+    # The count is what says no case was written; the content is byte-identical to
+    # the notes `corpus.py` held before the move, so no reading moved and every
+    # `[[history]]` block in the library still stands. Recorded in
+    # docs/validation.md; the previous value was `31cacb9d69ec`.
     cases = load_library(CASES_DIR)
-    assert LibraryVersion.of(cases) == LibraryVersion(cases=18, digest="31cacb9d69ec")
+    assert LibraryVersion.of(cases) == LibraryVersion(cases=18, digest="81ff91682cfc")
 
 
 def test_nothing_in_the_bench_can_read_a_retrieval_result() -> None:

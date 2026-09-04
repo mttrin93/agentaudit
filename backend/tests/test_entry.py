@@ -28,6 +28,7 @@ and what is under test here is what the writer does with the answer.
 
 import ast
 import json
+import re
 import tomllib
 from collections import Counter
 from dataclasses import replace
@@ -58,6 +59,7 @@ from backend.bench.library import (
     AdmissionBar,
     AdmissionReading,
     AdmissionRecord,
+    AnyFamily,
     Case,
     CaseStatus,
     DiscoveredBy,
@@ -73,7 +75,12 @@ from backend.bench.library import (
 )
 from backend.bench.payload import citation
 from backend.bench.retirement import live_library
-from backend.tests.conftest import authored_library, imports_of, retired_case
+from backend.tests.conftest import (
+    authored_library,
+    imports_of,
+    retired_case,
+    some_planted_content,
+)
 from backend.tests.test_cited import _numbers, a_passing_gate, a_record
 from scripts import admit
 
@@ -100,10 +107,20 @@ def separating(model: str) -> AdmissionReading:
     return AdmissionReading(model=model, attempts=10, hardened=0, weak=5, trivial=10)
 
 
+def _a_word_of(payload: str) -> str:
+    """A word this payload actually says, to file its planted content under.
+
+    Derived rather than fixed because the tests below vary the payload and the
+    record's own fetching turn has to name the content it plants (ADR-0060) — a
+    constant key here would make every one of them a record no library accepts.
+    """
+    return str(next(word for word in re.findall(r"[a-z]{4,}", payload.lower())))
+
+
 def an_admitted_case(
     case_id: str = "adaptive-data_leakage-0f0f0f0f",
     payload: str = "the probe that actually ran",
-    family: Family = Family.DATA_LEAKAGE,
+    family: AnyFamily = Family.DATA_LEAKAGE,
 ) -> Case:
     """One case as `promote` returns it: the record, and the block that let it in.
 
@@ -125,6 +142,12 @@ def an_admitted_case(
             # condition as well as this case's, and one reply cannot be two families'
             # evidence. `Case` refuses one since #50 (ADR-0043).
             planted_canary="ADAPTIVE-ACK-31904",
+        ),
+        # And the content that produces it, because a case whose instruction arrives
+        # in what the target fetched carries its own attack (ADR-0060). Filed under a
+        # word this payload says, which is how the case's own turn retrieves it.
+        planted_artefact=some_planted_content(
+            _a_word_of(payload), "ADAPTIVE-ACK-", "31904"
         ),
         verdict_class=VerdictClass.DETERMINISTIC,
         applies_to=("assistant",),
@@ -185,7 +208,7 @@ def test_a_payload_written_to_break_a_serialiser_still_round_trips(
     # The round trip over the values a naive writer loses: a backslash, three
     # quotes, a quote against the closing delimiter, a tab, trailing whitespace,
     # and no final newline.
-    case = replace(an_admitted_case(), payload=(HOSTILE,))
+    case = an_admitted_case(payload=HOSTILE)
     path = tmp_path / f"{case.id}.toml"
 
     path.write_text(case_record(case), encoding="utf-8")
@@ -549,10 +572,8 @@ def test_a_run_that_wrote_nothing_has_no_superseding_to_print(
     # printer has to test: a run that moved nothing has nothing to say about the
     # citation, and a section that printed an empty superseding would read as one.
     library = a_cited_library(tmp_path)
-    rediscovered = replace(
-        an_admitted_case(),
-        family=leakage_case.family,
-        payload=leakage_case.payload,
+    rediscovered = an_admitted_case(
+        payload=leakage_case.payload[0], family=leakage_case.family
     )
 
     written = enter([rediscovered], library, holder=HOLDER)
@@ -594,10 +615,8 @@ def test_a_run_that_wrote_nothing_leaves_the_citation_unmoved(
     # the attacker composes its probes against these three agents, and a probe that
     # lands on a payload already in the library is the cheapest way this happens.
     library = a_cited_library(tmp_path)
-    rediscovered = replace(
-        an_admitted_case(),
-        family=leakage_case.family,
-        payload=leakage_case.payload,
+    rediscovered = an_admitted_case(
+        payload=leakage_case.payload[0], family=leakage_case.family
     )
 
     written = enter([rediscovered], library, holder=HOLDER)

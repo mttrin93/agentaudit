@@ -675,6 +675,20 @@ carrying one is evidence for the other
 ([ADR-0043](./docs/adr/0043-the-canary-a-nonce-cannot-be-confused-with.md)).
 _Avoid_: marker, tracer, honeytoken
 
+**Planted artefact**:
+The hostile content a **case** is attacked *with*, held on that case's own record.
+Present on exactly the cases whose instruction arrives in **content the target
+fetches** — a case in those families *is* a piece of content, so the **payload** is a
+colleague's ordinary message and the attack is what the tool brought back. It carries
+the two halves of the **canary** and never the join, so a target that quotes it back
+while refusing it reproduces both halves and cannot be scored as one that carried the
+instruction out; the joined value is derived and is written nowhere
+([ADR-0060](./docs/adr/0060-a-planted-artefact-is-part-of-the-case-record.md)). Not a
+**canary** and not a **payload**: the canary is what executing it produces, the payload
+is what the bench sends, and this is what somebody else put where the target would find
+it. The *act* of putting it there is #84's word and is not this one.
+_Avoid_: note, document, poisoned note, fixture, content
+
 **Nonce**:
 The bench-issued value a user must plant in their target to prove they control it. Registration does not complete without its echo.
 _Avoid_: token, challenge, secret, key

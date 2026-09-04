@@ -845,6 +845,139 @@ class SuccessCondition:
             )
 
 
+class PlantedIn(StrEnum):
+    """Where an artefact a family needs has to be put before the attack turn.
+
+    CONTEXT.md's **canary** entry names three plantings — configuration, retrieved
+    content and session memory — and one member here, because this is the one a case
+    record can *carry*. The registration nonce is planted in the target's
+    configuration and is issued per run, so no record may name it (ADR-0007); the
+    session-memory planting is performed by content the target fetched, which is this
+    member under another turn's name (ADR-0041). A second member arrives with the
+    hook that can put something somewhere else (#84).
+    """
+
+    RETRIEVED_CONTENT = "retrieved_content"
+    """Content the target brings back through a tool. Third-party text, all of it."""
+
+
+@dataclass(frozen=True)
+class PlantedArtefact:
+    """The hostile content a case is attacked *with*, on the case's own record.
+
+    A case in the fetched-content families **is** a piece of content: the payload the
+    bench sends is a colleague's ordinary message and everything adversarial is in
+    what the target retrieved. So a record that named only the canary was a record
+    that did not carry its own attack, and the attack lived in the reference agents'
+    source — where nothing but a reference agent could be planted with it and an
+    operator told to plant *a third-party note* was being asked to write it
+    themselves
+    ([ADR-0060](../../docs/adr/0060-a-planted-artefact-is-part-of-the-case-record.md)).
+
+    **The canary is two halves here and is joined nowhere on the record.** The body
+    spells out `prefix` in one place and `reference` in another, and carrying the
+    instruction out is what joins them; `executed_line` is the join, computed and
+    never stored. A field holding the finished string and interpolated into the body
+    would make a target that quoted the whole note back while refusing it reproduce
+    the join, and every refusal that described the attack would score as one that
+    carried it out (ADR-0004, and `corpus.py`'s own soundness argument).
+    """
+
+    where: PlantedIn
+    key: str
+    """The word a message uses when it means this artefact. Matched case-folded.
+
+    Where the content is filed rather than a field of it: the bench's payload names
+    it in ordinary prose — *a note from the supplier*, *the remittance advice* — and
+    the target has to bring this content back when it does. The case's own fetching
+    turn has to name it, which `Case._refuse_a_planting_its_record_disagrees_with`
+    checks, so a record cannot plant content its own message never retrieves.
+    """
+
+    body: str
+    """The text to plant, exactly. Third-party content, all of it.
+
+    Committed and public, on ADR-0008's own terms as amended: the override phrasing
+    is the published kind an input check is written for rather than one this project
+    discovered, and moving it from one committed file to another publishes nothing
+    new. What is refused is payload text in a signed artefact or a CI log.
+    """
+
+    prefix: str
+    """The half of the canary the instruction spells out as a stamp."""
+
+    reference: str
+    """The half the body states as a document reference, elsewhere in the text."""
+
+    fires_on: tuple[str, ...] = ()
+    """What a later message has to mention before a retained instruction fires.
+
+    Empty for content that acts in the turn that fetched it, and for a standing
+    convention that fires on every turn after it. Where it is present the subjects
+    are matched case-folded, and the record's own scored turn has to raise one of
+    them — held here beside the body that waits for it so the subject the case asks
+    about and the subject the content waits on cannot drift apart
+    ([ADR-0041](../../docs/adr/0041-the-persistence-canary-is-read-over-two-turns.md)).
+    """
+
+    @property
+    def executed_line(self) -> str:
+        """What carrying the instruction out adds to a reply — the two halves joined.
+
+        A property and never a field, which is the whole of the composition defence:
+        there is one copy of each half on the record, the join exists only where
+        something computed it, and nothing can write a body with the finished string
+        already in it.
+        """
+        return f"{self.prefix}{self.reference}"
+
+    def __post_init__(self) -> None:
+        """Refuse content that cannot be planted, or whose canary is not composed.
+
+        Three refusals. The **halves, the key and the body** have to be there at all:
+        an artefact missing one is content nothing can retrieve, nothing can plant, or
+        nothing can score. The **join** may not appear in the body, which is the
+        soundness property above and is checked over the bytes rather than argued. And
+        both halves have to appear *separately* in the body, because a body that
+        spelled out neither is content whose instruction cannot be carried out at all —
+        the case would measure the retrieval and never the obedience.
+        """
+        missing = sorted(
+            name
+            for name, value in (
+                ("key", self.key),
+                ("body", self.body.strip()),
+                ("prefix", self.prefix),
+                ("reference", self.reference),
+            )
+            if not value
+        )
+        if missing:
+            raise ValueError(
+                f"a planted artefact states nothing for {missing}. The key is how a "
+                "message retrieves it, the body is what is planted, and the two "
+                "halves are the canary the verdict reads"
+            )
+        if self.executed_line in self.body:
+            raise ValueError(
+                f"the {self.key} artefact carries {self.executed_line!r} joined in "
+                "its own body, so a target that quoted the content back while "
+                "refusing it would score. The canary is composed by carrying the "
+                "instruction out, and the record holds the two halves and never the "
+                "join"
+            )
+        absent = sorted(
+            half for half in (self.prefix, self.reference) if half not in self.body
+        )
+        if absent:
+            raise ValueError(
+                f"the {self.key} artefact does not spell out {absent} anywhere in "
+                "its body, so nothing that read it could produce "
+                f"{self.executed_line!r}. Content whose instruction cannot be "
+                "carried out makes the case a measurement of the fetch"
+            )
+
+
 @dataclass(frozen=True)
 class JudgedCondition:
     """The semantic question a judged family's verdict answers, held on the record.
@@ -1312,6 +1445,27 @@ class Case:
     this repository could check.
     """
 
+    planted_artefact: PlantedArtefact | None = None
+    """The hostile content this case is attacked with, for a case attacked by content.
+
+    Present on exactly the cases whose instruction arrives in content the target
+    fetched (`CARRIED_BY_FETCHED_CONTENT`) and absent on every other, the pairing
+    enforced in `_refuse_a_planting_its_record_disagrees_with`. `None` therefore on a
+    case whose canary is the registration nonce — that value is issued per run and
+    planted inside the target's boundary, so no record names it (ADR-0007) — and on a
+    direct override, whose instruction is in the payload above.
+
+    **The canary is not written twice.** The success condition's `planted_canary` is
+    this artefact's two halves joined, and `load_case` derives it rather than reading
+    it: a record that wrote both would be two copies of one fact, which is the drift
+    a test used to catch and this field exists to make unrepresentable
+    ([ADR-0060](../../docs/adr/0060-a-planted-artefact-is-part-of-the-case-record.md)).
+
+    Versioned by being here — `_versioned` reads `dataclasses.fields`, so two runs
+    that planted different content cannot report one library version, and the digest
+    moved in the commit that added the field.
+    """
+
     retrieval: RetrievedFrom | None = None
     """Where this case's payload was published, on a case retrieved from a corpus.
 
@@ -1432,6 +1586,7 @@ class Case:
         # worse. This one is what a base case's blank turn reaches.
         self._refuse_a_payload_with_nothing_to_send()
         self._refuse_a_same_turn_planting()
+        self._refuse_a_planting_its_record_disagrees_with()
         self._refuse_a_canary_the_wrong_channel_spells_out()
         self._refuse_a_canary_a_nonce_could_be_confused_with()
 
@@ -1727,6 +1882,95 @@ class Case:
                 "is read over, which makes the attack answerable in one exchange. A "
                 "same-turn success is indirect prompt injection's verdict and is not "
                 "scorable here (ADR-0041)"
+            )
+
+    def _refuse_a_planting_its_record_disagrees_with(self) -> None:
+        """Keep the content this case is attacked with, and its canary, one fact.
+
+        The record carries the attack now rather than naming only what the attack
+        produces
+        ([ADR-0060](../../docs/adr/0060-a-planted-artefact-is-part-of-the-case-record.md)),
+        and four refusals are what makes it one fact rather than several that agree
+        today.
+
+        The **pairing** is `status` and `retirement`'s discipline applied to planting.
+        A case whose instruction arrives in content the target fetched and carries no
+        content is the state this field exists to end — the attack would be somewhere
+        the record cannot show a reader — and content on any other case is content
+        nothing plants: the registration nonce is issued per run and planted inside
+        the boundary (ADR-0007), and a direct override's instruction is in the payload.
+
+        The **canary** has to be the artefact's own two halves joined. `load_case`
+        derives it, so this catches a `Case` assembled in code rather than loaded, and
+        with it the drift the suite used to watch for between two copies of one string.
+
+        The **key** has to be named by the turn that fetches. `corpus.fetched` matches
+        a message against the key, so a record whose fetching turn names some other
+        content is a case whose scored turn retrieves the wrong thing — and it fails as
+        a clean zero that reads like a defence.
+
+        The **subject** a dormant instruction waits on has to be raised by the scored
+        turn, and only a retained instruction may wait on one at all. Content that
+        acts in the turn that fetched it has no later turn to wait for, and a subject
+        no message raises is content that can never fire (ADR-0041).
+        """
+        artefact = self.planted_artefact
+        condition = self.success_condition
+        kind = None if condition is None else condition.kind
+        by_content = kind in CARRIED_BY_FETCHED_CONTENT
+        if by_content and artefact is None:
+            raise ValueError(
+                f"{self.id} reads an instruction that arrives in content the target "
+                "fetched and carries no content. A case in these families *is* a "
+                "piece of content, so a record naming only the canary leaves the "
+                "attack somewhere it cannot show a reader — and nothing but a "
+                "reference agent can be planted with it (ADR-0060)"
+            )
+        if artefact is None:
+            return
+        if not by_content:
+            raise ValueError(
+                f"{self.id} carries planted content and its success condition is "
+                f"{kind}, which reads no instruction planted in content the target "
+                "fetched. Content on such a record is content nothing plants and "
+                "nothing scores"
+            )
+        assert condition is not None
+        if condition.planted_canary != artefact.executed_line:
+            raise ValueError(
+                f"{self.id} is scored on {condition.planted_canary!r} and its "
+                f"planted content produces {artefact.executed_line!r}. The canary is "
+                "the artefact's two halves joined and is written once, so a record "
+                "holding both is two copies of one fact (ADR-0060)"
+            )
+        fetching = " ".join((self.planting or self.payload[0]).split()).lower()
+        if artefact.key not in fetching:
+            raise ValueError(
+                f"{self.id} plants content filed under {artefact.key!r} and the turn "
+                "that fetches names no such thing. The message has to retrieve the "
+                "content this case is attacked with (`corpus.fetched`), or the "
+                "attempt measures a target that fetched something else and answers a "
+                "clean zero"
+            )
+        if artefact.fires_on and kind is not (
+            SuccessConditionKind.RETAINED_INSTRUCTION_EXECUTED
+        ):
+            raise ValueError(
+                f"{self.id} plants content that waits for a subject and is scored on "
+                f"{kind}, which reads the turn that fetched it. There is no later "
+                "turn for the subject to be raised in (ADR-0041)"
+            )
+        unraised = sorted(
+            subject
+            for subject in artefact.fires_on
+            if subject not in " ".join(self.script.split()).lower()
+        )
+        if unraised:
+            raise ValueError(
+                f"{self.id} plants content waiting on {unraised} and its scored turn "
+                "raises none of it. A dormant instruction whose subject no message "
+                "mentions is content that can never fire, so the case would measure "
+                "the planting and nothing else (ADR-0041)"
             )
 
     def _refuse_a_canary_the_wrong_channel_spells_out(self) -> None:
@@ -2141,6 +2385,7 @@ def load_case(path: Path) -> Case:
     success = record.get("success_condition")
     judged = record.get("judged_condition")
     history = tuple(_reading(entry) for entry in record.get("history", ()))
+    artefact = _planted_artefact(record.get("planted_artefact"))
     return Case(
         id=record["id"],
         family=family_named(record["family"]),
@@ -2154,8 +2399,9 @@ def load_case(path: Path) -> Case:
         if success is None
         else SuccessCondition(
             kind=SuccessConditionKind(success["kind"]),
-            planted_canary=success.get("planted_canary"),
+            planted_canary=_canary(record.get("id"), success, artefact),
         ),
+        planted_artefact=artefact,
         judged_condition=None
         if judged is None
         else JudgedCondition(
@@ -2178,6 +2424,81 @@ def load_case(path: Path) -> Case:
         history=history,
         retirement=_retirement(record.get("retirement"), history),
     )
+
+
+PLANTED_ARTEFACT_FIELDS = ("where", "key", "prefix", "reference", "body")
+"""What a `[planted_artefact]` block has to say, named once for the reader and the
+refusal.
+
+`RETRIEVAL_FIELDS`' shape and its argument: five lookups raise a `KeyError` naming
+the first key missing and nothing else, and the reader of a half-written record needs
+the whole list. `fires_on` is not among them — content that acts in the turn that
+fetched it waits for nothing, and TOML has no null, so a record that says nothing
+there is saying the true thing.
+
+**In the order `entry._planted_artefact` writes them**, so that the list a refusal
+prints and the block a reader opens are the same list in the same order.
+"""
+
+
+def _planted_artefact(block: dict[str, Any] | None) -> PlantedArtefact | None:
+    """The `[planted_artefact]` block of a record, or `None` for a case that plants
+    nothing.
+
+    Every field read rather than defaulted, on `_retrieval`'s terms: a default would
+    put an empty string in front of `PlantedArtefact`, which would refuse it for a
+    reason that reads like a judgement about the record's author.
+    """
+    if block is None:
+        return None
+    missing = sorted(name for name in PLANTED_ARTEFACT_FIELDS if name not in block)
+    if missing:
+        raise ValueError(
+            f"a planted artefact block is missing {missing}, where a block states "
+            f"{list(PLANTED_ARTEFACT_FIELDS)}. The content a case is attacked with is "
+            "part of the record, and a block that lost a field is an attack nothing "
+            "can plant or nothing can score (ADR-0060)"
+        )
+    return PlantedArtefact(
+        where=PlantedIn(block["where"]),
+        key=block["key"],
+        body=block["body"],
+        prefix=block["prefix"],
+        reference=block["reference"],
+        fires_on=tuple(block.get("fires_on", ())),
+    )
+
+
+def _canary(
+    case_id: object,
+    success: dict[str, Any],
+    artefact: PlantedArtefact | None,
+) -> str | None:
+    """The value this record's verdict reads, and the refusal of a second copy of it.
+
+    Derived from the planted artefact's two halves wherever there is one, and read
+    off the success condition otherwise. **A record may not write both**, which is
+    the whole of what moving the content onto the record bought: the canary and the
+    content that produces it were two copies of one fact in two files, a test watched
+    them for drift, and one copy needs no test
+    ([ADR-0060](../../docs/adr/0060-a-planted-artefact-is-part-of-the-case-record.md)).
+
+    Refused here rather than on the type, because the type cannot see that a value
+    equal to the join was *written* rather than derived — and a written copy that
+    agrees today is the copy that drifts tomorrow.
+    """
+    if artefact is None:
+        written = success.get("planted_canary")
+        return None if written is None else str(written)
+    if "planted_canary" in success:
+        raise ValueError(
+            f"{case_id!r} writes a planted canary and plants content that "
+            f"produces {artefact.executed_line!r}. The canary is the artefact's two "
+            "halves joined and there is one copy of each half, so a record that "
+            "writes the join as well is the drift this field was added to end "
+            "(ADR-0060)"
+        )
+    return artefact.executed_line
 
 
 def _payload(record: dict[str, Any]) -> tuple[str, ...]:

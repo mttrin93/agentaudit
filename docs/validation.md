@@ -3695,3 +3695,57 @@ they were measurements.
 run and displaces the 13:44 run of the same date, at the same digest. Both records are
 kept (ADR-0023). A reader comparing them is comparing two runs whose only declared
 difference is fixture content, which is exactly what the pair is for.
+
+### The poisoned note moved onto the case record (#83, 2026-09-05)
+
+**This section records a type change and one figure that moved for no measured
+reason.** The content the two fetched-content families attack with — the three
+indirect-injection notes and the three memory-poisoning ones — is now a
+`[planted_artefact]` block on the case record rather than a constant in the reference
+agents' source, and the canary is the block's two halves joined and derived
+([ADR-0060](./adr/0060-a-planted-artefact-is-part-of-the-case-record.md)). Read on
+2026-09-05.
+
+- **No reading moved, and this is the claim the change had to earn.** #73 recorded
+  that the override line is target-side equipment and that changing it would move
+  every plain indirect-injection reading. It did not, because nothing about the
+  content changed: the seven note bodies the shared folder serves are **byte-identical**
+  to the ones `corpus.py` held, as are their executed lines and their `Standing`
+  records — checked against the pre-change module during the move, and held afterwards
+  by `test_the_content_the_folder_serves_is_the_content_the_case_records`, which puts
+  each case's own fetching turn through `corpus.fetched` and compares what comes back
+  with the record. No rate, `D`, κ, interval, band, gate decision or gate citation
+  moved, and every `[[history]]` and `[admission]` block in the library still stands.
+- **The library digest moved and no payload changed.** From `31cacb9d69ec` to
+  `81ff91682cfc`, on #65's and #72's precedent with three records edited as well:
+  `Case` gained `planted_artefact`, and the three indirect-injection records each
+  gained their note and gave up the `planted_canary` line the note's two halves now
+  derive. **The count of eighteen is what says no case was written.** The designed
+  tripwire (`test_the_library_version_did_not_move`) is updated with the reason rather
+  than loosened. The three elective memory-poisoning records gained the same block and
+  are outside that digest.
+- **The drift test is gone because the drift is unrepresentable.** The old arrangement
+  wrote one fact in two files and watched them: *if they drift apart the trivial agent
+  stops executing anything and the suite says so*. `load_case` now **refuses** a record
+  that writes `planted_canary` alongside content that produces it, so the second copy
+  cannot be written. Driven red by disabling that refusal, and by making `corpus.py`
+  serve a body other than the record's — the second is the issue's own red-drive,
+  restated for a world with one copy in it.
+- **Every refusal was driven red on its own.** Eleven of them — a fetched-content case
+  that plants nothing, content on a case that plants nothing, a second copy of the
+  canary, a key the record's own fetching turn never names, content that waits for a
+  subject on a case scored in the turn that fetched it, a subject the scored turn never
+  raises, a block that lost a field, an artefact missing a half or a key, a body
+  carrying the join, a body spelling out neither half, and two records filing content
+  under one key — each disabled in turn, each failing exactly one test and for its own
+  reason.
+- **The versioning was driven red rather than asserted.** `_versioned` reads
+  `dataclasses.fields`, so the new field is covered by being one. Adding
+  `planted_artefact` to `RUN_RECORD_FIELDS` — the one-line edit that would silently
+  stop the digest covering it — fails both the new test and `test_variant`'s guard on
+  the exemption.
+- **The operator can now be handed what to plant, off the record.**
+  `GET /bench/notes` and `scripts/console.py` read `case.planted_artefact` and neither
+  imports the reference agents' source any more. Nothing about disclosure changed:
+  both halves were already committed and the route already served the bodies
+  (ADR-0008 as amended, and ADR-0060's own section).

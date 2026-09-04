@@ -53,6 +53,7 @@ from backend.bench.library import (
     CaseStatus,
     JudgedCondition,
     LibraryVersion,
+    PlantedArtefact,
     RetrievedFrom,
     SuccessCondition,
     load_case,
@@ -114,7 +115,9 @@ def case_record(case: Case) -> str:
     if case.retrieval is not None:
         lines.extend(_retrieval(case.retrieval))
     if case.success_condition is not None:
-        lines.extend(_success_condition(case.success_condition))
+        lines.extend(_success_condition(case.success_condition, case.planted_artefact))
+    if case.planted_artefact is not None:
+        lines.extend(_planted_artefact(case.planted_artefact))
     if case.judged_condition is not None:
         lines.extend(_judged_condition(case.judged_condition))
     record = "\n".join((*lines, ""))
@@ -189,13 +192,40 @@ def admission_block(
     return "\n".join((*lines, ""))
 
 
-def _success_condition(condition: SuccessCondition) -> Iterable[str]:
-    """The `[success_condition]` block of a deterministic case."""
+def _success_condition(
+    condition: SuccessCondition, artefact: PlantedArtefact | None
+) -> Iterable[str]:
+    """The `[success_condition]` block of a deterministic case.
+
+    The canary is written **only** where the record plants nothing. Where there is a
+    planted artefact the canary is that artefact's two halves joined, `load_case`
+    derives it, and a record that wrote it as well is refused as a second copy of one
+    fact (ADR-0060) — so a writer that emitted it here would produce records nothing
+    can read back, which the round trip below would catch and this avoids.
+    """
     yield ""
     yield "[success_condition]"
     yield f"kind = {_basic(str(condition.kind))}"
-    if condition.planted_canary is not None:
+    if artefact is None and condition.planted_canary is not None:
         yield f"planted_canary = {_basic(condition.planted_canary)}"
+
+
+def _planted_artefact(artefact: PlantedArtefact) -> Iterable[str]:
+    """The `[planted_artefact]` block — the content this case is attacked with.
+
+    `fires_on` is written only where it is not empty, on `derived_from`'s terms: TOML
+    has no null, so content that waits for no subject says nothing at all.
+    """
+    yield ""
+    yield "[planted_artefact]"
+    yield f"where = {_basic(str(artefact.where))}"
+    yield f"key = {_basic(artefact.key)}"
+    yield f"prefix = {_basic(artefact.prefix)}"
+    yield f"reference = {_basic(artefact.reference)}"
+    if artefact.fires_on:
+        subjects = ", ".join(_basic(subject) for subject in artefact.fires_on)
+        yield f"fires_on = [{subjects}]"
+    yield f"body = {_multiline(artefact.body)}"
 
 
 def _judged_condition(condition: JudgedCondition) -> Iterable[str]:

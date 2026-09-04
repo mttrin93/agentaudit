@@ -146,7 +146,7 @@ def test_every_section_states_its_own_reproducibility_and_three_read_the_payload
 
 # --- The golden digest: one document, pinned to the byte ---------------------
 
-GOLDEN_ONE_FAMILY = "a0c1893ced05064602bee68ab6d2d73529a3425acde3cbc9909db49d186d8eb6"
+GOLDEN_ONE_FAMILY = "85037fa011ea5de138bc227fa4ea30a86718150aab2af19885a002a7e4003c92"
 """The sha256 of `_one_family()`'s rendering, written down.
 
 **A tripwire, and it is deliberately a strict one.** Every other assertion in this
@@ -247,6 +247,18 @@ travels, so it may not be the surface that says less than the payload it is a vi
 of. **No figure moved**: the label is read off `labels.LABELS`,
 which is a property of the family and not of the run, and `test_narration.py` asserts
 that a run's three narration states render to one document.
+
+Moved a tenth time, by #76, and it is section 4 in two places: a paragraph above the
+family blocks saying that each family's figure is one rate over **every construction
+it sent** and that two runs are comparable only at equal library version and equal
+selection, and inside each family's block one line per construction with the counts it
+made
+([ADR-0055](../../docs/adr/0055-a-family-pools-its-variants-and-publishes-the-counts.md)).
+**No figure moved** and every mix line reads `plain — n of 30` here, because the library
+holds no variant yet: what moved is that the document now says so, which is exactly
+the fact the comparability sentence rests on. A reader of a report whose families
+sent one construction has to be able to tell it from one whose families sent six, and
+before this the pooled rate looked the same either way.
 """
 
 

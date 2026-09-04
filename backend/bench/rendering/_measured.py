@@ -104,6 +104,9 @@ def _figures(measured: Mapping[str, Any], elective: Mapping[str, Any]) -> Sectio
             "A band is the interval's **separation** from those two anchors, never a "
             "bound clearing a threshold, and it summarises one family for one target.",
             "",
+            f"**One rate per family, over every construction it sent.** "
+            f"{measured['variants_stated']}",
+            "",
             *_family_blocks(measured),
             "### Families whose rate this report does not publish",
             "",
@@ -166,11 +169,47 @@ def _family_block(entry: Mapping[str, Any]) -> tuple[str, ...]:
         f"- **Band — {entry['band']}**: "
         f"{BAND_IN_A_TARGET_REPORT[Band(entry['band'])]}.",
         f"- **Verdict class**: {entry['verdict_class']}.",
+        *_variants(entry["variants"]),
         *_label(entry["label"]),
         *_reliability(entry["reliability"]),
         *_discrimination(entry["discrimination"]),
         *_coverage(entry["coverage"]),
         "",
+    )
+
+
+def _variants(counts: Sequence[Mapping[str, Any]]) -> tuple[str, ...]:
+    """The constructions behind this family's rate, each with the counts it made.
+
+    **The figure above is pooled and this is what it was pooled from.** Every variant
+    of a family attacks the same failure against the same criterion, so an attempt
+    that succeeded through any of them is an attempt that succeeded and the family's
+    rate adds them
+    ([ADR-0055](../../../docs/adr/0055-a-family-pools-its-variants-and-publishes-the-counts.md)).
+    What that costs is that the rate depends on the mix — one plain case and five
+    encodings reports a rate that is mostly about encodings — so the mix is printed
+    beneath the rate rather than left in the payload.
+
+    Printed for a family holding one construction too, and the sentence is *plain,
+    and nothing else*: the signed document is the surface that travels, so it may not
+    be the one that says less than the payload it is a view of, and a reader
+    comparing two reports needs to see that one of them sent fewer constructions.
+
+    Nothing is computed here. The counts are the payload's and the pooled total is
+    the entry's own `attempts` two lines above — this module prints and never adds.
+    """
+    return (
+        "- **How this rate was made up** — one line per construction this family "
+        "sent, with the counts each one made. The rate above is these counts pooled: "
+        "every construction attacks the same failure against the same criterion, so "
+        "an attempt that succeeded through any of them is an attempt that succeeded. "
+        "What pooling costs is that the rate depends on the mix below, which is why "
+        "the mix is printed.",
+        *(
+            f"  - `{one['transform']}` — {one['successes']} of {one['attempts']} "
+            f"attempts succeeded, {one['transform_stated']}."
+            for one in counts
+        ),
     )
 
 

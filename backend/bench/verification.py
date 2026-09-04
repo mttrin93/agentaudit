@@ -863,6 +863,7 @@ def _entry(
             f"no rate at all — {impossible}",
         )
         return
+    _variants(path, entry, rate, comparisons)
     interval = _mapping(entry, "interval")
     comparisons.same(path, entry, "rate", rate.value)
     comparisons.same(f"{path}.interval", interval, "lower", rate.interval.lower)
@@ -870,6 +871,92 @@ def _entry(
     comparisons.same(path, entry, "interval_confidence", rule.interval_confidence)
     _band(path, entry, rate, cuts, comparisons)
     _reliability(path, entry, rule, comparisons)
+
+
+def _variants(
+    path: str,
+    entry: Mapping[str, Any],
+    rate: Rate,
+    comparisons: _Comparisons,
+) -> None:
+    """The pooled denominator, re-derived from the per-variant counts beside it.
+
+    **The one check that reads the family's `n` off the document rather than off the
+    rule.** ADR-0027 has the verifier read the denominator and assert the rest of the
+    bar, and until a family could hold more than one variant the denominator it read
+    was the attempts per case times the cases the library held. It is now the sum of
+    the counts published per variant, so that is what is added up here — a family
+    whose `attempts` is not that sum is a document whose rate is over a denominator
+    nothing in it accounts for, and no other check on this page would notice
+    ([ADR-0055](../../docs/adr/0055-a-family-pools-its-variants-and-publishes-the-counts.md)).
+
+    Three comparisons, because there are three ways the breakdown can fail to be the
+    counts the rate was read off: the attempts, the successes, and a transform
+    appearing twice — which would add up correctly while telling a recipient that one
+    construction was sent twice as often as it was. Order is not checked here: it is
+    the enumeration's rather than a claim about the run, so a reordered list is a
+    document a recipient reads in a different order and not a figure that is wrong.
+
+    A breakdown that is missing, empty, or **malformed** is a disagreement rather than
+    a crash, on the terms `_entry` states for counts that are not a rate: a recipient
+    of an older or doctored artefact is owed the sentence and not a traceback, and an
+    element whose `attempts` is a string is exactly as doctored as one whose `attempts`
+    is nine. So the two are one branch — the counts do not add up, because one of them
+    is not a count.
+    """
+    counts = entry.get("variants")
+    if not isinstance(counts, list) or not counts or not _countable(counts):
+        comparisons.agrees(
+            f"{path}.variants",
+            False,
+            "no per-variant counts that add up to anything",
+            f"the counts {rate.attempts} attempts were pooled from, which is what a "
+            "recipient takes this family's rate apart with (ADR-0055)",
+        )
+        return
+    attempts = 0
+    successes = 0
+    transforms: list[Any] = []
+    for one in counts:
+        attempts += _integer(one, "attempts")
+        successes += _integer(one, "successes")
+        transforms.append(one.get("transform"))
+    comparisons.agrees(
+        f"{path}.variants.attempts",
+        attempts == rate.attempts,
+        f"{rate.attempts} attempts against a breakdown summing to {attempts}",
+        f"{attempts}, the sum of the counts published per variant",
+    )
+    comparisons.agrees(
+        f"{path}.variants.successes",
+        successes == rate.successes,
+        f"{rate.successes} successes against a breakdown summing to {successes}",
+        f"{successes}, the sum of the counts published per variant",
+    )
+    comparisons.agrees(
+        f"{path}.variants.transform",
+        len(set(transforms)) == len(transforms),
+        f"a breakdown naming {transforms}",
+        "one entry per construction, or the counts double-count one of them",
+    )
+
+
+def _countable(counts: Sequence[Any]) -> bool:
+    """Whether every element of a breakdown is an object with two whole counts on it.
+
+    Asked before the sum rather than raised inside it, so that a malformed element
+    lands in the one sentence a recipient can act on instead of a traceback out of
+    `_integer` (`_variants` above, and `_entry`'s own refusal of counts that are not a
+    rate).
+    """
+    return all(
+        isinstance(one, dict)
+        and all(
+            isinstance(one.get(key), int) and not isinstance(one.get(key), bool)
+            for key in ("attempts", "successes")
+        )
+        for one in counts
+    )
 
 
 def _band(

@@ -91,8 +91,10 @@ A run has two layers and they are not equal. Everything the project signs comes 
   ┌──────────────────────── SCORED LAYER — this is what gets signed ────────────────────────┐
   │                                                                                          │
   │  register ──→ scan ──→ approve ──→ attacker ──→ evaluator ──→ assembler ──→ report ──→ sign
-  │   nonce       declared   cost      18 cases×10  success cond.  rates, Wilson,            │
+  │   nonce       declared   cost      live×10 ea.  success cond.  rates, Wilson,            │
   │   echo        controls   halt      n per fam    (harness)      bands, D                  │
+  │                                    pooled over                per-variant counts         │
+  │                                    variants                    beside each rate          │
   │                  │         │            │            │              ▲                    │
   │                  │         │            └─→ judge ───┘         (no arithmetic            │
   │                  │         │             blinded, narrative      crosses this line)      │
@@ -567,7 +569,7 @@ This section is the reason the project is defensible. It is also the hard option
 
 ### The gate — does the bench measure anything?
 
-Run all six families, all eighteen cases, ten attempts each, against all three reference agents. **n = 30 per family per agent at eighteen cases**, and read off the attempts that ran rather than asserted, because a family the admission gate has grown is measured at more (ADR-0033). The judge is blinded to which agent produced each transcript.
+Run all six families, every live case, ten attempts each, against all three reference agents. **n = 30 per family per agent at the eighteen authored cases**, and read off the attempts that ran rather than asserted, because a family the admission gate has grown is measured at more (ADR-0033) — and so is one holding **variants**, since a variant is a case and carries its own ten ([ADR-0055](./docs/adr/0055-a-family-pools-its-variants-and-publishes-the-counts.md)). A family's rate is one figure over every variant it holds, pooled because every variant measures the same failure against the same criterion, with the counts per variant published beside it so a reader can take the figure apart again; two runs are comparable only at equal library version and equal selection. No adaptive result is ever a summand of it (ADR-0010). The judge is blinded to which agent produced each transcript.
 
 Let `D_family = trivial_rate − hardened_rate`.
 

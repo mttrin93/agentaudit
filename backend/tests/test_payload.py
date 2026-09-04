@@ -85,7 +85,7 @@ from backend.bench.scorer import (
     failure_rate,
 )
 from backend.graph.budget import Layer
-from backend.tests.conftest import imports_of
+from backend.tests.conftest import imports_of, plain_breakdown
 
 IDENTIFIERS = {
     Family.DATA_LEAKAGE: ExternalId(
@@ -1160,6 +1160,7 @@ def an_entry(
         band=band_for(rate, DECLARED_BAND_CUTS),
         discrimination=discrimination,
         coverage=(IDENTIFIERS[family],),
+        variants=plain_breakdown(rate),
         reliability=reliability,
     )
 

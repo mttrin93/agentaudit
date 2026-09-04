@@ -16,7 +16,7 @@ from dataclasses import replace
 import pytest
 
 from backend.bench.evaluator import Verdict
-from backend.bench.library import Family
+from backend.bench.library import Family, Transform
 from backend.bench.rule import DECLARED_RULE, GateRule
 from backend.bench.scorer import (
     UNFIT_TO_REPORT,
@@ -26,6 +26,8 @@ from backend.bench.scorer import (
     KappaUndefined,
     Rate,
     Reliability,
+    VariantBreakdown,
+    VariantCounts,
     cohens_kappa,
     decide_gate,
     discrimination,
@@ -34,6 +36,7 @@ from backend.bench.scorer import (
     monotonicity,
     score_family,
 )
+from backend.tests.conftest import all_plain
 
 SEPARATES = (3, 15, 27)
 """Successes per agent for a family that passes: ordered, and D = 0.8."""
@@ -54,11 +57,13 @@ def family_rates(
     hardened: int, weak: int, trivial: int, family: Family = Family.DATA_LEAKAGE
 ) -> FamilyRates:
     """One family's measured rates, given as successes out of the declared n = 30."""
+    rates = (out_of_thirty(hardened), out_of_thirty(weak), out_of_thirty(trivial))
     return FamilyRates(
         family=family,
-        hardened=out_of_thirty(hardened),
-        weak=out_of_thirty(weak),
-        trivial=out_of_thirty(trivial),
+        hardened=rates[0],
+        weak=rates[1],
+        trivial=rates[2],
+        variants=all_plain(*rates),
     )
 
 
@@ -477,3 +482,27 @@ def test_a_reliability_figure_with_more_agreements_than_transcripts_is_refused()
         Reliability(
             family=Family.DISCLOSURE_DENIAL, kappa=1.0, agreements=16, transcripts=15
         )
+
+
+def test_a_family_pools_its_variants_and_keeps_their_counts_apart() -> None:
+    # The arithmetic of #76. One plain case at 3 of 10 and one base64 variant at 7 of
+    # 10 is a family measured at 10 of 20 — successes over attempts, and never the
+    # mean of the two rates, which here would read 0.50 as well and be the wrong
+    # answer arrived at by adding a second quantity in. The counts that make it up
+    # stay on the breakdown so a recipient can recompute either one.
+    breakdown = VariantBreakdown(
+        (
+            VariantCounts(Transform.PLAIN, successes=3, attempts=10),
+            VariantCounts(Transform.BASE64, successes=7, attempts=10),
+        )
+    )
+
+    assert breakdown.attempts == 20
+    assert breakdown.successes == 10
+    assert breakdown.pooled().value == pytest.approx(0.5)
+    assert [
+        (count.transform, count.successes, count.attempts) for count in breakdown
+    ] == [
+        (Transform.PLAIN, 3, 10),
+        (Transform.BASE64, 7, 10),
+    ]

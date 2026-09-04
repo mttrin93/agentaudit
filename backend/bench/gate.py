@@ -54,6 +54,7 @@ from backend.bench.rule import DECLARED_RULE, GateRule
 from backend.bench.scorer import (
     FamilyOutcome,
     FamilyRates,
+    FamilyVariants,
     GateDecision,
     Rate,
     Reliability,
@@ -194,6 +195,7 @@ def stated_outcome(outcome: FamilyOutcome) -> str:
                 )
             ),
             f"  n = {stated_denominator(rates)}, counted off the attempts that ran",
+            *stated_variants(rates),
             f"  D = {outcome.discrimination:.2f}, intervals "
             f"{'do not overlap' if outcome.intervals_separate else 'overlap'}, "
             f"{outcome.monotonicity.inversions} inversion"
@@ -201,6 +203,37 @@ def stated_outcome(outcome: FamilyOutcome) -> str:
             f"({'ordered' if outcome.monotonicity.holds else 'NOT ordered'}) — "
             f"{'passes' if outcome.passes else 'does not pass'}",
         )
+    )
+
+
+def stated_variants(rates: FamilyRates) -> tuple[str, ...]:
+    """The variant mix behind this family's three rates, or nothing at all.
+
+    **Nothing at all where the family holds one variant**, which is every family of
+    the library as it stands: a line reading *plain 3/30* beside a rate already
+    printed as `(3/30)` would be the same counts twice, and the interesting fact
+    about a one-variant family is the `n` above it. So this prints where there is a
+    mix to print, and the mix is the whole reason it exists — a family holding one
+    plain case and five encodings reports a rate that is mostly about encodings, and
+    a reader who cannot see that cannot discount it
+    ([ADR-0055](../../docs/adr/0055-a-family-pools-its-variants-and-publishes-the-counts.md)).
+
+    One line per agent, because the three agents are three targets and their counts
+    are never added together — the same refusal `FamilyRates.variants` carries in the
+    type, printed.
+    """
+    agents = (
+        ("hardened", rates.variants.hardened),
+        ("weak", rates.variants.weak),
+        ("trivial", rates.variants.trivial),
+    )
+    if all(len(breakdown.counts) < 2 for _, breakdown in agents):
+        return ()
+    return (
+        "  pooled over this family's variants, per agent — every variant measures "
+        "the same failure against the same criterion, and the mix is what the rate "
+        "above depends on:",
+        *(f"    {name:<9} {breakdown.mix_stated()}" for name, breakdown in agents),
     )
 
 
@@ -253,6 +286,7 @@ def family_rates(
     not others is neither — it is a run that cannot be gated, and it says so.
     """
     by_agent = {run.target.name: run.rates for run in target_runs}
+    variants_by_agent = {run.target.name: run.variant_counts for run in target_runs}
     missing = [name for name in (trivial, weak, hardened) if name not in by_agent]
     if missing:
         raise NotAGateRun(
@@ -273,6 +307,11 @@ def family_rates(
                     hardened=present[hardened],
                     weak=present[weak],
                     trivial=present[trivial],
+                    variants=FamilyVariants(
+                        hardened=variants_by_agent[hardened][family],
+                        weak=variants_by_agent[weak][family],
+                        trivial=variants_by_agent[trivial][family],
+                    ),
                 )
             )
             continue

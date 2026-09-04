@@ -324,6 +324,7 @@ def _score(sent: Sent, target: TargetConfig, run_state: RunState) -> Attempt:
         planting=sent.planted,
         verdict=verdict.verdict,
         verdict_class=sent.case.verdict_class,
+        transform=sent.case.transform,
         started_at=sent.began,
     )
     run_state.record(attempt)

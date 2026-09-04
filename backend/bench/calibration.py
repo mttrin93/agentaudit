@@ -77,6 +77,7 @@ from backend.bench.library import (
     ElectiveFamily,
     Family,
     LibraryVersion,
+    Transform,
     VerdictClass,
     one_of_the_six,
 )
@@ -104,7 +105,13 @@ from backend.bench.registration import (
     register,
 )
 from backend.bench.rule import DECLARED_RULE, GateRule
-from backend.bench.scorer import Rate, failure_rate
+from backend.bench.scorer import (
+    IN_TRANSFORM_ORDER,
+    Rate,
+    VariantBreakdown,
+    VariantCounts,
+    failure_rate,
+)
 from backend.bench.usage import LayerTotals, UsageLedger
 from backend.graph.approval import ApprovalOutcome, Approve, run_under_approval
 from backend.graph.budget import Layer, RunBudget
@@ -385,16 +392,110 @@ class TargetRun:
             if isinstance(family, ElectiveFamily)
         }
 
-    def _rates(self, attempts: Iterable[Attempt]) -> dict[Family, Rate]:
-        """Group attempts by family and divide. The one place a rate is computed."""
+    @property
+    def variant_counts(self) -> dict[Family, VariantBreakdown]:
+        """Each family's attempts split by the transform that made them.
+
+        The counts that take this target's per-family rate apart again, keyed exactly
+        as `rates` is: one family, one breakdown, and no container holding two
+        families' variants together — the breakdown sits one level *below* a rate, so
+        ADR-0005's refusal to reach across families reaches it too.
+
+        A family absent from `rates` is absent here, and for the same reason: no
+        attempts is not a failure rate of zero, and an empty breakdown printed for a
+        family the run never touched would be a denominator nobody measured.
+
+        **Counts and no rate.** Pooling them is `VariantBreakdown.pooled`, and it
+        returns the same figure `rates` already does — asserted rather than assumed,
+        by `FamilyEntry` and by `verification.py`
+        ([ADR-0055](../../docs/adr/0055-a-family-pools-its-variants-and-publishes-the-counts.md)).
+        """
+        return self._variants(self.attempts)
+
+    @property
+    def deterministic_variant_counts(self) -> dict[Family, VariantBreakdown]:
+        """The variant counts of the families decided by a success condition.
+
+        Split by verdict class on the same terms as `deterministic_rates`, because a
+        breakdown printed beside a rate has to be the breakdown *of* that rate: a
+        collection over both routes would put counts under a rate they are not the
+        denominator of the moment a family holds cases of both classes.
+        """
+        return self._variants_under(VerdictClass.DETERMINISTIC)
+
+    @property
+    def judged_variant_counts(self) -> dict[Family, VariantBreakdown]:
+        """The variant counts of the families decided by adjudication."""
+        return self._variants_under(VerdictClass.JUDGED)
+
+    def _variants_under(
+        self, verdict_class: VerdictClass
+    ) -> dict[Family, VariantBreakdown]:
+        """The variant counts of the families decided by one route."""
+        return self._variants(
+            attempt
+            for attempt in self.attempts
+            if attempt.verdict_class is verdict_class
+        )
+
+    def _variants(self, attempts: Iterable[Attempt]) -> dict[Family, VariantBreakdown]:
+        """Group attempts by family and then by transform. The one place they split.
+
+        The inner order is `IN_TRANSFORM_ORDER` — the enumeration's, so `PLAIN` comes
+        first and two targets' breakdowns line up entry for entry — and never the
+        order the run happened to attempt in.
+        """
+        split: dict[Family, dict[Transform, list[Attempt]]] = defaultdict(
+            lambda: defaultdict(list)
+        )
+        for family, grouped in _by_family(attempts).items():
+            if not one_of_the_six(family):
+                continue
+            for attempt in grouped:
+                split[family][attempt.transform].append(attempt)
         return {
-            family: self._divide(grouped)
-            for family, grouped in _by_family(attempts).items()
-            if one_of_the_six(family)
+            family: VariantBreakdown(
+                tuple(
+                    VariantCounts(
+                        transform=transform,
+                        successes=sum(
+                            1 for a in made if a.verdict is Verdict.SUCCEEDED
+                        ),
+                        attempts=len(made),
+                    )
+                    for transform in IN_TRANSFORM_ORDER
+                    if (made := by_transform.get(transform))
+                )
+            )
+            for family, by_transform in split.items()
+        }
+
+    def _rates(self, attempts: Iterable[Attempt]) -> dict[Family, Rate]:
+        """Pool each family's variant counts. The one place one of the six's rate is
+        computed.
+
+        **Derived from the breakdown rather than counted beside it**, which is what
+        makes *the rate is these counts pooled* true by construction and not by
+        assertion: two independent walks over the same attempts would be two figures
+        that could drift, and `FamilyEntry` would then be refusing an artefact this
+        module had already built
+        ([ADR-0055](../../docs/adr/0055-a-family-pools-its-variants-and-publishes-the-counts.md)).
+        `accounts_for` still guards the two types that carry both, because they can be
+        constructed by callers this method never sees.
+        """
+        return {
+            family: breakdown.pooled(self.rule)
+            for family, breakdown in self._variants(attempts).items()
         }
 
     def _divide(self, grouped: Sequence[Attempt]) -> Rate:
-        """Successes over attempts, at the rule these attempts were run under."""
+        """Successes over attempts, at the rule these attempts were run under.
+
+        The elective tier's arithmetic, and the six's is `_rates` above, which pools a
+        breakdown. *Selectable is not ungated* still holds — this is the same division
+        — and what the tier does not yet carry is the per-variant counts beside it,
+        which no elective record has a variant to fill (ADR-0035, ADR-0055).
+        """
         return failure_rate(
             sum(1 for a in grouped if a.verdict is Verdict.SUCCEEDED),
             len(grouped),

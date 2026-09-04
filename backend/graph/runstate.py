@@ -23,6 +23,7 @@ from backend.bench.library import (
     AnyFamily,
     Family,
     LibraryVersion,
+    Transform,
     VerdictClass,
 )
 from backend.graph.budget import BudgetExceeded, Layer, RunBudget
@@ -75,6 +76,22 @@ class Attempt:
     from the family name, which is the inference spec story 18 exists to forbid.
     Reading it off the record at the moment the attempt is made is the only place
     that inference is impossible.
+    """
+
+    transform: Transform
+    """How the case that made this attempt attacks — the construction it performed.
+
+    Copied off the case record when the attempt is made, for the reason `family` and
+    `verdict_class` are copied: an attempt joined back to the library afterwards is an
+    attempt that can be joined to the wrong record, and here the cost is a count in
+    the wrong entry of a published breakdown, which no reader of the artefact could
+    see (`scorer.VariantBreakdown`,
+    [ADR-0055](../../docs/adr/0055-a-family-pools-its-variants-and-publishes-the-counts.md)).
+
+    **Required and not defaulted**, on the terms ADR-0051 gives `Case.transform`: a
+    default of `PLAIN` would attribute a variant's successes to the payload it is a
+    variant of, and silently — the pooled rate would be unchanged and only the
+    breakdown wrong, which is the one error this ticket exists to make impossible.
     """
 
     planting: Transcript | None = None

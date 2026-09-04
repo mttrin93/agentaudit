@@ -69,8 +69,34 @@ export interface FamilyEntry {
   band_stated: string
   discrimination: number | null
   coverage: CoverageNote[]
+  /**
+   * The counts, per construction, this family's rate was pooled from.
+   *
+   * Typed because it is on the wire, on the same terms as `band_stated` above: a
+   * renamed key upstream has to fail `tsc` against the served fixture rather than
+   * arrive as `undefined` in a browser. The figure above is one rate over every
+   * variant the family sent, and what pooling costs is that it depends on the mix —
+   * so the mix travels with it (ADR-0055). **Drawing it is not this screen's yet:**
+   * the console's own reading of the mix arrives with the selection that produced it
+   * (#79), and the signed Markdown already prints it beneath every family's rate.
+   */
+  variants: VariantCount[]
   reliability: ReliabilityFigure | null
   label: FamilyLabel
+}
+
+/**
+ * One construction's contribution to a family's pooled rate. Counts, and no rate.
+ *
+ * No interval and no band per variant, deliberately: an interval invites a band, and
+ * a band is a summary of a family against two anchors the gate decided nothing about
+ * a slice on (ADR-0014, ADR-0055).
+ */
+export interface VariantCount {
+  transform: string
+  transform_stated: string
+  successes: number
+  attempts: number
 }
 
 /**
@@ -136,6 +162,14 @@ export interface BandCuts {
 export interface MeasuredSection {
   reproducibility: string
   reproducibility_stated: string
+  /**
+   * What a reader comparing two of these documents is owed, in the artefact's own
+   * wording: each family's figure is one rate over every construction the run sent,
+   * so **two runs are comparable only at equal library version and equal selection**
+   * (ADR-0055). Typed because it is on the wire; the screen's own reading of the mix
+   * arrives with the selection that produced it (#79).
+   */
+  variants_stated: string
   cuts: BandCuts
   deterministic: FamilyEntry[]
   judged: FamilyEntry[]

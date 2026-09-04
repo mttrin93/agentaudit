@@ -106,7 +106,7 @@ instrument prints the same column as one that explained every success.
 _Avoid_: the family's article, the regulation, the clause, compliance requirement
 
 **Case**:
-One executable test belonging to a family, consisting of a payload and the criterion that decides its verdict — a success condition, or, for a judged family, the semantic question stated on the record. Three cases per family as authored; a family the admission gate has grown holds more, and the count is read off the library rather than declared.
+One executable test belonging to a family, consisting of a payload and the criterion that decides its verdict — a success condition, or, for a judged family, the semantic question stated on the record. Three cases per family as authored; a family the admission gate has grown holds more, and so does one holding **variants** — a variant is a case, with its own ten attempts — so the count is read off the library rather than declared ([ADR-0055](./docs/adr/0055-a-family-pools-its-variants-and-publishes-the-counts.md)).
 Since [ADR-0051](./docs/adr/0051-a-variant-is-a-case-and-the-transform-is-a-function-it-names.md)
 it also states **how** it attacks: a **transform**, `plain` included, and the case it
 transforms if it is a **variant** of one. Eighteen today and every one of them plain.
@@ -132,10 +132,19 @@ a **case** may be a fixed script, and then one attempt is that whole script in o
 session: the turns of it are dependent on each other by construction and the criterion
 is applied to each, with the attempt succeeding on the first turn that meets it. Two
 attempts still share no session, which is the property that makes ten of them a sample
-rather than a trajectory. A family's `n` is ten attempts times the cases the
-library holds in it — thirty per family per agent as authored, and read off the
-attempts that ran rather than asserted, because the admission gate can add a case to
-a family ([ADR-0033](./docs/adr/0033-an-admitted-route-is-written-into-the-library.md)).
+rather than a trajectory. A family's `n` is ten attempts times the **live** cases the
+library holds in it — counting every admitted **variant** and excluding the retired —
+which is thirty per family per agent for the eighteen authored plain records the library
+holds today, and it is read off the attempts that ran rather than asserted, because the
+admission gate can add a case to a family
+([ADR-0033](./docs/adr/0033-an-admitted-route-is-written-into-the-library.md)) and a
+variant of one is another case in it
+([ADR-0055](./docs/adr/0055-a-family-pools-its-variants-and-publishes-the-counts.md)).
+The family's rate is one figure over all of them, and the counts per variant travel
+beside it: pooling is legitimate because every variant measures the same failure against
+the same criterion, and what it costs is that the figure depends on the variant mix — so
+two runs are comparable only at equal library version and equal selection, and the signed
+artefact prints that sentence rather than leaving it to be inferred from a hash.
 _Avoid_: run, trial, call, iteration
 
 **Run**:
@@ -527,6 +536,12 @@ in the loader rather than in the library. A **family** is measured by the varian
 exist, so a transform that means nothing for a family is simply a variant nobody wrote
 and needs no absence of its own
 ([ADR-0051](./docs/adr/0051-a-variant-is-a-case-and-the-transform-is-a-function-it-names.md)).
+A family's rate is **pooled** over the variants it holds — one figure, with the
+successes and attempts of each variant published beside it so a recipient recomputes the
+plain rate, the encoded rate or any subset. Pooling across **families** stays forbidden
+(ADR-0005) and no **episode** is ever a summand
+([ADR-0010](./docs/adr/0010-two-layers-in-one-run-the-adaptive-layer-is-never-scored.md),
+[ADR-0055](./docs/adr/0055-a-family-pools-its-variants-and-publishes-the-counts.md)).
 Never a **technique**, which is already spent on a judgement about a **corpus** row.
 _Avoid_: technique, mutation, derived case, child case, using it for **technique**
 

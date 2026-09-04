@@ -19,7 +19,7 @@ import pytest
 
 from backend.bench.contract import Transcript
 from backend.bench.evaluator import Verdict
-from backend.bench.library import Case, Family, VerdictClass
+from backend.bench.library import Case, Family, Transform, VerdictClass
 from backend.graph.runstate import Attempt
 from backend.tests.conftest import target_run_for
 from scripts.console import EXIT_WITHHELD
@@ -124,6 +124,7 @@ def _attempt(stop_signal_at: int | None) -> Attempt:
         ),
         verdict=Verdict.RESISTED,
         verdict_class=VerdictClass.DETERMINISTIC,
+        transform=Transform.PLAIN,
     )
 
 

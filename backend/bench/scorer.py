@@ -10,12 +10,12 @@ rule that decided a run can be printed next to the run.
 """
 
 import math
-from collections.abc import Hashable, Mapping, Sequence
+from collections.abc import Hashable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
 from statistics import NormalDist
 
-from backend.bench.library import Family
+from backend.bench.library import Family, Transform
 from backend.bench.measurability import NotMeasurable
 from backend.bench.rule import DECLARED_RULE, GateRule
 
@@ -279,6 +279,156 @@ def cohens_kappa[Rated: Hashable](pairs: Sequence[tuple[Rated, Rated]]) -> float
     return (observed - expected) / (1.0 - expected)
 
 
+IN_TRANSFORM_ORDER = tuple(Transform)
+"""The transforms in the order `Transform` declares them, which is `PLAIN` first.
+
+The order every breakdown is written in, and deliberately not the member values'
+alphabetical order: `base64` sorts before `plain`, which would print a family's
+encodings above the payload they are encodings *of*. It is also not the order a run
+happened to attempt in, so two targets' breakdowns line up entry for entry —
+`Family`'s own order, one level down (`assembler._entries`).
+"""
+
+
+@dataclass(frozen=True)
+class VariantCounts:
+    """What one transform contributed to a family's pooled rate, for one target.
+
+    A **variant** is a case
+    ([ADR-0051](../../docs/adr/0051-a-variant-is-a-case-and-the-transform-is-a-function-it-names.md)),
+    so this is the counts over every attempt made on the cases of one family that
+    attack by one construction — three plain cases at ten attempts each are one
+    entry reading 30, not three.
+
+    Counts and no rate. The rate over these counts is a real number a recipient may
+    compute, and it is deliberately not written here: `Rate` carries a Wilson
+    interval and a band is read off one, and a per-variant band would be a summary of
+    a slice the gate never decided anything on. What this type exists for is that a
+    reader can take the family's rate apart again (`payload.py`: *every measured
+    figure is written with the counts it came from*), one level deeper than the family.
+    """
+
+    transform: Transform
+    successes: int
+    attempts: int
+
+    def __post_init__(self) -> None:
+        if self.attempts <= 0:
+            raise ValueError(
+                f"{self.transform} contributed {self.attempts} attempts to a "
+                "breakdown. A transform that was never sent is absent from the "
+                "breakdown rather than present at zero, on the same terms a family "
+                "with no attempts has no rate"
+            )
+        if not 0 <= self.successes <= self.attempts:
+            raise ValueError(
+                f"{self.transform} reports {self.successes} successes in "
+                f"{self.attempts} attempts, which is not a count of anything"
+            )
+
+
+@dataclass(frozen=True)
+class VariantBreakdown:
+    """A family's attempts split by the transform that made them, for one target.
+
+    **The counts that take a pooled rate apart, and the pooling itself.** Every
+    variant of a family measures the same failure against the same criterion, so an
+    attempt that succeeded through a base64 wrapper and one that succeeded through a
+    four-rung script are both attempts that succeeded and `pooled` adds them —
+    successes over attempts, and never the mean of the per-variant rates, which
+    would be a second quantity averaged in and is the wrong answer that looks right
+    ([ADR-0055](../../docs/adr/0055-a-family-pools-its-variants-and-publishes-the-counts.md)).
+
+    What pooling costs is that the family's rate depends on the variant mix, and this
+    type is how that cost is *published* rather than hidden: the counts travel beside
+    the rate in the signed artefact, so a recipient recomputes the plain rate, the
+    encoded rate or any subset.
+
+    **One target's counts.** The three reference agents are three targets and their
+    counts are never added together, which is why `FamilyVariants` below holds three
+    of these and there is no method here that reaches across them.
+    """
+
+    counts: tuple[VariantCounts, ...]
+
+    def __post_init__(self) -> None:
+        transforms = [count.transform for count in self.counts]
+        if len(set(transforms)) != len(transforms):
+            raise ValueError(
+                f"a transform appears twice in one breakdown: {transforms}. Every "
+                "attempt of one family made by one construction belongs to one "
+                "entry, or the sum below double-counts"
+            )
+        if transforms != sorted(transforms, key=IN_TRANSFORM_ORDER.index):
+            raise ValueError(
+                f"the breakdown is not in transform order: {transforms}. The order is "
+                "the enumeration's and not the run's, so two targets' breakdowns line "
+                "up entry for entry and a serialisation is stable"
+            )
+
+    def __iter__(self) -> Iterator[VariantCounts]:
+        """The entries, in transform order."""
+        return iter(self.counts)
+
+    @property
+    def successes(self) -> int:
+        """This family's successes, pooled over its variants."""
+        return sum(count.successes for count in self.counts)
+
+    @property
+    def attempts(self) -> int:
+        """This family's `n`, pooled over its variants.
+
+        Read off the counts and not computed from the library: `attempts_per_case`
+        times the live cases of this family is what the run *should* have made, and
+        this is what it did make.
+        """
+        return sum(count.attempts for count in self.counts)
+
+    def pooled(self, rule: GateRule = DECLARED_RULE) -> Rate:
+        """The family's rate over every variant it holds. The one place it is pooled."""
+        return failure_rate(self.successes, self.attempts, rule)
+
+    def accounts_for(self, rate: Rate) -> bool:
+        """Whether this breakdown is the counts that rate was read off.
+
+        The tripwire of this whole construction, asserted by the two types that carry
+        a pooled rate beside its breakdown and re-derived from the artefact by
+        `verification.py`. A family whose `attempts` is not the sum of its variants'
+        is a document whose rate is over a denominator nothing in it accounts for,
+        and there is no reading of it that is merely imprecise.
+        """
+        return (rate.successes, rate.attempts) == (self.successes, self.attempts)
+
+    def mix_stated(self) -> str:
+        """The variant mix behind this family's rate, in transform order.
+
+        Printed beside the rate wherever the rate is printed, because a family holding
+        one plain case and five encodings reports a rate that is mostly about
+        encodings — and a reader who cannot see the mix cannot see that (ADR-0055).
+        """
+        return ", ".join(
+            f"{count.transform.value} {count.successes}/{count.attempts}"
+            for count in self.counts
+        )
+
+
+@dataclass(frozen=True)
+class FamilyVariants:
+    """One family's variant counts against each of the three reference agents.
+
+    Three breakdowns and never one, and that is the design rather than an
+    inconvenience: the reference agents are three targets, so adding their counts
+    would pool across subjects instead of across variants of one question. The
+    pooling this ticket authorises is over the variants of one family against one
+    target, and nothing here can perform any other.
+    """
+
+    hardened: VariantBreakdown
+    weak: VariantBreakdown
+    trivial: VariantBreakdown
+
+
 @dataclass(frozen=True)
 class Monotonicity:
     """Whether one family ordered the three reference agents as construction
@@ -293,19 +443,50 @@ class FamilyRates:
     """What one family measured against the three reference agents.
 
     Each `Rate` carries its own `attempts`, and that is where this family's `n`
-    lives: `attempts_per_case` times the cases the library holds in this family,
-    which is 30 for the authored three and more for a family the admission gate has
-    grown
-    ([ADR-0033](../../docs/adr/0033-an-admitted-route-is-written-into-the-library.md)).
-    Nothing here states a denominator, because there is no one denominator this type
-    could state — a family whose three agents were not attempted equally has three,
-    and `gate.stated_denominator` is what says so.
+    lives: `attempts_per_case` times the **live cases** the library holds in this
+    family, counting every admitted variant and excluding the retired
+    ([ADR-0033](../../docs/adr/0033-an-admitted-route-is-written-into-the-library.md),
+    [ADR-0055](../../docs/adr/0055-a-family-pools-its-variants-and-publishes-the-counts.md)).
+    A variant is a case, so it carries its own ten. Nothing here states a
+    denominator, because there is no one denominator this type could state — a family
+    whose three agents were not attempted equally has three, and
+    `gate.stated_denominator` is what says so.
+
+    **One rate per agent over every variant, and the counts that take it apart.** The
+    rate is pooled because every variant of a family measures the same failure
+    against the same criterion; `variants` is what makes the mix behind it readable,
+    and the invariant below is what stops the two disagreeing.
     """
 
     family: Family
     hardened: Rate
     weak: Rate
     trivial: Rate
+    variants: FamilyVariants
+    """Each agent's attempts on this family, split by the transform that made them.
+
+    Required and not defaulted, and asserted against the three rates: a gate document
+    printing `n = 60` where the last run printed `n = 30` tells a reader nothing about
+    whether the family gained a case or a construction, and a breakdown a caller could
+    omit is a breakdown that would be omitted exactly when a family first held more
+    than one (ADR-0055).
+    """
+
+    def __post_init__(self) -> None:
+        for agent, rate in (
+            ("hardened", self.hardened),
+            ("weak", self.weak),
+            ("trivial", self.trivial),
+        ):
+            breakdown: VariantBreakdown = getattr(self.variants, agent)
+            if not breakdown.accounts_for(rate):
+                raise ValueError(
+                    f"{self.family} read {rate.successes} of {rate.attempts} against "
+                    f"the {agent} agent and a breakdown that does not account for "
+                    f"it: {breakdown.mix_stated() or 'nothing at all'}. The three "
+                    "agents are three targets, so each one's counts are its own "
+                    "(ADR-0055)"
+                )
 
 
 @dataclass(frozen=True)

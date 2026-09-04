@@ -1866,6 +1866,91 @@ eighteen, and the arithmetic is untouched and stays #76's.
   ladders are proposals awaiting a person's admission run, so #76's counts and #79's
   selection see eighteen records still.
 
+### One scored rate over every variant a family holds, and the counts to take it apart (#76)
+
+The run arithmetic four tickets of #71 deliberately left alone. The decisions are
+[ADR-0055](./adr/0055-a-family-pools-its-variants-and-publishes-the-counts.md).
+**What is measured here is still one variant per family**: no variant is admitted —
+admission needs a person at a tty (ADR-0052 §5) — so the library digest and record count
+are unchanged at `31cacb9d69ec` over eighteen, every breakdown a real run produces holds
+exactly one `plain` entry, and `n = 30` per family per agent is what a gate run reads. The
+multi-variant arithmetic is held by constructed libraries in
+`backend/tests/test_pooled_rate.py` and by type invariants, and by nothing that has run
+against a model.
+
+- **The rate is pooled and the mean is refused.** A family's figure is successes over
+  attempts across every variant it holds, because every variant measures the same failure
+  against the same criterion. `VariantBreakdown.pooled` is the one place it happens, and
+  `TargetRun._rates` derives each family's rate *from* that family's breakdown rather
+  than counting it in a second walk — so the two figures cannot drift and the invariants
+  below guard callers rather than this module.
+  Driven red by making `successes` the mean of the per-variant counts: at 3/10 and 7/10
+  the two answers coincide, which is why the tests that matter use **unequal**
+  denominators — 3/30 with 7/10 reads 0.25 pooled and 0.50 averaged.
+- **The counts per variant are in the signed artefact, not only in the view.** Each family
+  entry carries `variants`: a list, in the enumeration's order so `plain` comes first
+  rather than the alphabetical order canonical JSON would impose on keys, of
+  `transform`/`transform_stated`/`successes`/`attempts`. No rate and no interval per
+  variant, deliberately — an interval invites a band, and a band is a summary of a family
+  against two anchors the gate decided nothing about a slice on.
+- **The transform travels on the attempt, required and not defaulted.**
+  `Attempt.transform` is read off the case record when the attempt is made, on the terms
+  `family` and `verdict_class` are. The hazard is peculiarly quiet: a default of `PLAIN`
+  leaves the pooled rate correct and only the breakdown wrong, which no reader of the
+  artefact could see. One production construction site, nine test sites, all keyword.
+- **The counts adding up is a type invariant *and* a verifier check, on purpose.**
+  `FamilyEntry` and `FamilyRates` refuse a breakdown that does not account for the rate
+  beside them, so the bench cannot produce a bad artefact; `verification._variants`
+  re-derives the pooled denominator from the document, so a recipient can detect one
+  **edited after signing** — the rate still follows from `successes`/`attempts` and no
+  other check on the page would notice. Driven red by hand-editing one variant's
+  `attempts` from 10 to 9 in an otherwise clean payload: `AGREES` before, `DISAGREES` at
+  `measured.deterministic[0].variants.attempts` after.
+- **The pooling is asserted at unequal denominators, which is the only place it can
+  fail.** 3 of 10 plain with 7 of 30 encoded is 10 of 40 — 0.25 — where the mean of the
+  two rates is 0.27. Driven red by making `pooled` return the mean: `(11, 40)` against
+  `(10, 40)`. Equal denominators would let the mean pass, which is why the run-seam test
+  builds the attempts rather than measuring them — a stub reference agent answers the
+  same way every time, so a real run cannot produce an unequal pair on demand.
+- **A malformed breakdown is a disagreement too, not a traceback.** An element whose
+  `attempts` is a string is exactly as doctored as one whose `attempts` is nine, so
+  `_countable` asks before the sum and both land in one reading. Driven red by removing
+  that guard: `NotThisArtefact: attempts is not a whole number in this payload` out of
+  the verifier instead of a sentence a recipient can act on.
+- **`n` is the live case count times the attempts per case, asserted as the
+  composition it is.** Three records in one family, one of them retired: `live_library`
+  returns two, the run makes twenty attempts, and the retired variant is absent from the
+  breakdown rather than present at zero. Driven red by making `live_library` keep the
+  retired case: three live, and the family read thirty.
+- **`n` per family is a definition now, not a hole.** #66 had removed
+  `attempts_per_family()` and every `3 *`; this fills the gap — a family's `n` is its
+  **live** case count times `attempts_per_case`, counting admitted variants and excluding
+  the retired — and it is still printed off the attempts that ran. `attempts_per_case`
+  stays at 10 because retirement is per case and a variant is a case;
+  `NOT_A_GATE_RESULT` and `DECLARED_BAND_CUTS` are untouched for the reasons ADR-0055 §5
+  gives.
+- **The comparability sentence is printed where a reader compares two reports.**
+  `payload.VARIANTS_STATED`, in the measured section and in the rendered document:
+  *comparable only at equal library version and equal selection*. One wording, for the
+  reason `NOT_A_GATE_RESULT` is one wording. The rendered document prints the mix beneath
+  every family's rate including a one-variant family, because the signed document may not
+  say less than the payload it is a view of; the **gate** document prints the mix only
+  where a family holds more than one, since `plain 3/30` beside a rate already printed as
+  `(3/30)` is the same counts twice.
+- **The adaptive boundary was the thing not to widen, and it was not.** The breakdown is
+  keyed on `Transform`; an `AdaptiveEpisode` has no transform and is not an `Attempt`, so
+  there is no field a discovery count could arrive in (ADR-0010). #77 adds it to the
+  family *view* as its own field of its own type, and this ticket left `AdaptiveSection`
+  and `FamilyEntry`'s adaptive-free shape alone.
+- **What downstream tickets inherit.** `Attempt.transform`;
+  `TargetRun.variant_counts` / `deterministic_variant_counts` / `judged_variant_counts`;
+  `scorer.VariantCounts`, `VariantBreakdown`, `FamilyVariants`, `IN_TRANSFORM_ORDER`, and
+  `NO_VARIANTS` for a family with no attempts; `FamilyEntry.variants` and
+  `FamilyRates.variants`; `payload.VARIANTS_STATED`; and the test builders
+  `conftest.plain_breakdown` / `all_plain`, which invent the split behind a rate and are
+  test-only for exactly that reason. #79's selection is the second half of the
+  comparability sentence and has a place waiting for it.
+
 ---
 
 ## Pre-gate observations

@@ -33,10 +33,16 @@ class GateRule:
     cases a family holds is a fact about the library on disk, and since the
     admission gate writes an admitted route into it
     ([ADR-0033](../../docs/adr/0033-an-admitted-route-is-written-into-the-library.md))
-    a family can hold four while the others hold three. This record has no library
-    and must not be given one, so a family's `n` is counted off the attempts that
-    ran and printed beside that family's own rates (`gate.stated_outcome`). Nothing
-    here multiplies by three.
+    a family can hold four while the others hold three — and a **variant** is a case
+    too, so a family holding one is measured at another ten again
+    ([ADR-0055](../../docs/adr/0055-a-family-pools-its-variants-and-publishes-the-counts.md)).
+    This record has no library and must not be given one, so a family's `n` is
+    counted off the attempts that ran and printed beside that family's own rates
+    (`gate.stated_outcome`). Nothing here multiplies by three.
+
+    **And ten does not move because a variant arrived.** Retirement is per case, a
+    variant has its own admission and its own decay series (ADR-0051), so each one
+    needs its own ten readings for the rule above to be able to operate on it.
     """
 
     discrimination_floor: float = 0.4

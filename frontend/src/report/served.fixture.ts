@@ -155,6 +155,14 @@ export const SERVED: TargetReport = {
         "rate": 0.7,
         "reliability": null,
         "successes": 21,
+        "variants": [
+          {
+            "attempts": 30,
+            "successes": 21,
+            "transform": "plain",
+            "transform_stated": "sent as the record commits it — the identity, and a member rather than a silence so that every record states how it attacks"
+          }
+        ],
         "verdict_class": "deterministic"
       },
       {
@@ -190,6 +198,14 @@ export const SERVED: TargetReport = {
         "rate": 0.2,
         "reliability": null,
         "successes": 6,
+        "variants": [
+          {
+            "attempts": 30,
+            "successes": 6,
+            "transform": "plain",
+            "transform_stated": "sent as the record commits it — the identity, and a member rather than a silence so that every record states how it attacks"
+          }
+        ],
         "verdict_class": "deterministic"
       }
     ],
@@ -233,6 +249,14 @@ export const SERVED: TargetReport = {
           "transcripts": 15
         },
         "successes": 9,
+        "variants": [
+          {
+            "attempts": 30,
+            "successes": 9,
+            "transform": "plain",
+            "transform_stated": "sent as the record commits it — the identity, and a member rather than a silence so that every record states how it attacks"
+          }
+        ],
         "verdict_class": "judged"
       }
     ],
@@ -256,6 +280,7 @@ export const SERVED: TargetReport = {
     ],
     "reproducibility": "re_derivable",
     "reproducibility_stated": "re-derivable — every figure here follows from the recorded attempts, the case records and the stated rule, so a reader holding those can recompute it without this bench",
+    "variants_stated": "Each family's figure is one rate over every variant of that family this run sent — the payload as the record commits it, and each construction performed on it — because every variant measures the same failure against the same criterion, so an attempt that succeeded through any of them is an attempt that succeeded. The counts are written per variant beside it, so the plain rate, the encoded rate or any subset is recomputable from this document. What pooling costs is that the figure depends on the variant mix: a family holding one plain case and five encodings reports a rate that is mostly about encodings. So **two runs are comparable only at equal library version and equal selection** — a run that sent fewer constructions measured a different denominator, and neither figure is the other's baseline. Nothing here is pooled across families (ADR-0005) and no adaptive result is a summand of any count on this page (ADR-0010).",
     "withheld": [
       {
         "agreements": 13,

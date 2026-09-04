@@ -84,6 +84,7 @@ from backend.bench.scorer import (
     Interval,
     Rate,
     Reliability,
+    VariantBreakdown,
     band_for,
 )
 from backend.graph.runstate import Attempt
@@ -229,6 +230,29 @@ class FamilyEntry:
     """The published identifiers this family's cases test one case *within*, each
     with the boundary of that claim (ADR-0002)."""
 
+    variants: VariantBreakdown
+    """The counts, per transform, that `rate` was pooled from.
+
+    **The counts that take the rate apart again.** A family's rate is one figure over
+    every variant the family holds, and every variant measures the same failure
+    against the same criterion — so pooling is legitimate and the arithmetic is
+    `VariantBreakdown.pooled` (ADR-0055). What it costs is that the rate depends on
+    the variant mix: a family holding one plain case and five encodings reports a
+    rate that is mostly about encodings. This field is how that cost is published
+    rather than hidden — the same idiom `payload.py` states one level up, *every
+    measured figure is written with the counts it came from*.
+
+    **Required and not defaulted, and asserted against the rate below.** An entry
+    whose breakdown does not add up to its own `rate` is an entry over a denominator
+    nothing in it accounts for, and a default would let a caller that forgot the
+    counts publish a rate no reader could take apart.
+
+    **No adaptive figure is in here and none can be** (ADR-0010). The keys are
+    `Transform` members, an `AdaptiveEpisode` has no transform and is not an
+    `Attempt`, and the discovery count #77 adds to the family view is a separate
+    field of a separate type — never a summand of `attempts`.
+    """
+
     reliability: Reliability | None = None
     """κ for the instrument that decided this family, on a judged entry.
 
@@ -239,6 +263,16 @@ class FamilyEntry:
     that produced this rate, which is not the same reading as a κ of zero and is why
     `fit_to_report` refuses both.
     """
+
+    def __post_init__(self) -> None:
+        if not self.variants.accounts_for(self.rate):
+            raise ValueError(
+                f"{self.family} reports {self.rate.successes} of "
+                f"{self.rate.attempts} attempts and a breakdown that does not "
+                f"account for it: {self.variants.mix_stated() or 'nothing at all'}. "
+                "A published rate over a denominator nothing in the document adds up "
+                "to is a figure no recipient can take apart (ADR-0055)"
+            )
 
     @property
     def interval(self) -> Interval:
@@ -781,6 +815,7 @@ def assemble(
         measured=MeasuredSection(
             deterministic=_entries(
                 target_run.deterministic_rates,
+                target_run.deterministic_variant_counts,
                 VerdictClass.DETERMINISTIC,
                 cases,
                 gate,
@@ -792,6 +827,7 @@ def assemble(
             ),
             judged=_entries(
                 target_run.judged_rates,
+                target_run.judged_variant_counts,
                 VerdictClass.JUDGED,
                 cases,
                 gate,
@@ -841,6 +877,7 @@ def _scanned(
 
 def _entries(
     rates: Mapping[Family, Rate],
+    variants: Mapping[Family, VariantBreakdown],
     verdict_class: VerdictClass,
     cases: Iterable[Case],
     gate: GateDecision | None,
@@ -855,6 +892,12 @@ def _entries(
     `reliability` is required rather than defaulted, so the deterministic call site
     has to state that it passes none: a κ figure reaching an entry whose verdict came
     from a success condition would be a defect nobody reading the call could see.
+
+    `variants` is the per-transform counts of the same attempts `rates` was divided
+    over, keyed the same way and read from the same run — indexed and never
+    `.get`-with-a-default, because a family with a rate and no breakdown is the one
+    thing `FamilyEntry` refuses and a silent empty breakdown would turn that refusal
+    into a `KeyError` nobody could read (ADR-0055).
     """
     coverage = _coverage(cases)
     scores = _discrimination(gate)
@@ -866,6 +909,7 @@ def _entries(
             band=band_for(rates[family], cuts),
             discrimination=scores.get(family),
             coverage=coverage.get(family, ()),
+            variants=variants[family],
             reliability=reliability.get(family),
         )
         for family in Family

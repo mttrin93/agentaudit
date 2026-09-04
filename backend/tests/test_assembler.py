@@ -54,7 +54,7 @@ from backend.bench.scorer import (
     band_for,
     failure_rate,
 )
-from backend.tests.conftest import a_target
+from backend.tests.conftest import a_target, plain_breakdown
 from backend.tests.test_scorer import WILSON_90
 
 FIGURES = (Rate, Interval, Band)
@@ -203,6 +203,7 @@ def test_a_family_entry_carries_the_figures_a_reader_needs_and_no_others() -> No
         "band",
         "discrimination",
         "coverage",
+        "variants",
         "reliability",
     }
 
@@ -213,6 +214,11 @@ def test_a_family_entry_carries_the_figures_a_reader_needs_and_no_others() -> No
     assert entry.band is Band.FAILS
     assert entry.discrimination == 0.8
     assert entry.coverage == (LEAKAGE_ID,)
+    # The counts the pooled rate was made up of, one entry per construction the
+    # family sent — the figure above depends on that mix, so the mix travels with it
+    # (ADR-0055). Asserted against the rate rather than against a literal: an entry
+    # whose breakdown does not account for its own rate does not construct.
+    assert entry.variants.accounts_for(entry.rate)
     # κ arrives with the gold set (#11) and belongs to the judged entries. On a
     # deterministic entry it is absent, and `fit_to_report` is true without one
     # because the success condition is authoritative (ADR-0004).
@@ -549,6 +555,7 @@ def an_entry(
         band=band_for(rate),
         discrimination=discrimination,
         coverage=(LEAKAGE_ID,),
+        variants=plain_breakdown(rate),
     )
 
 

@@ -65,6 +65,12 @@ from backend.bench.library import (
 )
 from backend.bench.registration import Attestation
 from backend.bench.rule import DECLARED_RULE
+from backend.bench.scorer import (
+    FamilyVariants,
+    Rate,
+    VariantBreakdown,
+    VariantCounts,
+)
 from backend.graph import approval
 from backend.graph.approval import Approval, Approve
 from backend.graph.budget import BudgetPayload, RunBudget
@@ -343,6 +349,35 @@ untestable against a name that turns up anyway.
 """
 
 
+def plain_breakdown(rate: Rate) -> VariantBreakdown:
+    """That rate's counts as a single plain variant contributed them.
+
+    A **test** builder and deliberately not a production one: it invents the split
+    behind a rate, which is exactly what no code that publishes an artefact may do
+    (ADR-0055). Every case of the library as it stands is `PLAIN`, so this is the
+    real split for every rate a real run produces today — and a test that means to
+    exercise a mix builds the counts itself.
+    """
+    return VariantBreakdown(
+        (
+            VariantCounts(
+                transform=Transform.PLAIN,
+                successes=rate.successes,
+                attempts=rate.attempts,
+            ),
+        )
+    )
+
+
+def all_plain(hardened: Rate, weak: Rate, trivial: Rate) -> FamilyVariants:
+    """The three agents' breakdowns for a family holding nothing but plain cases."""
+    return FamilyVariants(
+        hardened=plain_breakdown(hardened),
+        weak=plain_breakdown(weak),
+        trivial=plain_breakdown(trivial),
+    )
+
+
 def a_finding(
     family: Family = Family.DATA_LEAKAGE,
     verdict_class: VerdictClass = VerdictClass.DETERMINISTIC,
@@ -377,6 +412,7 @@ def a_finding(
         ),
         verdict=Verdict.SUCCEEDED,
         verdict_class=verdict_class,
+        transform=Transform.PLAIN,
     )
     narrative = Narrative(
         reason=reason,

@@ -74,6 +74,7 @@ from backend.tests.conftest import (
     CASES_DIR,
     CONFIRMING,
     adjudicating,
+    all_plain,
     authored_library,
     imports_of,
     served_references,
@@ -118,11 +119,17 @@ FIT = Reliability(
 def rates_for(counts: tuple[int, int, int], family: Family) -> FamilyRates:
     """One family's three rates from hardened, weak and trivial successes of thirty."""
     hardened, weak, trivial = counts
+    rates = (
+        failure_rate(hardened, 30),
+        failure_rate(weak, 30),
+        failure_rate(trivial, 30),
+    )
     return FamilyRates(
         family=family,
-        hardened=failure_rate(hardened, 30),
-        weak=failure_rate(weak, 30),
-        trivial=failure_rate(trivial, 30),
+        hardened=rates[0],
+        weak=rates[1],
+        trivial=rates[2],
+        variants=all_plain(*rates),
     )
 
 
@@ -1692,6 +1699,9 @@ def test_a_family_measured_on_three_different_denominators_says_so(
         hardened=failure_rate(0, 30),
         weak=failure_rate(15, 30),
         trivial=failure_rate(20, 40),
+        variants=all_plain(
+            failure_rate(0, 30), failure_rate(15, 30), failure_rate(20, 40)
+        ),
     )
 
     printed = stated_outcome(score_family(ragged))
@@ -1710,9 +1720,15 @@ def _at(
     measured at another, and this states the denominator rather than scaling the
     counts into the old one.
     """
+    rates = (
+        failure_rate(hardened, attempts),
+        failure_rate(weak, attempts),
+        failure_rate(trivial, attempts),
+    )
     return FamilyRates(
         family=family,
-        hardened=failure_rate(hardened, attempts),
-        weak=failure_rate(weak, attempts),
-        trivial=failure_rate(trivial, attempts),
+        hardened=rates[0],
+        weak=rates[1],
+        trivial=rates[2],
+        variants=all_plain(*rates),
     )

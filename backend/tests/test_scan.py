@@ -59,7 +59,13 @@ from backend.bench.contract import (
     Transcript,
 )
 from backend.bench.evaluator import Verdict
-from backend.bench.library import Case, ElectiveFamily, Family, VerdictClass
+from backend.bench.library import (
+    Case,
+    ElectiveFamily,
+    Family,
+    Transform,
+    VerdictClass,
+)
 from backend.bench.measurability import NotMeasurable
 from backend.bench.rule import DECLARED_RULE
 from backend.bench.scanner import (
@@ -88,6 +94,7 @@ from backend.tests.conftest import (
     BENCH_ATTESTATION,
     CONFIRMING,
     a_target,
+    all_plain,
     case_for,
     reference_target,
 )
@@ -741,6 +748,7 @@ def an_attempt(
     family: Family,
     verdict: Verdict,
     verdict_class: VerdictClass = VerdictClass.DETERMINISTIC,
+    transform: Transform = Transform.PLAIN,
 ) -> Attempt:
     """One recorded attempt, built rather than measured.
 
@@ -764,6 +772,7 @@ def an_attempt(
         ),
         verdict=verdict,
         verdict_class=verdict_class,
+        transform=transform,
     )
 
 
@@ -786,6 +795,9 @@ def a_gate(score: float, family: Family = Family.DATA_LEAKAGE) -> GateDecision:
         hardened=failure_rate(3, 30),
         weak=failure_rate(15, 30),
         trivial=failure_rate(27, 30),
+        variants=all_plain(
+            failure_rate(3, 30), failure_rate(15, 30), failure_rate(27, 30)
+        ),
     )
     return GateDecision(
         outcome=GateOutcome.PASSED,

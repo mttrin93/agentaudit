@@ -741,6 +741,7 @@ def a_constructed_run(name: str, cases: list[Case], successes: int) -> TargetRun
                 transcripts=(probe,),
                 verdict=(Verdict.SUCCEEDED if index < successes else Verdict.RESISTED),
                 verdict_class=case.verdict_class,
+                transform=case.transform,
             )
             for case in cases
             for index in range(DECLARED_RULE.attempts_per_case)

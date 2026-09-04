@@ -94,7 +94,7 @@ from backend.bench.published import ClaimedInPart, UntestedCategory
 from backend.bench.registration import AttestationRecord
 from backend.bench.rule import DECLARED_RULE, GateRule
 from backend.bench.scanner import RuleOfTwo
-from backend.bench.scorer import GateOutcome, Interval, Reliability
+from backend.bench.scorer import GateOutcome, Interval, Reliability, VariantCounts
 from backend.graph.budget import Layer
 
 ARTEFACT = "agentaudit.target-report"
@@ -761,6 +761,32 @@ def write(payload: TargetPayload, path: Path) -> Path:
     return path
 
 
+VARIANTS_STATED = (
+    "Each family's figure is one rate over every variant of that family this run "
+    "sent — the payload as the record commits it, and each construction performed on "
+    "it — because every variant measures the same failure against the same criterion, "
+    "so an attempt that succeeded through any of them is an attempt that succeeded. "
+    "The counts are written per variant beside it, so the plain rate, the encoded "
+    "rate or any subset is recomputable from this document. What pooling costs is "
+    "that the figure depends on the variant mix: a family holding one plain case and "
+    "five encodings reports a rate that is mostly about encodings. So **two runs are "
+    "comparable only at equal library version and equal selection** — a run that "
+    "sent fewer constructions measured a different denominator, and neither figure "
+    "is the other's baseline. Nothing here is pooled across families (ADR-0005) and "
+    "no adaptive result is a summand of any count on this page (ADR-0010)."
+)
+"""What a reader comparing two of these documents is owed, printed where they do it.
+
+One wording, in the artefact rather than in the console that produced it, for the
+reason `rule.NOT_A_GATE_RESULT` is one wording: the honest sentence is *comparable
+only at equal library version and equal selection*, and a reader who has to infer it
+from a library hash is a reader who will not
+([ADR-0055](../../docs/adr/0055-a-family-pools-its-variants-and-publishes-the-counts.md)).
+The selection itself arrives in the artefact under #79; this sentence is what makes
+its absence readable rather than silent.
+"""
+
+
 def _measured(section: MeasuredSection, rule: GateRule) -> dict[str, Any]:
     """What the fixed suite measured: counts per family, and what is not published.
 
@@ -775,6 +801,7 @@ def _measured(section: MeasuredSection, rule: GateRule) -> dict[str, Any]:
     return {
         "reproducibility": section.reproducibility.value,
         "reproducibility_stated": section.reproducibility.stated(),
+        "variants_stated": VARIANTS_STATED,
         "cuts": {
             "holds_at_or_below": section.cuts.holds_at_or_below,
             "fails_at_or_above": section.cuts.fails_at_or_above,
@@ -847,9 +874,39 @@ def _entry(entry: FamilyEntry, rule: GateRule) -> dict[str, Any]:
         "band": entry.band.value,
         "band_stated": entry.band.stated(),
         "discrimination": entry.discrimination,
+        "variants": [_variant(count) for count in entry.variants],
         "coverage": [_external(identifier) for identifier in entry.coverage],
         "reliability": _reliability(entry.reliability),
         "label": _label(entry.family),
+    }
+
+
+def _variant(count: VariantCounts) -> dict[str, Any]:
+    """One transform's contribution to a family's pooled rate: counts, and no rate.
+
+    **The counts a recipient takes the family's rate apart with.** A family's figure
+    is pooled over every variant it holds, which is legitimate because every variant
+    measures the same failure against the same criterion — and what it costs is that
+    the figure depends on the variant mix
+    ([ADR-0055](../../docs/adr/0055-a-family-pools-its-variants-and-publishes-the-counts.md)).
+    This is the cost published rather than hidden: the plain rate, the encoded rate
+    and any subset are all recomputable from here.
+
+    **No rate and no interval, deliberately.** A per-variant Wilson interval would
+    invite a per-variant band, and a band is a summary of a family for a target that
+    the gate decided nothing about a slice on. The counts are the evidence; the
+    arithmetic over them is the recipient's.
+
+    A list and never an object keyed by transform, so the order is
+    `IN_TRANSFORM_ORDER` — `PLAIN` first — rather than the alphabetical order
+    canonical JSON would impose on keys, which would print a family's encodings above
+    the payload they are encodings of.
+    """
+    return {
+        "transform": count.transform.value,
+        "transform_stated": count.transform.stated(),
+        "successes": count.successes,
+        "attempts": count.attempts,
     }
 
 

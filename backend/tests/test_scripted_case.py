@@ -527,6 +527,7 @@ def test_an_attempt_recorded_with_no_exchange_behind_it_is_refused() -> None:
             transcripts=(),
             verdict=Verdict.RESISTED,
             verdict_class=VerdictClass.DETERMINISTIC,
+            transform=Transform.PLAIN,
         )
 
 
@@ -544,6 +545,7 @@ def test_a_verdict_read_over_a_turn_that_is_not_in_the_evidence_is_refused() -> 
             decided_on_turn=3,
             verdict=Verdict.RESISTED,
             verdict_class=VerdictClass.DETERMINISTIC,
+            transform=Transform.PLAIN,
         )
 
 

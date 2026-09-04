@@ -82,6 +82,20 @@ same shape in a table of its own, and an elective label makes no coverage claim:
 entry it names stays listed as untested until a family with cases claims it.
 _Avoid_: the family's OWASP number, category, mapping, taxonomy
 
+**Article**:
+An EU AI Act duty a **family**'s failure bears on, from a fixed table this project
+wrote before any code (PLAN §4) and never a model's choice
+([ADR-0004](./docs/adr/0004-deterministic-verdicts-judge-is-narrative.md)). A family
+bears *articles*, plural: four of the nine bear two, and the first is the one the
+failure principally bears on, so a reader with room for one prints that rather than
+whichever sorted lower ([ADR-0040](./docs/adr/0040-a-family-bears-more-than-one-article.md)).
+Article 12 is the exception on both counts — it applies to every family, so it sits on
+no family's **label** and on a logged instrument disagreement instead. Nothing that is
+not a family bears one: an article printed beside a **declared capability** would put a
+legal duty next to a self-declaration in a document whose every other article sits
+beside a **verdict**.
+_Avoid_: the family's article, the regulation, the clause, compliance requirement
+
 **Case**:
 One executable test belonging to a family, consisting of a payload and the criterion that decides its verdict — a success condition, or, for a judged family, the semantic question stated on the record. Three cases per family as authored; a family the admission gate has grown holds more, and the count is read off the library rather than declared.
 _Avoid_: test, probe, scenario, payload
@@ -219,7 +233,7 @@ elective family's `D` is a fact about the bench (ADR-0018).
 _Avoid_: using it for **not measurable**, deselected, disabled, opted out, n/a
 
 **Finding**:
-A verdict plus its narrative — reason, article, external identifier, remediation, exposure type. Produced by the scored layer only; the adaptive layer produces an **adaptive finding**, which is a different thing and is named differently on purpose.
+A verdict plus its narrative — reason, articles, external identifier, remediation, exposure type. Produced by the scored layer only; the adaptive layer produces an **adaptive finding**, which is a different thing and is named differently on purpose.
 _Avoid_: issue, vulnerability, defect, alert
 
 **Deterministic family / Judged family**:

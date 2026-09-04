@@ -335,6 +335,50 @@ of all ten and the truth of none.
   2026-08-24 is as far from the live library as #47 left it, and no reading in this
   file was re-measured.
 
+### Four families now bear two articles each, and no report prints any of them (#46)
+
+**The article column is the one column this project calls its central defence, and it
+is still not in the document.** `Article` gained 10 and 13 and `article_for` returns a
+tuple ([ADR-0040](./adr/0040-a-family-bears-more-than-one-article.md)), so nine
+families now carry between one and two EU AI Act articles apiece. What reads them is
+`judge.Narrative`, and `Narrative` is read by `scripts/console.py` and by nothing under
+`payload.py`, `assembler.py` or `rendering/`. A reader of a **signed report** sees no
+article at all, before this change and after it. That is #52's ticket and it is worth
+stating here rather than only in a ticket: the mapping PLAN §4 wrote before any code
+has never once been printed in the artefact it was written for.
+
+- **Four, where both tickets say five.** #42 and #46 each write that *five families
+  carry two articles* and each then lists four — scope creep, wrongful commitment,
+  disclosure denial, memory poisoning — with PII leakage's Article 10 counted into the
+  five while the same sentence concedes it stands alone. Five families' article column
+  changed; four bear two. The tickets were transcribed rather than counted, which is
+  the kind of arithmetic this file exists to catch late.
+- **The two new members are readings of the Act, and the suite checks their shape and
+  not their truth.** That memory poisoning's failure bears on *data and data
+  governance* (10), and that disclosure denial's bears on *transparency to deployers*
+  (13) as well as on Article 50, are #42's judgements transcribed. No lawyer has read
+  them and no test can. What is checked is that every member of `Article` is borne by
+  some family — so a duty cannot be declared and claimed about nobody — and that
+  Article 12 is borne by none, because PLAN §4 gives it to every row.
+- **The order inside each tuple is a claim nothing external validates.** *Primary
+  first* means PLAN §4's own column first, which is this project's reading of which
+  duty a family's failure principally bears on. Scope creep bears 14 then 15 and
+  wrongful commitment bears 15 then 14; a reader may think either pair is the wrong way
+  round, and the only thing the suite proves is that the two orders are declared rather
+  than derived, so a change to one is visible as a change.
+- **`pii_leakage`'s article was a declared blank for exactly one ticket.** #45 left it
+  empty because writing a wrong article was worse than writing none; #46 added the
+  member and filled it. A label bearing no article is now refused where it is written,
+  which means the next family to arrive — #48, #49, #50 — cannot ship without one, and
+  cannot ship with a placeholder either.
+- **No figure moved and neither digest moved.** The library digest is unchanged at
+  `sha256:8f1932c50602` — no case record changed, because a case's identifier and a
+  family's label are two different claims (ADR-0037 §7). The golden rendering digest is
+  unchanged too, for the reason above: the document does not carry a narrative, so
+  there was nothing in it for a second article to lengthen. The gate citation of
+  2026-08-24 is as far from the live library as #45 left it, and no reading in this
+  file was re-measured.
+
 ---
 
 ## Pre-gate observations

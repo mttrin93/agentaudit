@@ -5,9 +5,11 @@ mappings of different shapes in two others — `published.FAMILY_CATEGORY` gave 
 at most one identifier on one list, `judge.article_for` gave it exactly one article —
 and #42's selection breaks both cardinalities at once: a family carries an identifier
 on each of two lists or none on either, one identifier is claimed by two families, and
-five families bear two articles. Why the two halves became one record, and what the
+four families bear two articles. Why the two halves became one record, and what the
 consolidation cost, is
-[ADR-0039](../../docs/adr/0039-a-familys-label-is-one-record.md).
+[ADR-0039](../../docs/adr/0039-a-familys-label-is-one-record.md); why the article half
+is a tuple every reader of it takes whole, and what the order inside it means, is
+[ADR-0040](../../docs/adr/0040-a-family-bears-more-than-one-article.md).
 
 **Two tables and one record type.** `LABELS` is keyed on `Family`, `ELECTIVE_LABELS` on
 `ElectiveFamily`, and a label is the same shape in both: an elective family says the
@@ -60,10 +62,27 @@ class Article(StrEnum):
     RECORD_KEEPING = "12"
     """Applies to every family. The article a disagreement is recorded under."""
 
+    DATA_GOVERNANCE = "10"
+    """Data and data governance. Borne where the material that escaped, or that
+    steered the agent, was *someone else's* — a third party's personal data, or a
+    turn of a prior session read back as though it were the operator's instruction.
+    Distinguished from 15 by whose data it is rather than by how it moved."""
+
+    TRANSPARENCY_TO_DEPLOYERS = "13"
+    """Transparency and provision of information to deployers. The duty owed to the
+    organisation *operating* the system, and never the same duty as `TRANSPARENCY`
+    below: 50 is owed to the person in the conversation, 13 to whoever deployed the
+    thing they are talking to. Disclosure denial defeats both at once, which is why
+    it is the one family that bears the pair."""
+
     HUMAN_OVERSIGHT = "14"
     STOP_CONTROL = "14(4)(e)"
     ROBUSTNESS_AND_CYBERSECURITY = "15"
+
     TRANSPARENCY = "50"
+    """Transparency obligations owed to the natural person interacting with the
+    system. Not `TRANSPARENCY_TO_DEPLOYERS`, which is Article 13 and a different
+    reader."""
 
 
 @dataclass(frozen=True)
@@ -72,7 +91,7 @@ class FamilyLabel:
 
     Three tuples and no scalar anywhere, because every one of the three has a
     cardinality the old shape could not hold: a family claims entries on two lists
-    independently, either list may carry none, and #42 gives five families two
+    independently, either list may carry none, and #42 gives four families two
     articles. A field that held *at most one* of any of them would be the defect this
     record was opened for, one list further along.
 
@@ -89,13 +108,28 @@ class FamilyLabel:
     edition."""
 
     articles: tuple[Article, ...] = ()
-    """The EU AI Act articles this family's failure bears on, from PLAN §4."""
+    """The EU AI Act articles this family's failure bears on, primary first.
+
+    PLAN §4's column and #42's second articles, in that order and never sorted
+    ([ADR-0040](../../docs/adr/0040-a-family-bears-more-than-one-article.md)). The
+    default is empty so the field can sit beside the two that mean something empty,
+    and `__post_init__` refuses it: unlike a published list, there is no family that
+    bears no duty.
+    """
 
     def __post_init__(self) -> None:
-        """Refuse an identifier that names no edition or no stored copy.
+        """Refuse a label with no article, or an identifier naming no stored copy.
 
-        The check `ExternalId` makes of a case's claim, arriving at the other claim a
-        report prints
+        Two refusals of the same shape and they are not the same argument. The
+        article half is asymmetric with the two identifier tuples above on purpose:
+        empty is a real answer there and none here
+        ([ADR-0040](../../docs/adr/0040-a-family-bears-more-than-one-article.md)
+        decision 5). It is made here rather than by each reader because there is no
+        longer a family for which a blank column is the honest answer, and a guard
+        whose condition cannot be reached is one nobody can drive red.
+
+        The identifier half is the check `ExternalId` makes of a case's claim,
+        arriving at the other claim a report prints
         ([ADR-0036](../../docs/adr/0036-a-published-identifier-resolves-to-a-stored-copy.md)).
         A label is the more dangerous of the two places to leave the edition open,
         because it is read once per family rather than once per case: an untagged
@@ -108,6 +142,13 @@ class FamilyLabel:
         that had been given an identifier, and the form a family with no claim takes
         is the empty tuple above.
         """
+        if not self.articles:
+            raise ValueError(
+                "this label bears no article. PLAN §4's column is the report's "
+                "central defence and a blank in it is not a finding about the "
+                "family — a family claims nothing on a published list often, and "
+                "bears no legal duty never"
+            )
         for identifier in (*self.agentic, *self.llm):
             if identifier == editions.ORIGINATED_HERE:
                 raise ValueError(
@@ -120,29 +161,31 @@ class FamilyLabel:
             if refused is not None:
                 raise ValueError(refused)
 
-    @property
-    def article(self) -> Article:
-        """The one article a reader that has room for one may print.
 
-        `Narrative.article` and `Disagreement.article` are single fields, so the
-        narrow reader is the reader and not the record. It refuses rather than
-        returning the first, because returning the first is how the second article of
-        a family that has two disappears on the day it is declared — and the day is
-        scheduled (#46, which gives `Article` its 10 and 13 and widens the reader).
-        """
-        if not self.articles:
-            raise ValueError(
-                "this label carries no article, so there is nothing for a reader "
-                "that prints one to print. PLAN §4's column is the report's central "
-                "defence and a blank in it is not a finding about the family"
-            )
-        if len(self.articles) > 1:
-            raise ValueError(
-                f"this label carries two articles — {', '.join(self.articles)} — and "
-                "a reader that holds one would drop the rest. Widening that reader "
-                "is #46; until then the two cannot be read as one"
-            )
-        return self.articles[0]
+def articles_stated(articles: tuple[Article, ...]) -> str:
+    """`article 15`, or `articles 50 and 13` — the sentence a reader prints.
+
+    One rendering for every reader of a label, and why there is one rather than a
+    format string per call site is
+    [ADR-0040](../../docs/adr/0040-a-family-bears-more-than-one-article.md)
+    decision 7.
+
+    Reads the tuple as the label declares it and sorts nothing, so the printed line
+    is stable for a golden digest and still says which article is the primary claim.
+
+    Raises:
+        ValueError: on an empty tuple, which `FamilyLabel` and `judge.Narrative`
+            refuse before it can reach here. `articles ` with nothing after it is
+            what silence would look like in a signed document.
+    """
+    if not articles:
+        raise ValueError(
+            "this label bears no article, so there is nothing for a reader of "
+            "PLAN §4's central column to print"
+        )
+    if len(articles) == 1:
+        return f"article {articles[0]}"
+    return f"articles {', '.join(articles[:-1])} and {articles[-1]}"
 
 
 def covering[F: StrEnum](
@@ -198,12 +241,18 @@ LABELS: Mapping[Family, FamilyLabel] = covering(
         Family.SCOPE_CREEP: FamilyLabel(
             agentic=("ASI02:2026",),
             llm=("LLM03:2026",),
-            articles=(Article.HUMAN_OVERSIGHT,),
+            articles=(
+                Article.HUMAN_OVERSIGHT,
+                Article.ROBUSTNESS_AND_CYBERSECURITY,
+            ),
         ),
         Family.WRONGFUL_COMMITMENT: FamilyLabel(
             agentic=("ASI03:2026",),
             llm=("LLM07:2026",),
-            articles=(Article.ROBUSTNESS_AND_CYBERSECURITY,),
+            articles=(
+                Article.ROBUSTNESS_AND_CYBERSECURITY,
+                Article.HUMAN_OVERSIGHT,
+            ),
         ),
         Family.DATA_LEAKAGE: FamilyLabel(
             llm=("LLM02:2026", "LLM08:2026"),
@@ -215,7 +264,7 @@ LABELS: Mapping[Family, FamilyLabel] = covering(
         ),
         Family.DISCLOSURE_DENIAL: FamilyLabel(
             agentic=("ASI09:2026",),
-            articles=(Article.TRANSPARENCY,),
+            articles=(Article.TRANSPARENCY, Article.TRANSPARENCY_TO_DEPLOYERS),
         ),
     },
     Family,
@@ -270,9 +319,14 @@ elective family #42 selected for it — is stated beside the claim in
 `published.NOT_REACHED_WITHIN` rather than left to be read off the claim's absence, and
 `published.py` has a test that no identifier a live case claims is printed as untested.
 
-**The article column is one article per family today and the record holds a tuple**,
-because #42 gives five of the nine two apiece and two of those need members `Article`
-does not have. Both halves of that are #46's.
+**The article column is PLAN §4's, with #42's second articles after it and never
+sorted.** Three of these six bear two — scope creep 14 and 15, wrongful commitment 15
+and 14, disclosure denial 50 and 13 — and the two rows carrying the same pair carry it
+in opposite orders, because the first is the article the family's failure principally
+bears on and a reader with room for one prints that
+([ADR-0040](../../docs/adr/0040-a-family-bears-more-than-one-article.md)). Article 12
+is on none of them: PLAN §4 gives it to every row, so it sits on `judge.Disagreement`
+instead of nine times here.
 
 Every claim in either column costs a stated limit in `published.NOT_REACHED_WITHIN`,
 and the two subtractions there are what makes an unclaimed entry print with a reason.
@@ -283,13 +337,19 @@ ELECTIVE_LABELS: Mapping[ElectiveFamily, FamilyLabel] = covering(
     {
         ElectiveFamily.MEMORY_POISONING: FamilyLabel(
             agentic=("ASI06:2026",),
-            articles=(Article.ROBUSTNESS_AND_CYBERSECURITY,),
+            articles=(
+                Article.ROBUSTNESS_AND_CYBERSECURITY,
+                Article.DATA_GOVERNANCE,
+            ),
         ),
         ElectiveFamily.DIRECT_PROMPT_INJECTION: FamilyLabel(
             llm=("LLM01:2026",),
             articles=(Article.ROBUSTNESS_AND_CYBERSECURITY,),
         ),
-        ElectiveFamily.PII_LEAKAGE: FamilyLabel(llm=("LLM02:2026",)),
+        ElectiveFamily.PII_LEAKAGE: FamilyLabel(
+            llm=("LLM02:2026",),
+            articles=(Article.DATA_GOVERNANCE,),
+        ),
     },
     ElectiveFamily,
 )
@@ -306,10 +366,11 @@ which is #42's *`LLM01` is claimed by two families* — and the reason
 families in one subtraction: the derivations in `published.py` read `LABELS` alone, so
 nothing on this table shortens a printed coverage list.
 
-**`pii_leakage` carries no article, and that is a declared absence rather than an
-oversight.** #42 gives it Article 10 — data and data governance — alone, and `Article`
-has no member for it until #46. A wrong article here would be worse than a blank, and
-the blank is refused by any reader that prints one (`FamilyLabel.article`).
+**`pii_leakage` bears Article 10 alone, which is the blank #45 declared and #46
+filled.** It carried none while `Article` had no member for *data and data governance*,
+on the footing that a wrong article is worse than a blank; the member exists now, this
+was the last blank column in the tree, and a label bearing no article is refused where
+it is written rather than guarded against per reader (ADR-0040).
 
 The three are labels for families with no cases on disk. That is the tier's shape
 rather than a gap in this table: a member exists so the cases have somewhere to arrive
@@ -333,12 +394,20 @@ def label_for(family: Family) -> FamilyLabel:
     return LABELS[family]
 
 
-def article_for(family: Family) -> Article:
-    """The article this family's failure bears on, from PLAN §4.
+def article_for(family: Family) -> tuple[Article, ...]:
+    """The articles this family's failure bears on, primary first.
 
     Read off the label rather than matched on the family, which is the consolidation:
-    the article and the published identifiers are one record and cannot drift into
-    disagreeing about which family they describe. The reader's own limit — one article
-    where the record holds a tuple — is `FamilyLabel.article`.
+    the articles and the published identifiers are one record and cannot drift into
+    disagreeing about which family they describe.
+
+    A tuple and never one article, because four of the nine families bear two and a
+    reader given the first of them would print a true sentence with a duty missing
+    from it. Why the reader widened rather than the record narrowing, and what the
+    order inside the tuple means, is
+    [ADR-0040](../../docs/adr/0040-a-family-bears-more-than-one-article.md).
+
+    Never empty: `FamilyLabel` refuses a label with no article, so a caller may index
+    `[0]` for the primary claim without asking first.
     """
-    return label_for(family).article
+    return label_for(family).articles

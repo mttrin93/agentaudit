@@ -31,6 +31,7 @@ from backend.bench.adaptive.episode import AdaptiveEpisode
 from backend.bench.admission import library_provenance, outcome_for
 from backend.bench.calibration import CalibrationResult, PlantNonce, TargetRun
 from backend.bench.contract import TargetConfig
+from backend.bench.labels import articles_stated
 from backend.bench.library import Case, Family, bar_for, trigger_counts
 from backend.bench.registration import ECHO_PROBE, NONCE_PREFIX, Attestation
 from backend.bench.retirement import (
@@ -238,7 +239,7 @@ def findings_section(target_run: TargetRun) -> str:
         lines.extend(
             (
                 f"    {finding.case_id} / {finding.family} "
-                f"[article {finding.narrative.article}, "
+                f"[{articles_stated(finding.narrative.articles)}, "
                 f"{finding.narrative.external_id.identifier}]",
                 f"      exposure:    {finding.narrative.exposure}",
                 f"      reason:      {finding.narrative.reason}",

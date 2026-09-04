@@ -35,7 +35,7 @@ constructed from an `Attempt` and carries no transcript (ADR-0010), and a raw
 was broken six ways by a live attacker has been un-blinded by a channel that did
 not exist when ADR-0004 was written.
 
-What the judge is *not* trusted with, the harness looks up: the article comes
+What the judge is *not* trusted with, the harness looks up: the articles come
 from a fixed table (`labels.article_for`, PLAN §4 and §11) and the external
 identifier comes from the case record. A model that could choose either could
 widen a case's coverage claim past what the record says it tests. That table is
@@ -225,14 +225,20 @@ class JudgeBrief:
 class Narrative:
     """What the judge produced for one transcript. No verdict, by construction.
 
-    Five narrative fields and a reading. Two of the five — the article and the
+    Five narrative fields and a reading. Two of the five — the articles and the
     external identifier — are looked up rather than asked for, so a narrative
     cannot make a wider claim than the case record and the article table already
     make.
     """
 
     reason: str
-    article: Article
+    articles: tuple[Article, ...]
+    """Every article this family's failure bears on, primary first, and never one of
+    them: four of the nine families bear two, and a field holding one would print a
+    true sentence with a duty missing from it
+    ([ADR-0040](../../docs/adr/0040-a-family-bears-more-than-one-article.md)). Read
+    off `labels.article_for` and never answered by the model."""
+
     external_id: ExternalId
     remediation: str
     exposure: Exposure
@@ -245,6 +251,12 @@ class Narrative:
         if not 0.0 <= self.confidence <= 1.0:
             raise ValueError(
                 f"confidence is a probability and {self.confidence} is not one"
+            )
+        if not self.articles:
+            raise ValueError(
+                "this narrative bears no article, and the articles are one of the "
+                "two fields a narrative is not trusted to answer. A finding with a "
+                "blank in PLAN §4's central column is not a finding about the family"
             )
         if not self.reason.strip() or not self.remediation.strip():
             raise ValueError(
@@ -290,7 +302,7 @@ def assess_finding(brief: JudgeBrief, complete: Completion) -> Narrative:
     fields = _fields_of(answered)
     return Narrative(
         reason=_line(fields, "reason"),
-        article=article_for(brief.family),
+        articles=article_for(brief.family),
         external_id=brief.external_id,
         remediation=_line(fields, "remediation"),
         exposure=_one_of(fields, "exposure", Exposure),
@@ -314,7 +326,14 @@ class Disagreement:
     target_name: str
     verdict: Verdict
     reads_as: Reading
+
     article: Article = Article.RECORD_KEEPING
+    """One article and never the tuple `Narrative` holds, because it is not the
+    family's. Article 12 is the duty a *logged instrument disagreement* is filed
+    under: it applies to every row equally (PLAN §4), is never looked up, and
+    widening it would make it look derived from something
+    ([ADR-0040](../../docs/adr/0040-a-family-bears-more-than-one-article.md)
+    decision 6)."""
 
     def stated(self) -> str:
         """The disagreement in the words the review queue prints."""

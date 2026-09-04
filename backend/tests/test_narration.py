@@ -18,7 +18,7 @@ with the answer.
 
 import ast
 from collections.abc import Iterator
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import cast, get_type_hints
 
@@ -40,7 +40,7 @@ from backend.bench.judge import (
     Reading,
     assess_finding,
 )
-from backend.bench.labels import Article
+from backend.bench.labels import Article, article_for
 from backend.bench.library import Case, Family
 from backend.bench.narration import (
     Narration,
@@ -201,8 +201,8 @@ def test_a_finding_carries_the_judges_narrative_and_the_tools_fix(
 ) -> None:
     """Both instruments ran, and what each produced is on the record.
 
-    The article and the external identifier are asserted because they are the two
-    fields the judge is *not* trusted with: the article comes from `article_for`
+    The articles and the external identifier are asserted because they are the two
+    fields the judge is *not* trusted with: the articles come from `article_for`
     and the identifier off the case record, so a run cannot widen a case's
     coverage claim by asking a model (`judge.py`, PLAN §11).
     """
@@ -214,7 +214,9 @@ def test_a_finding_carries_the_judges_narrative_and_the_tools_fix(
     assert narration.finding.narrative.remediation == JUDGED["remediation"]
     assert narration.finding.narrative.exposure is Exposure.CONFIDENTIAL_MATERIAL
     assert narration.finding.narrative.reads_as is Reading.READS_AS_SUCCEEDED
-    assert narration.finding.narrative.article is (Article.ROBUSTNESS_AND_CYBERSECURITY)
+    assert narration.finding.narrative.articles == (
+        Article.ROBUSTNESS_AND_CYBERSECURITY,
+    )
     assert narration.finding.narrative.external_id == leakage_case.external_id
     assert narration.remediation.fix == FIX
     # Nothing was recorded against this family, so the fix was written against no
@@ -744,6 +746,44 @@ def test_the_printed_section_says_which_of_the_three_readings_this_run_was(
     assert JUDGED["reason"] in printed
     assert leakage_case.external_id.identifier in printed
     assert "0 disagreement(s), logged and not resolved" in printed
+
+
+def test_the_printed_finding_names_every_article_the_family_bears(
+    leakage_case: Case,
+) -> None:
+    """The one surface that prints PLAN §4's central column today.
+
+    Four of the nine families bear two articles since #46, so the line an operator
+    reads has to be true of one and of two. The singular is asserted first because
+    it is the sentence that was already printed and must not have become false, and
+    the pair second because it is the one that did not exist
+    ([ADR-0040](../../docs/adr/0040-a-family-bears-more-than-one-article.md)).
+    """
+    [explained] = narrated(leakage_case).result.target_runs
+    assert "[article 15," in findings_section(explained)
+
+    # The family is substituted onto the finding rather than run for: what is under
+    # test is the printer, and data leakage bears one article by PLAN §4.
+    assert explained.narrations
+    bearing_two = tuple(
+        replace(
+            narration,
+            finding=replace(
+                narration.finding,
+                narrative=replace(
+                    narration.finding.narrative,
+                    articles=article_for(Family.WRONGFUL_COMMITMENT),
+                ),
+            ),
+        )
+        for narration in explained.narrations
+    )
+
+    printed = findings_section(replace(explained, narrations=bearing_two))
+
+    # Both, in the order the label declares — 15 is what wrongful commitment
+    # principally bears on and 14 is #42's second — and never one of them.
+    assert "[articles 15 and 14," in printed
 
 
 def test_the_printed_review_queue_counts_the_disagreements_it_holds(

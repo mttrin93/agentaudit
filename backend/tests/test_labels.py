@@ -23,6 +23,7 @@ from backend.bench.labels import (
     Article,
     FamilyLabel,
     article_for,
+    articles_stated,
     covering,
     label_for,
 )
@@ -63,7 +64,9 @@ def test_a_family_with_no_label_is_refused_where_the_table_is_declared() -> None
     # arrives in it.
     intruder: Mapping[Family, FamilyLabel] = {
         **LABELS,
-        ElectiveFamily.PII_LEAKAGE: FamilyLabel(),  # type: ignore[dict-item]
+        ElectiveFamily.PII_LEAKAGE: FamilyLabel(  # type: ignore[dict-item]
+            articles=(Article.DATA_GOVERNANCE,)
+        ),
     }
     with pytest.raises(KeyError, match="is not a Family"):
         covering(intruder, Family)
@@ -153,29 +156,147 @@ def test_a_family_that_claims_nothing_on_a_list_carries_an_empty_tuple() -> None
 # --- The article, read off the record ----------------------------------------
 
 
-def test_the_article_a_family_bears_is_read_off_its_label() -> None:
-    # PLAN §4's central column, unchanged by the consolidation: the same six answers
-    # `judge.article_for` gave from a match of its own.
+def test_every_article_is_one_a_family_bears_or_the_one_that_applies_to_all() -> None:
+    # The roster, checked from both ends at once. #46 adds 10 and 13 because #42's
+    # selection names them, and an `Article` member no label carries is a duty this
+    # project has written into a closed enumeration and claims about nobody — the
+    # Rule of Two's Article 14 being the row that would arrive that way (ADR-0038's
+    # *not decided here*, and ADR-0039 §10 from the other end).
+    assert Article.DATA_GOVERNANCE.value == "10"
+    assert Article.TRANSPARENCY_TO_DEPLOYERS.value == "13"
+
+    borne = {
+        article
+        for label in (*LABELS.values(), *ELECTIVE_LABELS.values())
+        for article in label.articles
+    }
+    # Article 12 is the one exception and it is stated rather than skipped: PLAN §4
+    # says it applies to every row, so it sits on no family's tuple and on
+    # `Disagreement` instead.
+    assert borne | {Article.RECORD_KEEPING} == set(Article)
+    assert Article.RECORD_KEEPING not in borne
+
+
+def test_the_articles_a_family_bears_are_read_off_its_label() -> None:
+    # PLAN §4's central column with #42's second articles added to it, and a tuple
+    # per family rather than one article: four of the nine bear two, so the answer a
+    # reader gets is *the articles* and never *the article*.
     assert {family: article_for(family) for family in Family} == {
-        Family.INDIRECT_PROMPT_INJECTION: Article.ROBUSTNESS_AND_CYBERSECURITY,
-        Family.DATA_LEAKAGE: Article.ROBUSTNESS_AND_CYBERSECURITY,
-        Family.WRONGFUL_COMMITMENT: Article.ROBUSTNESS_AND_CYBERSECURITY,
-        Family.SCOPE_CREEP: Article.HUMAN_OVERSIGHT,
-        Family.HALT_DEFEAT: Article.STOP_CONTROL,
-        Family.DISCLOSURE_DENIAL: Article.TRANSPARENCY,
+        Family.INDIRECT_PROMPT_INJECTION: (Article.ROBUSTNESS_AND_CYBERSECURITY,),
+        Family.DATA_LEAKAGE: (Article.ROBUSTNESS_AND_CYBERSECURITY,),
+        Family.WRONGFUL_COMMITMENT: (
+            Article.ROBUSTNESS_AND_CYBERSECURITY,
+            Article.HUMAN_OVERSIGHT,
+        ),
+        Family.SCOPE_CREEP: (
+            Article.HUMAN_OVERSIGHT,
+            Article.ROBUSTNESS_AND_CYBERSECURITY,
+        ),
+        Family.HALT_DEFEAT: (Article.STOP_CONTROL,),
+        Family.DISCLOSURE_DENIAL: (
+            Article.TRANSPARENCY,
+            Article.TRANSPARENCY_TO_DEPLOYERS,
+        ),
     }
 
-
-def test_a_label_with_two_articles_has_no_single_article_to_be_read_as() -> None:
-    # The cardinality the record already has and its reader does not. #42 gives five
-    # families two articles each; the record holds a tuple today and `Narrative.article`
-    # is one field, so the reader refuses rather than picking the first — which would
-    # drop an article silently on the day the second one lands (#46).
-    two = FamilyLabel(
-        articles=(Article.HUMAN_OVERSIGHT, Article.ROBUSTNESS_AND_CYBERSECURITY)
+    # The elective tier is the other half of #42's selection and `pii_leakage` is the
+    # row #45 had to leave blank: 10 is the article it bears alone, and `Article` had
+    # no member for it until this change.
+    assert ELECTIVE_LABELS[ElectiveFamily.MEMORY_POISONING].articles == (
+        Article.ROBUSTNESS_AND_CYBERSECURITY,
+        Article.DATA_GOVERNANCE,
     )
-    with pytest.raises(ValueError, match="two articles"):
-        _ = two.article
+    assert ELECTIVE_LABELS[ElectiveFamily.DIRECT_PROMPT_INJECTION].articles == (
+        Article.ROBUSTNESS_AND_CYBERSECURITY,
+    )
+    assert ELECTIVE_LABELS[ElectiveFamily.PII_LEAKAGE].articles == (
+        Article.DATA_GOVERNANCE,
+    )
 
-    with pytest.raises(ValueError, match="no article"):
-        _ = FamilyLabel().article
+
+def test_the_order_inside_the_tuple_is_declared_and_could_not_be_derived() -> None:
+    # Order is the primary claim first — PLAN §4's column, written before any code —
+    # and #42's second article after it, so a reader with room for one prints what
+    # the family's failure principally bears on rather than whichever member sorted
+    # lower. Asserted by a pair no derivation could produce rather than by restating
+    # the literals above: scope creep and wrongful commitment bear the *same two*
+    # articles in *opposite* orders, so nothing that sorts a set, or reads the order
+    # off `Article`'s own member order, can give both these answers.
+    creep = LABELS[Family.SCOPE_CREEP].articles
+    commitment = LABELS[Family.WRONGFUL_COMMITMENT].articles
+    assert set(creep) == set(commitment)
+    assert creep != commitment
+    assert creep[0] is Article.HUMAN_OVERSIGHT
+    assert commitment[0] is Article.ROBUSTNESS_AND_CYBERSECURITY
+
+    # And descending, on the one family where the primary article has the higher
+    # number: 50 is the duty disclosure denial defeats and 13 is the one it defeats
+    # second, so a tuple sorted either way would be wrong here.
+    assert LABELS[Family.DISCLOSURE_DENIAL].articles == (
+        Article.TRANSPARENCY,
+        Article.TRANSPARENCY_TO_DEPLOYERS,
+    )
+
+
+def test_a_label_that_bears_no_article_is_refused_where_it_is_written() -> None:
+    # The refusal `FamilyLabel.article` used to make on the way out, moved to the way
+    # in. #45 left `pii_leakage` blank because `Article` had no member for 10 and a
+    # wrong article is worse than a blank; 10 exists now, the last blank is filled,
+    # and a blank column is refused rather than guarded against per reader. Empty
+    # stays a real answer on the two identifier tuples and is not one here: a family
+    # claims nothing on a published list often, and bears no legal duty never.
+    with pytest.raises(ValueError, match="bears no article"):
+        FamilyLabel(llm=("LLM02:2026",))
+
+    with pytest.raises(ValueError, match="bears no article"):
+        FamilyLabel()
+
+    # And every label in the tree carries one, which is the same refusal read as a
+    # roster rather than as a raise.
+    for label in (*LABELS.values(), *ELECTIVE_LABELS.values()):
+        assert label.articles
+
+
+# --- What a reader prints --------------------------------------------------
+
+
+def test_the_articles_render_as_one_sentence_that_is_true_of_one_and_of_two() -> None:
+    # The sentence every reader of a label prints, in one place so the console, the
+    # report and #52's screen cannot word it three ways. *article 15* was true before
+    # #46 and stays true; *articles 50 and 13* is what replaces it where a family
+    # bears two, and neither says *the* article of a family that has more than one.
+    assert articles_stated((Article.ROBUSTNESS_AND_CYBERSECURITY,)) == "article 15"
+    assert (
+        articles_stated((Article.TRANSPARENCY, Article.TRANSPARENCY_TO_DEPLOYERS))
+        == "articles 50 and 13"
+    )
+    # No family bears three today and the rendering is written for the tuple rather
+    # than for its current length, because #42's selection is not the last one.
+    assert (
+        articles_stated(
+            (
+                Article.HUMAN_OVERSIGHT,
+                Article.ROBUSTNESS_AND_CYBERSECURITY,
+                Article.DATA_GOVERNANCE,
+            )
+        )
+        == "articles 14, 15 and 10"
+    )
+
+    # Every label in the tree renders, so no family is a blank in the column.
+    for label in (*LABELS.values(), *ELECTIVE_LABELS.values()):
+        assert articles_stated(label.articles)
+
+    with pytest.raises(ValueError, match="bears no article"):
+        articles_stated(())
+
+
+def test_the_rendering_follows_the_declared_order_and_not_the_number() -> None:
+    # What makes the printed line stable, which is what a golden digest is measured
+    # against: the same two articles borne by two families print in two different
+    # orders, so the rendering reads the tuple and sorts nothing.
+    assert articles_stated(LABELS[Family.SCOPE_CREEP].articles) == "articles 14 and 15"
+    assert (
+        articles_stated(LABELS[Family.WRONGFUL_COMMITMENT].articles)
+        == "articles 15 and 14"
+    )

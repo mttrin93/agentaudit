@@ -20,6 +20,7 @@ prose is *worth* is not asserted anywhere: that has its own evaluation, which is
 
 import ast
 from collections.abc import Iterator
+from dataclasses import replace
 from pathlib import Path
 from typing import get_type_hints
 
@@ -27,6 +28,7 @@ import pytest
 
 from backend.bench.adaptive.episode import AdaptiveEpisode, EpisodeOutcome
 from backend.bench.contract import Transcript
+from backend.bench.editions import ORIGINATED_HERE
 from backend.bench.evaluator import Verdict
 from backend.bench.judge import (
     Completion,
@@ -42,7 +44,7 @@ from backend.bench.judge import (
     disagreements,
 )
 from backend.bench.labels import Article, article_for
-from backend.bench.library import Case, Family
+from backend.bench.library import Case, ExternalId, Family
 from backend.graph.runstate import Attempt
 from backend.tests.conftest import a_target, target_run_for
 
@@ -100,7 +102,7 @@ def test_the_judge_produces_every_narrative_field_for_a_transcript(
 
     assert narrative.reason == ANSWERED["reason"]
     assert narrative.remediation == ANSWERED["remediation"]
-    assert narrative.article is Article.ROBUSTNESS_AND_CYBERSECURITY
+    assert narrative.articles == (Article.ROBUSTNESS_AND_CYBERSECURITY,)
     assert narrative.external_id == leakage_case.external_id
     assert narrative.exposure is Exposure.CONFIDENTIAL_MATERIAL
     assert narrative.confidence == 0.8
@@ -117,8 +119,52 @@ def test_the_article_and_the_external_identifier_are_looked_up_not_answered(
         answering(article="50", external_id="LLM99:2026"),
     )
 
-    assert narrative.article is article_for(Family.DATA_LEAKAGE)
+    assert narrative.articles == article_for(Family.DATA_LEAKAGE)
     assert narrative.external_id is leakage_case.external_id
+
+
+def test_a_narrative_for_a_two_article_family_carries_both_and_drops_neither(
+    leaked: Attempt, leakage_case: Case
+) -> None:
+    # The reader #46 widened. Four of the nine families bear two articles, and a
+    # `Narrative` holding one would have printed the first and lost the second in a
+    # document whose central column this is — which is why `FamilyLabel` refused to
+    # answer a one-article reader at all until this field became a tuple (ADR-0039
+    # §7, ADR-0040).
+    #
+    # The family is substituted onto the brief rather than run for: what is under
+    # test is the lookup the judge cannot influence, and the transcript's own family
+    # bears one article by PLAN §4.
+    two_articles = replace(
+        JudgeBrief.about(leaked, leakage_case), family=Family.WRONGFUL_COMMITMENT
+    )
+
+    narrative = assess_finding(two_articles, answering())
+
+    assert narrative.articles == (
+        Article.ROBUSTNESS_AND_CYBERSECURITY,
+        Article.HUMAN_OVERSIGHT,
+    )
+    # Ordered as the label declares and never sorted, because the first is the one a
+    # reader with room for one prints.
+    assert narrative.articles[0] is Article.ROBUSTNESS_AND_CYBERSECURITY
+
+
+def test_a_narrative_that_bears_no_article_is_not_a_narrative() -> None:
+    # The same refusal `FamilyLabel` makes, at the record that carries the answer out
+    # of the module. Nothing in the live path can produce one — `article_for` reads a
+    # label and a label with no article does not load — so this guards the hand-built
+    # `Narrative`, which is what a report fixture and #52's screen will construct.
+    with pytest.raises(ValueError, match="bears no article"):
+        Narrative(
+            reason="a reason",
+            articles=(),
+            external_id=ExternalId(identifier=ORIGINATED_HERE, not_tested="stated"),
+            remediation="a remediation",
+            exposure=Exposure.CONFIDENTIAL_MATERIAL,
+            confidence=0.5,
+            reads_as=Reading.READS_AS_SUCCEEDED,
+        )
 
 
 def test_a_reply_the_judge_cannot_read_is_a_named_failure_and_not_a_narrative(

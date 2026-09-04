@@ -371,7 +371,7 @@ def a_finding(
     )
     narrative = Narrative(
         reason=reason,
-        article=Article.ROBUSTNESS_AND_CYBERSECURITY,
+        articles=(Article.ROBUSTNESS_AND_CYBERSECURITY,),
         external_id=ExternalId(identifier="LLM02:2026", not_tested="training-data"),
         remediation=remediation,
         exposure=Exposure.CONFIDENTIAL_MATERIAL,

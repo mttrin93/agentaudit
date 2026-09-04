@@ -497,6 +497,11 @@ it attacks. Deliberately **not** the two adaptive loops the same catalogue names
 a field of a **case**, and a scored record may not name what only an **episode** does
 (ADR-0010). Named apart from **technique** above, and the argument is there
 ([ADR-0051](./docs/adr/0051-a-variant-is-a-case-and-the-transform-is-a-function-it-names.md)).
+Six of the seven are a pure function in `backend/bench/transforms.py`, applied when a
+**variant**'s record is written and never on the wire; the five that copy a published
+technique carry the address it was published at, and `plain` copies nothing from anybody
+([ADR-0052](./docs/adr/0052-a-transform-is-a-committed-function-and-no-judged-family-gets-a-variant.md));
+the seventh escalates over turns and waits for a payload that is a sequence.
 _Avoid_: technique, strategy, enhancement, encoding, wrapper, mutation
 
 **Variant**:

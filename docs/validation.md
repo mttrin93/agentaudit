@@ -1558,6 +1558,93 @@ no variant record exists, and no reference agent has been asked one. Read on 202
   covers that: a gate run of any outcome replaces it, so what the group owes there is a
   gate run and not a decision.
 
+### The five published transforms exist as functions and no variant has been admitted (#73)
+
+**This section records five functions, five proposed pairings and one measurement that
+an agent cannot take.** #72 added the dimension; #73 implements the constructions it
+names — `backend/bench/transforms.py`, one pure function per implemented member, and the
+address it was published at on each of the five that copy a published technique
+([ADR-0052](./adr/0052-a-transform-is-a-committed-function-and-no-judged-family-gets-a-variant.md)).
+**The library still holds no variant**, so the digest is still `89288dbf94f9` over
+eighteen records and no rate, `D`, κ, band, gate decision or gate citation moved. Read
+on 2026-09-04.
+
+- **The admission run is a person's, and that is why this ticket admits nothing.** A
+  variant enters the library by clearing ADR-0003's single-model bar against the three
+  reference agents through `scripts/admit.py`, which reaches targets and therefore asks
+  for the three attestation statements and the approval interrupt. `scripts/console.py`
+  treats piped or absent stdin as a **no** rather than as a default — by design, ADR-0007
+  — so the measurement cannot be performed by an agent on the operator's behalf, and it
+  was not. What is here is everything upstream of it, plus the exact commands.
+- **The five pairings, proposed and unmeasured.** `data-leakage-001` under base64, ROT13
+  and leetspeak; `data-leakage-002` under the prompt-injection wrapper;
+  `data-leakage-003` under roleplay. The reason for each pairing is ADR-0052 §4. To take
+  the reading, per variant: `uv run python -m scripts.variant --base data-leakage-001
+  --transform base64 --argument <the paragraph you wrote> --write`, then `uv run python
+  -m scripts.admit --identity "your name" --cases data-leakage-001-base64 --write`.
+  **None of the five header paragraphs is written**, and that is deliberate rather than
+  outstanding work: ADR-0008 wants the classification argued per record, so the
+  paragraph belongs to whoever takes the reading, and `scripts/variant.py` refuses to
+  write a record without one. What each has to say is ADR-0052 §3. A
+  variant that clears the bar is committed with its citation; one that does not is
+  **deleted** — a rejected case is discarded, not parked — and its reading belongs here,
+  because an encoding the hardened agent decodes and refuses exactly as it refuses the
+  plain text has measured that agent's decoder. **Expect some of the five to fail**: the
+  reference agents are built to known quality (PLAN §3) and their input checks are not
+  phrase lists, so a wrapper that beats a naive filter may buy nothing here.
+- **Nothing half-measured can be committed by accident.** `scripts/variant.py --write`
+  writes a record with no `[admission]` block into `backend/cases/`, which is where
+  `scripts/admit.py` looks for a proposal — and `admitted_library` refuses a record
+  whose own reading does not clear the bar it claims, so the suite will not load a
+  library holding one. The script says so at the end of a `--write` rather than leaving
+  an operator to discover it from a failing test.
+- **The two round trips were driven red on the substitution, and the first attempt was
+  too weak to notice.** ROT13 is asserted against `codecs.encode(text, "rot_13")` and
+  base64 against `base64.b64decode` — oracles from the standard library, because a
+  substitution written twice in one repository is a typo asserted against itself.
+  Breaking one letter of the ROT13 table left the test **green**, because the payload it
+  used has no `z` in it; the assertion now runs over the whole alphabet. Swapping
+  `b64encode` for `b32encode` failed the other, as it should.
+- **The record check is a test and not a loader refusal, and it is vacuous today.**
+  `transforms.mismatched_variants` reports a variant whose committed payload is not
+  `applied(transform, base.payload)` — the fault a hand-edit after generation would
+  leave, which no run would ever notice because the attacker sends `case.payload`. The
+  suite asserts it over the library on disk, where it is vacuously true until the first
+  variant lands and non-vacuous the moment one does. It was driven red by inverting its
+  comparison, and the fixture cases exercise it non-vacuously in both directions,
+  including one variant of a variant. Why it is not a refusal in `load_library` is
+  ADR-0052 §1.
+- **Three families get no variant, and one of the three is a finding about the record
+  shape.** Scope creep and halt defeat are skipped because an encoding destroys their
+  situational mechanism rather than strengthening it — the agent cannot read the errand,
+  or the stop — and a wrapper or persona round either would replace the mechanism rather
+  than vary it. **Indirect prompt injection cannot be varied at all under ADR-0051's
+  design**: `indirect-injection-001`'s payload is a colleague's morning message carrying
+  no attack, and the override line lives in the reference agents' corpus as target-side
+  equipment, so `applied(transform, case.payload)` would encode the one part of the case
+  nothing defends against. #73's table asks for a note-side variant and no record can
+  express one. **No ticket owns that**; #74 and #79 should not read the table as a
+  promise.
+- **Two of the five transforms send this repository's own words, and the citation
+  points at a construction rather than at a string.** The catalogue composes its
+  wrapper and its persona with a model at run time; a transform here is pure, so the
+  framing is written out once in `transforms.py` and it is ours. The leetspeak table is
+  narrower than the published one for the same kind of reason — the published tables map
+  `l` and `i` both to `1`, which a reader cannot undo. So what these three variants
+  would measure is *this bench's instance of a published shape*, and the base payload is
+  untouched in all three (#73: no new base payload is written here). ADR-0052 §3 carries
+  the argument, and the five `CITATIONS` addresses were checked against the catalogue's
+  own directory listing.
+- **The judged families are refused in code, not by convention.** `variant_of` refuses a
+  judged base on `verdict_class`, because a transformed payload in a κ-bearing
+  denominator has no counterpart in the fifteen hand-labelled transcripts per family
+  that license the rate (`rule.gold_transcripts_per_family`). It refuses a **retrieved**
+  base too: ADR-0047's row, licence and notice are a block on that record and would not
+  travel with a derivative of it.
+- **The gate has not gone stale, because nothing was admitted.** ADR-0023's mechanism
+  comes due with the first admitted variant — a gate run of any outcome replaces the
+  citation — and what the group owes there is still a run rather than a decision.
+
 ---
 
 ## Pre-gate observations

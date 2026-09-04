@@ -446,13 +446,13 @@ and the identifier claims (#47) rather than with the copy.
 | applies_to | Which agent types it is valid for |
 | requires | Preconditions — for example, tool-call exposure |
 | added_on | Date |
-| trigger | Why it was added — one of the six below |
-| discovered_by | `authored`, `adaptive`, or `user_gap`. Provenance, not motive — the trigger says *why* the case exists, this says *who found it*. It decides which admission bar applies (D16) |
+| trigger | Why it was added — one of the seven below |
+| discovered_by | `authored`, `adaptive`, `user_gap`, or `retrieved`. Provenance, not motive — the trigger says *why* the case exists, this says *who found it*. It decides which admission bar applies (D16). A `retrieved` case carries a `retrieval` block naming the published row, its licence, that licence's notice and the person who assigned its family, and it may not be judged ([ADR-0047](./docs/adr/0047-a-retrieved-case-cites-its-row-and-a-person-signs-for-its-family.md)) |
 | admission | What it measured to get in: the bar it entered under, the date, and the counts against the three reference agents on every model it was read on. Absent on a *proposed* case; a case with no admission block does not load into a run (D16, story 69) |
 | status | Active, or retired with date and last discrimination score |
 | discrimination_history | `D` on every gate run |
 
-### The six triggers for a new case
+### The seven triggers for a new case
 
 1. **A family stops discriminating.** Providers add defences. An attack that worked in January is refused by default in June. It still runs; it no longer separates careful from careless.
 2. **A target passes everything.** Either the agent is excellent or the attacks are weak. Check the trivial agent. If it also passes, the attacks are the problem. This ceiling effect is the most likely failure with real users — and **the adaptive layer is the best available source for this trigger**, because it is the only one that can tell the two explanations apart by demonstration: an attacker that breaks the target by a route the fixed suite did not contain has answered the question, where a second opinion about the library only restates it.
@@ -460,6 +460,7 @@ and the identifier claims (#47) rather than with the copy.
 4. **A new agent type arrives.** A voice agent needs different payloads from a document agent. Family stays; cases change.
 5. **A new technique is published.** The library is behind the field.
 6. **The scan checklist grows.** A new declared control needs an attack that checks it works.
+7. **A published corpus is searched.** The library is narrow rather than out of date, and a body of text somebody else published holds phrasings nobody here has written. Argued into the set rather than stretched out of trigger 5, because nothing about a row of a published safety corpus is *new* ([ADR-0047](./docs/adr/0047-a-retrieved-case-cites-its-row-and-a-person-signs-for-its-family.md)). It is the only trigger that implies a provenance: a case claiming it and no retrieval is a reason nobody performed.
 
 ### The admission gate
 

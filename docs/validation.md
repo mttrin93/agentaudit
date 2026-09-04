@@ -1151,6 +1151,80 @@ produced a second reading by the same reader and called it a validation of two t
 It stays recorded above as unvalidated, and it is the same gap this section reports
 about itself.
 
+### A retrieved case has a shape, a bar and a trigger, and nothing has ever been retrieved into one (#65)
+
+**Nothing in this section is a measurement, and saying so is the point.** #65 is type and
+record work: it gives a retrieved payload a provenance, a trigger, an admission bar and a
+place on a case record
+([ADR-0047](./adr/0047-a-retrieved-case-cites-its-row-and-a-person-signs-for-its-family.md)).
+What has *never* been validated is everything the shape is for. Read on 2026-09-04.
+
+- **No case in the library is retrieved, and none may be until a person assigns one.**
+  `backend/cases/` holds eighteen cases, all `authored`, none claiming
+  `published_corpus_searched`. That is asserted rather than remarked —
+  `test_no_case_in_the_library_claims_the_seventh_trigger_yet` pins it at zero, and it
+  was tripped on purpose with a valid retrieved record written into the library and then
+  removed. The instrument that would supply a family assignment was measured at **κ =
+  0.16 against a declared floor of 0.40** in the section above, so the seam ADR-0046
+  built is what licenses anything here, and the seam requires a person. `assigned_by` is
+  required on the record and refuses a blank.
+- **The claim that a retrieved case faces the single-model bar is not measured and #67 is
+  where it is tested.** ADR-0047 decision 1 argues that a corpus assembled with no
+  knowledge of these three reference agents applies no selection pressure toward them,
+  and answers the counter-argument — retrieval selects by nearness to a declared query —
+  by pointing at what the queries are: this project's own words, no case payload among
+  them, asserted against the library on disk. **What that argument has never been given
+  is a reading.** A retrieved case that cleared the single-model bar and then failed to
+  separate on a second underlying model would falsify it, and no retrieved case has ever
+  been run against anything.
+- **The disclosure classification is per case and no case has been classified.**
+  ADR-0008's amendment for retrieved payloads says *already published under a licence
+  that permits redistribution* is a strong argument made one payload at a time, in the
+  record's own header, the way `halt-defeat-001` and `data-leakage-001` each argue their
+  own. Nothing has been argued, because nothing has been written. **This is a second and
+  independent reason #62's plan is not available from this corpus**, on top of the yield
+  figures above: the 739 candidates that exist are `direct_prompt_injection` template
+  overrides whose wording is the working part, so each one has to be argued past the
+  transferability test individually rather than in bulk.
+- **The library version moved with no case record in the diff, and that is the designed
+  answer rather than a case written by accident.** `LibraryVersion.of(load_library(...))`
+  is now **18 cases, `sha256:d0a4deb2789e`**, where #63 and #64 both read
+  `sha256:84a94f471260`. `Case` gained a `retrieval` field, and `_versioned` builds the
+  digest from `dataclasses.fields` precisely so that a field added to a case is versioned
+  unless somebody deliberately exempts it — so a case's *shape* moving is a library
+  version moving, over eighteen records none of which changed. The count is what says no
+  case was written. ADR-0045's tripwire caught it, which is what it is for; #66 and #67
+  will move it again. The stored **gate citation** still cites `90a8ebcc3d0c`, which was
+  already superseded before this ticket, and a citation naming a superseded library
+  version is what ADR-0023 makes it: a fact about when the gate was last run.
+- **The golden report rendering digest did not move**, and nothing the gate reads did.
+  No rate, `D`, κ, band, gate decision or gate citation changed; `backend/corpus/` is
+  untouched; `test_corpus_isolation.py`'s two AST direction tests are unchanged and still
+  pass, so retrieval is still not a second edge into the scored side.
+- **The audit walk has no caller outside a test, and #67 is where it gets one.** #65's
+  price for storing an address was *"a runtime dependency on the corpus being present,
+  and that price has to be named"*. ADR-0047 does not pay that price — nothing at load
+  resolves anything — and what it substitutes is an audit walk: a reader with the corpus
+  asks `source.RETRIEVAL.resolves` whether a stored address was written under today's
+  inputs. **`resolves` is called nowhere in the tree but `test_retrieved_case.py`.** No
+  script and no report line surfaces a non-resolving address, so a case record citing a
+  superseded revision is discoverable today only by somebody who writes the code to look.
+  Not built here, because it would be a script over an empty set — the reason ADR-0046
+  gives for refusing a proposer nothing could exercise — and it is the first thing #67
+  should want once a retrieved case exists.
+- **`applies_to` is untouched and follows the existing records.** #65's third refusal
+  asks for a value and says *"do not invent a third string here"*; every record on disk
+  says `["assistant", "document"]` and so does this ticket's fixture. Nothing asserts
+  it, deliberately: the agent-type vocabulary is a known open question, and a test
+  pinning the two strings would freeze a vocabulary that is deferred on purpose. So #67
+  can still invent a third string, and nothing here would stop it.
+- **One defect was found and fixed on the way, and it was the fourth provenance that
+  exposed it.** `admission.LibraryProvenance` accepted a census that left a provenance
+  out and raised a `KeyError` in the middle of printing a gate run's provenance block —
+  the worst moment to find out, and invisible until a member was added. Its docstring had
+  claimed since it was written that every provenance appears whether or not it is used;
+  that claim is now enforced where the mapping is built.
+
 ---
 
 ## Pre-gate observations

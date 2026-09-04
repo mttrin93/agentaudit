@@ -741,15 +741,19 @@ def test_a_record_cannot_be_retired_without_saying_when_and_on_what(
         )
 
 
-# --- The closed set of six triggers -------------------------------------------
+# --- The closed set of triggers, now seven ------------------------------------
 
 
-def test_the_six_triggers_are_a_closed_set_and_every_case_names_one(
+def test_the_seven_triggers_are_a_closed_set_and_every_case_names_one(
     library: list[Case],
 ) -> None:
     # Spec story 75. "Why does this case exist" always has an answer, and it comes
     # from a list nobody can extend by writing a sentence into a record.
-    assert len(Trigger) == 6
+    #
+    # Six until #65. The seventh is argued in ADR-0047 rather than stretched out of
+    # the fifth, and the count is asserted so that an eighth is a decision with an
+    # ADR rather than a member somebody appended.
+    assert len(Trigger) == 7
     counts = trigger_counts(library)
     assert set(counts) == set(Trigger)
     assert sum(counts.values()) == len(library)

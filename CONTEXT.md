@@ -365,9 +365,27 @@ readings of one thing (ADR-0022). Scoping the window is not editing the series; 
 readings outside it are kept, printed, and never deleted.
 _Avoid_: the last two runs, the recent history, the retirement history
 
+**Provenance**:
+Who found a case — `authored`, `adaptive`, `user_gap` or `retrieved` — held as
+`discovered_by` on the record, and the field that selects its **admission** bar
+([ADR-0012](./docs/adr/0012-adaptive-discovered-cases-face-a-cross-model-admission-bar.md),
+[ADR-0047](./docs/adr/0047-a-retrieved-case-cites-its-row-and-a-person-signs-for-its-family.md)).
+Not a **trigger**, which is *why* the case exists, and the two are deliberately
+independent in all but one direction. Not a **provenance block** either, which is the
+part of a **signed report** recording who ran it — that is about a run and this is about
+a case, and no type carries both.
+_Avoid_: origin, discovered_by (in prose), where the case came from
+
 **Trigger**:
-The stated reason a case was added to the library. One of six.
-_Avoid_: source, origin, motivation
+The stated reason a case was added to the library. One of seven — PLAN §6's six, plus
+*a published corpus was searched*, which was argued into the set rather than stretched
+out of *a new technique was published*, because nothing about a row of a published
+**corpus** is new and the library was narrow rather than behind **the field**
+([ADR-0047](./docs/adr/0047-a-retrieved-case-cites-its-row-and-a-person-signs-for-its-family.md)).
+Never provenance, which is *who found it*: a gap a user reported and somebody filled
+from a corpus is the third trigger and the fourth provenance, and the two fields exist
+to say that without contradiction.
+_Avoid_: source, origin, motivation, provenance
 
 **Corpus**:
 A published body of third-party material this project *searches* while writing cases,
@@ -393,8 +411,13 @@ so that *retrieved* can never be read as *admitted* — the step from a candidat
 case is a **family assignment**, which is a human judgement about which of the six a
 phrasing belongs to, and a published safety taxonomy answers no part of that question. A **canary** is not a
 candidate and neither is a **payload**: a candidate is somebody else's published text
-that nothing in this bench has yet decided anything about.
-_Avoid_: retrieved case, hit, match, result, proposal
+that nothing in this bench has yet decided anything about. Once a person has made that
+**family assignment** and the payload has cleared **admission**, what exists is a
+**case** whose provenance is *retrieved* — so *retrieved case* names that, and is not
+available for the thing no judgement has been made about
+([ADR-0047](./docs/adr/0047-a-retrieved-case-cites-its-row-and-a-person-signs-for-its-family.md)).
+No **case** in the library is one today.
+_Avoid_: retrieved case (for a candidate), hit, match, result, proposal
 
 **Family assignment**:
 The judgement that one **candidate** belongs to one **family**, and the instrument that
@@ -410,7 +433,11 @@ every case grown from a **corpus** is `deterministic`, so no retrieved phrasing 
 reach a κ. The instrument carries a measured agreement figure and a declared floor on
 the terms adjudication's κ is held to, and as read on 2026-09-04 it is **below that
 floor**: what licenses its use is not the figure but the seam, and its proposals say so
-on every line they print (docs/validation.md).
+on every line they print (docs/validation.md). **The person travels onto the case
+record**: a `retrieved` case carries who assigned its family, and one that names nobody
+does not load, because a record with no person on it is the instrument's proposal
+wearing a record's type
+([ADR-0047](./docs/adr/0047-a-retrieved-case-cites-its-row-and-a-person-signs-for-its-family.md)).
 _Avoid_: label, labelling, labeller, classification, tagging, the candidate's family
 
 ### Human input
@@ -479,7 +506,8 @@ The user's recorded statement that they are authorised to test the target, that 
 _Avoid_: consent, agreement, terms, disclaimer
 
 **Provenance block**:
-The part of a report recording who ran it, against what, under which attestation, with which library version.
+The part of a report recording who ran it, against what, under which attestation, with
+which library version. Not **provenance**, which is a fact about a **case**.
 _Avoid_: metadata, header, audit trail
 
 **Stored copy**:

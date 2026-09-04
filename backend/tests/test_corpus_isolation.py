@@ -65,8 +65,16 @@ def test_the_library_version_did_not_move() -> None:
     # A deliberate tripwire, and the ticket that is *supposed* to trip it is #67,
     # which lands twenty cases in each grown family. A digest change with no case
     # record in the diff is the failure this pins.
+    #
+    # **It tripped in #65 with no case record in the diff, and that was the designed
+    # answer rather than the failure.** `Case` gained a `retrieval` field, and
+    # `_versioned` reads `dataclasses.fields` precisely so that a field added to a
+    # case is versioned unless somebody deliberately exempts it — so the shape of a
+    # case moving is a library version moving, and eighteen unchanged records now
+    # digest to something else. The count is what says no case was written. Recorded
+    # in docs/validation.md and in ADR-0047; the previous value was `84a94f471260`.
     cases = load_library(CASES_DIR)
-    assert LibraryVersion.of(cases) == LibraryVersion(cases=18, digest="84a94f471260")
+    assert LibraryVersion.of(cases) == LibraryVersion(cases=18, digest="d0a4deb2789e")
 
 
 def test_nothing_in_the_bench_can_read_a_retrieval_result() -> None:

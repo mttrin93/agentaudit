@@ -465,6 +465,27 @@ class LibraryProvenance:
     live: Mapping[DiscoveredBy, int]
     retired: Mapping[DiscoveredBy, int]
 
+    def __post_init__(self) -> None:
+        """Refuse a census that leaves a provenance out.
+
+        The paragraph above says every provenance appears whether or not it is used,
+        and `stated()` depends on it: a mapping built by hand from the members that
+        existed when it was written raises a `KeyError` halfway through printing a
+        gate run's provenance block. Checked here so the failure lands where the
+        mapping was written.
+        """
+        for name, census in (("live", self.live), ("retired", self.retired)):
+            missing = sorted(
+                member.value for member in DiscoveredBy if member not in census
+            )
+            if missing:
+                raise ValueError(
+                    f"the {name} census names no count for {missing}. Every "
+                    "provenance appears whether or not it is used, because a "
+                    "fraction with a missing denominator reads as an absence of the "
+                    "thing rather than as a count of zero"
+                )
+
     @property
     def live_total(self) -> int:
         return sum(self.live.values())

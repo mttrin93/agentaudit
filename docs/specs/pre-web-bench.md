@@ -132,7 +132,7 @@ The adaptive layer is in *this* spec, not the next one, for one reason: it is a 
 72. As a bench engineer, I want each case's discrimination score stored on every gate run, so that decay is a series rather than a surprise.
 73. As a bench engineer, I want a case below 0.25 on two consecutive runs marked retired, so that one bad run cannot retire a working case.
 74. As a bench engineer, I want retired cases kept with their date and final score rather than deleted, so that a case that stopped working is evidence the field moved.
-75. As a bench engineer, I want the six triggers recorded as an enumerable set, so that "why does this case exist" always has an answer from a closed list.
+75. As a bench engineer, I want the seven triggers recorded as an enumerable set, so that "why does this case exist" always has an answer from a closed list. Six of them are PLAN §6's; the seventh — a published corpus was searched — is argued in ADR-0047 rather than stretched out of the fifth, and it is the one that implies a provenance.
 
 ### Reproducibility
 
@@ -219,7 +219,7 @@ run_gate(library, target_urls) -> GateResult
 
 **Adaptive statistics are pure functions over recorded episodes**, on the same terms as the gate statistics: `A_break`, median turns-to-first-success with censoring, and the paired one-sided sign test take recorded episodes and return values, with no I/O and no model calls. `T = 8` and `k = 2` are declared in `AdaptiveBudget`, which is deliberately **not** `GateRule`.
 
-**A case carries `discovered_by`,** one of `authored`, `adaptive` or `user_gap`, and it selects the admission bar. `adaptive` requires `D ≥ 0.4` with disjoint intervals on the second underlying model as well as the first, reusing the model-swap seam that already exists as configuration. Per ADR-0012.
+**A case carries `discovered_by`,** one of `authored`, `adaptive`, `user_gap` or `retrieved`, and it selects the admission bar. `adaptive` requires `D ≥ 0.4` with disjoint intervals on the second underlying model as well as the first, reusing the model-swap seam that already exists as configuration. Per ADR-0012. `retrieved` keeps the single-model rule on a third reason of its own — a published corpus was assembled with no knowledge of these three agents — and carries a `retrieval` block naming the row, its licence, that licence's notice and the person who assigned its family. Per ADR-0047.
 
 ## Testing Decisions
 

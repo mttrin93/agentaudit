@@ -225,21 +225,32 @@ def test_the_adaptive_fraction_of_the_live_library_is_computed(
     assert "0.00 adaptive-discovered" in stated
 
 
+def test_a_census_that_leaves_a_provenance_out_is_refused_where_it_is_built() -> None:
+    # `stated()` reads every member, so a census built by hand from the members that
+    # happened to exist when it was written raises a `KeyError` in the middle of
+    # printing a gate run — the worst moment to find out. The claim that every
+    # provenance appears whether or not it is used is enforced at construction, so a
+    # fifth member fails where the mapping is written rather than where it is read.
+    total = dict.fromkeys(DiscoveredBy, 0)
+    short: dict[DiscoveredBy, int] = {
+        member: 0 for member in DiscoveredBy if member is not DiscoveredBy.RETRIEVED
+    }
+
+    with pytest.raises(ValueError, match="retrieved"):
+        LibraryProvenance(live=short, retired=total)
+    with pytest.raises(ValueError, match="retrieved"):
+        LibraryProvenance(live=total, retired=short)
+
+
 def test_the_retirement_rate_is_grouped_by_discovered_by() -> None:
     # Adaptive-discovered cases retiring faster than authored ones is the
     # fingerprint of overfitting, which is why the rate is per provenance and never
     # one number over the library.
     provenance = LibraryProvenance(
-        live={
-            DiscoveredBy.AUTHORED: 3,
-            DiscoveredBy.ADAPTIVE: 1,
-            DiscoveredBy.USER_GAP: 0,
-        },
-        retired={
-            DiscoveredBy.AUTHORED: 1,
-            DiscoveredBy.ADAPTIVE: 3,
-            DiscoveredBy.USER_GAP: 0,
-        },
+        live=dict.fromkeys(DiscoveredBy, 0)
+        | {DiscoveredBy.AUTHORED: 3, DiscoveredBy.ADAPTIVE: 1},
+        retired=dict.fromkeys(DiscoveredBy, 0)
+        | {DiscoveredBy.AUTHORED: 1, DiscoveredBy.ADAPTIVE: 3},
     )
 
     assert provenance.retirement_rate(DiscoveredBy.AUTHORED) == 0.25

@@ -53,6 +53,7 @@ from backend.bench.library import (
     CaseStatus,
     JudgedCondition,
     LibraryVersion,
+    RetrievedFrom,
     SuccessCondition,
     load_case,
     load_library,
@@ -104,6 +105,8 @@ def case_record(case: Case) -> str:
             f"not_tested = {_multiline(case.external_id.not_tested)}",
         )
     )
+    if case.retrieval is not None:
+        lines.extend(_retrieval(case.retrieval))
     if case.success_condition is not None:
         lines.extend(_success_condition(case.success_condition))
     if case.judged_condition is not None:
@@ -124,6 +127,28 @@ def case_record(case: Case) -> str:
     if case.retirement is not None:
         record += retirement_block(case.retirement.retired_on)
     return record
+
+
+def _retrieval(retrieval: RetrievedFrom) -> list[str]:
+    """The `[retrieval]` block a case retrieved from a published corpus carries.
+
+    Four values and all four are written, because a record that lost any of them
+    reads back as a payload with no provenance and `Case.__post_init__` refuses it
+    — the round trip `enter` performs is where that would be caught, which is the
+    point of writing the whole block rather than the fields a caller thought of
+    ([ADR-0047](../../docs/adr/0047-a-retrieved-case-cites-its-row-and-a-person-signs-for-its-family.md)).
+
+    The attribution is multi-line because it is a notice a person reads and it does
+    not fit a line; the other three are single-line values on `_basic`'s terms.
+    """
+    return [
+        "",
+        "[retrieval]",
+        f"address = {_basic(retrieval.address)}",
+        f"licence = {_basic(retrieval.licence)}",
+        f"assigned_by = {_basic(retrieval.assigned_by)}",
+        f"attribution = {_multiline(retrieval.attribution)}",
+    ]
 
 
 def admission_block(

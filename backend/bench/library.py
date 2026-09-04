@@ -155,17 +155,25 @@ class VerdictClass(StrEnum):
 
 
 class Trigger(StrEnum):
-    """Why a case exists. One of six, so the library's growth is auditable.
+    """Why a case exists. One of seven, so the library's growth is auditable.
 
-    A closed set of exactly the six reasons PLAN §6 states, and closed is the
-    whole of the point: a library whose motives are free text can be grown by
-    anybody who can think of a sentence, and "why does this case exist" then has as
-    many answers as it has authors. Every member says what it means in `stated()`,
-    so the answer a case gives is the same answer whoever reads the record.
+    A closed set of the six reasons PLAN §6 states plus the one ADR-0047 argues, and
+    closed is the whole of the point: a library whose motives are free text can be
+    grown by anybody who can think of a sentence, and "why does this case exist" then
+    has as many answers as it has authors. Every member says what it means in
+    `stated()`, so the answer a case gives is the same answer whoever reads the record.
 
     Distinct from `DiscoveredBy`, which says *who* found the case. A case can be
     triggered by a published technique and still have been found by the adaptive
     attacker, and the two answers are not interchangeable.
+
+    **One member implies a provenance and the rest imply none.**
+    `PUBLISHED_CORPUS_SEARCHED` names an act only retrieval performs, so a case
+    claiming it and not `DiscoveredBy.RETRIEVED` is refused in `Case.__post_init__`.
+    That is one direction only: a gap a user reported and somebody filled out of the
+    corpus is `USER_REPORTED_GAP` by trigger and `RETRIEVED` by provenance, which is
+    the very distinction the paragraph above exists to keep available (ADR-0047
+    decision 2).
     """
 
     FAMILY_STOPPED_DISCRIMINATING = "family_stopped_discriminating"
@@ -174,9 +182,10 @@ class Trigger(StrEnum):
     NEW_AGENT_TYPE = "new_agent_type"
     NEW_TECHNIQUE_PUBLISHED = "new_technique_published"
     SCAN_CHECKLIST_GREW = "scan_checklist_grew"
+    PUBLISHED_CORPUS_SEARCHED = "published_corpus_searched"
 
     def stated(self) -> str:
-        """The reason in the words PLAN §6 states it in.
+        """The reason in the words PLAN §6 states it in, and the seventh in ADR-0047's.
 
         The match has no fallback branch on purpose: a seventh trigger must fail the
         type check rather than exist as a member no reader can be given a reason for.
@@ -213,6 +222,12 @@ class Trigger(StrEnum):
                 return (
                     "the scan checklist grew — a new declared control needs an "
                     "attack that checks it works"
+                )
+            case Trigger.PUBLISHED_CORPUS_SEARCHED:
+                return (
+                    "a published corpus was searched — the library was narrow "
+                    "rather than out of date, and a body of text somebody else "
+                    "published held phrasings nobody here had written"
                 )
 
 
@@ -257,6 +272,24 @@ class DiscoveredBy(StrEnum):
     USER_GAP = "user_gap"
     """Written because a user reported an exposure the library did not cover. Not
     fitted to the reference agents either, so it keeps the single-model rule."""
+
+    RETRIEVED = "retrieved"
+    """Found by searching a published **corpus**, and assigned to its family by a
+    person.
+
+    Last in the set rather than beside `AUTHORED`, because the provenance census
+    prints in this order and a member inserted above one already counted would
+    reorder a line readers of two gate runs compare
+    (`admission.LibraryProvenance.stated`).
+
+    A payload from here is somebody else's published text, so what it carries and
+    what it may not is
+    [ADR-0047](../../docs/adr/0047-a-retrieved-case-cites-its-row-and-a-person-signs-for-its-family.md):
+    a `RetrievedFrom` block naming the row, the licence it was published under and
+    the person who assigned its family, and no route by which the family could have
+    been assigned by an instrument
+    ([ADR-0046](../../docs/adr/0046-a-family-assignment-is-proposed-here-and-decided-by-a-person.md)).
+    """
 
 
 class AdmissionBar(StrEnum):
@@ -979,6 +1012,82 @@ class Retirement:
 
 
 @dataclass(frozen=True)
+class RetrievedFrom:
+    """The row a retrieved case's payload was published as, and who signed for it.
+
+    Present on exactly the cases whose `discovered_by` is `RETRIEVED`, and the
+    pairing is enforced in `Case.__post_init__` on the terms `status` and
+    `retirement` are paired on
+    ([ADR-0047](../../docs/adr/0047-a-retrieved-case-cites-its-row-and-a-person-signs-for-its-family.md)).
+
+    **Four fields and each one answers a different reader.** `address` is the
+    publisher's own row id under a pinned revision, so *which* text this is can be
+    checked against the publisher without this repository's help. `licence` and
+    `attribution` are the terms it was published under and the notice those terms ask
+    to travel with the use — a payload committed under CC BY 4.0 with no notice beside
+    it is a licence breach rather than an untidy record. And `assigned_by` is the
+    person whose judgement put the payload in this family, which is the one field the
+    instrument of
+    [ADR-0046](../../docs/adr/0046-a-family-assignment-is-proposed-here-and-decided-by-a-person.md)
+    can never supply: it proposes, a person decides, and a record with nobody on it is
+    the instrument's answer wearing a record's type.
+
+    **Nothing here is resolved by anything that runs.** The payload is on the record,
+    so a run needs no corpus, no index and no network, and there is no load-time
+    resolution that could fail and shrink a denominator. What the address buys is
+    audit rather than execution: a reader with the corpus asks
+    `source.RETRIEVAL.resolves` whether this address was written under the inputs the
+    index holds today, and a `False` says the record predates a re-index rather than
+    that the case is broken. That walk is a person's, because `backend/bench/` may not
+    import `backend/corpus/` at all (ADR-0045 decision 6) — which is why the shape of
+    an address is checked here and its resolution is not.
+    """
+
+    address: str
+    licence: str
+    attribution: str
+    assigned_by: str
+
+    def __post_init__(self) -> None:
+        """Refuse a record that cites nothing, says nothing, or names nobody.
+
+        The address is checked for *shape* and never resolved, and the shape is
+        checked here rather than by `corpus.documents.CorpusAddress.parse` because
+        this module may not import that one (ADR-0045 decision 6). Two readers of one
+        form, kept in step by `test_retrieved_case.py` rather than by an import that
+        would be the second edge ADR-0010 leaves no room for.
+        """
+        rest, _, row = self.address.rpartition("#")
+        identifier, _, revision = rest.rpartition("@")
+        if not (identifier and revision and row):
+            raise ValueError(
+                f"{self.address!r} is not a corpus address: expected "
+                "<corpus>@<revision>#<row>. An address that names no revision is a "
+                "reference into whatever the corpus happens to be today, and a case "
+                "record citing one cites nothing a reader can check"
+            )
+        if not self.licence.strip():
+            raise ValueError(
+                f"{self.address!r} names no licence. The payload is somebody else's "
+                "published text, and the terms it was published under are what make "
+                "committing it lawful rather than merely convenient (ADR-0047)"
+            )
+        if not self.attribution.strip():
+            raise ValueError(
+                f"{self.address!r} names a licence and carries no attribution "
+                "notice. A licence that permits redistribution asks that its notice "
+                "travel with the use, and the use is this record (`source.ATTRIBUTION`)"
+            )
+        if not self.assigned_by.strip():
+            raise ValueError(
+                f"{self.address!r} has a family and nobody who assigned it. A family "
+                "assignment is a person's judgement (ADR-0046), so an unattributed "
+                "one is an instrument's proposal wearing a record's type — and the "
+                "instrument was read at kappa 0.16 against a floor of 0.40"
+            )
+
+
+@dataclass(frozen=True)
 class Case:
     id: str
     family: AnyFamily
@@ -1045,6 +1154,15 @@ class Case:
     verdict has to be re-derivable by a reader holding the record and the transcripts
     (ADR-0004), and a first turn that lived in code would be evidence nobody outside
     this repository could check.
+    """
+
+    retrieval: RetrievedFrom | None = None
+    """Where this case's payload was published, on a case retrieved from a corpus.
+
+    `None` on every case a person wrote, which is every case in the library today.
+    Versioned like every other field — `_versioned` reads `dataclasses.fields`, so
+    adding this one moved the library digest, which is the direction that default has
+    to point in (ADR-0047).
     """
 
     admission: AdmissionRecord | None = None
@@ -1124,6 +1242,7 @@ class Case:
                 "could ever be run against"
             )
 
+        self._refuse_a_provenance_its_record_disagrees_with()
         self._refuse_a_same_turn_planting()
         self._refuse_a_canary_the_wrong_channel_spells_out()
         self._refuse_a_canary_a_nonce_could_be_confused_with()
@@ -1190,6 +1309,56 @@ class Case:
                         "(ADR-0004), so a judged case holding one would have its "
                         "verdict decided by the deterministic path after all"
                     )
+
+    def _refuse_a_provenance_its_record_disagrees_with(self) -> None:
+        """Keep `discovered_by`, the retrieval block, the trigger and the verdict
+        class from ever saying different things about where this payload came from.
+
+        Four refusals and each one closes a different way in
+        ([ADR-0047](../../docs/adr/0047-a-retrieved-case-cites-its-row-and-a-person-signs-for-its-family.md)).
+        The **pairing** is `status` and `retirement`'s discipline applied to
+        provenance: a retrieved case with no block cites nothing, and a block on any
+        other provenance is a citation of material that payload did not come from.
+
+        The **trigger** implication runs one way and only one, for the reason
+        ADR-0047 decision 2 gives; `Trigger`'s own docstring carries the consequence
+        for a reader of that enumeration.
+
+        The **verdict class** refusal is #62's invariant carried by the type rather
+        than remarked: no retrieved phrasing can reach an adjudicator's κ. It is
+        stated over `verdict_class` and not over a list of family names, and the
+        family-level half of the same refusal is in `load_library`, which can see the
+        records this one cannot.
+        """
+        retrieved = self.discovered_by is DiscoveredBy.RETRIEVED
+        if retrieved and self.retrieval is None:
+            raise ValueError(
+                f"{self.id} is {self.discovered_by} and cites no corpus row. A "
+                "retrieved payload is somebody else's published text, so a record "
+                "that does not say whose, under what licence, and who assigned its "
+                "family is a payload with no provenance at all (ADR-0047)"
+            )
+        if self.retrieval is not None and not retrieved:
+            raise ValueError(
+                f"{self.id} is {self.discovered_by} and cites a corpus row. One of "
+                "the two is wrong, and a citation of material a payload did not come "
+                "from is worse than none"
+            )
+        if self.trigger is Trigger.PUBLISHED_CORPUS_SEARCHED and not retrieved:
+            raise ValueError(
+                f"{self.id} exists because {Trigger.PUBLISHED_CORPUS_SEARCHED.value} "
+                f"and was found by {self.discovered_by}. The seventh trigger names an "
+                "act only retrieval performs, so a case claiming it and no retrieval "
+                "is a reason nobody performed"
+            )
+        if retrieved and self.verdict_class is VerdictClass.JUDGED:
+            raise ValueError(
+                f"{self.id} is retrieved and judged. A judged verdict rests on an "
+                "adjudicator's κ against the gold set (ADR-0013), and a retrieved "
+                "phrasing inside a κ-gated denominator is material nothing here "
+                "measured reaching the one figure this bench has to earn. Every case "
+                "grown from a corpus is deterministic (#62, ADR-0046)"
+            )
 
     def _refuse_a_same_turn_planting(self) -> None:
         """Keep a persistence case from being answerable inside one turn.
@@ -1455,8 +1624,39 @@ def trigger_counts(cases: Iterable[Case]) -> dict[Trigger, int]:
 
 def load_library(directory: Path) -> list[Case]:
     """Load every case record in a directory, ordered by file name for a
-    stable run order."""
-    return [load_case(path) for path in sorted(directory.glob("*.toml"))]
+    stable run order.
+
+    One cross-record refusal, on `load_elective`'s terms: a retrieved case may not
+    join a family that a judged case belongs to. `Case.__post_init__` refuses a
+    retrieved case that is *itself* judged and cannot see this half — the reason both
+    ends refuse is
+    [ADR-0047](../../docs/adr/0047-a-retrieved-case-cites-its-row-and-a-person-signs-for-its-family.md)
+    decision 4.
+
+    **The judged set is read off the records in this directory**, which is what makes
+    a third family becoming judged cost nothing here, and is also the limit of the
+    check: a family whose records straddled `backend/cases/` and its `elective/`
+    subdirectory would be read as two families by two calls. Nothing does — the two
+    judged families are both among the six, and `load_elective` refuses one of the
+    six in the tier's directory.
+    """
+    cases = [load_case(path) for path in sorted(directory.glob("*.toml"))]
+    judged = {
+        case.family for case in cases if case.verdict_class is VerdictClass.JUDGED
+    }
+    astray = sorted(
+        case.id
+        for case in cases
+        if case.discovered_by is DiscoveredBy.RETRIEVED and case.family in judged
+    )
+    if astray:
+        raise ValueError(
+            f"{astray} are retrieved and sit in a family that holds a judged case. "
+            "A judged family's rate rests on an adjudicator's κ against the gold set "
+            "(ADR-0013), and a retrieved phrasing in that denominator is material "
+            "nothing here measured reaching the one figure this bench has to earn"
+        )
+    return cases
 
 
 ELECTIVE_DIRECTORY = "elective"
@@ -1537,9 +1737,48 @@ def load_case(path: Path) -> Case:
         discovered_by=DiscoveredBy(record["discovered_by"]),
         status=CaseStatus(record["status"]),
         citation=record.get("citation"),
+        retrieval=_retrieval(record.get("retrieval")),
         admission=_admission(record.get("admission")),
         history=history,
         retirement=_retirement(record.get("retirement"), history),
+    )
+
+
+RETRIEVAL_FIELDS = ("address", "licence", "attribution", "assigned_by")
+"""What a `[retrieval]` block has to say, named once for the reader and the refusal.
+
+A tuple rather than four `block[...]` lookups, because the four lookups raise a
+`KeyError` naming the first key missing and nothing else — and the reader of a
+half-written record needs the whole list, in a sentence of the shape every other
+refusal in this module raises.
+"""
+
+
+def _retrieval(block: dict[str, Any] | None) -> RetrievedFrom | None:
+    """The `[retrieval]` block of a record, or `None` for a case a person wrote.
+
+    Every field is read rather than defaulted, and a block that lost one is refused
+    here with a `ValueError` naming what is missing. Defaulting any of them would put
+    an empty string in front of `RetrievedFrom`, which would refuse it for a reason
+    that reads like a judgement about the record's author; letting the lookup raise
+    would answer with a `KeyError`, which is the one refusal in this module a caller
+    catching `ValueError` would miss.
+    """
+    if block is None:
+        return None
+    missing = [field for field in RETRIEVAL_FIELDS if field not in block]
+    if missing:
+        raise ValueError(
+            f"a retrieval block naming {missing} is a citation with a hole in it: a "
+            "retrieved payload's provenance is the row, the licence, that licence's "
+            "notice and the person who assigned the family, and a record missing any "
+            "of the four does not say where its payload came from (ADR-0047)"
+        )
+    return RetrievedFrom(
+        address=block["address"],
+        licence=block["licence"],
+        attribution=block["attribution"],
+        assigned_by=block["assigned_by"],
     )
 
 
@@ -1611,4 +1850,12 @@ def bar_for(discovered_by: DiscoveredBy) -> AdmissionBar:
             # Neither was fitted to these three agents, so the selection pressure
             # the second bar exists to counter is not acting on it. Stated as a
             # single branch because it is one reason, not two.
+            return AdmissionBar.SINGLE_MODEL
+        case DiscoveredBy.RETRIEVED:
+            # The same answer on a third reason: a published corpus was assembled
+            # with no knowledge of these three agents. Its own branch rather than
+            # joined above because that is a third reason and not a third name for
+            # one of the two, and because it has a counter-argument to answer —
+            # ADR-0047 decision 1 states it and `test_admission.py` asserts the fact
+            # the answer rests on. #67's first gate run is where the claim is tested.
             return AdmissionBar.SINGLE_MODEL

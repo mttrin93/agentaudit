@@ -1,6 +1,6 @@
 ---
 status: accepted
-amended_by: 0046-a-family-assignment-is-proposed-here-and-decided-by-a-person.md
+amended_by: 0046-a-family-assignment-is-proposed-here-and-decided-by-a-person.md, 0047-a-retrieved-case-cites-its-row-and-a-person-signs-for-its-family.md
 ---
 
 # The corpus is a search surface and never a library

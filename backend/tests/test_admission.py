@@ -47,6 +47,7 @@ from backend.bench.library import (
     load_library,
 )
 from backend.bench.rule import DECLARED_RULE
+from backend.corpus.queries import DECLARED_QUERIES
 from backend.tests.conftest import CASES_DIR
 
 FIRST_MODEL = "openrouter:openai/gpt-4.1-nano"
@@ -141,6 +142,22 @@ def test_provenance_decides_the_bar_and_every_member_has_one() -> None:
     assert bar_for(DiscoveredBy.AUTHORED) is AdmissionBar.SINGLE_MODEL
     assert bar_for(DiscoveredBy.USER_GAP) is AdmissionBar.SINGLE_MODEL
     assert {bar_for(member) for member in DiscoveredBy} == set(AdmissionBar)
+
+
+def test_a_retrieved_case_faces_the_single_model_bar_for_a_reason_of_its_own() -> None:
+    # The fourth provenance, and the branch is its own rather than joined to the two
+    # that share its answer. A published corpus was assembled with no knowledge of
+    # these three agents, so the selection pressure ADR-0012's second bar exists to
+    # counter is not acting on the payload — and the counter-argument the branch has
+    # to answer is that a candidate is selected by nearness to a *declared query*,
+    # which is asserted here rather than argued: the queries are this project's own
+    # words, not a case payload, so the proximity is to a sentence somebody wrote
+    # about a family and not to the agents the gate admits against (ADR-0047).
+    assert bar_for(DiscoveredBy.RETRIEVED) is AdmissionBar.SINGLE_MODEL
+
+    payloads = {case.payload.strip() for case in load_library(CASES_DIR)}
+    for query in DECLARED_QUERIES.values():
+        assert query.strip() not in payloads
 
 
 def test_an_adaptive_case_that_separates_only_on_the_model_it_was_found_on_is_rejected() -> (  # noqa: E501

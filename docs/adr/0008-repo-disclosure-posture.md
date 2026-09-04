@@ -1,5 +1,6 @@
 ---
 status: accepted
+amended_by: 0047-a-retrieved-case-cites-its-row-and-a-person-signs-for-its-family.md
 ---
 
 # Repository disclosure posture
@@ -104,3 +105,46 @@ trade this posture makes for an operator reading their own agent's route, and it
 not one it would make for a document that travels.
 
 **Every adaptive-promoted case is withheld by default**, and this needs no new rule — though the amendment above changes which rule it falls under. It is not that a discovered case is originated here; origin no longer decides anything. It is that a route the attacker found by breaking a defended agent is the one artefact whose *wording* is demonstrably the working part: it defeated a target that resisted the library, so the phrasing carries something the prose does not. That is the withheld side of the amended line, and adaptive cases sit on it by their nature rather than by their provenance. The `discovered_by` field of [ADR-0012](./0012-adaptive-discovered-cases-face-a-cross-model-admission-bar.md) makes the classification mechanical rather than a judgement call at commit time.
+
+## Amendment: a payload already published under a licence ships with its citation and that licence's notice
+
+The amended line above is **transferability**, and the library it governed held one
+payload that was published elsewhere first: `data-leakage-001`, which ships committed
+*with its citation*, on the sentence "republishing what is already published protects
+nobody". #62's group grows four families out of a **corpus** of 33,416
+published human/LLM interactions
+([ADR-0045](./0045-the-corpus-is-a-search-surface-and-never-a-library.md)), so that one
+case's situation becomes the ordinary one, and the posture has to say what it decides
+before a retrieved payload is written rather than after.
+
+**Read literally, the transferability test forbids these payloads.** An Aegis injection
+row is a phrasing that transfers to a target outside this repository, and most of them
+read as exactly the reusable override the test names. Read for its reason, it permits
+them: what makes publishing a payload irreversible is that *this repository would be the
+first to publish it*, and a corpus row was published by somebody else, ungated, under
+CC BY 4.0, at a revision this repository records the SHA-256 of. The letter and the
+reason point opposite ways, so this decides rather than assumes.
+
+**Amended decision.** A payload that was **already published under a licence that
+permits redistribution** ships committed, with three things beside it and refused
+without them: the publisher's own row under a pinned revision, the licence it was
+published under, and the notice that licence asks to travel with the use. That is
+`library.RetrievedFrom`, and the argument is
+[ADR-0047](./0047-a-retrieved-case-cites-its-row-and-a-person-signs-for-its-family.md)
+decision 3. The citation is not a courtesy here: it is what distinguishes *the 33,417th
+copy of a public string* from *a phrasing this repository put into the world*, and a
+record that carries the text without it is the second thing wearing the first thing's
+clothes.
+
+**Three things this does not change, and the third is the one to say plainly.** It does
+not touch transcripts, which are still never committed. It does not touch
+adaptive-promoted cases, which are still withheld by default and are the artefact this
+posture exists for — a route that beat a defended agent is the case where wording
+demonstrably is the mechanism, and nothing published it first. And **it is not a blanket
+permission for the corpus.** The classification stays per case, stated in the record's
+header with its argument, exactly as the amendment above requires: *already published*
+is a strong argument and it is made about one payload at a time, by whoever writes the
+record, and refused case by case where it does not hold. A bulk import of a hundred
+overrides under one appeal to this paragraph is the thing the per-case rule exists to
+prevent, and it would also be the sampled slice of a corpus that ADR-0045 rejects on
+this ADR's own authority.

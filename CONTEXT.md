@@ -367,6 +367,33 @@ _Avoid_: the last two runs, the recent history, the retirement history
 The stated reason a case was added to the library. One of six.
 _Avoid_: source, origin, motivation
 
+**Corpus**:
+A published body of third-party material this project *searches* while writing cases,
+indexed by meaning and never executed. Named apart from **library** for the reason
+**elective family** is named apart from **family**: a library is what a run executes
+and what a **library version** is the digest of, so a corpus called a library would be
+either a set of run inputs no version covers or a version that moves every time an
+index is rebuilt. One today — 33,416 published human/LLM interactions — and it is a
+**build-time** instrument: a person queries it, no **run** and no **gate run** opens
+it, nothing it returns reaches a rate, a `D`, a κ or a gate decision, and what is
+committed is the *record* of the material rather than the material
+([ADR-0045](./docs/adr/0045-the-corpus-is-a-search-surface-and-never-a-library.md)).
+Not a **stored copy**, which is a transcription held in the tree; a corpus is fetched,
+searched and discarded.
+_Avoid_: dataset (for this project's use of it), the case pool, second library,
+knowledge base, the index
+
+**Candidate**:
+One row a **corpus** search returned, before anybody has judged it. Deliberately not a
+**case** and deliberately not labelled: it has no **family**, no verdict, no
+**trigger** and no criterion, and it acquires none by being retrieved. The word exists
+so that *retrieved* can never be read as *admitted* — the step from a candidate to a
+case is a human judgement about which of the six a phrasing belongs to, and a
+published safety taxonomy answers no part of that question. A **canary** is not a
+candidate and neither is a **payload**: a candidate is somebody else's published text
+that nothing in this bench has yet decided anything about.
+_Avoid_: retrieved case, hit, match, result, proposal
+
 ### Human input
 
 **Approval interrupt**:

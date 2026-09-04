@@ -60,3 +60,12 @@ wheels/
 
 # Node
 node_modules/
+
+# The vector index over the published safety corpus the LLM-list families are grown
+# from (backend/corpus/, ADR-0045). Git-ignored on /precedent/'s reasoning and one
+# reason of its own: it is rebuildable from `scripts/index_corpus.py`, it is large,
+# and committing it would put 33,416 harmful prompts in this repository, which
+# ADR-0008 forbids far more clearly than it forbids any single case payload. A
+# directory rather than a file name because ChromaDB writes a SQLite database and a
+# per-collection directory beside it.
+/corpus/

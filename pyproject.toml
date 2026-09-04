@@ -20,6 +20,14 @@ dependencies = [
     "uvicorn[standard]>=0.52.3",
 ]
 
+# The corpus index is a build-time instrument a person runs, not something the bench,
+# a run or CI ever opens (`backend/corpus/`, ADR-0045). So `chromadb` is an extra and
+# not a dependency or a dev group: `uv sync --all-groups` installs groups and leaves
+# extras alone, which is what keeps 80 transitive packages and 331 MB — measured on
+# 2026-09-04 — out of every CI job for a package nothing in CI imports.
+[project.optional-dependencies]
+corpus = ["chromadb>=1.5.9"]
+
 [dependency-groups]
 dev = [
     "mypy>=1.14",
@@ -61,3 +69,11 @@ python_version = "3.12"
 # same terms the product does.
 files = ["backend", "scripts", "frontend/e2e"]
 strict = true
+
+# `chromadb` is the corpus index's, and nothing else in this repository imports it.
+# It has no stub package and CI does not install it (see the optional extra above),
+# so it is `Any` at the one boundary that touches it — `backend/corpus/index.py`,
+# which is kept thin for exactly that reason.
+[[tool.mypy.overrides]]
+module = ["chromadb.*"]
+ignore_missing_imports = true

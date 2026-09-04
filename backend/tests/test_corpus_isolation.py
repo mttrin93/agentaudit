@@ -1,0 +1,164 @@
+"""The corpus is a search surface, and these are the tests that say so.
+
+Five claims, each of which would be prose without a test: the case library did not
+move, nothing in the bench can read a **candidate**, nothing in the corpus can write a
+case, no family a query searches for has a judged case — so no retrieved phrasing can
+reach a κ — and nothing the suite imports needs `chromadb`, which CI does not install.
+
+The last three are asserted over the tree rather than over a fixture, because what
+they forbid is a future edit rather than a present value. An import added in six
+months is exactly the way a second edge into the scored side gets built
+([ADR-0010](../../docs/adr/0010-two-layers-in-one-run-the-adaptive-layer-is-never-scored.md),
+[ADR-0045](../../docs/adr/0045-the-corpus-is-a-search-surface-and-never-a-library.md)).
+"""
+
+import ast
+from pathlib import Path
+
+import pytest
+
+from backend.bench.library import Family, LibraryVersion, VerdictClass, load_library
+from backend.corpus.index import CORPUS_STORE
+from backend.corpus.queries import DECLARED_QUERIES, query_for
+from backend.tests.conftest import CASES_DIR, imports_of
+
+ROOT = Path(__file__).resolve().parents[2]
+BENCH = ROOT / "backend" / "bench"
+CORPUS = ROOT / "backend" / "corpus"
+CORPUS_SCRIPTS = (
+    ROOT / "scripts" / "index_corpus.py",
+    ROOT / "scripts" / "retrieve_candidates.py",
+)
+
+
+def _mentions(path: Path) -> set[str]:
+    """Every identifier one file names, whether bare, attributed, or imported.
+
+    Not `conftest.imports_of`, which answers the *import* question and is what the two
+    direction tests below use. This one has to cover `library.load_library(...)` as
+    well as a bare `load_library`, because a module that imports the loader's *module*
+    can call the loader through it — so the walk reads `Attribute.attr` too, and a
+    guard that read only `Name` would have a hole exactly the shape of a qualified
+    call.
+    """
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    named: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Name):
+            named.add(node.id)
+        elif isinstance(node, ast.Attribute):
+            named.add(node.attr)
+        elif isinstance(node, ast.alias):
+            named.add(node.asname or node.name.rpartition(".")[2])
+    return named
+
+
+def test_the_library_version_did_not_move() -> None:
+    # The whole ticket, in one line. A corpus that had become a second library would
+    # show up here first, and so would a case quietly written by an ingestion run.
+    #
+    # A deliberate tripwire, and the ticket that is *supposed* to trip it is #67,
+    # which lands twenty cases in each grown family. A digest change with no case
+    # record in the diff is the failure this pins.
+    cases = load_library(CASES_DIR)
+    assert LibraryVersion.of(cases) == LibraryVersion(cases=18, digest="84a94f471260")
+
+
+def test_nothing_in_the_bench_can_read_a_retrieval_result() -> None:
+    # The dependency runs one way. The scored side takes its input from the library,
+    # and the adaptive layer reaches it through `propose_case` and nowhere else; an
+    # import in this direction is how a second edge gets built by accident.
+    reaching = {
+        path.relative_to(ROOT).as_posix()
+        for path in BENCH.rglob("*.py")
+        for imported in imports_of(path)
+        if imported.startswith("backend.corpus")
+    }
+    assert reaching == set()
+
+
+def test_the_corpus_reaches_into_the_bench_for_one_closed_set_and_no_further() -> None:
+    # `Family` is a closed enumeration of six names, and reading it is not an edge:
+    # nothing flows back. Anything else — a loader, a scorer, a case record — would be.
+    # `imports_of` yields the module *and* each name taken from it, so the assertion
+    # names the one symbol read rather than only the module it came from.
+    reaching = {
+        imported
+        for path in CORPUS.rglob("*.py")
+        for imported in imports_of(path)
+        if imported.startswith("backend.bench")
+    }
+    assert reaching == {"backend.bench.library", "backend.bench.library.Family"}
+
+
+def test_nothing_in_the_corpus_or_its_scripts_can_write_a_case() -> None:
+    # Retrieval prints candidates for a person to read. The step from a candidate to
+    # a case record is a human judgement (#64) and an admission bar (#65), and the
+    # way to be sure this ticket did not skip both is that the loader is not reachable
+    # from here at all.
+    for path in (*CORPUS.rglob("*.py"), *CORPUS_SCRIPTS):
+        named = _mentions(path)
+        assert "load_library" not in named, path
+        assert "load_case" not in named, path
+        assert "Case" not in named, path
+
+
+def test_no_family_a_query_searches_for_has_a_judged_case() -> None:
+    # This is why κ is not in this group's blast radius, and it is read off the
+    # library rather than declared: the two judged families are judged because their
+    # case records say so, and a third family becoming judged would fail here rather
+    # than quietly acquire a corpus query.
+    judged = {
+        case.family
+        for case in load_library(CASES_DIR)
+        if case.verdict_class is VerdictClass.JUDGED and isinstance(case.family, Family)
+    }
+    assert judged == {Family.DISCLOSURE_DENIAL, Family.WRONGFUL_COMMITMENT}
+    assert judged.isdisjoint(DECLARED_QUERIES)
+
+    for family in judged:
+        with pytest.raises(KeyError):
+            query_for(family)
+
+
+def _module_level(path: Path) -> set[str]:
+    """Every module name imported at a file's top level, ignoring deferred ones."""
+    names: set[str] = set()
+    for node in ast.parse(path.read_text(encoding="utf-8")).body:
+        if isinstance(node, ast.Import):
+            names.update(alias.name for alias in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.module and not node.level:
+            names.add(node.module)
+    return names
+
+
+def test_no_module_the_suite_imports_needs_chromadb() -> None:
+    # CI runs `uv sync --all-groups`, which installs dependency groups and leaves
+    # extras alone, so `chromadb` is absent there. A module-level import anywhere the
+    # suite can reach would turn a green pipeline red at collection time — and the
+    # deferred one in `index.py` is what makes the extra a real boundary rather than a
+    # packaging preference (ADR-0045 decision 5).
+    reaching = {
+        path.relative_to(ROOT).as_posix()
+        for path in (ROOT / "backend").rglob("*.py")
+        for imported in _module_level(path)
+        if imported.split(".")[0] == "chromadb"
+    }
+    assert reaching == set()
+
+    deferred = {
+        path.relative_to(ROOT).as_posix()
+        for path in (ROOT / "backend").rglob("*.py")
+        for imported in imports_of(path)
+        if imported.split(".")[0] == "chromadb"
+    }
+    assert deferred == {"backend/corpus/index.py"}
+
+
+def test_the_store_is_git_ignored_and_is_not_the_case_directory() -> None:
+    # 33,416 harmful prompts in this repository is what ADR-0008 forbids most
+    # clearly, and a store written next to the case records is a store `load_library`
+    # would be one glob away from reading.
+    assert CORPUS_STORE.name not in {path.name for path in CASES_DIR.iterdir()}
+    ignored = (ROOT / ".gitignore").read_text(encoding="utf-8")
+    assert f"/{CORPUS_STORE.name}/" in ignored

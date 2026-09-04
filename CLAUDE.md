@@ -25,6 +25,7 @@ the unit of the denominator; a turn is not an attempt.
 
 ```
 uv sync --all-groups          # install; add --locked to match CI exactly
+uv sync --extra corpus        # only to build or query the corpus index (ADR-0045)
 uv run pytest -q              # tests
 uv run mypy                   # typecheck, strict
 uv run ruff check .           # lint

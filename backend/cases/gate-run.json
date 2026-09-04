@@ -1,12 +1,13 @@
 {
   "cited": true,
-  "decided_on": "2026-08-24",
-  "document": "gate-2026-08-24T23-27-23Z.md",
+  "decided_on": "2026-09-04",
+  "document": "gate-2026-09-04T14-51-03Z.md",
   "library": {
     "cases": 18,
-    "digest": "90a8ebcc3d0c"
+    "digest": "c31a2355f065"
   },
+  "moved": null,
   "outcome": "passed",
-  "record": "gate-2026-08-24T23-27-23Z.json",
-  "stated": "the bench passed its own gate on 2026-08-24, against its three agents of known construction, at library version: 18 cases, sha256:90a8ebcc3d0c \u2014 over every field of every record that ran, so an edited payload is a different version \u2014 recorded in gate-2026-08-24T23-27-23Z.md, and as fields in gate-2026-08-24T23-27-23Z.json, where every per-family figure behind that answer is recoverable without reading a sentence. A fact about the instrument that produced the figures above, and not a verdict on this target: this target has rates, intervals and bands, and passes and fails nothing"
+  "record": "gate-2026-09-04T14-51-03Z.json",
+  "stated": "the bench passed its own gate on 2026-09-04, against its three agents of known construction, at library version: 18 cases, sha256:c31a2355f065 \u2014 over every field of every record that ran, so an edited payload is a different version \u2014 recorded in gate-2026-09-04T14-51-03Z.md, and as fields in gate-2026-09-04T14-51-03Z.json, where every per-family figure behind that answer is recoverable without reading a sentence. A fact about the instrument that produced the figures above, and not a verdict on this target: this target has rates, intervals and bands, and passes and fails nothing"
 }

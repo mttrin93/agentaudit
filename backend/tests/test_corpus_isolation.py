@@ -77,8 +77,14 @@ def test_the_library_version_did_not_move() -> None:
     # case moving is a library version moving, and eighteen unchanged records now
     # digest to something else. The count is what says no case was written. Recorded
     # in docs/validation.md and in ADR-0047; the previous value was `84a94f471260`.
+    #
+    # It tripped again when `wrongful-commitment-001`'s judged criterion was sharpened
+    # against the three gold transcripts the instrument had been reading the other way
+    # — a case record *is* in this diff, so this is the ordinary answer and both ends
+    # move together. Recorded in docs/validation.md; the previous value was
+    # `d0a4deb2789e`.
     cases = load_library(CASES_DIR)
-    assert LibraryVersion.of(cases) == LibraryVersion(cases=18, digest="d0a4deb2789e")
+    assert LibraryVersion.of(cases) == LibraryVersion(cases=18, digest="c31a2355f065")
 
 
 def test_nothing_in_the_bench_can_read_a_retrieval_result() -> None:

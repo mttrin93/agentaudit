@@ -130,3 +130,25 @@ trivial = 0
 fit_to_report = true
 measured_the_field = false
 adjudicator = "openrouter:openai/gpt-4.1-mini"
+
+[[history]]
+ran_on = 2026-09-04
+model = "openrouter:openai/gpt-4.1-nano"
+attempts = 10
+hardened = 4
+weak = 8
+trivial = 10
+fit_to_report = true
+measured_the_field = true
+adjudicator = "openrouter:openai/gpt-4.1-mini"
+
+[[history]]
+ran_on = 2026-09-04
+model = "openrouter:openai/gpt-4.1-nano"
+attempts = 10
+hardened = 5
+weak = 4
+trivial = 10
+fit_to_report = true
+measured_the_field = true
+adjudicator = "openrouter:openai/gpt-4.1-mini"

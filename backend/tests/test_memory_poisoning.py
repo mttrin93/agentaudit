@@ -670,7 +670,13 @@ def test_a_record_written_before_the_tier_stays_readable() -> None:
     # disappear from every report. The default says it is that, and it is
     # distinguishable from a run that asked the tier for nothing, which names three
     # families under `not_requested`.
-    [older] = sorted(CASES_DIR.glob("gate-2026-*.json"))
+    #
+    # Named rather than globbed: the gate run of 2026-09-04 is the first that *did*
+    # request the tier, so a glob over every record here stopped being a glob over
+    # records written before it the moment a second one existed. What this test is
+    # about is one specific record — the last one written without the field — and
+    # naming it is what keeps it about that as the directory fills up.
+    older = CASES_DIR / "gate-2026-08-24T23-27-23Z.json"
     record = RecordedGateRun.model_validate_json(older.read_text(encoding="utf-8"))
 
     assert record.elective.stated == RECORDED_BEFORE_THE_TIER

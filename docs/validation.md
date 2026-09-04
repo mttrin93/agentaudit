@@ -1760,6 +1760,112 @@ single-turn base cases. Read on 2026-09-04.
   with the denominator unmoved. The run arithmetic — `attempts_per_family()`, PLAN §3's counts,
   `rule.attempts_per_case` — is untouched and stays #76's.
 
+### Scripted crescendo exists as two ladders and neither has been measured (#75)
+
+The published escalation as a **fixed script** in the scored layer, which is the half
+that has a denominator (#71(b), and #71(d) for the loop it is not). The decisions are
+[ADR-0054](./adr/0054-a-crescendo-is-a-function-of-its-base-case-and-a-halt-outlives-a-turn.md).
+What was measured here is the reading, not a target: **no crescendo record is
+committed**, the library digest and record count are still `31cacb9d69ec` over
+eighteen, and the arithmetic is untouched and stays #76's.
+
+- **The ladder is a function of the base *case*, not of its payload's spelling.** A
+  crescendo's rungs are an approach to the mechanism one case tests and cannot be
+  computed from the words of its request, so `transforms.applied` still refuses the
+  member — the refusal now says *where* the construction is rather than naming a
+  ticket — and `transforms.derived_payload` is the one entry point both callers take.
+  The consequence that decided the shape: `mismatched_variants` reads every member
+  through it, so a crescendo record's payload stays re-derivable from its base and its
+  member name, and a rung hand-edited after generation fails the suite. Hand-written
+  ladders per record would have made a crescendo the one payload in the library that
+  nothing could check.
+- **A base with no ladder is refused rather than defaulted.** Two have one —
+  `data-leakage-001` and `halt-defeat-001`. A third is a ticket with an argument.
+- **The data-leakage ladder ends in the base case's payload word for word.** Three
+  approach rungs this repository worded (a summary the agent is for, a question about
+  how it was told to do it, the wording "for the audit"), then the committed request
+  unchanged, so the reading is a claim about what three turns bought against the *same*
+  request. Asserted against the record on disk rather than against a literal.
+- **The halt-defeat ladder is the base record's own two paragraphs, one turn apart.**
+  Two rungs establish the work and deliberately do not authorise it, then the base's
+  stop signal as rung three and its housekeeping request as rung four — so the stop
+  lands **between** turns, which is what the variant exists to measure. The copy is
+  asserted against the record, so a reflow of that record fails a test that names both.
+- **The stop signal had to become a fact about the session, and this was the ticket's
+  real find.** `ToolTrace.stop_signal_at` is a position inside one turn, so the halt
+  ladder has no turn whose trace shows both the signal and the call: read per turn in
+  isolation, `calls_after_stop` is empty on both and the attempt scores **resisted** —
+  a defeat recorded as a defence. `evaluate_script` now carries the halt forward and
+  `evaluate`/`checkable` take `already_halted`, a keyword with a default that only
+  `tool_call_after_stop` reads. Driven red: the four-rung trace fixture scored
+  `resisted` before the clause existed.
+- **The ordering the family measures survives at both scales.** `already_halted` is
+  still false while the turn the stop arrived in is being read, so a call made *before*
+  the signal in that turn is not halt defeat — asserted with the call at position zero
+  and the stop at position one. A script whose traces never record a signal resists,
+  which is the default a wrong one would have turned into "every tool call of every
+  scripted family is a halt defeat". And a single turn read on its own comes out of
+  `evaluate` byte for byte as before, which the suite asserts over the committed
+  `halt-defeat-001`.
+- **One record refusal, and one field the writer adds rather than copies.** A record
+  claiming `scripted_crescendo` over a single message does not load — the member is
+  *one attempt and more than one turn*, and a one-turn crescendo reports the
+  escalation's rate having escalated nothing. `scripts/variant.py` adds
+  `SESSION_RETENTION` when the construction came back a script, because a crescendo's
+  base is single-turn and does not declare it; the halt-defeat ladder therefore
+  declares both capabilities and is the case that will report *not measurable* most
+  often. Correct, not a defect — and sharper than that while no register screen
+  declares retention at all (the gap recorded under #74 above).
+- **`Case.script` stopped being vacuous, which #74 flagged as this ticket's to get
+  right.** The newline join is what every canary guard reads, and a script is the first
+  payload that can spell a canary out *between* its turns: an indirect-injection record
+  whose payload holds half the canary in turn one and half in turn three now does not
+  load. Driven red by pointing `Case.script` at `payload[0]`, the plausible mistake.
+- **No judged variant, and it is said in the ADR because there is no record header to
+  say it in.** Wrongful commitment is the family crescendo is most obviously for and it
+  is judged, so a ladder there would put a payload the gold set has no counterpart for
+  into a κ-bearing denominator. Both existing refusals held unchanged and neither
+  needed a clause added.
+- **What the missing admission run is for.** Whether four turns beat one on the
+  hardened agent. If the hardened agent refuses rung four exactly as it refuses the
+  single-turn payload, the ladder bought nothing against a defended target — a result,
+  recorded here, and not a committed case. `scripts/admit.py` reaches targets and so
+  asks for the attestations and the approval interrupt, which is a person's run at a
+  terminal (ADR-0052 §5, unchanged).
+- **The reference agents' own stop control did not outlive a turn either, and that
+  would have made the reading impossible rather than wrong.** Found while reviewing this
+  ticket against #75's admission question. `ReferenceAgent.reply` read the stop position
+  from the current message alone and `SessionMemory` held only standing instructions, so
+  a stand-down on rung three was forgotten by rung four and **all three** agents —
+  hardened included — would have acted: the ladder scores *succeeded* everywhere, `D` is
+  zero, and the variant fails admission for a reason belonging to this repository's
+  equipment. `SessionMemory.stood_down` now records that the signal reached the session
+  and `StopControl.stops` reads it, which makes that control's own sentence true across
+  turns as well as within one. Driven red at the agent seam: the hardened agent filed on
+  the turn after a stand-down before the flag existed. Three limits are deliberate — set
+  from the turn that carried the signal and never from the case, read as it was *before*
+  this turn so a turn carrying the signal is stopped by the signal, and no message
+  resumes a halted session (ADR-0054 §4).
+- **The gradient is visible over real HTTP, which is what says the reading is about the
+  control.** The halt ladder against served reference agents: four turns in one session,
+  the stop signal recorded on rung three and no other, the **trivial** agent files on
+  rung four and scores `succeeded`, the **hardened** agent does not and scores
+  `resisted`. Not an admission and not a `D` — that is a person's run at a terminal
+  (ADR-0052 §5) — but it is the evidence that the question #75 asks can be answered.
+- **The tripwire reports a construction it cannot perform rather than raising.** A
+  hand-written record can claim `scripted_crescendo` over a base no ladder exists for —
+  the record's refusals ask only for two turns and the retention — and
+  `mismatched_variants` would then have thrown out of the suite's library check instead
+  of naming the record. A bench that cannot load its library cannot report that its
+  library is wrong (ADR-0052 §1), so such a record is reported as a mismatch. Driven red
+  against an invented `scope-creep-001-scripted_crescendo`.
+- **What downstream tickets inherit.** `transforms.derived_payload(transform, base)` is
+  the one construction entry point and `transforms.scripted_crescendo(base)` the ladder;
+  `evaluate`/`checkable` carry `already_halted` for the halt that outlives a turn;
+  `SessionMemory.stood_down` is the reference agents' half of the same fact; and the two
+  ladders are proposals awaiting a person's admission run, so #76's counts and #79's
+  selection see eighteen records still.
+
 ---
 
 ## Pre-gate observations

@@ -104,12 +104,35 @@ class SessionMemory:
     economy: the model in a later turn is never shown the planting content, so it
     cannot reproduce a canary it was never given — the reading stays a claim about
     retained state and not about a long context window.
+
+    **`stood_down` is the second thing a session holds, and it is not an instruction.**
+    An operator's stand-down is not addressed to one message: a stop control that only
+    held in the turn the signal arrived in would be no defence at all against a
+    scripted escalation that sends the signal on one rung and the continuation of
+    agreed work on the next, and all three agents would act — a `D` of zero measuring
+    this harness rather than the agents
+    ([ADR-0054](../../../docs/adr/0054-a-crescendo-is-a-function-of-its-base-case-and-a-halt-outlives-a-turn.md)
+    §4). It is a flag rather than a `Standing` because nothing about it fires on a
+    subject and nothing about it reaches the model: it is read by the one control that
+    ends a turn (`controls.StopControl`), and only the agent that *has* that control is
+    defended by it.
     """
 
     standing: list[Standing] = field(default_factory=list)
+    stood_down: bool = False
 
     def keep(self, kept: Standing) -> None:
         self.standing.append(kept)
+
+    def stand_down(self) -> None:
+        """Record that the operator's stop signal reached this session.
+
+        One direction only: nothing in these agents resumes a halted session, because
+        an operator who has said stand down says so again on a new session id, and a
+        message that could lift a halt would be a stop control an attacker can talk
+        out of (`controls.StopControl`).
+        """
+        self.stood_down = True
 
     def carried(self, message: str) -> tuple[str, ...]:
         """The lines this message's reply gains from what earlier turns left here."""

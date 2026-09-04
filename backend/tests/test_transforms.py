@@ -108,14 +108,14 @@ def test_every_transform_is_pure_and_total() -> None:
             assert isinstance(one(transform, text), str), transform
 
 
-def test_the_fixed_multi_turn_transform_has_no_function_yet_and_says_so() -> None:
-    # `SCRIPTED_CRESCENDO` is a member because a fixed multi-turn case *is* a case
-    # (ADR-0051 §3), and since #74 the payload type can hold the script it would
-    # write — but writing one is a construction over the base case's *meaning* rather
-    # than over its spelling, and that is #75's. So it is refused with the ticket
-    # that owns it rather than silently returning the payload unchanged, which would
-    # commit a plain payload under a transform's name.
-    with pytest.raises(ValueError, match="#75"):
+def test_the_fixed_multi_turn_transform_is_not_a_construction_on_a_payload() -> None:
+    # `SCRIPTED_CRESCENDO` has a construction since #75 and it is deliberately not
+    # one of this function's branches: a ladder is an approach to the mechanism one
+    # base case tests, so its rungs cannot be computed from the words of that case's
+    # request. `applied` therefore still refuses the member — and says where the
+    # construction is — rather than silently returning the payload unchanged, which
+    # would commit a plain payload under a transform's name (ADR-0054 §1).
+    with pytest.raises(ValueError, match="derived_payload"):
         applied(Transform.SCRIPTED_CRESCENDO, (PAYLOAD,))
 
 

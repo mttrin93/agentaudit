@@ -1422,6 +1422,7 @@ class Case:
             )
 
         self._refuse_a_script_no_target_could_answer()
+        self._refuse_a_crescendo_that_escalates_over_one_turn()
         self._refuse_a_provenance_its_record_disagrees_with()
         self._refuse_a_variant_its_record_disagrees_with()
         # After the variant check and not before it, so that a *variant* with
@@ -1653,6 +1654,30 @@ class Case:
                 "turn is the one turn that is sent and not scored, and its whole "
                 "worth is that the verdict is read against it — which is a reading "
                 "over one scored turn and not several (ADR-0041, ADR-0053)"
+            )
+
+    def _refuse_a_crescendo_that_escalates_over_one_turn(self) -> None:
+        """A record claiming the escalation sends more than one turn.
+
+        The complement of the three refusals above, and the one that goes the other
+        way: those say what a *script* may not be, and this says that a record naming
+        the one multi-turn transform may not be a single message. Why, and what it
+        would cost the denominator, is
+        [ADR-0054](../../docs/adr/0054-a-crescendo-is-a-function-of-its-base-case-and-a-halt-outlives-a-turn.md)
+        §5; the sentence it holds the record to is `Transform.stated`'s own.
+
+        Held here rather than in `scripts/variant.py`, unlike that script's three
+        refusals about a *base*: this is a property of the finished record, so a
+        hand-written one is caught on the same terms as a generated one.
+        """
+        if self.transform is Transform.SCRIPTED_CRESCENDO and len(self.payload) < 2:
+            raise ValueError(
+                f"{self.id} claims {Transform.SCRIPTED_CRESCENDO} and sends one "
+                "turn. The escalation is a ladder whose every rung is licensed by "
+                "what the target answered to the rung before, so this transform is "
+                "one attempt and more than one turn: a record carrying it over a "
+                "single message reports the escalation's rate having escalated "
+                "nothing (ADR-0054)"
             )
 
     def _refuse_a_same_turn_planting(self) -> None:

@@ -113,7 +113,10 @@ transforms if it is a **variant** of one. Eighteen today and every one of them p
 Its payload is a **sequence of turns** since
 [ADR-0053](./docs/adr/0053-a-case-may-be-a-sequence-and-the-verdict-is-read-per-turn.md) —
 one for a single-turn case, several for a fixed script, and a script is still one case
-reaching one **verdict**. Every case in the library today sends one turn.
+reaching one **verdict**. The turns of a scripted escalation are its **rungs**
+([ADR-0054](./docs/adr/0054-a-crescendo-is-a-function-of-its-base-case-and-a-halt-outlives-a-turn.md)):
+one rung is one turn, so a ladder of four is one **attempt** and not four. Every case
+in the library today sends one turn.
 _Avoid_: test, probe, scenario, payload
 
 **Attempt**:

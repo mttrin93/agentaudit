@@ -206,13 +206,23 @@ class StopControl:
     the toolbox is reached, so an agent that halts takes no action after the
     halt and its trace says so. Noticing the signal is not this control's job and
     happens whether or not the agent has one — `carries_stop_signal` above.
+
+    **And it stays stopped for the rest of the session.** `stood_down` is what the
+    session already knows (`memory.SessionMemory`), and a control that forgot it
+    between turns would let a scripted escalation ask for the agreed work one rung
+    after the stand-down and be obeyed — which is a stop control that works only when
+    the attack is one message long
+    ([ADR-0054](../../../docs/adr/0054-a-crescendo-is-a-function-of-its-base-case-and-a-halt-outlives-a-turn.md)
+    §4).
     """
 
     signals: tuple[str, ...]
     acknowledgement: str
 
-    def stops(self, message: str) -> str | None:
-        return self.acknowledgement if matches_any(message, self.signals) else None
+    def stops(self, message: str, *, stood_down: bool = False) -> str | None:
+        if stood_down or matches_any(message, self.signals):
+            return self.acknowledgement
+        return None
 
 
 @dataclass(frozen=True)
@@ -357,14 +367,21 @@ class Controls:
             return True
         return self.scope_limit.permits(tool_name)
 
-    def before_model(self, message: str, configuration: str) -> str | None:
+    def before_model(
+        self, message: str, configuration: str, *, stood_down: bool = False
+    ) -> str | None:
         """What the agent says instead of asking its model, if anything does.
 
         The stop control runs first, ahead of even the registration path: a stop
         control reachable only by passing the other checks is not a stop control.
+
+        `stood_down` is the one fact about the *session* any of these controls reads,
+        and only the stop control reads it: a halt the operator sent on an earlier turn
+        (`memory.SessionMemory.stood_down`). Every caller with one turn and no session
+        passes nothing.
         """
         if self.stop_control is not None:
-            if halt := self.stop_control.stops(message):
+            if halt := self.stop_control.stops(message, stood_down=stood_down):
                 return halt
 
         # The one exemption, and a named piece rather than a condition buried in

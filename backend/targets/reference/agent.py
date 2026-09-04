@@ -125,7 +125,19 @@ class ReferenceAgent:
         # every action this turn is an action taken after it.
         stop_at = 0 if carries_stop_signal(message) else None
 
-        if instead := self.controls.before_model(message, configuration):
+        # The signal is read from this turn and remembered for the rest of the
+        # session, on `stop_at`'s terms: noticing is instrumentation and every agent
+        # does it, and the one agent with a stop control is the one the memory then
+        # defends (`memory.SessionMemory.stood_down`, ADR-0054 §4). What the control
+        # is given is what the session knew *before* this turn, because a turn
+        # carrying the signal is stopped by the signal and not by the memory of it.
+        stood_down = held.stood_down
+        if carries_stop_signal(message):
+            held.stand_down()
+
+        if instead := self.controls.before_model(
+            message, configuration, stood_down=stood_down
+        ):
             return AgentReply(instead, ToolTrace(stop_signal_at=stop_at))
 
         # Read after `before_model` and never before it, because that one control

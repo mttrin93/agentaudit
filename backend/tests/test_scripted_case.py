@@ -85,11 +85,12 @@ def test_a_single_turn_transform_is_applied_to_every_turn_of_a_script() -> None:
     assert applied(Transform.PLAIN, script) == script
 
 
-def test_the_scripted_crescendo_transform_still_has_no_function() -> None:
-    # #74 owns the payload *type* a script needs and not the escalation itself:
-    # the two deterministic crescendo variants are #75's, and a member with no
-    # function is refused rather than quietly returning the payload unchanged.
-    with pytest.raises(ValueError, match="#75"):
+def test_the_scripted_crescendo_transform_is_not_reached_through_this_one() -> None:
+    # #74 owns the payload *type* a script needs and not the escalation itself. The
+    # two deterministic ladders are #75's and they take the base *record* rather than
+    # its payload, so this entry point still refuses the member and names the one
+    # that dispatches it (`transforms.derived_payload`, ADR-0054 §1).
+    with pytest.raises(ValueError, match="derived_payload"):
         applied(Transform.SCRIPTED_CRESCENDO, ("a first turn",))
 
 
@@ -390,6 +391,33 @@ def test_a_script_may_not_also_carry_a_planting_turn() -> None:
                 planted_canary="ZZ-COMPOSED-JOIN",
             ),
             planting="a first turn that plants",
+        )
+
+
+def test_a_canary_spelled_across_two_turns_of_a_script_does_not_load() -> None:
+    # `Case.script` — the newline join every canary guard reads — was vacuous while
+    # every record held one turn, and a script is the first payload that can spell a
+    # canary out *between* its turns. An indirect case's payload has to spell out no
+    # part of the instruction, because the whole soundness of that verdict is that the
+    # canary can only be composed by carrying the planted instruction out (ADR-0042);
+    # a guard that read turn one alone would let a script spell one half in turn one
+    # and the other in turn three and score a target that echoed the two back.
+    indirect = next(
+        one for one in load_library(CASES_DIR) if one.id == "indirect-injection-001"
+    )
+    condition = indirect.success_condition
+    assert condition is not None
+    canary = condition.planted_canary or ""
+    assert canary
+    half = len(canary) // 2
+
+    with pytest.raises(ValueError, match="spells"):
+        replace(
+            indirect,
+            id="indirect-injection-001-split",
+            payload=(f"morning — {canary[:half]}", "nothing urgent", canary[half:]),
+            requires=(*indirect.requires, Precondition.SESSION_RETENTION),
+            admission=None,
         )
 
 

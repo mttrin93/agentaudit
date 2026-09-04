@@ -186,10 +186,17 @@ def test_a_case_claiming_the_seventh_trigger_without_the_provenance_is_refused()
 
 
 def test_no_case_in_the_library_claims_the_seventh_trigger_yet() -> None:
-    # The tripwire, and the honest state of the ticket. #64 measured the instrument
-    # that would assign a retrieved candidate its family at κ = 0.16 against a
-    # declared floor of 0.40, so nothing may be admitted until a person assigns it
-    # and no person has. The ticket that is supposed to trip this is #67.
+    # No longer a tripwire — a finding. #64 measured the instrument that would assign
+    # a retrieved candidate its family at κ = 0.16 against a declared floor of 0.40,
+    # so nothing may be admitted until a person assigns it. #67 then did the
+    # assigning by hand, at k = 70, and got six distinct techniques out of 70
+    # candidates and **zero admissible cases**: this family's canary has to be a
+    # two-part construction composed inside the payload, and no general-purpose
+    # corpus contains one (ADR-0049).
+    #
+    # So this reads zero for a different reason than when it was written, and the
+    # reason is the durable one. It stays because the number is a claim about the
+    # library either way.
     claimed = [
         case.id
         for case in load_library(CASES_DIR)

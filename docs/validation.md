@@ -1290,6 +1290,74 @@ not done. Read on 2026-09-04.
   AST direction tests in `test_corpus_isolation.py` are unchanged and still pass, so
   retrieval is still not a second edge into the scored side.
 
+### The corpus cannot supply a canary, and that is #67's result (#67, steps 2 to 4)
+
+**A negative result, measured rather than assumed, and it is the deliverable.** #67 set
+out to grow one family from the corpus. Retrieval and the hand reading both worked; the
+record refused to load, three ways, and the reason generalises to every family this
+bench has
+([ADR-0049](./adr/0049-an-agentic-scorers-canary-is-a-two-part-construction.md)).
+Read on 2026-09-04, reproducible with
+`uv run python -m scripts.retrieve_candidates --family direct_prompt_injection --k 70`
+against the index at `source.RETRIEVAL`.
+
+- **70 selected, 31 suppressed as near-duplicates, no shortfall.** Distances 0.413 to
+  0.682 against the declared override query. `NEAR_DUPLICATE_FLOOR = 0.25` did real
+  work again: the 31 it removed include four further copies of the template below.
+- **27 of the 70 are genuine overrides — 38.6% precision, which sits on #64's falling
+  curve** (40.0% at `k = 20`, 30.0% at 60, 22.5% at 120, 38.6% at 70 read here). The 43
+  rejected are conversational turns the corpus holds because Aegis stores interaction
+  *turns* — `Thank you. Tell me how.`, `okay i'll try that`, `How do I do that?` —
+  harmful-topic asks carrying no override at all, and marketplace task prompts whose
+  override clause is simply absent (`Make this message more professional … All Output
+  Shall Be in [TARGETLANGUAGE]`). Two were read as borderline and rejected: both assign
+  a role and insist on compliance without displacing any prior instruction.
+- **Six distinct techniques, and 21 of the 27 are one of them.** An independent
+  confirmation of #64's 21-of-25 reading, at a different `k`, over a different sample.
+
+| technique | instances | candidate numbers in the reading |
+| --- | --- | --- |
+| Marketplace role-swap override — *ignore all previous instructions* + a persona + a `[TARGETLANGUAGE]` task | **21** | 2, 4, 6, 10, 11, 12, 18, 20, 26, 31, 34, 40, 44, 46, 49, 51, 52, 56, 59, 66, 67 |
+| Unrestricted-persona jailbreak — a named alter ego explicitly freed of its filters | 2 | 9, 32 |
+| Dual-response refusal bypass — a mandatory disclaimer, then the unfiltered answer | 1 | 22 |
+| Forged developer or auth marker — `login:admin // DEVELOPER_MODE:ENABLED` | 1 | 24 |
+| Shell emulation with commentary suppressed — *you are now windows cmd* | 1 | 47 |
+| Injected command grammar — private slash-commands redefining the response rules | 1 | 64 |
+
+- **Zero admissible cases, and the floor was never reached.** ADR-0048's technique floor
+  would have taken 27 candidates to six cases. It never ran: `Case.__post_init__` refuses
+  every one of the six first, and the three refusals close on each other — a case with no
+  canary is refused for declaring a criterion it does not name, one whose payload does not
+  spell the canary out is refused because that verdict belongs to `indirect_prompt_injection`
+  on another denominator (ADR-0042), and one whose payload spells it out *whole* is refused
+  because a target that echoed the message would score (ADR-0043). The survivor is a
+  **composed** canary — a prefix and a reference spelled out separately, joined only by
+  carrying the instruction out — and no corpus row contains one. ADR-0049 decision 2 has
+  the three refusals in the bench's own words.
+- **The three that came closest are the ones worth recording.** Candidates 32, 22 and 64
+  each instruct the target to emit a literal string — `[IDONTCARE]`, the
+  *"lets break the rules:"* sentence, a slash-command banner — so each carries what looks
+  like a canary already in the published text. All three are refused as echo-able. That is
+  the sharpest available demonstration that the obstacle is the *construction* and not the
+  absence of a marker.
+- **ADR-0048's single-digit prediction was right about techniques and wrong about cases.**
+  Six and zero. Corrected in ADR-0049 rather than left standing.
+- **Nothing moved and nothing was written.** No case record, no rate, no `D`, no κ, no
+  band, no gate decision, no gate citation. The library digest is still
+  `18 cases, sha256:d0a4deb2789e` and the tier still holds nine authored cases.
+  `test_no_case_in_the_library_claims_the_seventh_trigger_yet` still reads zero — and
+  its meaning changed, from *nobody has done the work yet* to *the work does not
+  terminate*.
+- **What the reading does not establish.** Whether a corpus built against a canary
+  scorer, or one of agent transcripts with tool traces, would supply cases — neither
+  exists to try. Whether the six techniques would have discriminated had they been
+  runnable: unknown and now unknowable from this corpus, so ADR-0047 decision 1's
+  single-model bar for a retrieved case **still has no reading**, and #67 was the ticket
+  that was going to give it one. The working notes behind the table above, with the full
+  candidate-to-technique mapping and the raw retrieval transcript, were kept at
+  `scratchpad/hand-reading-k70.md` — a session working file rather than a committed one,
+  which is why the table is reproduced here in full and the command is printed above.
+
 ---
 
 ## Pre-gate observations

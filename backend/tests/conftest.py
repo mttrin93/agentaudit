@@ -58,6 +58,7 @@ from backend.bench.library import (
     Retirement,
     SuccessCondition,
     SuccessConditionKind,
+    Transform,
     Trigger,
     VerdictClass,
     load_library,
@@ -224,6 +225,8 @@ def unlisted_case(payload: str, case_id: str) -> Case:
         added_on=date(2026, 8, 17),
         trigger=Trigger.NEW_AGENT_TYPE,
         discovered_by=DiscoveredBy.AUTHORED,
+        transform=Transform.PLAIN,
+        derived_from=None,
         status=CaseStatus.ACTIVE,
     )
 

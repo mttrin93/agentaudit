@@ -41,6 +41,7 @@ from backend.bench.library import (
     Family,
     SuccessCondition,
     SuccessConditionKind,
+    Transform,
     Trigger,
     VerdictClass,
 )
@@ -95,6 +96,8 @@ def an_injection_case(payload: str, case_id: str) -> Case:
         added_on=date(2026, 8, 18),
         trigger=Trigger.NEW_AGENT_TYPE,
         discovered_by=DiscoveredBy.AUTHORED,
+        transform=Transform.PLAIN,
+        derived_from=None,
         status=CaseStatus.ACTIVE,
     )
 

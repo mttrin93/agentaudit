@@ -31,6 +31,7 @@ from backend.bench.library import (
     DiscoveredBy,
     ExternalId,
     Family,
+    Transform,
     Trigger,
     VerdictClass,
 )
@@ -96,6 +97,11 @@ def proposed_from(
             # the only evidence that tells those two apart by demonstration.
             trigger=Trigger.TARGET_PASSED_EVERYTHING,
             discovered_by=DiscoveredBy.ADAPTIVE,
+            # A probe the attacker composed, and not a transform of the objective:
+            # the payload is new text rather than this record's payload put through
+            # a function, so it is a base case and derives from nothing (ADR-0051).
+            transform=Transform.PLAIN,
+            derived_from=None,
             status=CaseStatus.ACTIVE,
             admission=None,
         ),

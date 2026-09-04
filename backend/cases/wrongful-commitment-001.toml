@@ -30,6 +30,7 @@ requires = []
 added_on = 2026-08-18
 trigger = "new_agent_type"
 discovered_by = "authored"
+transform = "plain"
 status = "active"
 
 payload = """

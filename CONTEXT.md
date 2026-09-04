@@ -107,6 +107,9 @@ _Avoid_: the family's article, the regulation, the clause, compliance requiremen
 
 **Case**:
 One executable test belonging to a family, consisting of a payload and the criterion that decides its verdict — a success condition, or, for a judged family, the semantic question stated on the record. Three cases per family as authored; a family the admission gate has grown holds more, and the count is read off the library rather than declared.
+Since [ADR-0051](./docs/adr/0051-a-variant-is-a-case-and-the-transform-is-a-function-it-names.md)
+it also states **how** it attacks: a **transform**, `plain` included, and the case it
+transforms if it is a **variant** of one. Eighteen today and every one of them plain.
 _Avoid_: test, probe, scenario, payload
 
 **Attempt**:
@@ -473,8 +476,41 @@ this project argues each member in a sentence. It is also not what
 one **selection**, and a technique repeating across the whole corpus is invisible to it
 — which is the gap this word names. Like the **family assignment** beside it, the person
 decides and the record carries the answer.
-_Avoid_: attack type, category, cluster, variant, near-duplicate, template (for the
-judgement rather than for one instance of it)
+
+**Not a transform**, which is the term below and a closed set. A technique is
+a judgement about somebody else's published text; a transform is a construction this
+bench performs on a payload it already committed, so it is closed against what the code
+implements rather than against what the field publishes
+([ADR-0051](./docs/adr/0051-a-variant-is-a-case-and-the-transform-is-a-function-it-names.md)).
+One word for both would put an unvalidated judgement and a function over committed bytes
+in one reader's sentence.
+_Avoid_: attack type, category, cluster, variant, near-duplicate, transform, template
+(for the judgement rather than for one instance of it)
+
+**Transform**:
+How a **case** attacks — the construction the bench performs on the payload the record
+commits. The dimension the library did not have: a record said what it sends and never
+how, so `data-leakage-001` and the same request wrapped in base64 were either one record
+with two behaviours or two records nothing distinguished. Seven, closed, each argued in a
+sentence, and `plain` is a member rather than a silence so that every record states how
+it attacks. Deliberately **not** the two adaptive loops the same catalogue names: this is
+a field of a **case**, and a scored record may not name what only an **episode** does
+(ADR-0010). Named apart from **technique** above, and the argument is there
+([ADR-0051](./docs/adr/0051-a-variant-is-a-case-and-the-transform-is-a-function-it-names.md)).
+_Avoid_: technique, strategy, enhancement, encoding, wrapper, mutation
+
+**Variant**:
+One **case** carrying a transform, and a record of its own rather than something a run
+wraps round a payload at send time — `data-leakage-001-base64` has its own id, its own
+**admission**, its own **decay series** and its own place in the **library version**. It
+names the case it transforms, and that pointer is provenance and never a payload the
+loader fetches: a variant with nothing of its own to send would put the bytes on the wire
+in the loader rather than in the library. A **family** is measured by the variants that
+exist, so a transform that means nothing for a family is simply a variant nobody wrote
+and needs no absence of its own
+([ADR-0051](./docs/adr/0051-a-variant-is-a-case-and-the-transform-is-a-function-it-names.md)).
+Never a **technique**, which is already spent on a judgement about a **corpus** row.
+_Avoid_: technique, mutation, derived case, child case, using it for **technique**
 
 ### Human input
 

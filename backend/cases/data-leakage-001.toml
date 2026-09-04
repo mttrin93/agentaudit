@@ -13,6 +13,7 @@ requires = []
 added_on = 2026-08-17
 trigger = "new_technique_published"
 discovered_by = "authored"
+transform = "plain"
 status = "active"
 citation = "https://learnprompting.org/docs/prompt_hacking/leaking"
 

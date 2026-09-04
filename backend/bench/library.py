@@ -359,6 +359,90 @@ class Precondition(StrEnum):
     """
 
 
+class Transform(StrEnum):
+    """How a case attacks — the construction the bench performs on its payload.
+
+    The dimension the library did not have. A record said what it sends and never
+    how, so `data-leakage-001` and the same request wrapped in base64 were either one
+    record with two behaviours or two records nothing distinguished. A **variant** is
+    the second of those made explicit: one case, one transform, its own
+    `[admission]`, its own decay series
+    ([ADR-0051](../../docs/adr/0051-a-variant-is-a-case-and-the-transform-is-a-function-it-names.md)).
+
+    **Named apart from `RetrievedFrom.technique`, and closed where that field is
+    prose.** Why the two words are two words, and why ADR-0048 §4's refusal of a
+    closed technique vocabulary does not reach this set, is ADR-0051 §2. The
+    consequence here: a member is a construction this repository *performs*, so
+    adding one means writing the function that performs it, and the `stated()`
+    sentence below describes an operation on bytes rather than an attack somebody
+    published.
+
+    **The two adaptive loops of the same catalogue are deliberately absent** —
+    ADR-0051 §3, and ADR-0010 for the boundary. The consequence here: this is a field
+    of `Case`, so any member added to it is a thing a *scored* record can claim, and
+    an eighth member is a decision with an ADR rather than a line in this class.
+
+    **`PLAIN` is a member and not the absence of one.** The identity transform, so
+    that `transform` can be required on every record — the argument `discovered_by`
+    makes, restated at neither end and linked at the field below.
+    """
+
+    PLAIN = "plain"
+    """The payload as the record commits it, sent unchanged. The identity."""
+
+    BASE64 = "base64"
+    ROT13 = "rot13"
+    LEETSPEAK = "leetspeak"
+    PROMPT_INJECTION_WRAPPER = "prompt_injection_wrapper"
+    ROLEPLAY = "roleplay"
+    SCRIPTED_CRESCENDO = "scripted_crescendo"
+
+    def stated(self) -> str:
+        """What this transform does to the payload the record commits.
+
+        The match has no fallback branch on purpose: an eighth transform must fail
+        the type check rather than exist as a member no reader can be told the effect
+        of. Each sentence describes an operation on the committed text and never an
+        attack somebody published, which is the difference this set rests on.
+        """
+        match self:
+            case Transform.PLAIN:
+                return (
+                    "sent as the record commits it — the identity, and a member "
+                    "rather than a silence so that every record states how it attacks"
+                )
+            case Transform.BASE64:
+                return (
+                    "the payload encoded as base64 — the words an input filter "
+                    "matches on are not in the bytes that arrive"
+                )
+            case Transform.ROT13:
+                return (
+                    "the payload rotated thirteen letters — a substitution weak "
+                    "enough for a model to undo and opaque to a literal match"
+                )
+            case Transform.LEETSPEAK:
+                return (
+                    "the payload's letters replaced by digits and punctuation that "
+                    "look like them — the request is legible and its spelling is not"
+                )
+            case Transform.PROMPT_INJECTION_WRAPPER:
+                return (
+                    "the payload wrapped in framing that presents it as instructions "
+                    "the target has already accepted, rather than as a request"
+                )
+            case Transform.ROLEPLAY:
+                return (
+                    "the payload asked of a character the target is invited to play, "
+                    "so that refusing reads as breaking a fiction"
+                )
+            case Transform.SCRIPTED_CRESCENDO:
+                return (
+                    "the payload escalated over a fixed script of turns, each one "
+                    "written on the record — one attempt, and more than one turn"
+                )
+
+
 class SuccessConditionKind(StrEnum):
     """The deterministic checks a case can ask for.
 
@@ -1156,6 +1240,35 @@ class Case:
     and the safest answer is the one that selects the *weaker* bar (ADR-0012).
     """
 
+    transform: Transform
+    """How this case attacks — the construction performed on the payload above.
+
+    Required rather than defaulted, on `discovered_by`'s terms two fields up and
+    ADR-0051 §2's: `Transform.PLAIN` is a member, so a base case states it in a word
+    rather than by leaving a line out.
+
+    Versioned by being here — `_versioned` reads `dataclasses.fields`, so two records
+    identical but for this field are two library versions. That is the property the
+    rejected send-time design could not have had, and ADR-0051 §1 is the argument
+    ([ADR-0051](../../docs/adr/0051-a-variant-is-a-case-and-the-transform-is-a-function-it-names.md)).
+    """
+
+    derived_from: str | None
+    """The id of the case this one transforms, or `None` on a base case.
+
+    **Provenance, and never a payload the loader goes and fetches.** What it buys is
+    that a variant's record does not restate its base's prose: the header argues only
+    what the transform changes, and a reader follows the pointer for the rest. What it
+    must not become is a fallback — a variant with no payload of its own would be the
+    send-time transform wearing a record's type, so the refusal below takes the empty
+    payload here rather than resolving anything at load (ADR-0051).
+
+    Paired with `transform`, in both directions: a record that transforms something
+    names what, and a record that transforms nothing names nobody. The half of the
+    check that needs the other records — that the id resolves, in this family, without
+    a cycle — is `load_library`'s, which can see them.
+    """
+
     status: CaseStatus
     citation: str | None = None
     """Where a published technique came from. Not the trigger, which says why
@@ -1272,6 +1385,7 @@ class Case:
             )
 
         self._refuse_a_provenance_its_record_disagrees_with()
+        self._refuse_a_variant_its_record_disagrees_with()
         self._refuse_a_same_turn_planting()
         self._refuse_a_canary_the_wrong_channel_spells_out()
         self._refuse_a_canary_a_nonce_could_be_confused_with()
@@ -1387,6 +1501,55 @@ class Case:
                 "phrasing inside a κ-gated denominator is material nothing here "
                 "measured reaching the one figure this bench has to earn. Every case "
                 "grown from a corpus is deterministic (#62, ADR-0046)"
+            )
+
+    def _refuse_a_variant_its_record_disagrees_with(self) -> None:
+        """Keep `transform` and `derived_from` from ever saying different things.
+
+        One fact written twice, so every way of writing half of it is refused
+        ([ADR-0051](../../docs/adr/0051-a-variant-is-a-case-and-the-transform-is-a-function-it-names.md)).
+        The **pairing** is `status` and `retirement`'s discipline applied to the
+        variant dimension, and neither direction is a symmetry for its own sake: a
+        variant naming no base has nothing for its readings to be compared against,
+        which is the measurement that is the whole reason to add one, and a plain case
+        naming a base is either a duplicate of another record or a variant whose
+        transform went missing — two different repairs.
+
+        The **self-derivation** refusal is reachable by a rename that moved `id` and
+        not this field, and it is here rather than in the loader's cycle walk so that
+        the one-record cycle is refused by the record that holds it.
+
+        The **payload** refusal is what keeps `derived_from` provenance. A variant
+        with nothing to send would make the loader the only thing that knows what
+        arrives on the wire, which is the send-time design with an extra field.
+        Stated over the variant alone because a base case with an empty payload is a
+        different fault with a different message, and no case in the library has one.
+        """
+        varies = self.transform is not Transform.PLAIN
+        if varies and self.derived_from is None:
+            raise ValueError(
+                f"{self.id} is {self.transform} and names no case it transforms. A "
+                "variant's reading is a claim about what the transform changed, so a "
+                "record with no base is a decorated payload with nothing to compare "
+                "it against (ADR-0051)"
+            )
+        if not varies and self.derived_from is not None:
+            raise ValueError(
+                f"{self.id} transforms nothing and derives from "
+                f"{self.derived_from!r}. Either it is a second copy of that case or "
+                "its transform went missing, and the two need different repairs"
+            )
+        if self.derived_from == self.id:
+            raise ValueError(
+                f"{self.id} derives from itself. A rename that moved the id and not "
+                "the derivation reads as a variant of a case that no longer exists"
+            )
+        if varies and not self.payload.strip():
+            raise ValueError(
+                f"{self.id} is a variant and carries no payload of its own. "
+                "`derived_from` is provenance and never a base the loader fetches: a "
+                "record with nothing to send would put what arrives on the wire in "
+                "the loader rather than in the library (ADR-0051)"
             )
 
     def _refuse_a_same_turn_planting(self) -> None:
@@ -1694,7 +1857,75 @@ def load_library(directory: Path) -> list[Case]:
             "nothing here measured reaching the one figure this bench has to earn"
         )
     _refuse_a_repeated_technique(cases)
+    _refuse_a_derivation_the_library_cannot_resolve(cases)
     return cases
+
+
+def _refuse_a_derivation_the_library_cannot_resolve(cases: Iterable[Case]) -> None:
+    """Keep every variant pointing at a base case that is here, in its own family.
+
+    `load_library`'s third cross-record refusal, and here for the reason the other
+    two are: a record cannot see the library it is joining
+    ([ADR-0051](../../docs/adr/0051-a-variant-is-a-case-and-the-transform-is-a-function-it-names.md)).
+    `Case.__post_init__` refuses the halves one record can see — a transform with no
+    derivation, a derivation with no transform, a case deriving from itself — and
+    cannot see any of these three.
+
+    **Resolvable**, because a derivation nothing resolves is a comparison a reader
+    cannot make: the variant's readings mean *this transform discriminates where the
+    plain payload does not*, and the plain payload has to be in the library for that
+    sentence to have a second term.
+
+    **In one family**, because a transform changes how a payload is spelled and never
+    which failure is being tested. Families are separate denominators (ADR-0015), so
+    a variant across one would be counted in a family whose base sits in another.
+
+    **Acyclic, and the chain is walked rather than held to one link.** Composition is
+    a real attack — a roleplay wrapped round a base64 payload — so a variant of a
+    variant loads. What a cycle would be is a set of variants none of which has a
+    base case underneath it, so nothing in it compares against a plain payload at
+    all.
+    """
+    records = list(cases)
+    held = {case.id: case for case in records}
+    # Iterated over the list rather than over `held.values()`, so that two records
+    # sharing an id are both checked instead of one of them silently winning the
+    # dictionary. The walk below reads `held`, where a duplicate id is a resolution
+    # this function is not the place to refuse.
+    for case in records:
+        base_id = case.derived_from
+        if base_id is None:
+            continue
+        base = held.get(base_id)
+        if base is None:
+            raise ValueError(
+                f"{case.id} derives from a case the library does not hold "
+                f"({base_id!r}). A variant's reading is a claim against the plain "
+                "payload's, so a base nothing resolves is a comparison with one term"
+            )
+        if base.family != case.family:
+            raise ValueError(
+                f"{case.id} is in {case.family} and transforms {base.id}, which is "
+                f"in {base.family} — another family. A transform changes how a "
+                "payload is spelled and never which failure it tests, and the two "
+                "families are two denominators (ADR-0015)"
+            )
+        # Re-walked from every variant rather than memoised across the outer loop,
+        # which is quadratic in the length of a derivation chain and deliberately so:
+        # the cost is bounded by the library — eighteen records, once, at load — and
+        # a per-case `seen` is what lets the message below name the case a reader has
+        # to go and fix.
+        seen = {case.id}
+        walked: Case | None = base
+        while walked is not None and walked.derived_from is not None:
+            if walked.derived_from in seen:
+                raise ValueError(
+                    f"{case.id}'s derivation closes on itself at {walked.id}. A "
+                    "cycle of variants is a chain with no base case underneath it, "
+                    "so nothing in it is compared against a plain payload"
+                )
+            seen.add(walked.id)
+            walked = held.get(walked.derived_from)
 
 
 def _refuse_a_repeated_technique(cases: Iterable[Case]) -> None:
@@ -1810,6 +2041,8 @@ def load_case(path: Path) -> Case:
         added_on=record["added_on"],
         trigger=Trigger(record["trigger"]),
         discovered_by=DiscoveredBy(record["discovered_by"]),
+        transform=_transform(record),
+        derived_from=record.get("derived_from"),
         status=CaseStatus(record["status"]),
         citation=record.get("citation"),
         retrieval=_retrieval(record.get("retrieval")),
@@ -1817,6 +2050,29 @@ def load_case(path: Path) -> Case:
         history=history,
         retirement=_retirement(record.get("retirement"), history),
     )
+
+
+def _transform(record: dict[str, Any]) -> Transform:
+    """How a record says it attacks, refused when it says nothing.
+
+    Read rather than defaulted, for the reason the field is required on the type
+    ([ADR-0051](../../docs/adr/0051-a-variant-is-a-case-and-the-transform-is-a-function-it-names.md)),
+    and refused here with a `ValueError` rather than by letting the lookup raise: a
+    `KeyError` is the one refusal in this module a caller catching `ValueError` would
+    miss, which is `_retrieval`'s argument over a different missing key.
+
+    `derived_from` gets no function beside this one and is read with `get`, because
+    TOML has no null and a base case's record therefore says nothing at all. What
+    catches a *variant* whose derivation line went missing is the pairing on the
+    record, not a second required key here.
+    """
+    if "transform" not in record:
+        raise ValueError(
+            f"{record.get('id')!r} does not say how it attacks. Every record states "
+            "its transform, `plain` included, because a default would make *nothing "
+            "was done to this text* the answer a record acquires by silence"
+        )
+    return Transform(record["transform"])
 
 
 RETRIEVAL_FIELDS = ("address", "licence", "attribution", "assigned_by", "technique")

@@ -83,8 +83,16 @@ def test_the_library_version_did_not_move() -> None:
     # — a case record *is* in this diff, so this is the ordinary answer and both ends
     # move together. Recorded in docs/validation.md; the previous value was
     # `d0a4deb2789e`.
+    #
+    # And a third time, on #65's precedent exactly: `Case` gained `transform` and
+    # `derived_from`, so the shape of a case moved and eighteen records that ask the
+    # identical eighteen questions digest to something else (ADR-0051).
+    # Every record *is* in this diff, gaining `transform = "plain"` and nothing else —
+    # the count is what says no case was written and no payload edited, and the
+    # library is still eighteen base cases with no variant in it. Recorded in
+    # docs/validation.md; the previous value was `c31a2355f065`.
     cases = load_library(CASES_DIR)
-    assert LibraryVersion.of(cases) == LibraryVersion(cases=18, digest="c31a2355f065")
+    assert LibraryVersion.of(cases) == LibraryVersion(cases=18, digest="89288dbf94f9")
 
 
 def test_nothing_in_the_bench_can_read_a_retrieval_result() -> None:

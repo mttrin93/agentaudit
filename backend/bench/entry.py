@@ -92,8 +92,14 @@ def case_record(case: Case) -> str:
         f"added_on = {case.added_on.isoformat()}",
         f"trigger = {_basic(str(case.trigger))}",
         f"discovered_by = {_basic(str(case.discovered_by))}",
+        f"transform = {_basic(str(case.transform))}",
         f"status = {_basic(str(case.status))}",
     ]
+    # Written only on a variant, because TOML has no null and a base case's record
+    # says nothing at all — the shape `load_case` reads with `get` and the pairing
+    # on the record then checks (ADR-0051).
+    if case.derived_from is not None:
+        lines.append(f"derived_from = {_basic(case.derived_from)}")
     if case.citation is not None:
         lines.append(f"citation = {_basic(case.citation)}")
     lines.extend(("", f"payload = {_multiline(case.payload)}"))

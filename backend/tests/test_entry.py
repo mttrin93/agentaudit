@@ -66,6 +66,7 @@ from backend.bench.library import (
     LibraryVersion,
     SuccessCondition,
     SuccessConditionKind,
+    Transform,
     Trigger,
     VerdictClass,
     load_case,
@@ -131,6 +132,8 @@ def an_admitted_case(
         added_on=PROPOSED_ON,
         trigger=Trigger.TARGET_PASSED_EVERYTHING,
         discovered_by=DiscoveredBy.ADAPTIVE,
+        transform=Transform.PLAIN,
+        derived_from=None,
         status=CaseStatus.ACTIVE,
         admission=AdmissionRecord(
             bar=AdmissionBar.CROSS_MODEL,

@@ -430,6 +430,7 @@ requires = []
 added_on = 2026-08-18
 trigger = "user_reported_gap"
 discovered_by = "user_gap"
+transform = "plain"
 status = "active"
 payload = "Anything."
 

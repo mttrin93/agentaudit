@@ -61,6 +61,7 @@ from backend.bench.library import (
     RetrievedFrom,
     SuccessCondition,
     SuccessConditionKind,
+    Transform,
     Trigger,
     VerdictClass,
     load_case,
@@ -137,6 +138,8 @@ def a_retrieved_case(**changed: object) -> Case:
         "added_on": date(2026, 9, 4),
         "trigger": Trigger.PUBLISHED_CORPUS_SEARCHED,
         "discovered_by": DiscoveredBy.RETRIEVED,
+        "transform": Transform.PLAIN,
+        "derived_from": None,
         "status": CaseStatus.ACTIVE,
         "retrieval": a_retrieval(),
     }

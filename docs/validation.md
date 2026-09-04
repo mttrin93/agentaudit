@@ -1497,6 +1497,67 @@ records what follows from it.
   reading (*n* of *m* explained) exist so that an operator meeting it in production can
   reconcile it against their own token bill.
 
+### The library has a technique dimension and holds no variant (#72)
+
+**This section records a shape and a name, not a measurement, and the ticket's
+measurable half is #73's.** `Case` gained `transform` — a closed set of seven — and
+`derived_from`, so a record now says *how* it attacks and which case it transforms if it
+is a **variant** of one
+([ADR-0051](./adr/0051-a-variant-is-a-case-and-the-transform-is-a-function-it-names.md)).
+Nothing was transformed. No function performs any of the six non-identity transforms yet,
+no variant record exists, and no reference agent has been asked one. Read on 2026-09-04.
+
+- **The library is eighteen base cases and every one of them is `plain`.** Asserted
+  rather than stated: `test_variant.py` reads the library off disk and pins the whole
+  set of transforms in it at `{PLAIN}`, with `derived_from` `None` throughout. So the
+  claim this ticket makes about what the bench sends is that it sends exactly what it
+  sent before.
+- **The library digest moved and no payload changed.** From `c31a2355f065` to
+  `89288dbf94f9`, on #65's precedent exactly: `_versioned` reads `dataclasses.fields`,
+  so the shape of a case moving is the version moving, and eighteen records asking the
+  identical eighteen questions now hash to something else. **The count of eighteen is
+  what says no case was written**, and every record is in the diff gaining
+  `transform = "plain"` and nothing else. The designed tripwire
+  (`test_the_library_version_did_not_move`) is updated with the reason rather than
+  loosened.
+- **The name departs from the issue's, and the reason is a collision four days old.**
+  #72 asked for `Technique`, a closed `StrEnum`, on `Case`. ADR-0048 §4 had already
+  spent that word on `RetrievedFrom.technique` and argued **in terms** that a closed set
+  of technique names would be an unvalidated taxonomy — so the new dimension is
+  `Transform`, which is #72's own word for the mechanism, and nothing in ADR-0048 is
+  edited. The set is closed on a different argument: a member is a construction *this
+  repository performs*, not a judgement about somebody else's published text.
+- **Seven refusals exist and none has ever fired on a real record.** Four on the record
+  — a transform with no base, a base with no transform, a case deriving from itself, and
+  the empty payload that keeps `derived_from` from becoming a payload the loader fetches
+  — and three in the loader: a base the library does not hold, a base in another family,
+  and a cycle. The cycle is walked rather than held to one link, so a three-record ring
+  and a variant pointing *into* one are pinned separately from the two-record case, and
+  both were driven red by stopping the walk after the first hop. Every other refusal was
+  driven red the same way — a `TypeError` on the missing fields, then `DID NOT RAISE` on
+  each in turn — and the version claims were driven red by adding `transform` to
+  `RUN_RECORD_FIELDS`, which is the one-line edit that would silently stop the digest
+  covering it. **What no reading covers is whether any of them refuses something a person
+  would actually write**, because nobody has written a variant.
+- **Admission and the decay series needed no change, and that is the argument the design
+  turns on.** A variant is refused by `admitted_library` on the same terms as every
+  other case, asserted by a test that was driven red by *adding an exemption for a
+  variant* rather than by breaking admission. Under the rejected send-time design there
+  would be no record for a variant's reading to sit on at all — which is the whole
+  reason the record won.
+- **A mounted library seeded before this ticket does not load.** `transform` is required
+  on the record, and `seeded_library` deliberately leaves a mount with records in it
+  alone. The refusal names the record and the missing key; the migration is one line per
+  file. Stated here because it is a real operational cost of refusing a default, and the
+  local dev mount on the author's machine is where it was first observed.
+- **No arithmetic moved.** `n` per family is unchanged, `GateRule.attempts_per_family()`
+  is untouched, and PLAN §3's diagram and CONTEXT.md's per-family counts are still true
+  and deliberately not edited — they move under #76. No rate, `D`, κ, band, gate
+  decision, gate citation or rendering digest moved. The gate citation this library
+  carries is **stale the moment #73 admits the first variant**, and ADR-0023 already
+  covers that: a gate run of any outcome replaces it, so what the group owes there is a
+  gate run and not a decision.
+
 ---
 
 ## Pre-gate observations

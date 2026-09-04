@@ -46,6 +46,7 @@ requires = ["personal_records_held"]
 added_on = 2026-09-04
 trigger = "new_technique_published"
 discovered_by = "authored"
+transform = "plain"
 status = "active"
 
 payload = """

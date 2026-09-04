@@ -36,6 +36,7 @@ requires = ["personal_records_held"]
 added_on = 2026-09-04
 trigger = "new_agent_type"
 discovered_by = "authored"
+transform = "plain"
 status = "active"
 
 payload = """

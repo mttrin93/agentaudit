@@ -10,6 +10,18 @@ An adversarial test bench that measures whether an AI agent's defences hold, and
 An AI agent belonging to a user, reachable as an HTTP endpoint, that the bench attacks.
 _Avoid_: system under test, SUT, client agent
 
+**Callback target**:
+A **target** whose operator handed over a function rather than a URL. It is not a
+third kind of thing: `serve_callback` wraps the function in an app on an ephemeral
+loopback port and the bench reaches it through `send_message` like everything else,
+so nothing downstream of registration can tell one from an endpoint somebody deployed
+([ADR-0059](./docs/adr/0059-a-callback-target-is-served-over-the-contract.md)). What
+the bench does *not* have is a second path in: a callback reached by any route other
+than the contract would be the gate no longer exercising the code a user's run
+exercises.
+_Avoid_: in-process target, local target, embedded agent — each names the thing the
+shim deliberately is not
+
 **Reference agent**:
 One of three agents built by the project to known quality — hardened, weak, trivial — used to calibrate the bench. Test equipment; never reaches a user.
 _Avoid_: baseline, control agent, dummy agent
@@ -205,6 +217,9 @@ for, which is what keeps the turn budget a budget and `A_effort` comparable acro
 linear attacker and a branching one (ADR-0057). A branch is not a turn. Turns
 within an episode are dependent by construction, which is why an episode is not a
 sample of attempts and why no rate is computed over turns.
+_Not_: `shim.Turn`, which is the reply shape a **callback target** returns when it can
+show its tool calls — a scored-side reply and not a unit of anything. Nothing is
+counted in those, and no arithmetic reads both.
 _Avoid_: attempt, step, iteration, round, branch
 
 **Probe**:

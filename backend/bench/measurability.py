@@ -75,6 +75,11 @@ class NotMeasurable(StrEnum):
     is a declaration the endpoint contradicted on its first reply. Both produce no
     number, and only the second tells an operator that what they registered and what
     they are running are two different things.
+
+    **Unreachable against a callback target, and reachable against every other kind**
+    ([ADR-0059](../../docs/adr/0059-a-callback-target-is-served-over-the-contract.md)
+    §4). It stays because most targets are a URL their operator deployed, and one of
+    those can still contradict its own registration on its first reply.
     """
 
     def stated(self) -> str:

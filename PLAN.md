@@ -167,6 +167,8 @@ An HTTP endpoint the bench can send messages to. Registered with: endpoint URL, 
 
 **If the endpoint does not expose tool calls**, scope creep and halt defeat report *not measurable for this target*. They do not fall back to LLM judgement.
 
+**A user with a function rather than an endpoint gets one served for them, and not a second path in.** `serve_callback` (`backend/bench/shim.py`) wraps `f(message, session_id) -> reply` in an app on an ephemeral loopback port and hands back an ordinary registration, so the bench reaches it through `send_message` like every other target — the retry policy, the named transport failures and the declared wait included. `exposes_tool_calls` is the one declaration derived rather than taken, because on that surface the bench built the endpoint ([ADR-0059](./docs/adr/0059-a-callback-target-is-served-over-the-contract.md)).
+
 ---
 
 ## 4. The article mapping
@@ -508,6 +510,7 @@ agentaudit/
 ├── backend/
 │   ├── bench/
 │   │   ├── registration.py  # nonce issue and echo check, attestation record
+│   │   ├── shim.py          # serves a user's callback over the contract — no in-process branch
 │   │   ├── scanner.py       # declared-control checklist
 │   │   ├── attacker.py      # runs cases against a target endpoint, under budget
 │   │   ├── evaluator.py     # applies success_condition — the four deterministic verdicts

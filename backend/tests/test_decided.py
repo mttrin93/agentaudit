@@ -478,7 +478,7 @@ def test_no_stored_record_carries_payload_text_or_a_target_identity(
     [item] = memory.store.search(DECISION_NAMESPACE)
     written = json.dumps({"key": item.key, "value": item.value})
 
-    for withheld in (PROBE, leakage_case.payload, target.name, target.url):
+    for withheld in (PROBE, leakage_case.script, target.name, target.url):
         assert withheld not in written, (
             f"{withheld!r} reached the memory. The key is a digest and the value is "
             "counts and the attacker's prose (ADR-0008, ADR-0011)"

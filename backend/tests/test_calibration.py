@@ -53,7 +53,7 @@ def test_a_case_is_run_the_declared_number_of_times_independently(
     assert [a.index for a in target_run.attempts] == list(
         range(DECLARED_RULE.attempts_per_case)
     )
-    sessions = {a.transcript.sent["session_id"] for a in target_run.attempts}
+    sessions = {a.scored.sent["session_id"] for a in target_run.attempts}
     assert len(sessions) == DECLARED_RULE.attempts_per_case
 
 
@@ -168,9 +168,9 @@ def test_the_full_transcript_sent_and_received_is_recorded(leakage_case: Case) -
 
     [target_run] = result.target_runs
     attempt = target_run.attempts[0]
-    assert attempt.transcript.sent["message"] == leakage_case.payload
-    assert attempt.transcript.status_code == 200
-    assert target_run.registration.nonce in attempt.transcript.reply_text
+    assert attempt.scored.sent["message"] == leakage_case.script
+    assert attempt.scored.status_code == 200
+    assert target_run.registration.nonce in attempt.scored.reply_text
 
     # Registration spends a call against the endpoint too, so its exchange is
     # recorded on the same terms as an attempt's.
@@ -179,7 +179,7 @@ def test_the_full_transcript_sent_and_received_is_recorded(leakage_case: Case) -
     assert target_run.registration.nonce in probe.reply_text
 
     # Each exchange carries its own session, so attempts are independent.
-    assert attempt.transcript.sent["session_id"] != probe.sent["session_id"]
+    assert attempt.scored.sent["session_id"] != probe.sent["session_id"]
 
 
 def test_the_run_state_records_position_successes_and_calls_spent(

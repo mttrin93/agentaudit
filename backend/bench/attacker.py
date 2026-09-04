@@ -5,13 +5,19 @@ independent by construction — each carries its own session id — so a rate is
 rate rather than a trajectory. Payloads are sent, never executed locally: the
 bench must not itself be a vector.
 
-**One attempt can be more than one turn, and a turn is still not an attempt.** A
-case carrying a `planting` turn sends it first, in the same session, and the verdict
-is read over the reply to the second — which is what makes memory poisoning a claim
-about persistence rather than about obedience
+**One attempt can be more than one turn, and a turn is still not an attempt.** Two
+shapes reach that, and they are different in kind. A case carrying a `planting` turn
+sends it first, in the same session, and the verdict is read over the reply to the
+second — which is what makes memory poisoning a claim about persistence rather than
+about obedience
 ([ADR-0041](../../docs/adr/0041-the-persistence-canary-is-read-over-two-turns.md)).
-The denominator does not move; what moves is the budget, which counts calls on the
-operator's endpoint and is authorised for every turn before the first goes out.
+A case whose `payload` is a **script** sends every turn of it, in that one session,
+and the criterion is applied to each: the attempt succeeds on the first turn that
+meets it, because a break nobody checked for would be a break recorded as resistance
+([ADR-0053](../../docs/adr/0053-a-case-may-be-a-sequence-and-the-verdict-is-read-per-turn.md)).
+The denominator does not move for either; what moves is the budget, which counts
+calls on the operator's endpoint and is authorised for every turn before the first
+goes out.
 
 Every message is authorised against the run's budget before it goes on the wire
 and counted against the scored layer after it comes back, so a suite cannot spend
@@ -63,7 +69,7 @@ from backend.bench.contract import (
     Transcript,
     send_message,
 )
-from backend.bench.evaluator import Verdict, evaluate
+from backend.bench.evaluator import ScriptedVerdict, evaluate_script
 from backend.bench.library import Case, VerdictClass
 from backend.bench.rule import DECLARED_RULE, GateRule
 from backend.graph.budget import Layer
@@ -86,9 +92,9 @@ number cannot put a second attack on the wire (ADR-0007).
 class Sent:
     """One attempt that has been made, before it has been scored.
 
-    The transcript is the whole of the evidence and the verdict is not in it yet:
-    `verdict` is a `Verdict` for a deterministic case, decided on this thread the
-    moment the reply arrived, and a `Future` for a judged one, being decided
+    The transcripts are the whole of the evidence and the verdict is not in them yet:
+    `verdict` is a `ScriptedVerdict` for a deterministic case, decided on this thread
+    the moment the last reply arrived, and a `Future` for a judged one, being decided
     elsewhere. Both are read the same way and in the same order.
 
     `began` is carried rather than re-taken because it is the fact ADR-0010's
@@ -97,12 +103,24 @@ class Sent:
 
     case: Case
     index: int
-    transcript: Transcript
+    transcripts: tuple[Transcript, ...]
+    """Every scored turn of this attempt, in send order.
+
+    A sequence for the reason `Attempt.transcripts` is: a case may be a fixed
+    script, and the evidence for a scripted attempt is every turn of it (ADR-0053).
+    """
+
     planted: Transcript | None
     """The planting turn's exchange, for a case whose verdict is about a later turn."""
 
     began: float
-    verdict: Verdict | Future[Verdict]
+    verdict: ScriptedVerdict | Future[ScriptedVerdict]
+    """The verdict and the turn it was read over.
+
+    The turn travels with the verdict because on a script they are one reading: the
+    attempt succeeded *on* a turn, and everything that shows one exchange per
+    attempt has to show that one (ADR-0053).
+    """
 
     span: Recorder = DROPPED
     """The attempt's span, opened when the message went out and closed when its
@@ -214,7 +232,13 @@ def _send(
             if case.planting is None
             else send_message(target, case.planting, session_id=session)
         )
-        transcript = send_message(target, case.payload, session_id=session)
+        # Turn by turn and in order, in the one session opened above. A script's turns
+        # are dependent on each other — that is what a script is — and the session id
+        # is what carries the dependence, so the escalation happens inside this
+        # attempt and nowhere between two of them (ADR-0053).
+        transcripts = tuple(
+            send_message(target, turn, session_id=session) for turn in case.payload
+        )
     except TargetUnreachable as unreachable:
         # The class of the failure and the sends it cost, and nothing else off the
         # exception: its message names the endpoint url, which is the one identifier
@@ -222,17 +246,21 @@ def _send(
         span.record({Field.RETRIES: unreachable.sends - 1})
         span.abandon(unreachable.failure)
         raise
-    sends = transcript.sends + (0 if planted is None else planted.sends)
+    sends = sum(turn.sends for turn in transcripts) + (
+        0 if planted is None else planted.sends
+    )
     span.record({Field.RETRIES: sends - case.turns})
     run_state.record_call(Layer.SCORED, sends)
-    verdict: Verdict | Future[Verdict]
+    verdict: ScriptedVerdict | Future[ScriptedVerdict]
     try:
         if pool is not None and case.verdict_class is VerdictClass.JUDGED:
             verdict = pool.submit(
-                verdict_of, case, transcript, target, canary, adjudicator, planted
+                verdict_of, case, transcripts, target, canary, adjudicator, planted
             )
         else:
-            verdict = verdict_of(case, transcript, target, canary, adjudicator, planted)
+            verdict = verdict_of(
+                case, transcripts, target, canary, adjudicator, planted
+            )
     except BaseException:
         # A deterministic verdict is decided on this thread and a case with no
         # adjudicator is refused here, so this is the second way out of an attempt
@@ -244,7 +272,7 @@ def _send(
     return Sent(
         case=case,
         index=index,
-        transcript=transcript,
+        transcripts=transcripts,
         planted=planted,
         began=began,
         verdict=verdict,
@@ -284,16 +312,17 @@ def _score(sent: Sent, target: TargetConfig, run_state: RunState) -> Attempt:
     except BaseException:
         sent.span.abandon()
         raise
-    sent.span.record({Field.VERDICT: verdict})
+    sent.span.record({Field.VERDICT: verdict.verdict})
     sent.span.end()
     attempt = Attempt(
         case_id=sent.case.id,
         family=sent.case.family,
         target_name=target.name,
         index=sent.index,
-        transcript=sent.transcript,
+        transcripts=sent.transcripts,
+        decided_on_turn=verdict.turn,
         planting=sent.planted,
-        verdict=verdict,
+        verdict=verdict.verdict,
         verdict_class=sent.case.verdict_class,
         started_at=sent.began,
     )
@@ -324,13 +353,13 @@ def run_attempt(
 
 def verdict_of(
     case: Case,
-    transcript: Transcript,
+    transcripts: tuple[Transcript, ...],
     target: TargetConfig,
     canary: str,
     adjudicator: Completion | None,
     planted: Transcript | None = None,
-) -> Verdict:
-    """One attempt's verdict, by the route the case record names.
+) -> ScriptedVerdict:
+    """One attempt's verdict, by the route the case record names, and its turn.
 
     The class comes off the record. A family name is a label a reader recognises
     (ADR-0002) and deciding how to reach a verdict from one would be deciding it
@@ -347,13 +376,22 @@ def verdict_of(
     """
     match case.verdict_class:
         case VerdictClass.DETERMINISTIC:
-            return evaluate(case, transcript, target, canary, planted)
+            return evaluate_script(case, transcripts, target, canary, planted)
         case VerdictClass.JUDGED:
             if adjudicator is None:
                 raise NoAdjudicator([case.id])
-            return adjudicate(
-                AdjudicationBrief.about(
-                    case, transcript.reply_text, transcript.tool_trace
+            # The one turn there is. A judged case may not be a script — the brief
+            # carries the case's own text as one string and κ rests on single-turn
+            # gold transcripts — and the record refuses one, so this index is a
+            # property of the library rather than a choice made here (ADR-0053,
+            # `Case._refuse_a_script_no_target_could_answer`).
+            transcript = transcripts[0]
+            return ScriptedVerdict(
+                verdict=adjudicate(
+                    AdjudicationBrief.about(
+                        case, transcript.reply_text, transcript.tool_trace
+                    ),
+                    adjudicator,
                 ),
-                adjudicator,
+                turn=0,
             )

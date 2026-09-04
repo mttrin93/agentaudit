@@ -85,7 +85,7 @@ def an_injection_case(payload: str, case_id: str) -> Case:
             identifier="LLM01:2026",
             not_tested="A case built inside a test. It makes no coverage claim.",
         ),
-        payload=payload,
+        payload=(payload,),
         success_condition=SuccessCondition(
             kind=SuccessConditionKind.CANARY_INSTRUCTION_EXECUTED,
             planted_canary=PLANTED_CANARY,
@@ -121,7 +121,7 @@ def calls_of(
     """The tools one agent reached for on the first attempt of this case."""
     target_run = target_run_for(case, name=name, model=MODEL, agents=agents)
     [attempt, *_] = target_run.attempts
-    trace = attempt.transcript.tool_trace
+    trace = attempt.scored.tool_trace
     assert trace is not None
     return [call.name for call in trace.calls]
 

@@ -54,7 +54,8 @@ docstring below instead of being crammed in here: the record cites what this
 repository copied, and the function cites what the field published.
 
 `PLAIN` and `SCRIPTED_CRESCENDO` are absent on purpose. The identity copies nothing
-from anybody, and the fixed multi-turn script has no function yet (`applied` below).
+from anybody, and the fixed multi-turn script has no function yet — the payload type
+it needs landed with #74 and the escalation is #75's (`applied` below).
 """
 
 _ROT13 = str.maketrans(
@@ -216,13 +217,21 @@ def roleplay(payload: str) -> str:
     )
 
 
-def applied(transform: Transform, payload: str) -> str:
-    """That transform's function, run over that payload.
+def applied(transform: Transform, payload: tuple[str, ...]) -> tuple[str, ...]:
+    """That transform's function, run over every turn of that payload.
 
     The one entry point, so that a caller naming a member cannot reach a different
     function than the record claims. Total over *text* — every function it dispatches
     to accepts any payload — and not over the enumeration: the one member with no
     function is refused below rather than defaulted.
+
+    **A sequence in and a sequence of the same length out**, since `Case.payload`
+    became one
+    ([ADR-0053](../../docs/adr/0053-a-case-may-be-a-sequence-and-the-verdict-is-read-per-turn.md)).
+    Every function above is a construction on one message, so a single-turn transform
+    over a script is that construction applied turn by turn and the comparison
+    against the base case stays turn for turn. The one member that would produce
+    *more* turns than it was given is the one with no function here.
 
     The match has no fallback branch on purpose, on
     `Transform.stated`'s terms: an eighth member must fail the type check here rather
@@ -231,25 +240,26 @@ def applied(transform: Transform, payload: str) -> str:
     """
     match transform:
         case Transform.PLAIN:
-            return plain(payload)
+            return tuple(plain(turn) for turn in payload)
         case Transform.BASE64:
-            return base64_encoded(payload)
+            return tuple(base64_encoded(turn) for turn in payload)
         case Transform.ROT13:
-            return rot13(payload)
+            return tuple(rot13(turn) for turn in payload)
         case Transform.LEETSPEAK:
-            return leetspeak(payload)
+            return tuple(leetspeak(turn) for turn in payload)
         case Transform.PROMPT_INJECTION_WRAPPER:
-            return prompt_injection_wrapper(payload)
+            return tuple(prompt_injection_wrapper(turn) for turn in payload)
         case Transform.ROLEPLAY:
-            return roleplay(payload)
+            return tuple(roleplay(turn) for turn in payload)
         case Transform.SCRIPTED_CRESCENDO:
             raise ValueError(
-                "scripted_crescendo escalates over a fixed script of turns and "
-                "`Case.payload` is one string, so there is nothing here for a "
-                "single-turn transform to produce — the payload type is #74's work "
-                "and the transform is applied there. A member with no function is "
-                "refused rather than quietly returning the payload unchanged, which "
-                "would commit a plain payload under a transform's name"
+                "scripted_crescendo escalates over a fixed script of turns, and the "
+                "escalation itself is #75's work: `Case.payload` can now hold a "
+                "script (ADR-0053) and this is the one member that would have to "
+                "*write* one, which is a construction over the base case's meaning "
+                "rather than over its spelling. A member with no function is refused "
+                "rather than quietly returning the payload unchanged, which would "
+                "commit a plain payload under a transform's name"
             )
 
 

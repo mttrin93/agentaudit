@@ -917,12 +917,12 @@ def _recent_attempt(record: RunRecord) -> list[AttemptPayload]:
             # One-based on the way out, for `_scored_progress`' own reason: a reader
             # counts "the third attempt" and the record holds an index into ten.
             attempt=attempt.index + 1,
-            sent=_message(attempt.transcript.sent),
-            reply=attempt.transcript.reply_text,
+            sent=_message(attempt.scored.sent),
+            reply=attempt.scored.reply_text,
             verdict=str(attempt.verdict),
             verdict_class=str(attempt.verdict_class),
-            status_code=attempt.transcript.status_code,
-            sends=attempt.transcript.sends,
+            status_code=attempt.scored.status_code,
+            sends=attempt.scored.sends,
         )
         for attempt in record.run_state.attempts[-RECENT_ATTEMPTS:]
     ]
@@ -1477,7 +1477,7 @@ attacks worked, so what is served is `RunState.succeeded_attempts` and nothing e
 **The artefact is still the line this does not cross.** The signed payload carries
 `successes` and `attempts` per family and no transcript — `document()` is built key by
 key precisely so that an attempt's transcript has nowhere to arrive — and this response
-is built from `Attempt.transcript`, which nothing signs and no file holds (ADR-0008,
+is built from `Attempt.transcripts`, which nothing signs and no file holds (ADR-0008,
 spec story 105). What that gives up is stated on the response and on the screen: a
 screenshot of this is a copy of a payload that worked against a live agent, and the
 operator who took it is carrying it.
@@ -1612,12 +1612,12 @@ def _exchange(attempt: Attempt) -> AttemptPayload:
         # One-based on the way out, like every other index this surface serves: a
         # reader counts *the third attempt* and the record holds an index into ten.
         attempt=attempt.index + 1,
-        sent=_message(attempt.transcript.sent),
-        reply=attempt.transcript.reply_text,
+        sent=_message(attempt.scored.sent),
+        reply=attempt.scored.reply_text,
         verdict=str(attempt.verdict),
         verdict_class=str(attempt.verdict_class),
-        status_code=attempt.transcript.status_code,
-        sends=attempt.transcript.sends,
+        status_code=attempt.scored.status_code,
+        sends=attempt.scored.sends,
     )
 
 
@@ -4144,12 +4144,12 @@ def _recent(record: GateRunRecord) -> list[AttemptPayload]:
             # One-based on the way out, for `_scored_progress`' own reason: a reader
             # counts "the third attempt" and the record holds an index into ten.
             attempt=attempt.index + 1,
-            sent=_message(attempt.transcript.sent),
-            reply=attempt.transcript.reply_text,
+            sent=_message(attempt.scored.sent),
+            reply=attempt.scored.reply_text,
             verdict=str(attempt.verdict),
             verdict_class=str(attempt.verdict_class),
-            status_code=attempt.transcript.status_code,
-            sends=attempt.transcript.sends,
+            status_code=attempt.scored.status_code,
+            sends=attempt.scored.sends,
         )
         for attempt in reversed(tail)
     ]
@@ -4788,7 +4788,7 @@ def create_app(
         What a run signs carries each family's successes over its attempts and the
         boundary of the claim; `document()` is assembled key by key so that an
         attempt's transcript has nowhere to arrive. This response is built from
-        `Attempt.transcript` instead — a record that exists already, that no run
+        `Attempt.transcripts` instead — a record that exists already, that no run
         writes to disk, and that the assembler never sees.
 
         **Two absences and two answers**, as the episodes route answers them. A run

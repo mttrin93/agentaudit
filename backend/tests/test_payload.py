@@ -1036,7 +1036,7 @@ def test_no_payload_text_from_any_case_appears_anywhere_in_the_artefact(
 
     for case in library:
         for value in prose:
-            assert case.payload not in value, (
+            assert case.script not in value, (
                 f"{case.id} has its payload in the artefact. A report that travels "
                 "is the worst possible place for a working attack (ADR-0008)"
             )

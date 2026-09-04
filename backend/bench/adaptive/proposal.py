@@ -86,7 +86,10 @@ def proposed_from(
                     "claim until it has cleared the cross-model admission bar"
                 ),
             ),
-            payload=payload,
+            # One turn, because a probe is one message the attacker composed:
+            # the adaptive layer sends no script and the payload type holding one
+            # does not make it able to (ADR-0053, ADR-0010).
+            payload=(payload,),
             success_condition=objective.success_condition,
             verdict_class=VerdictClass.DETERMINISTIC,
             applies_to=(target.agent_type,),

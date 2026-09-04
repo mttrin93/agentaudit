@@ -266,10 +266,8 @@ def test_an_agent_with_no_input_check_carries_out_an_override_the_user_sent() ->
     # agents — which is the reading the admission block on each record states.
     for case in direct_library():
         for agent in ("trivial", "weak"):
-            assert canary_of(case) in one_turn(agent, case.payload), (
-                f"{agent} {case.id}"
-            )
-        assert canary_of(case) not in one_turn("hardened", case.payload), case.id
+            assert canary_of(case) in one_turn(agent, case.script), f"{agent} {case.id}"
+        assert canary_of(case) not in one_turn("hardened", case.script), case.id
 
 
 def test_the_hardened_agents_refusal_is_attributable_to_the_input_check() -> None:
@@ -288,12 +286,12 @@ def test_the_hardened_agents_refusal_is_attributable_to_the_input_check() -> Non
     for case in direct_library():
         without_check = hardened_without("input_check")
         assert canary_of(case) in one_turn(
-            "hardened", case.payload, agents=without_check
+            "hardened", case.script, agents=without_check
         ), case.id
 
         for piece in ("scope_limit", "output_filter", "stop_control", "memory_hygiene"):
             assert canary_of(case) not in one_turn(
-                "hardened", case.payload, agents=hardened_without(piece)
+                "hardened", case.script, agents=hardened_without(piece)
             ), f"{case.id} without {piece}"
 
 
@@ -365,14 +363,14 @@ def test_the_channel_a_message_uses_is_the_only_one_it_reaches() -> None:
     typed, fetched = a_channels_canaries()
 
     for case in direct_library():
-        reply = one_turn("trivial", case.payload)
+        reply = one_turn("trivial", case.script)
         assert canary_of(case) in reply, case.id
         assert not any(line in reply for line in fetched), case.id
 
     for case in load_library(CASES_DIR):
         if case.family is not Family.INDIRECT_PROMPT_INJECTION:
             continue
-        reply = one_turn("trivial", case.payload)
+        reply = one_turn("trivial", case.script)
         assert not any(line in reply for line in typed), case.id
 
 

@@ -50,9 +50,19 @@ class Attempt:
 
     target_name: str
     index: int
-    transcript: Transcript
-    """The exchange the verdict was read over — the **scored** turn, where an
-    attempt took more than one."""
+    transcripts: tuple[Transcript, ...]
+    """Every scored turn of this attempt, in send order.
+
+    A sequence and not one exchange, because a case may be a fixed script and the
+    evidence behind a scripted attempt is every turn of it — the shape
+    `AdaptiveEpisode.transcripts` already holds, and what a reader needs to
+    re-derive a verdict read per turn (ADR-0004,
+    [ADR-0053](../../docs/adr/0053-a-case-may-be-a-sequence-and-the-verdict-is-read-per-turn.md)).
+    Non-empty on every attempt: an attempt with no exchange behind it is not an
+    attempt.
+
+    The turn that *decided* is `scored` below, and it is not always the last one.
+    """
 
     verdict: Verdict
     verdict_class: VerdictClass
@@ -79,6 +89,25 @@ class Attempt:
     ADR-0004).
     """
 
+    decided_on_turn: int = 0
+    """Which of the scored turns the verdict was read over, counted from zero.
+
+    Named for the turn and not `decided_on`, which this codebase already spends on a
+    *date* (`decided.Conditions.decided_on`, `cited.py`): one word for a day and an
+    index would make a reader of either guess.
+
+    Zero on every single-turn attempt, which is every attempt the library sends
+    today. On a script it is the **first** turn that met the condition, because that
+    is where the attempt succeeded: a target that leaked on turn two and recovered
+    on turn four broke on turn two, and a reading off the last turn would record it
+    as having held (ADR-0053).
+
+    Carried rather than recomputed because everything that shows one exchange for
+    one attempt — the transcript view, the judge's brief — has to show the turn the
+    verdict is about. A reader can still re-derive it from `transcripts` and the
+    record, which is what keeps this a convenience and not the evidence.
+    """
+
     started_at: float = field(default_factory=time.monotonic)
     """When this attempt began — before the message went on the wire, not when the
     record was built.
@@ -88,6 +117,32 @@ class Attempt:
     target, and `backend/tests/test_layer_ordering.py` compares this against
     `AdaptiveEpisode.started_at` to say so (ADR-0010).
     """
+
+    def __post_init__(self) -> None:
+        if not self.transcripts:
+            raise ValueError(
+                f"{self.case_id} against {self.target_name!r} recorded an attempt "
+                "with no exchange behind it. A verdict has to be re-derivable from "
+                "the evidence, and there is none (ADR-0004)"
+            )
+        if not 0 <= self.decided_on_turn < len(self.transcripts):
+            raise ValueError(
+                f"{self.case_id} against {self.target_name!r} reads its verdict off "
+                f"turn {self.decided_on_turn} of {len(self.transcripts)}. A verdict "
+                "read over a turn that is not in the evidence is a verdict nobody "
+                "can check (ADR-0004)"
+            )
+
+    @property
+    def scored(self) -> Transcript:
+        """The one turn the verdict was read over.
+
+        For every consumer that shows or briefs *one* exchange per attempt. Not the
+        last turn and not the first: the turn `decided_on_turn` names, which on a
+        succeeded script is where it broke and on a resisted one is the last turn
+        that had a chance to.
+        """
+        return self.transcripts[self.decided_on_turn]
 
 
 @dataclass(frozen=True)

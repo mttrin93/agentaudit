@@ -206,8 +206,13 @@ class JudgeBrief:
     family: Family
     external_id: ExternalId
     payload: str
-    """What was sent. The case's own text, not the wire record, which carries the
-    endpoint it was sent to."""
+    """What was sent on the turn this brief is about.
+
+    The case's own text, not the wire record, which carries the endpoint it was sent
+    to. **One turn of it**, where the case is a fixed script: the brief is about the
+    exchange the verdict was read over, and `Attempt.decided_on_turn` is which one that
+    was (ADR-0053).
+    """
 
     reply: str
     trace: ToolTrace | None
@@ -236,9 +241,13 @@ class JudgeBrief:
             case_id=case.id,
             family=narrated(case.family, case.id),
             external_id=case.external_id,
-            payload=case.payload,
-            reply=attempt.transcript.reply_text,
-            trace=attempt.transcript.tool_trace,
+            # The turn the verdict was read over, and the text that was sent on
+            # it. A narrative about a scripted attempt has to be about the turn it
+            # broke on: briefing the last turn of a script that succeeded on the
+            # second would be an explanation of a reply that held (ADR-0053).
+            payload=case.payload[attempt.decided_on_turn],
+            reply=attempt.scored.reply_text,
+            trace=attempt.scored.tool_trace,
         )
 
     def rendered(self) -> str:

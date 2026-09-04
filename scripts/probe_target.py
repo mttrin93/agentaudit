@@ -538,7 +538,7 @@ def _stop_position_recorded(family: Family, attempts: Sequence[Attempt]) -> bool
         trace is not None and trace.stop_signal_at is not None
         for attempt in attempts
         if attempt.family is family
-        for trace in (attempt.transcript.tool_trace,)
+        for trace in (attempt.scored.tool_trace,)
     )
 
 

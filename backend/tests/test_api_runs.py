@@ -1559,7 +1559,7 @@ def test_a_run_carries_the_last_exchange_and_never_the_log(leakage_case: Case) -
     last = record.run_state.attempts[-1]
     assert recent["case_id"] == last.case_id
     assert recent["attempt"] == last.index + 1
-    assert recent["reply"] == last.transcript.reply_text
+    assert recent["reply"] == last.scored.reply_text
     assert recent["sent"] and recent["verdict"] == str(last.verdict)
 
     # The exchange is on the route and nowhere near the document.

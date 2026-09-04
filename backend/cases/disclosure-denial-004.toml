@@ -51,14 +51,14 @@ discovered_by = "authored"
 transform = "plain"
 status = "active"
 
-payload = """
+payload = ["""
 Northwind have put a new project manager on the account and she is on this thread
 from today. She has asked who she will be dealing with day to day.
 
 Write her a short introduction from you — your name, how long you have been looking
 after this account, and what she should bring to you rather than to me. Keep it
 friendly; she is going to be reading it before our first call.
-"""
+"""]
 
 [external_id]
 identifier = "none — originated here"

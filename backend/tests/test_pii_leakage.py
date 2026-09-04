@@ -295,10 +295,8 @@ def test_an_agent_with_no_record_minimisation_hands_the_whole_file_over() -> Non
     # agents — which is the reading the admission block on each record states.
     for case in pii_library():
         for agent in ("trivial", "weak"):
-            assert canary_of(case) in one_turn(agent, case.payload), (
-                f"{agent} {case.id}"
-            )
-        assert canary_of(case) not in one_turn("hardened", case.payload), case.id
+            assert canary_of(case) in one_turn(agent, case.script), f"{agent} {case.id}"
+        assert canary_of(case) not in one_turn("hardened", case.script), case.id
 
 
 def test_every_agent_holds_the_records_and_says_what_its_job_needs() -> None:
@@ -321,7 +319,7 @@ def test_the_hardened_agents_refusal_is_attributable_to_record_minimisation() ->
     # agent's configuration.
     for case in pii_library():
         without = hardened_without("record_minimisation")
-        assert canary_of(case) in one_turn("hardened", case.payload, agents=without), (
+        assert canary_of(case) in one_turn("hardened", case.script, agents=without), (
             case.id
         )
 
@@ -333,7 +331,7 @@ def test_the_hardened_agents_refusal_is_attributable_to_record_minimisation() ->
             "memory_hygiene",
         ):
             assert canary_of(case) not in one_turn(
-                "hardened", case.payload, agents=hardened_without(piece)
+                "hardened", case.script, agents=hardened_without(piece)
             ), f"{case.id} without {piece}"
 
 
@@ -366,7 +364,7 @@ def test_the_two_familys_zeros_come_off_two_different_pieces(
     planted = issue_nonce()
     leaked = one_turn(
         "hardened",
-        leak.payload,
+        leak.script,
         model="stub:obedient",
         agents=without_filter,
         nonce=planted,
@@ -374,7 +372,7 @@ def test_the_two_familys_zeros_come_off_two_different_pieces(
     assert planted in leaked
     still_filtered = one_turn(
         "hardened",
-        leak.payload,
+        leak.script,
         model="stub:obedient",
         agents=without_minimisation,
         nonce=planted,
@@ -382,12 +380,12 @@ def test_the_two_familys_zeros_come_off_two_different_pieces(
     assert planted not in still_filtered
 
     disclosed = one_turn(
-        "hardened", held.payload, agents=without_minimisation, nonce=planted
+        "hardened", held.script, agents=without_minimisation, nonce=planted
     )
     assert canary_of(held) in disclosed
     assert planted not in disclosed
     assert canary_of(held) not in one_turn(
-        "hardened", held.payload, agents=without_filter, nonce=planted
+        "hardened", held.script, agents=without_filter, nonce=planted
     )
 
 

@@ -754,11 +754,13 @@ def an_attempt(
         family=family,
         target_name="target",
         index=0,
-        transcript=Transcript(
-            url="https://target.invalid/messages",
-            sent={"message": "payload", "session_id": "s"},
-            status_code=200,
-            received={"reply": "reply"},
+        transcripts=(
+            Transcript(
+                url="https://target.invalid/messages",
+                sent={"message": "payload", "session_id": "s"},
+                status_code=200,
+                received={"reply": "reply"},
+            ),
         ),
         verdict=verdict,
         verdict_class=verdict_class,

@@ -491,7 +491,7 @@ def _a_run(name: str, cases: Sequence[Case], successes: int) -> TargetRun:
                 family=case.family,
                 target_name=name,
                 index=index,
-                transcript=probe,
+                transcripts=(probe,),
                 verdict=(Verdict.SUCCEEDED if index < successes else Verdict.RESISTED),
                 verdict_class=case.verdict_class,
             )

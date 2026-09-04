@@ -288,7 +288,7 @@ def test_nothing_the_judge_is_sent_names_the_agent_that_produced_the_transcript(
     # The attempt knows: it was recorded against `hardened`, over a url with the
     # agent's name in it. What reaches the model must not.
     assert held.target_name == "hardened"
-    assert "hardened" in held.transcript.url
+    assert "hardened" in held.scored.url
 
     sent: list[str] = []
 
@@ -301,7 +301,7 @@ def test_nothing_the_judge_is_sent_names_the_agent_that_produced_the_transcript(
 
     assert sent, "the judge made no model call, so this proves nothing"
     for shown in (*sent, brief.rendered(), repr(brief)):
-        for label in ("hardened", "weak", "trivial", held.transcript.url):
+        for label in ("hardened", "weak", "trivial", held.scored.url):
             assert label not in shown
 
 
@@ -338,7 +338,7 @@ def test_no_probe_transcript_can_be_briefed_to_the_judge(
     # The likelier hole. `run_probe` shares the transport with `run_attack`, so
     # an adaptive turn produces exactly the `Transcript` a scored attempt does —
     # and a judge that accepted one could not tell them apart.
-    probed: Transcript = leaked.transcript
+    probed: Transcript = leaked.scored
 
     with pytest.raises(NotAScoredAttempt, match="scored attempts and nothing else"):
         JudgeBrief.about(probed, leakage_case)  # type: ignore[arg-type]

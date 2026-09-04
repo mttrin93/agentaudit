@@ -46,7 +46,7 @@ def test_transient_failures_are_retried_and_do_not_count_as_attempts(
 
     # Every reply cost the same number of sends, and each is recorded, because a
     # run that had to retry its way through is evidence about the endpoint.
-    assert {a.transcript.sends for a in target_run.attempts} == {failures + 1}
+    assert {a.scored.sends for a in target_run.attempts} == {failures + 1}
 
 
 def test_an_endpoint_that_never_recovers_stops_the_run_rather_than_scoring_it(
@@ -81,7 +81,7 @@ def test_a_healthy_endpoint_is_sent_each_message_exactly_once(
         )
 
     [target_run] = result.target_runs
-    assert {a.transcript.sends for a in target_run.attempts} == {1}
+    assert {a.scored.sends for a in target_run.attempts} == {1}
     assert target_run.registration.probe.sends == 1
 
     # Calls spent counts what went out on the wire, since every send is on the

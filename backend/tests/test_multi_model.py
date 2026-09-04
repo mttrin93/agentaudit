@@ -823,7 +823,7 @@ def test_the_entry_point_re_runs_the_library_on_a_second_model_and_records_both(
     )
     # And no payload, on any side of it (ADR-0008).
     for case in load_library(CASES_DIR):
-        assert case.payload not in written
+        assert case.script not in written
 
 
 def test_a_gate_run_holding_the_library_stops_the_write_and_not_the_comparison(

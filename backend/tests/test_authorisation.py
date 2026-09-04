@@ -271,7 +271,7 @@ def test_a_payload_is_transported_verbatim_and_never_executed_locally(
     [target_run] = result.target_runs
 
     assert not marker.exists()
-    assert {a.transcript.sent["message"] for a in target_run.attempts} == {payload}
+    assert {a.scored.sent["message"] for a in target_run.attempts} == {payload}
 
 
 def test_the_declared_budget_travels_with_the_result(leakage_case: Case) -> None:

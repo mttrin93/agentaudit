@@ -124,8 +124,8 @@ def test_the_exchange_behind_every_succeeded_attempt_is_served_by_family(
     assert len(family["succeeded"]) == len(succeeded)
     for served, attempt in zip(family["succeeded"], succeeded, strict=True):
         assert served["case_id"] == attempt.case_id
-        assert served["sent"] == attempt.transcript.sent["message"]
-        assert served["reply"] == attempt.transcript.reply_text
+        assert served["sent"] == attempt.scored.sent["message"]
+        assert served["reply"] == attempt.scored.reply_text
         assert served["verdict"] == str(Verdict.SUCCEEDED)
         # One-based on the way out: a reader counts *the third attempt* and the
         # record holds an index into ten.
@@ -224,7 +224,7 @@ def _resisted(like: Attempt, payload: str) -> Attempt:
         like,
         index=like.index + 1,
         verdict=Verdict.RESISTED,
-        transcript=replace(like.transcript, sent={"message": payload}),
+        transcripts=(replace(like.scored, sent={"message": payload}),),
     )
 
 

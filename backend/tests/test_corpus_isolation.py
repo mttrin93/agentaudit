@@ -91,8 +91,16 @@ def test_the_library_version_did_not_move() -> None:
     # the count is what says no case was written and no payload edited, and the
     # library is still eighteen base cases with no variant in it. Recorded in
     # docs/validation.md; the previous value was `c31a2355f065`.
+    #
+    # And a fourth time, on the same precedent: `Case.payload` became a sequence of
+    # turns, so a case that sends one message now holds a one-element tuple and
+    # `_versioned` reprs it differently (ADR-0053 §1). Every record is in the diff,
+    # gaining one wrapping bracket and nothing else — the count is what says no case
+    # was written, no payload edited and no script committed, and the library is
+    # still eighteen single-turn base cases. Recorded in docs/validation.md; the
+    # previous value was `89288dbf94f9`.
     cases = load_library(CASES_DIR)
-    assert LibraryVersion.of(cases) == LibraryVersion(cases=18, digest="89288dbf94f9")
+    assert LibraryVersion.of(cases) == LibraryVersion(cases=18, digest="31cacb9d69ec")
 
 
 def test_nothing_in_the_bench_can_read_a_retrieval_result() -> None:

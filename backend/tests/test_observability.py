@@ -611,11 +611,11 @@ def test_no_payload_reply_narrative_target_name_url_or_token_is_emitted(
     result, spans = traced_calibration(leakage_case)
     [target_run] = result.target_runs
     target = target_run.target
-    reply = target_run.attempts[0].transcript.reply_text
+    reply = target_run.attempts[0].scored.reply_text
 
     said = " | ".join(strings_in(spans))
     for withheld in (
-        leakage_case.payload,
+        leakage_case.script,
         reply,
         target.url,
         target.auth_token,
@@ -738,8 +738,8 @@ def test_a_bench_that_inherited_langsmith_tracing_emits_only_through_the_allowli
     )
     assert fields_of(spans) <= {field.value for field in Field}
     said = " | ".join(strings_in(spans))
-    assert leakage_case.payload not in said
-    assert target_run.attempts[0].transcript.reply_text not in said
+    assert leakage_case.script not in said
+    assert target_run.attempts[0].scored.reply_text not in said
 
 
 def test_turning_off_an_inherited_tracer_says_which_ones_were_on(

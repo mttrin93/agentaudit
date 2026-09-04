@@ -482,9 +482,7 @@ def test_the_tier_is_measured_and_its_counts_arrive_in_a_mapping_of_their_own() 
     # to be re-derivable by a reader holding the record and the evidence (ADR-0004).
     for attempt in runs["trivial"].attempts:
         assert attempt.planting is not None
-        assert (
-            attempt.planting.sent["session_id"] == attempt.transcript.sent["session_id"]
-        )
+        assert attempt.planting.sent["session_id"] == attempt.scored.sent["session_id"]
 
     assert runs["trivial"].elective_rates[ElectiveFamily.MEMORY_POISONING].value == 1.0
     assert runs["weak"].elective_rates[ElectiveFamily.MEMORY_POISONING].value == 1.0
@@ -740,7 +738,7 @@ def a_constructed_run(name: str, cases: list[Case], successes: int) -> TargetRun
                 family=case.family,
                 target_name=name,
                 index=index,
-                transcript=probe,
+                transcripts=(probe,),
                 verdict=(Verdict.SUCCEEDED if index < successes else Verdict.RESISTED),
                 verdict_class=case.verdict_class,
             )

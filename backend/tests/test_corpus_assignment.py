@@ -174,7 +174,7 @@ def _proposal_for(case: Case) -> FamilyProposal:
     """
     return propose(
         CorpusAddress(identifier="backend/cases", revision="library", row=case.id),
-        case.payload,
+        case.script,
     )
 
 

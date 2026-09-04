@@ -102,7 +102,7 @@ def case_record(case: Case) -> str:
         lines.append(f"derived_from = {_basic(case.derived_from)}")
     if case.citation is not None:
         lines.append(f"citation = {_basic(case.citation)}")
-    lines.extend(("", f"payload = {_multiline(case.payload)}"))
+    lines.extend(("", f"payload = {_payload_array(case.payload)}"))
     lines.extend(
         (
             "",
@@ -241,6 +241,18 @@ def _basic(value: str) -> str:
         )
     _refuse_control_characters(value)
     return '"' + value.replace("\\", "\\\\").replace('"', '\\"') + '"'
+
+
+def _payload_array(turns: tuple[str, ...]) -> str:
+    """A case's payload as the TOML array of multi-line strings a record holds.
+
+    An array whichever it is — one turn or several — because `Case.payload` is a
+    sequence and a record written two ways is two shapes for `load_case` to read
+    (ADR-0053). A single-turn record therefore reads with one wrapping bracket,
+    which is exactly what the eighteen on disk gained.
+    """
+    written = ", ".join(_multiline(turn) for turn in turns)
+    return f"[{written}]"
 
 
 def _multiline(value: str) -> str:

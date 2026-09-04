@@ -173,11 +173,16 @@ class RouteKey:
     def of(cls, case: Case) -> RouteKey:
         """The key one proposed case is filed under, read off the case record.
 
-        Off `case.payload` — the probe the episode actually sent, which
+        Off `case.script` — the probe the episode actually sent, which
         `proposed_from` copies from the episode's own record rather than from the
         tool's argument — so nothing can be keyed by a payload the target never saw.
+
+        Every turn of it, which for a proposed route is the one turn a probe is: a
+        proposal is a single message the attacker composed, so the digest of the
+        joined script is the digest of the probe and keys already filed still resolve
+        (ADR-0053).
         """
-        return cls(family=case.family, probe=_digest(case.payload))
+        return cls(family=case.family, probe=_digest(case.script))
 
     @property
     def filed_under(self) -> str:

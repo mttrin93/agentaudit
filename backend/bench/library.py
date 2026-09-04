@@ -1212,7 +1212,21 @@ class Case:
     """
 
     external_id: ExternalId
-    payload: str
+    payload: tuple[str, ...]
+    """What this case sends, one element per turn, in send order.
+
+    **A sequence and never one string**, because a case may be a fixed script: a
+    single-turn case holds one element and a scripted one holds several, and both
+    are one case reaching one verdict
+    ([ADR-0053](../../docs/adr/0053-a-case-may-be-a-sequence-and-the-verdict-is-read-per-turn.md)).
+    One field rather than two, so no record can carry both a message and a script
+    and leave a loader picking between them — and `_versioned` reprs whatever it
+    finds, so a tuple versions exactly as a string did.
+
+    Non-empty, and the refusal is below: a case with nothing to send is a record
+    whose payload arrives from somewhere the library cannot show a reader.
+    """
+
     success_condition: SuccessCondition | None
     """The deterministic check, for a case whose verdict class is deterministic.
 
@@ -1345,8 +1359,31 @@ class Case:
         A **turn** and never an attempt: the denominator is ten attempts per case
         whichever this returns, and what reads it is the budget, which counts sends on
         the operator's endpoint (CONTEXT.md, `RunBudget.declare`).
+
+        Two things add up here and they are different in kind. `payload` is every
+        turn the verdict is read over, and a `planting` turn is the one turn that is
+        sent and deliberately *not* scored (ADR-0041). A record may not carry both —
+        `_refuse_a_script_that_also_plants` — so this sum has at most one term
+        greater than one, and it is still one attempt either way.
         """
-        return 2 if self.planting else 1
+        return len(self.payload) + (1 if self.planting else 0)
+
+    @property
+    def script(self) -> str:
+        """Every scored turn of this case as one text.
+
+        For the guards below and for nothing on the wire: what goes out is
+        `payload`, turn by turn. These ask what the *attempt* sends rather than what
+        one turn of it does — a canary spelled out across two turns is a canary the
+        attempt sent, and a guard that read each turn on its own is a guard a script
+        walks past.
+
+        The join can in principle manufacture a containment that neither turn holds,
+        across the newline between them. That errs towards refusing a record, which
+        is the direction every guard here errs in, and for a single-turn case the
+        join is the payload unchanged.
+        """
+        return "\n".join(self.payload)
 
     def __post_init__(self) -> None:
         """A case declares one route to its verdict, and the one its class names.
@@ -1384,8 +1421,15 @@ class Case:
                 "could ever be run against"
             )
 
+        self._refuse_a_script_no_target_could_answer()
         self._refuse_a_provenance_its_record_disagrees_with()
         self._refuse_a_variant_its_record_disagrees_with()
+        # After the variant check and not before it, so that a *variant* with
+        # nothing to send is still refused in ADR-0051 §4's own words — the payload
+        # is the whole of what makes `derived_from` provenance rather than a base the
+        # loader fetches, and a general complaint about a blank turn would say that
+        # worse. This one is what a base case's blank turn reaches.
+        self._refuse_a_payload_with_nothing_to_send()
         self._refuse_a_same_turn_planting()
         self._refuse_a_canary_the_wrong_channel_spells_out()
         self._refuse_a_canary_a_nonce_could_be_confused_with()
@@ -1544,12 +1588,71 @@ class Case:
                 f"{self.id} derives from itself. A rename that moved the id and not "
                 "the derivation reads as a variant of a case that no longer exists"
             )
-        if varies and not self.payload.strip():
+        if varies and not self.script.strip():
             raise ValueError(
                 f"{self.id} is a variant and carries no payload of its own. "
                 "`derived_from` is provenance and never a base the loader fetches: a "
                 "record with nothing to send would put what arrives on the wire in "
                 "the loader rather than in the library (ADR-0051)"
+            )
+
+    def _refuse_a_payload_with_nothing_to_send(self) -> None:
+        """Every turn of a case's payload is a message, so none of them is empty.
+
+        The field is a sequence, so *nothing to send* has two spellings — no turns at
+        all, and a turn that is blank — and both are the same fault: a record whose
+        payload the loader would have to supply from somewhere (ADR-0051, ADR-0053).
+        """
+        if not self.payload:
+            raise ValueError(
+                f"{self.id} carries no payload at all. A case is a payload and the "
+                "criterion that decides its verdict, so a record with no turns to "
+                "send is not a case"
+            )
+        blank = [index for index, turn in enumerate(self.payload) if not turn.strip()]
+        if blank:
+            raise ValueError(
+                f"{self.id} carries a blank turn at {blank}. Every element of a "
+                "payload is a message that goes on the operator's endpoint, so an "
+                "empty one is a call no verdict depends on"
+            )
+
+    def _refuse_a_script_no_target_could_answer(self) -> None:
+        """Three things a fixed multi-turn case may not be.
+
+        A script has to declare `SESSION_RETENTION`, may not be judged, and may not
+        also carry a planting turn. Why each, and what the alternatives cost, is
+        [ADR-0053](../../docs/adr/0053-a-case-may-be-a-sequence-and-the-verdict-is-read-per-turn.md)
+        §5.
+
+        The consequence local to this method is that all three are properties of the
+        **record** and not of the caller that sends it — the same reason
+        `_refuse_a_same_turn_planting` below sits here rather than in `attacker.py`,
+        and the reason each message names the field to repair.
+        """
+        if len(self.payload) < 2:
+            return
+        if Precondition.SESSION_RETENTION not in self.requires:
+            raise ValueError(
+                f"{self.id} sends {len(self.payload)} turns and does not require "
+                f"{Precondition.SESSION_RETENTION}. A script against a target that "
+                "forgets the previous turn measures the target's memory rather than "
+                "its defences, and the honest answer is not measurable rather than a "
+                "rate of zero (ADR-0053, ADR-0004)"
+            )
+        if self.verdict_class is VerdictClass.JUDGED:
+            raise ValueError(
+                f"{self.id} is {self.verdict_class} and sends a script. A judged "
+                "brief carries the case's own text as one string and the instrument's "
+                "reliability rests on single-turn gold transcripts, so a judged "
+                "multi-turn case is not a wider brief but a new gold set (ADR-0053)"
+            )
+        if self.planting is not None:
+            raise ValueError(
+                f"{self.id} sends a script and carries a planting turn. A planting "
+                "turn is the one turn that is sent and not scored, and its whole "
+                "worth is that the verdict is read against it — which is a reading "
+                "over one scored turn and not several (ADR-0041, ADR-0053)"
             )
 
     def _refuse_a_same_turn_planting(self) -> None:
@@ -1586,14 +1689,14 @@ class Case:
         if not persists or condition is None:
             return
         canary = condition.planted_canary or ""
-        if canary and canary in self.payload:
+        if canary and canary in self.script:
             raise ValueError(
                 f"{self.id} carries the canary {canary!r} in the turn its verdict is "
                 "read over, so a target that echoed the message would score. The "
                 "canary is composed by executing the planted instruction and appears "
                 "in neither message the attempt sends"
             )
-        if planting and planting in self.payload:
+        if planting and planting in self.script:
             raise ValueError(
                 f"{self.id} carries its own planting turn inside the turn its verdict "
                 "is read over, which makes the attack answerable in one exchange. A "
@@ -1626,14 +1729,14 @@ class Case:
         if condition is None or condition.kind not in PLANTED_BY_THE_BENCH:
             return
         canary = condition.planted_canary or ""
-        if canary and canary in self.payload:
+        if canary and canary in self.script:
             raise ValueError(
                 f"{self.id} carries the canary {canary!r} in the turn its verdict is "
                 "read over, so a target that echoed the message would score. The "
                 "canary is composed by carrying the instruction out, and no message "
                 "the attempt sends holds the join"
             )
-        spelled = spells_out(self.payload, canary)
+        spelled = spells_out(self.script, canary)
         if condition.kind in CARRIED_BY_THE_MESSAGE and not spelled:
             raise ValueError(
                 f"{self.id} reads a direct override and its payload spells out no "
@@ -1696,7 +1799,7 @@ class Case:
             # Plain containment and not `spells_out`, because this canary is not
             # composed: it is held whole in the target's data and disclosing it emits
             # it whole.
-            if canary in self.payload:
+            if canary in self.script:
                 raise ValueError(
                     f"{self.id} carries the value {canary!r} in the message it "
                     "sends, so a target that quoted the message back would score. "
@@ -2020,7 +2123,7 @@ def load_case(path: Path) -> Case:
             identifier=external_id["identifier"],
             not_tested=external_id["not_tested"],
         ),
-        payload=record["payload"],
+        payload=_payload(record),
         planting=record.get("planting"),
         success_condition=None
         if success is None
@@ -2050,6 +2153,33 @@ def load_case(path: Path) -> Case:
         history=history,
         retirement=_retirement(record.get("retirement"), history),
     )
+
+
+def _payload(record: dict[str, Any]) -> tuple[str, ...]:
+    """The turns a record sends, refused when it writes them as one string.
+
+    One shape on disk and a refusal for the other, never both accepted, for the
+    reason `_transform` below is read rather than defaulted. The migration that
+    follows from it — and why refusing beats tolerating — is
+    [ADR-0053](../../docs/adr/0053-a-case-may-be-a-sequence-and-the-verdict-is-read-per-turn.md)
+    §1.
+
+    Local to this function: the check is `isinstance(list)` and not truthiness,
+    because `tuple("a message")` is eleven one-character turns rather than an error.
+    """
+    written = record.get("payload")
+    if not isinstance(written, list) or not all(
+        isinstance(turn, str) for turn in written
+    ):
+        raise ValueError(
+            f"{record.get('id')!r} does not write its payload as an array of turns. "
+            "A case sends one turn or several and both are spelled the same way on "
+            "disk, so a bare string here would be read as one turn per character. A "
+            "record written before ADR-0053 needs one wrapping bracket round its "
+            "payload; a deployed library mounted from before it needs re-seeding "
+            "from the image's own"
+        )
+    return tuple(written)
 
 
 def _transform(record: dict[str, Any]) -> Transform:

@@ -123,7 +123,7 @@ def test_the_output_filter_alone_holds_the_leakage_cases_no_marker_matches(
     for case_id in ("data-leakage-002", "data-leakage-003"):
         case = next(entry for entry in library if entry.id == case_id)
 
-        assert INPUT_CHECK.stops(case.payload) is None, "a marker matched after all"
+        assert INPUT_CHECK.stops(case.script) is None, "a marker matched after all"
         assert rate_of(case, hardened_without("input_check")) == 0.0
         assert rate_of(case, hardened_without("output_filter")) == 1.0
 

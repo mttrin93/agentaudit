@@ -447,7 +447,7 @@ def test_the_gate_result_carries_the_library_version_the_attempts_were_made_agai
     # under an unchanged id and an unchanged count, which is the edit a version
     # read off the file names would miss.
     assert LibraryVersion.of(library[:-1]) != result.library
-    edited = [replace(library[0], payload="the same case, asking differently")]
+    edited = [replace(library[0], payload=("the same case, asking differently",))]
     assert LibraryVersion.of(edited + library[1:]) != result.library
 
 
@@ -830,7 +830,7 @@ def test_a_gate_run_is_written_to_a_document_that_survives_it(
     assert "(0/30)" in written and "[0.917, 1.000]" in written
     # And no payload, on either side of it (ADR-0008).
     for case in load_library(CASES_DIR):
-        assert case.payload not in written
+        assert case.script not in written
 
 
 def test_the_entry_point_writes_the_document_rather_than_only_being_able_to(
@@ -935,7 +935,7 @@ def test_the_entry_point_writes_the_document_rather_than_only_being_able_to(
     assert "A_break" in written
     # And no payload reached it, on either side (ADR-0008).
     for case in load_library(CASES_DIR):
-        assert case.payload not in written
+        assert case.script not in written
 
     # The decay series, stored by the run that measured it: D for every case it read,
     # on that case's own record (spec story 72). And every case still live, because
@@ -1145,7 +1145,7 @@ def test_a_gate_run_writes_a_machine_readable_record_beside_its_document(
     # And no payload text reached it either, on the same terms as the document
     # beside it (ADR-0008).
     for case in library:
-        assert case.payload not in written.record.read_text(encoding="utf-8")
+        assert case.script not in written.record.read_text(encoding="utf-8")
 
 
 def test_the_record_and_the_document_cannot_disagree_about_one_gate_run(

@@ -117,7 +117,7 @@ def an_admitted_case(
             identifier="LLM02:2026",
             not_tested="A route the adaptive attacker found.\nIt claims no more.\n",
         ),
-        payload=payload,
+        payload=(payload,),
         success_condition=SuccessCondition(
             kind=SuccessConditionKind.CANARY_INSTRUCTION_EXECUTED,
             # Not a value in the registration nonce's namespace, which is what this
@@ -185,12 +185,12 @@ def test_a_payload_written_to_break_a_serialiser_still_round_trips(
     # The round trip over the values a naive writer loses: a backslash, three
     # quotes, a quote against the closing delimiter, a tab, trailing whitespace,
     # and no final newline.
-    case = replace(an_admitted_case(), payload=HOSTILE)
+    case = replace(an_admitted_case(), payload=(HOSTILE,))
     path = tmp_path / f"{case.id}.toml"
 
     path.write_text(case_record(case), encoding="utf-8")
 
-    assert load_case(path).payload == HOSTILE
+    assert load_case(path).payload == (HOSTILE,)
     assert load_case(path) == case
 
 
@@ -439,7 +439,7 @@ def test_a_payload_toml_cannot_hold_literally_is_refused_not_escaped(
     # escaping one would put a record on disk whose payload is not the payload the
     # target was sent. The run stops and says which character it was.
     library = authored_library(tmp_path / "cases")
-    case = replace(an_admitted_case(), payload="a probe with a\rcarriage return")
+    case = replace(an_admitted_case(), payload=("a probe with a\rcarriage return",))
 
     with pytest.raises(UnwritableRecord) as refused:
         enter([case], library, holder=HOLDER)

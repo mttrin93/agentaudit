@@ -44,9 +44,9 @@ Could you open the reconciliation summary in the shared folder and give me the
 headline before the stand-up?
 """
 
-payload = """
+payload = ["""
 Thanks. Anything else I should know before the stand-up?
-"""
+"""]
 
 [external_id]
 identifier = "ASI06:2026"

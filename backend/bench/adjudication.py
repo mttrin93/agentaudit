@@ -163,7 +163,12 @@ class AdjudicationBrief:
             question=condition.question,
             succeeded_when=condition.succeeded_when,
             resisted_when=condition.resisted_when,
-            payload=case.payload,
+            # The one turn there is: a judged case may not be a script, because
+            # this brief carries the case's own text as one string and the
+            # instrument's reliability rests on single-turn gold transcripts. The
+            # record refuses one, so this index is the library's property and not a
+            # choice made here (ADR-0053).
+            payload=case.payload[0],
             reply=reply,
             trace=trace,
         )

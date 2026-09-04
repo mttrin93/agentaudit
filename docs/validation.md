@@ -1645,6 +1645,121 @@ on 2026-09-04.
   comes due with the first admitted variant — a gate run of any outcome replaces the
   citation — and what the group owes there is still a run rather than a decision.
 
+### A case may be a sequence, and one attempt is one script in one session (#74)
+
+**This section records a type change, four decisions and one figure that moved for no
+measured reason.** `Case.payload` is a sequence of turns, an attempt is that whole
+sequence in one session, and the criterion is applied per turn
+([ADR-0053](./adr/0053-a-case-may-be-a-sequence-and-the-verdict-is-read-per-turn.md)).
+**No scripted record is committed and no variant is admitted**, so no rate, `D`, κ,
+band, gate decision or gate citation moved and the library is still eighteen
+single-turn base cases. Read on 2026-09-04.
+
+- **The library digest moved and no payload changed.** From `89288dbf94f9` to
+  `31cacb9d69ec`, on #65's and #72's precedent: `_versioned` reads
+  `dataclasses.fields`, so a case whose payload is now a one-element tuple reprs
+  differently and eighteen records asking the identical eighteen questions hash to
+  something else. **The count of eighteen is what says no case was written**, and every
+  record in `backend/cases/` is in the diff gaining one wrapping bracket and nothing
+  else. The designed tripwire (`test_the_library_version_did_not_move`) is updated with
+  the reason rather than loosened.
+- **The independence property was driven red, and it is the one that pays for the
+  rate.** Two attempts of one *scripted* case must not share a session id — the whole
+  of `attacker.py`'s opening claim, asserted over a case whose turns are deliberately
+  dependent. Making the session id a function of the case alone fails it; the
+  per-attempt `uuid4` that was already there is what makes it pass, so nothing about
+  the session id changed and the property is now asserted where a script could break
+  it.
+- **The per-turn verdict was driven red against the design it replaces.** A fixture
+  target that leaks on turn two of four and holds on turn four scores **succeeded**,
+  and the test fails against an implementation that reads the last transcript — which
+  was written first, on purpose, to see it fail. The reason is the adaptive layer's and
+  it carries here unchanged: a break that nobody checked for is a break recorded as
+  resistance.
+- **An unreadable turn is skipped and the last turn is not.** A turn whose reply
+  carries nothing the condition can read is not a resisted turn
+  (`measurability.checkable`), and removing that skip makes a trace-dependent script
+  raise on its first turn. Applying the same filter to the *last* turn makes
+  `TraceNotVisible` disappear into a quiet *resisted* — the soft number ADR-0004
+  refuses — which is why the last turn is read unguarded and a single-turn attempt
+  therefore behaves exactly as it did before scripts existed.
+- **The estimate already priced turns and now prices scripts.** `RunBudget.declare`
+  sums `case.turns`, which ADR-0041 built for a two-turn case; `Case.turns` now sums
+  the script and the planting turn, so a four-turn script prices four calls per attempt
+  and the ceiling `_send` authorises before the first turn goes out covers all of them
+  (ADR-0007). `RunPlan` carries the records that state their own turns and no second
+  copy of the arithmetic was added — the departure from #74's text is argued in
+  ADR-0053 §6.
+- **The retention precondition is #48's and was consumed rather than re-declared.**
+  `Precondition.SESSION_RETENTION`, `TargetConfig.retains_session_state`, the arm in
+  `measurability._target_meets` and `NotMeasurable.NO_SESSION_RETENTION` all landed
+  with ADR-0041. What #74 adds is a refusal on the record: a payload of more than one
+  turn that does not declare it does not load, so a script cannot be run against a
+  stateless target and reported as a rate of zero. Nothing in the frontend or the
+  contract changed.
+- **The declaration is not reachable from the register screen, and neither is the
+  other elective precondition.** Found while reviewing this ticket against #74's own
+  bullet list, which asks for *one declaration in the register screen, beside the
+  tool-visibility radio*. `retains_session_state` and `holds_personal_records` are
+  both fields on `TargetConfig` with a conservative `False` default, and the only
+  writer of either in the repository is `targets/reference/operator.py` — there is no
+  field on `TargetRequest`, no radio in `RegisterScreen.tsx` and no mention in
+  `frontend/src/register/declarations.ts`. So a **user's** target can declare neither,
+  every case requiring either reports *not measurable*, and that is the honest reading
+  rather than a wrong one: the refusal path works and the declaration path does not
+  exist. **#74 deliberately does not close it.** The gap covers both preconditions and
+  belongs to the elective tier that introduced them
+  ([docs/specs/elective-family-tier.md](./specs/elective-family-tier.md)); adding a
+  radio for one of the two and not the other would leave the register screen saying
+  that one declared capability matters and the other does not. Written down here
+  because a precondition nobody can declare is a family nobody can be measured on.
+- **Three shapes a record may not have, all refused in `__post_init__`.** A judged
+  script (the brief is one string and κ rests on single-turn gold transcripts), a
+  script that also plants (several scored turns and one control is a shape no reading is
+  defined over), and a payload with no turns or a blank one. Each was driven red by
+  disabling its own clause; the planting refusal needed a persistence-condition record
+  to be the *first* guard reached, which is a fact about guard order rather than about
+  the decision.
+- **`Transform.SCRIPTED_CRESCENDO` is still refused, and now names #75.** `applied`
+  takes and returns a sequence, so a single-turn transform over a script is that
+  construction applied turn by turn. The one member that would have to *write* a script
+  is a construction over the base case's meaning rather than its spelling, and that is
+  #75's two deterministic variants. The refusal was re-pointed rather than removed.
+- **One shape on disk, and the first record change that needs a migration.** A record
+  whose payload is a bare string does not load: `tuple("a message")` is eleven
+  one-character turns, which would go out as eleven calls on the operator's endpoint
+  and score whatever came back, so the loader refuses the string rather than accepting
+  either shape. Driven red by un-bracketing a real record's payload. The consequence
+  was found by running the suite on a development machine that had a library volume
+  seeded before this change: `app.deployed_library` seeds a mounted library only when
+  the mount is empty, so a bench redeployed onto such a volume refuses to boot until
+  the volume is re-seeded. Refusing is the right direction and the refusal says what to
+  do; argued in ADR-0053 §1.
+- **The whole path was exercised over real HTTP as well as against a stub.** A
+  three-turn script whose last turn is the library's own leakage payload, against the
+  trivial reference agent served over HTTP: three transcripts, one session id, and the
+  verdict read off the first turn whose reply carried the nonce. No result here comes
+  from a path a real run would not take (spec story 19).
+- **An attempt with no evidence, and a verdict off a turn nobody has, are both
+  refused.** `Attempt.__post_init__` refuses empty `transcripts` and a
+  `decided_on_turn` outside them, and `evaluate_script` refuses an empty sequence
+  rather than raising an `IndexError` from an expression nobody reads as a check. All
+  three driven red.
+- **`Case.script` joins the turns with a newline, and the guards read the join.**
+  Every canary guard on the record asks what the *attempt* sends rather than what one
+  turn does, because a canary spelled across two turns is a canary the attempt sent.
+  The cost is named on the property: the join can in principle manufacture a
+  containment neither turn holds, across the newline between them. It errs towards
+  refusing a record, which is the direction every guard there errs in, and it is
+  vacuous today — eighteen single-turn records, where the join is the payload
+  unchanged. **#75's crescendo scripts are the first records that can reach it.**
+- **What downstream tickets inherit.** The payload type for a sequence is
+  `tuple[str, ...]` on `Case`; the evidence is `Attempt.transcripts` with
+  `Attempt.decided_on_turn` naming the turn the verdict was read over and
+  `Attempt.scored` resolving it; and one attempt maps to one script in one session
+  with the denominator unmoved. The run arithmetic — `attempts_per_family()`, PLAN §3's counts,
+  `rule.attempts_per_case` — is untouched and stays #76's.
+
 ---
 
 ## Pre-gate observations

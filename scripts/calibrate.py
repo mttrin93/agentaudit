@@ -299,7 +299,7 @@ def _print_result(
             )
             print(f"  attempt {attempt.case_id} #{attempt.index}")
             print(f"    verdict: {attempt.verdict}  ({reached})")
-            print(f"    reply:   {excerpt(attempt.transcript.reply_text)}")
+            print(f"    reply:   {excerpt(attempt.scored.reply_text)}")
 
         # Printed after the attempts and never among them: an attempt is the unit
         # of the denominator and a finding is a verdict plus its narrative, and

@@ -183,7 +183,7 @@ def test_a_stored_reading_does_not_move_the_library_version(
 
     assert LibraryVersion.of(read) == LibraryVersion.of(library)
     # And an edit to what the case actually asks still moves it.
-    edited = [replace(library[0], payload="something else"), *library[1:]]
+    edited = [replace(library[0], payload=("something else",)), *library[1:]]
     assert LibraryVersion.of(edited) != LibraryVersion.of(library)
 
 
@@ -819,7 +819,7 @@ def a_run(name: str, cases: list[Case], successes: int) -> TargetRun:
                 family=case.family,
                 target_name=name,
                 index=index,
-                transcript=probe,
+                transcripts=(probe,),
                 verdict=(Verdict.SUCCEEDED if index < successes else Verdict.RESISTED),
                 verdict_class=case.verdict_class,
             )

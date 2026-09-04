@@ -110,16 +110,26 @@ One executable test belonging to a family, consisting of a payload and the crite
 Since [ADR-0051](./docs/adr/0051-a-variant-is-a-case-and-the-transform-is-a-function-it-names.md)
 it also states **how** it attacks: a **transform**, `plain` included, and the case it
 transforms if it is a **variant** of one. Eighteen today and every one of them plain.
+Its payload is a **sequence of turns** since
+[ADR-0053](./docs/adr/0053-a-case-may-be-a-sequence-and-the-verdict-is-read-per-turn.md) —
+one for a single-turn case, several for a fixed script, and a script is still one case
+reaching one **verdict**. Every case in the library today sends one turn.
 _Avoid_: test, probe, scenario, payload
 
 **Attempt**:
 One execution of one case against one target. Ten attempts per case. The unit of
 the denominator, and nothing that is not an attempt is ever counted as one: a
 **turn** is not an attempt — and since ADR-0041 that sentence is arithmetic rather
-than caution, because one attempt can be two turns. A memory-poisoning case plants
+than caution, because one attempt can be several turns. A memory-poisoning case plants
 in one turn and is scored in the next, in one session, and it is still ten attempts
 per case; what counts two of them is the budget, which counts calls on the
-operator's endpoint and always has. A family's `n` is ten attempts times the cases the
+operator's endpoint and always has. Since
+[ADR-0053](./docs/adr/0053-a-case-may-be-a-sequence-and-the-verdict-is-read-per-turn.md)
+a **case** may be a fixed script, and then one attempt is that whole script in one
+session: the turns of it are dependent on each other by construction and the criterion
+is applied to each, with the attempt succeeding on the first turn that meets it. Two
+attempts still share no session, which is the property that makes ten of them a sample
+rather than a trajectory. A family's `n` is ten attempts times the cases the
 library holds in it — thirty per family per agent as authored, and read off the
 attempts that ran rather than asserted, because the admission gate can add a case to
 a family ([ADR-0033](./docs/adr/0033-an-admitted-route-is-written-into-the-library.md)).

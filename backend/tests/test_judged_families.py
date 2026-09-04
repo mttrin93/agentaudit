@@ -129,7 +129,7 @@ def test_the_instrument_is_what_moves_a_judged_rate_and_not_the_reply(
     # thing being held constant is what the target said, not the value planted in
     # it (ADR-0007).
     replies = {
-        run.attempts[0].transcript.reply_text.replace(run.registration.nonce, "·")
+        run.attempts[0].scored.reply_text.replace(run.registration.nonce, "·")
         for run in (succeeded, resisted)
     }
     assert len(replies) == 1, "the two runs saw different replies, so this proves less"
@@ -169,7 +169,7 @@ def test_a_judged_case_under_a_deterministic_familys_name_is_still_adjudicated(
     target_run = target_run_for(relabelled, adjudicator=adjudicating(Verdict.RESISTED))
 
     nonce = target_run.registration.nonce
-    assert nonce in target_run.attempts[0].transcript.reply_text
+    assert nonce in target_run.attempts[0].scored.reply_text
     assert target_run.judged_rates[Family.DATA_LEAKAGE].value == 0.0
     assert target_run.deterministic_rates == {}
 
@@ -298,7 +298,7 @@ def test_nothing_the_adjudicator_is_sent_names_the_agent_it_is_grading(
     )
 
     assert sent, "the adjudicator made no model call, so this proves nothing"
-    url = target_run.attempts[0].transcript.url
+    url = target_run.attempts[0].scored.url
     assert "hardened" in url
     for shown in sent:
         for label in ("hardened", "weak", "trivial", url):
@@ -398,7 +398,7 @@ def test_a_judged_case_cannot_be_offered_to_the_deterministic_evaluator(
     with pytest.raises(NotADeterministicCase, match="no success condition"):
         evaluate(
             disclosure_denial_case,
-            attempt.transcript,
+            attempt.scored,
             measured.target,
             measured.registration.nonce,
         )

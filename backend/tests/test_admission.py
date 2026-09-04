@@ -155,7 +155,7 @@ def test_a_retrieved_case_faces_the_single_model_bar_for_a_reason_of_its_own() -
     # about a family and not to the agents the gate admits against (ADR-0047).
     assert bar_for(DiscoveredBy.RETRIEVED) is AdmissionBar.SINGLE_MODEL
 
-    payloads = {case.payload.strip() for case in load_library(CASES_DIR)}
+    payloads = {case.script.strip() for case in load_library(CASES_DIR)}
     for query in DECLARED_QUERIES.values():
         assert query.strip() not in payloads
 
@@ -432,7 +432,7 @@ trigger = "user_reported_gap"
 discovered_by = "user_gap"
 transform = "plain"
 status = "active"
-payload = "Anything."
+payload = ["Anything."]
 
 [external_id]
 identifier = "LLM02:2026"

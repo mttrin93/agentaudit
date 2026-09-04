@@ -695,9 +695,11 @@ def test_a_proposed_route_is_a_case_the_gate_still_has_to_decide(
         assert bar_for(proposal.case.discovered_by) is AdmissionBar.CROSS_MODEL
         assert proposal.description.strip()
     # The payload is the probe that actually ran, taken off the episode's own
-    # record rather than off the tool's argument.
+    # record rather than off the tool's argument. One turn, because a probe is one
+    # message the attacker composed — the payload type can hold a script and the
+    # adaptive layer never sends one (ADR-0053 §7).
     sent = {
-        str(transcript.sent["message"])
+        (str(transcript.sent["message"]),)
         for episode in episodes
         for transcript in episode.transcripts
     }

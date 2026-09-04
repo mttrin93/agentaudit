@@ -188,6 +188,96 @@ def articles_stated(articles: tuple[Article, ...]) -> str:
     return f"articles {', '.join(articles[:-1])} and {articles[-1]}"
 
 
+AGENTIC_LIST = "the OWASP agentic list"
+"""What a report calls the list `FamilyLabel.agentic` claims on.
+
+The short name and not `editions.AGENTIC_TOP_10_2026.edition`, which names the
+edition: every identifier a label carries already names its own edition
+(`__post_init__`), so a sentence that named it a second time would print
+*ASI01:2026 on the OWASP Top 10 for Agentic Applications 2026* and say 2026 twice.
+"""
+
+LLM_LIST = "the OWASP GenAI LLM list"
+"""What a report calls the list `FamilyLabel.llm` claims on. `AGENTIC_LIST`'s
+reasoning, and the two are spelled out here so the two halves of one sentence cannot
+be worded apart."""
+
+
+def bears_stated(articles: tuple[Article, ...]) -> str:
+    """`bears article 15 of the EU AI Act` — the sentence a reader prints for the
+    article half of a label.
+
+    `articles_stated` names the duties and this names the Act they are duties under,
+    and there is one of it for ADR-0040 decision 7's reason: the report prints this
+    sentence in three places and the screen prints it in three more, and *of the EU AI
+    Act* written out at six call sites is six chances for one of them to say something
+    else. The payload carries this rather than `articles_stated`, so the document and
+    the screen read one sentence rather than each appending the Act's name to a
+    fragment.
+
+    Lower case, because every reader of it puts it inside a longer sentence — *this
+    family bears …*, *the family bears … and claims …*. A capitalised form would be a
+    second rendering, which is the thing this exists to stop.
+    """
+    return f"bears {articles_stated(articles)} of the EU AI Act"
+
+
+def claims_stated(label: FamilyLabel) -> str:
+    """`claims ASI01:2026 Agent Goal Hijack on the OWASP agentic list and …` — the
+    sentence a reader prints for the identifier half of a label.
+
+    `articles_stated`'s counterpart, beside it for the reason ADR-0040 decision 7
+    gives: one rendering for every reader, so the report, the payload and the screen
+    cannot word one claim three ways. It takes the record rather than a tuple,
+    because the sentence spans both identifier fields and a caller holding only one
+    of them would be a caller printing half a claim.
+
+    **Both lists are named in every answer, including the one that claims nothing on
+    either.** An empty tuple is a real answer on both fields (`FamilyLabel`), and a
+    line that dropped the empty side would leave *this family claims nothing here*
+    indistinguishable from *this list was not consulted* — which is the reading
+    `published.UntestedCategory` exists to keep separate at the other end.
+
+    **Each identifier prints with the title the stored copy carries, verbatim.** The
+    title is the published wording, transcribed under the provenance discipline
+    `editions.py` states, and printing the identifier alone would leave a reader with
+    a number to look up — while printing this repository's paraphrase of the entry is
+    the thing a stored copy exists to prevent: a copy that has gone stale shows up as
+    a mismatch against the source, and a paraphrase hides as a wording choice
+    ([ADR-0036](../../docs/adr/0036-a-published-identifier-resolves-to-a-stored-copy.md),
+    ADR-0002). `FamilyLabel.__post_init__` has already refused an identifier that
+    resolves to no copy, so the lookup here cannot come back empty.
+
+    Reads the tuples in the order the label declares them and sorts nothing, on
+    `articles_stated`'s reasoning: the printed line has to be stable for a golden
+    digest, and the order is data.
+    """
+    return (
+        f"claims {_entries(label.agentic)} on {AGENTIC_LIST} and "
+        f"{_entries(label.llm)} on {LLM_LIST}"
+        if label.agentic or label.llm
+        else "claims nothing on either published list"
+    )
+
+
+def _entries(identifiers: tuple[str, ...]) -> str:
+    """Those entries as a reader reads them, or `nothing` where there are none."""
+    if not identifiers:
+        return "nothing"
+    named = [_entry(identifier) for identifier in identifiers]
+    if len(named) == 1:
+        return named[0]
+    return f"{', '.join(named[:-1])} and {named[-1]}"
+
+
+def _entry(identifier: str) -> str:
+    """One claimed entry: its identifier, and the title the stored copy carries."""
+    stored = editions.resolves(identifier)
+    if stored is None:  # pragma: no cover - `FamilyLabel` refuses one that does not
+        raise ValueError(editions.refusal(identifier))
+    return f"{identifier} {stored.title}"
+
+
 def covering[F: StrEnum](
     labels: Mapping[F, FamilyLabel], kind: type[F]
 ) -> Mapping[F, FamilyLabel]:

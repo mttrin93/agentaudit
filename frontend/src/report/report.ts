@@ -57,6 +57,7 @@
 import type {
   AdaptiveSection,
   FamilyEntry,
+  FamilyLabel,
   FamilyRun,
   MeasuredSection,
   RunAttempts,
@@ -87,6 +88,26 @@ export const BAND_IN_A_TARGET_REPORT: Record<string, string> = {
   fails:
     'measurably worse than an agent built to be defended, and consistent with an ' +
     'agent that has a system prompt and no controls.',
+}
+
+/**
+ * A family's label as a card prints it: the duty, and the entries it claims.
+ *
+ * Two strings and not one, because they are two claims of different standing — the
+ * article is this project's reading of the Act from a table a model may not choose
+ * from, and the identifiers are a secondary label on somebody else's list (ADR-0002,
+ * ADR-0044). Both come off the payload's own rendered sentences: a screen that built
+ * either from the lists beside them would be a second copy of a legal mapping, and
+ * two copies of one claim are two claims once one of them is edited.
+ *
+ * Carried by every answer shape, including the two that carry no figure. What a
+ * family's failure falls under is a property of the family, so a withheld rate and
+ * an unmet precondition do not remove it — and a duty that appeared only beside a
+ * published rate would read as something the measurement conferred.
+ */
+export interface LabelReading {
+  bears: string
+  claims: string
 }
 
 /** What a family's cases test one case within, and what they do not test. */
@@ -132,10 +153,11 @@ export interface Figures {
  * third outcome, never a rate of zero).
  */
 export type FamilyAnswer =
-  | { kind: 'measured'; family: string; figures: Figures }
+  | { kind: 'measured'; family: string; label: LabelReading; figures: Figures }
   | {
       kind: 'withheld'
       family: string
+      label: LabelReading
       reason: string
       /**
        * The line that stands where the rate would be, in a reader's words.
@@ -160,6 +182,7 @@ export type FamilyAnswer =
   | {
       kind: 'not_measurable'
       family: string
+      label: LabelReading
       reason: string
       stated: string
       note: string
@@ -232,6 +255,18 @@ function goldSetCounts(
   )
 }
 
+/**
+ * One label as a card reads it, off the payload's own sentences.
+ *
+ * A rename and nothing else: both fields are whole sentences the payload carries,
+ * and this app adds no word to either. Nothing is derived from `agentic`, `llm` or
+ * `articles` — those are on the wire so a recipient can match an identifier as a
+ * key, and the sentence a reader reads is the bench's own.
+ */
+function labelOf(label: FamilyLabel): LabelReading {
+  return { bears: label.bears_stated, claims: label.claims_stated }
+}
+
 export function familyAnswers(measured: MeasuredSection): FamilyAnswer[] {
   return [
     ...measured.deterministic.map(measuredAnswer),
@@ -239,6 +274,7 @@ export function familyAnswers(measured: MeasuredSection): FamilyAnswer[] {
     ...measured.withheld.map((withheld) => ({
       kind: 'withheld' as const,
       family: withheld.family,
+      label: labelOf(withheld.label),
       reason: withheld.reason,
       reads: WITHHELD_READS[withheld.reason] ?? RATE_NOT_PUBLISHED,
       kappa: barringKappa(withheld),
@@ -250,6 +286,7 @@ export function familyAnswers(measured: MeasuredSection): FamilyAnswer[] {
     ...measured.not_measurable.map((absent) => ({
       kind: 'not_measurable' as const,
       family: absent.family,
+      label: labelOf(absent.label),
       reason: absent.reason,
       stated: absent.stated,
       note: NOT_MEASURABLE_NOTE,
@@ -257,7 +294,12 @@ export function familyAnswers(measured: MeasuredSection): FamilyAnswer[] {
   ]
 
   function measuredAnswer(entry: FamilyEntry): FamilyAnswer {
-    return { kind: 'measured', family: entry.family, figures: figuresOf(entry) }
+    return {
+      kind: 'measured',
+      family: entry.family,
+      label: labelOf(entry.label),
+      figures: figuresOf(entry),
+    }
   }
 
   function figuresOf(entry: FamilyEntry): Figures {

@@ -20,6 +20,32 @@ import {
 } from './http'
 
 
+/**
+ * What a family is labelled with: the entries it claims, and the articles it bears.
+ *
+ * The whole record and both sentences over it, because the payload carries both and
+ * a screen that rebuilt the sentence would be a second copy of a legal mapping in
+ * TypeScript — one that can disagree with the signed document nobody would notice.
+ * `bears_stated` and `claims_stated` are `labels.bears_stated` and
+ * `labels.claims_stated`, which is the one rendering every reader of a label uses
+ * (ADR-0040 decision 7, ADR-0044). Whole sentences, naming the Act and the two
+ * published lists, so this app prints a rendering rather than appending its own
+ * words to a fragment — and each claimed entry carries the title its stored copy
+ * transcribes rather than a paraphrase (ADR-0036).
+ *
+ * The lists are typed because a recipient matching `ASI01:2026` against a published
+ * list wants the identifier as a key rather than out of prose; the order inside
+ * `articles` is declared and never sorted — the first is the duty the family's
+ * failure principally bears on, so a surface with room for one shows `articles[0]`.
+ */
+export interface FamilyLabel {
+  agentic: string[]
+  llm: string[]
+  articles: string[]
+  bears_stated: string
+  claims_stated: string
+}
+
 /** One family's figures, each beside the counts it was derived from. */
 export interface FamilyEntry {
   family: string
@@ -44,6 +70,7 @@ export interface FamilyEntry {
   discrimination: number | null
   coverage: CoverageNote[]
   reliability: ReliabilityFigure | null
+  label: FamilyLabel
 }
 
 /**
@@ -85,6 +112,8 @@ export interface WithheldFamily {
   agreements: number | null
   transcripts: number | null
   stated: string
+  /** The duty this family still bears, which withholding a rate does not alter. */
+  label: FamilyLabel
 }
 
 /** A family the target could not answer. Three fields, and none of them is a rate. */
@@ -92,6 +121,8 @@ export interface NotMeasurableFamily {
   family: string
   reason: string
   stated: string
+  /** Borne whether or not anything was measured — a property of the family. */
+  label: FamilyLabel
 }
 
 /** The two cut points a band is read against, declared in advance. */

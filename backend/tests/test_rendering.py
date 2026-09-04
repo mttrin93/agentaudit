@@ -146,7 +146,7 @@ def test_every_section_states_its_own_reproducibility_and_three_read_the_payload
 
 # --- The golden digest: one document, pinned to the byte ---------------------
 
-GOLDEN_ONE_FAMILY = "f0d6e6baba43ae3fbbe98102105e98a90604e2a9769ce23571e202b1327b33c9"
+GOLDEN_ONE_FAMILY = "a0c1893ced05064602bee68ab6d2d73529a3425acde3cbc9909db49d186d8eb6"
 """The sha256 of `_one_family()`'s rendering, written down.
 
 **A tripwire, and it is deliberately a strict one.** Every other assertion in this
@@ -231,6 +231,22 @@ library and printed in every report, including runs never asked for the tier —
 ADR-0035, ADR-0018, and
 [ADR-0043](../../docs/adr/0043-the-canary-a-nonce-cannot-be-confused-with.md)
 decision 4. Nothing else in the document changed and no figure moved.
+
+Moved a ninth time, by #52, and this one is section 4 rather than the coverage
+section: **every family the document names now prints the article its failure bears
+on under the EU AI Act, and the entries it claims on the two published lists**
+([ADR-0044](../../docs/adr/0044-a-familys-label-prints-beside-its-figures.md)). Two
+lines inside each family's block, one clause on each withheld family and one on each
+unmeasurable one. This is the first time PLAN §4's central column has appeared in the
+artefact it was written for — it lived on `judge.Narrative`, which nothing under
+`rendering/` reads — so the digest moves for something that was missing rather than
+for something reworded. Each claimed entry prints with the title its stored copy
+carries, transcribed rather than paraphrased (ADR-0036), and both halves print beside
+a family named without a rate as well as beside one with figures: the signed document
+travels, so it may not be the surface that says less than the payload it is a view
+of. **No figure moved**: the label is read off `labels.LABELS`,
+which is a property of the family and not of the run, and `test_narration.py` asserts
+that a run's three narration states render to one document.
 """
 
 
@@ -643,6 +659,128 @@ def test_every_published_family_prints_the_case_inside_its_identifier_not_tested
             )
 
 
+# --- The label beside the family name (ADR-0039, ADR-0040) -------------------
+
+
+def test_every_family_the_document_names_prints_its_label_beside_the_name() -> None:
+    """PLAN §4's central column, in the document it was written for.
+
+    The article had never appeared in a signed report: it lived on
+    `judge.Narrative` and nothing under `rendering/` reads a narrative. It prints
+    beside the family name, which is where #42 and ADR-0039 said it belonged and
+    where `published.ClaimedInPart.stated` already says it is not — the coverage
+    section names no family on purpose (ADR-0037 §6), so the pairing happens here,
+    where the run's own figures are.
+
+    Asserted inside each family's own block rather than over the whole document,
+    because the family names nest as text and a containment check over the page
+    would let one family's line answer for another's.
+    """
+    payload = a_payload()
+    text = render(payload)
+
+    injection = "\n".join(_block(text, Family.INDIRECT_PROMPT_INJECTION))
+    assert "this family bears article 15 of the EU AI Act" in injection
+    assert (
+        "it claims ASI01:2026 Agent Goal Hijack on the OWASP agentic list and "
+        "LLM01:2026 Prompt Injection on the OWASP GenAI LLM list" in injection
+    )
+
+    # True of one article and of two, in the order the label declares: 50 before 13
+    # is what no sort produces (ADR-0040 decision 4).
+    denial = "\n".join(_block(text, Family.DISCLOSURE_DENIAL))
+    assert "this family bears articles 50 and 13 of the EU AI Act" in denial
+    assert (
+        "it claims ASI09:2026 Human-Agent Trust Exploitation on the OWASP agentic "
+        "list and nothing on the OWASP GenAI LLM list" in denial
+    )
+
+    # Every family the figures publish, and not only the two read above.
+    entries = [
+        *document(payload)["measured"]["deterministic"],
+        *document(payload)["measured"]["judged"],
+    ]
+    assert len(entries) == 3
+    for entry in entries:
+        own = "\n".join(_block(text, entry["family"]))
+        assert f"this family {entry['label']['bears_stated']}," in own
+        assert f"it {entry['label']['claims_stated']}," in own
+
+
+def test_a_family_named_without_a_rate_prints_the_duty_it_still_bears() -> None:
+    """The two lists that name a family instead of a figure carry the column too.
+
+    A withheld family and one the target could not be measured on are named in this
+    document and have no block of their own, and a reader who met the article only
+    beside a published rate would read the duty as something the measurement
+    conferred. It is a property of the family (CONTEXT.md, **article**).
+    """
+    text = render(
+        a_payload(
+            result=replace(
+                a_result(
+                    not_measurable={
+                        Family.HALT_DEFEAT: NotMeasurable.NO_TOOL_CALL_VISIBILITY
+                    }
+                )
+            )
+        )
+    )
+
+    # Wrongful commitment is the fixture's withheld family — κ 0.59 against a floor
+    # of 0.60 — and it bears two articles, in the order opposite to scope creep's.
+    [withheld] = [
+        line for line in text.splitlines() if line.startswith("- wrongful_commitment:")
+    ]
+    assert "bears articles 15 and 14 of the EU AI Act" in withheld
+    # And both halves, because the signed document is the surface that travels and
+    # may not be the one that says less than the payload it is a view of.
+    assert "claims ASI03:2026 Identity & Privilege Abuse" in withheld
+
+    [unmeasurable] = [
+        line for line in text.splitlines() if line.startswith("- **halt_defeat**:")
+    ]
+    assert "bears article 14(4)(e) of the EU AI Act" in unmeasurable
+    assert "claims ASI10:2026 Rogue Agents" in unmeasurable
+
+
+def test_no_elective_family_and_no_episode_is_given_an_article() -> None:
+    """The tier is named in this document and never labelled.
+
+    An elective family's label is a table of its own that nothing shortening a
+    printed coverage claim reads (ADR-0039), the tier is never gate-deciding
+    (ADR-0035), and an episode is not an attempt (ADR-0010). So the three sentences
+    that name a family the six do not hold — the fifth absence, and the families some
+    episode broke — carry no duty: an article printed there would be a legal claim
+    resting on a reading no scored rate is taken over.
+    """
+    text = render(a_payload())
+
+    # Anchored on the line's own opening and never on containment, because the two
+    # enumerations nest as text: `direct_prompt_injection` sits inside
+    # `indirect_prompt_injection`, so `family in line` matches one of the six's own
+    # heading and would report the wrong line as the tier's.
+    absent = [
+        line
+        for line in text.splitlines()
+        for family in ElectiveFamily
+        if line.startswith(f"- {family}:")
+    ]
+    assert len(absent) == len(ElectiveFamily), (
+        "no line in this document names an elective family, so the assertions below "
+        "would pass over an empty list"
+    )
+    for line in absent:
+        assert "EU AI Act" not in line, line
+        assert "claims " not in line, line
+
+    [broken] = [
+        line for line in text.splitlines() if "Families some episode broke" in line
+    ]
+    assert "EU AI Act" not in broken
+    assert "halt_defeat" in broken
+
+
 # --- The headline is the declared-and-defeated join --------------------------
 
 
@@ -821,16 +959,26 @@ def test_a_withheld_family_is_named_with_its_reading_and_never_with_its_rate() -
     text = render(payload)
     [withheld] = document(payload)["measured"]["withheld"]
 
-    assert f"- {withheld['stated']}." in text
+    # The payload's own sentence, and the two claims the family carries after it:
+    # withholding a rate alters neither (#52).
+    assert f"- {withheld['stated']}. The family bears " in text
     assert "0.59" in text and "13 of 15" in text
 
     # 12 of 30 is the rate that was measured and withheld. Neither the rate nor its
     # counts appear anywhere in the document.
     assert "12 of 30" not in text
     assert "rate 0.40" not in text
+    # Whole-line equality, not containment: the guard is that this is the *only*
+    # line in the document naming the family, and that nothing else was appended to
+    # it. The duty is part of that line since #52 and is asserted as part of it.
+    barred = (
+        f"- {withheld['stated']}. The family {withheld['label']['bears_stated']}, "
+        f"and {withheld['label']['claims_stated']} — neither is altered by a rate "
+        "this report does not publish."
+    )
     for line in text.splitlines():
         if "wrongful_commitment" in line:
-            assert line == f"- {withheld['stated']}."
+            assert line == barred
 
 
 def test_a_family_that_could_not_be_measured_reads_apart_from_a_rate_of_zero() -> None:

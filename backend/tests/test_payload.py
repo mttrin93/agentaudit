@@ -85,6 +85,7 @@ from backend.bench.scorer import (
     failure_rate,
 )
 from backend.graph.budget import Layer
+from backend.tests.conftest import imports_of
 
 IDENTIFIERS = {
     Family.DATA_LEAKAGE: ExternalId(
@@ -460,6 +461,125 @@ def test_no_field_in_the_payload_can_hold_a_gate_decision_about_the_target() -> 
         assert value not in answers, f"{path} carries the gate's answer {value!r}"
 
 
+# --- The label beside every family the document names (ADR-0039, ADR-0040) ---
+
+
+def test_every_family_the_measured_section_names_carries_its_label() -> None:
+    """PLAN §4's central column, in the artefact it was written for.
+
+    The article mapping was written before any code and had never been printed in a
+    signed document: `judge.Narrative` held it and nothing under `payload.py` read a
+    narrative. It arrives here off `labels.LABELS` rather than off a finding, so a
+    run made with no narrative instrument carries the same column as one made with
+    both (ADR-0039, ADR-0040, #52).
+    """
+    measured = document(a_payload())["measured"]
+
+    # Written out rather than read back off the table, so this assertion can
+    # disagree with the label: a check that rebuilt the block the way the payload
+    # does would pass against any table at all.
+    [injection] = [
+        entry
+        for entry in measured["deterministic"]
+        if entry["family"] == Family.INDIRECT_PROMPT_INJECTION
+    ]
+    assert injection["label"] == {
+        "agentic": ["ASI01:2026"],
+        "llm": ["LLM01:2026"],
+        "articles": ["15"],
+        "claims_stated": (
+            "claims ASI01:2026 Agent Goal Hijack on the OWASP agentic list and "
+            "LLM01:2026 Prompt Injection on the OWASP GenAI LLM list"
+        ),
+        "bears_stated": "bears article 15 of the EU AI Act",
+    }
+
+    # A family bearing two, in the order the label declares and never sorted — 50
+    # before 13, which no sort produces (ADR-0040 decision 4).
+    [denial] = [
+        entry
+        for entry in measured["judged"]
+        if entry["family"] == Family.DISCLOSURE_DENIAL
+    ]
+    assert denial["label"]["articles"] == ["50", "13"]
+    assert (
+        denial["label"]["bears_stated"] == "bears articles 50 and 13 of the EU AI Act"
+    )
+    assert denial["label"]["llm"] == []
+    assert denial["label"]["claims_stated"].endswith(
+        "and nothing on the OWASP GenAI LLM list"
+    )
+
+
+def test_a_family_named_without_a_rate_carries_its_label_too() -> None:
+    # A label is a property of the family and not of the run, so the two lists that
+    # name a family *instead of* a figure carry it as well: a withheld family and an
+    # unmeasurable one are still the family the Act's duty falls on, and a reader who
+    # met the column only beside a published rate would read the duty as something
+    # the measurement conferred.
+    measured = document(
+        a_payload(
+            result=replace(
+                a_result(
+                    not_measurable={
+                        Family.HALT_DEFEAT: NotMeasurable.NO_TOOL_CALL_VISIBILITY
+                    }
+                )
+            )
+        )
+    )["measured"]
+
+    [withheld] = measured["withheld"]
+    assert withheld["family"] == Family.WRONGFUL_COMMITMENT
+    assert withheld["label"]["articles"] == ["15", "14"]
+
+    [unmeasurable] = measured["not_measurable"]
+    assert unmeasurable["family"] == Family.HALT_DEFEAT
+    assert unmeasurable["label"]["articles"] == ["14(4)(e)"]
+    assert unmeasurable["label"]["agentic"] == ["ASI10:2026"]
+
+
+def test_no_elective_family_and_no_episode_carries_a_label() -> None:
+    """The tier names families in this document and none of them is labelled.
+
+    `_label` is keyed on `Family`, so an elective family cannot reach it — the same
+    boundary `labels.label_for` holds and the reason `judge.narrated` raises. The
+    fifth absence names three elective families by name, the adaptive section names
+    the families some episode broke, and neither may carry an article: a duty printed
+    beside a row no scored rate is read over would be a legal claim about a reading
+    the gate is not decided on (ADR-0035, ADR-0010, ADR-0018).
+    """
+    body = document(a_payload())
+
+    assert [one["family"] for one in body["elective"]["not_requested"]] == [
+        family.value for family in ElectiveFamily
+    ]
+    for absent in body["elective"]["not_requested"]:
+        assert "label" not in absent
+    for episode in body["adaptive"]["episodes"]:
+        assert "label" not in episode
+    assert "label" not in body["adaptive"]
+
+    # And no label reaches the document by any other route than a family the measured
+    # section names: the whole document holds exactly as many as it names families.
+    named = {
+        entry["family"]
+        for key in ("deterministic", "judged", "withheld", "not_measurable")
+        for entry in body["measured"][key]
+    }
+    assert len(_labels_in(body)) == len(named)
+
+
+def _labels_in(node: object) -> list[object]:
+    """Every `label` block anywhere in the document, at any depth."""
+    if isinstance(node, dict):
+        held = [node["label"]] if "label" in node else []
+        return held + [one for value in node.values() for one in _labels_in(value)]
+    if isinstance(node, list):
+        return [one for value in node for one in _labels_in(value)]
+    return []
+
+
 # --- Negative coverage, derived and looked-up-able ---------------------------
 
 
@@ -610,7 +730,9 @@ def test_a_judged_family_below_the_kappa_floor_is_absent_with_its_reason_present
         and "below the declared floor" in (withheld["stated"])
     )
     # And no rate, interval or band under it — the rate is recorded on the run and
-    # is not published (ADR-0015).
+    # is not published (ADR-0015). `label` is on the roster since #52 and is not a
+    # figure: what a family's failure bears on under the Act is a property of the
+    # family, so it is the same block here as beside a published rate.
     assert set(withheld) == {
         "family",
         "reason",
@@ -619,6 +741,7 @@ def test_a_judged_family_below_the_kappa_floor_is_absent_with_its_reason_present
         "agreements",
         "transcripts",
         "stated",
+        "label",
     }
 
 
@@ -675,8 +798,10 @@ def test_a_family_the_target_could_not_answer_reads_apart_from_a_rate_of_zero() 
     assert unanswerable["family"] == "halt_defeat"
     assert unanswerable["reason"] == "no_tool_call_visibility"
     assert "not measurable" in unanswerable["stated"]
-    # No rate of any kind under it, and it appears in no rate-carrying list.
-    assert set(unanswerable) == {"family", "reason", "stated"}
+    # No rate of any kind under it, and it appears in no rate-carrying list. The
+    # label is on the roster and is not a rate: a family nobody could measure bears
+    # the same duty as one that was measured (#52).
+    assert set(unanswerable) == {"family", "reason", "stated", "label"}
     assert "halt_defeat" not in [
         entry["family"]
         for entry in [*body["measured"]["deterministic"], *body["measured"]["judged"]]
@@ -924,6 +1049,63 @@ def test_no_payload_text_from_any_case_appears_anywhere_in_the_artefact(
     # A case **id** does travel, because it is a pointer into the evidence rather
     # than a copy of it — the same distinction the gate documents already make.
     assert "data-leakage-001" in prose
+
+
+# --- No narrative reaches the document (ADR-0008, ADR-0030, ADR-0044) --------
+
+BENCH = Path(__file__).resolve().parents[1] / "bench"
+
+SERIALISERS = (
+    BENCH / "payload.py",
+    BENCH / "rendering" / "__init__.py",
+    BENCH / "rendering" / "_measured.py",
+    BENCH / "rendering" / "_declared.py",
+    BENCH / "rendering" / "_annexes.py",
+    BENCH / "rendering" / "_layout.py",
+)
+"""The modules that turn a result into bytes and into the document a human reads.
+
+`assembler.py` is deliberately not on this list: it takes a `TargetRun`, which
+*holds* the narrations, so a direct-import check over it would assert nothing. What
+holds the line there is behaviour rather than an import — `test_narration.py`
+asserts that a run's narration state does not change a byte of either artefact.
+"""
+
+THE_JUDGE_SIDE = ("judge", "narration", "remediation", "finding")
+"""Words no import in a serialiser may carry.
+
+Substrings and not exact names, because the records travel under several: a
+`Finding`, a `Narrative`, a `Narration` and a `Remediation` are four types in three
+modules and a check written against one of them would let the other three through.
+"""
+
+
+def test_no_narrative_or_remediation_reaches_the_document_or_its_view() -> None:
+    """The judge's prose is out of the signed artefact, and it is out by import.
+
+    [ADR-0030](../../docs/adr/0030-the-judge-runs-over-the-scored-layers-successes.md)
+    left surfacing a narrative to a ticket of its own on two grounds — what a signed
+    document may say about a target's failure is ADR-0008's question, and a document
+    carrying one would have to declare the instrument that wrote it — and #52 spent
+    neither: PLAN §4's article column reaches this document off `labels.LABELS`,
+    which is a property of the family
+    ([ADR-0044](../../docs/adr/0044-a-familys-label-prints-beside-its-figures.md)).
+
+    Asserted rather than reviewed, because the tempting version of #52 is the one
+    that carries a `Finding` in here — and it would be one import.
+    """
+    for source in SERIALISERS:
+        named = sorted(
+            name
+            for name in imports_of(source)
+            if any(word in name.lower() for word in THE_JUDGE_SIDE)
+        )
+        assert not named, (
+            f"{source.name} imports {named}. The judge's prose is not in the signed "
+            "document and the decision to keep it out is ADR-0030's, unspent by "
+            "#52: a narrative here would need a disclosure answer under ADR-0008 "
+            "and a fourth declared model to name the instrument that wrote it"
+        )
 
 
 # --- Helpers -----------------------------------------------------------------

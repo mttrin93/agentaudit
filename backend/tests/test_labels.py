@@ -16,7 +16,7 @@ import pytest
 
 from backend.bench import labels
 from backend.bench.contract import AgentCapability
-from backend.bench.editions import ORIGINATED_HERE
+from backend.bench.editions import ORIGINATED_HERE, resolves
 from backend.bench.labels import (
     ELECTIVE_LABELS,
     LABELS,
@@ -24,6 +24,8 @@ from backend.bench.labels import (
     FamilyLabel,
     article_for,
     articles_stated,
+    bears_stated,
+    claims_stated,
     covering,
     label_for,
 )
@@ -300,3 +302,81 @@ def test_the_rendering_follows_the_declared_order_and_not_the_number() -> None:
         articles_stated(LABELS[Family.WRONGFUL_COMMITMENT].articles)
         == "articles 15 and 14"
     )
+
+
+def test_the_published_entries_render_as_one_sentence_naming_both_lists() -> None:
+    # The other half of a label, and the half a report had no sentence for. Both
+    # lists are named in every answer, because *claims nothing here* and *this list
+    # was not consulted* are two readings and a line that dropped the empty side
+    # would leave a reader unable to tell them apart (ADR-0002, ADR-0039).
+    assert claims_stated(LABELS[Family.INDIRECT_PROMPT_INJECTION]) == (
+        "claims ASI01:2026 Agent Goal Hijack on the OWASP agentic list and "
+        "LLM01:2026 Prompt Injection on the OWASP GenAI LLM list"
+    )
+
+    # An empty tuple is an answer rather than a blank, on either side.
+    assert claims_stated(LABELS[Family.HALT_DEFEAT]) == (
+        "claims ASI10:2026 Rogue Agents on the OWASP agentic list and nothing on "
+        "the OWASP GenAI LLM list"
+    )
+    assert claims_stated(LABELS[Family.DATA_LEAKAGE]) == (
+        "claims nothing on the OWASP agentic list and LLM02:2026 Sensitive "
+        "Information Disclosure and LLM08:2026 Hidden Context Exposure on the "
+        "OWASP GenAI LLM list"
+    )
+
+    # No family claims nothing on both lists today and the sentence is written for
+    # the record rather than for the table: `FamilyLabel` permits it, so a reader
+    # that printed *nothing and nothing* would be the shape this answers instead.
+    assert (
+        claims_stated(FamilyLabel(articles=(Article.RECORD_KEEPING,)))
+        == "claims nothing on either published list"
+    )
+
+
+def test_every_claimed_entry_prints_with_the_title_its_stored_copy_carries() -> None:
+    """The published wording, transcribed, rather than this repository's paraphrase.
+
+    A number alone leaves a reader with something to look up, and a paraphrase hides
+    a stale copy as a wording choice where a transcription shows it as a mismatch
+    against the source
+    ([ADR-0036](../../docs/adr/0036-a-published-identifier-resolves-to-a-stored-copy.md),
+    ADR-0002). Read off `editions.resolves` at print time, so the title in a report is
+    the title in the copy this repository committed and cannot drift from it.
+    """
+    for label in (*LABELS.values(), *ELECTIVE_LABELS.values()):
+        printed = claims_stated(label)
+        assert printed.startswith("claims ")
+        for identifier in (*label.agentic, *label.llm):
+            stored = resolves(identifier)
+            assert stored is not None
+            # The pair and not the two halves separately: an identifier printed
+            # anywhere and a title printed anywhere would pass a containment check
+            # over a sentence that had paired them wrongly.
+            assert f"{identifier} {stored.title}" in printed
+        # And nothing else claimed: exactly one entry named per claim, so a sentence
+        # that had picked up a neighbouring entry's title would be caught.
+        assert printed.count(":2026") == len(label.agentic) + len(label.llm)
+
+
+def test_the_article_half_prints_as_a_whole_sentence_naming_the_act() -> None:
+    # One rendering and not a fragment each reader appends the Act's name to: the
+    # report prints this in three places and the screen in three more, and *of the
+    # EU AI Act* written out six times is six chances to say something else
+    # (ADR-0040 decision 7).
+    assert (
+        bears_stated((Article.ROBUSTNESS_AND_CYBERSECURITY,))
+        == "bears article 15 of the EU AI Act"
+    )
+    assert (
+        bears_stated(LABELS[Family.DISCLOSURE_DENIAL].articles)
+        == "bears articles 50 and 13 of the EU AI Act"
+    )
+    # Built over `articles_stated`, so the declared order survives into it and the
+    # two families bearing the same pair still read differently.
+    assert bears_stated(LABELS[Family.SCOPE_CREEP].articles) != bears_stated(
+        LABELS[Family.WRONGFUL_COMMITMENT].articles
+    )
+
+    with pytest.raises(ValueError, match="bears no article"):
+        bears_stated(())

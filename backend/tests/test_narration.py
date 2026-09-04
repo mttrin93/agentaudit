@@ -30,7 +30,8 @@ from backend.api.runs import BenchConfig, BenchRuns, RunStatus
 from backend.bench.adaptive.budget import AdaptiveBudget
 from backend.bench.adaptive.episode import AdaptiveEpisode, EpisodeOutcome
 from backend.bench.adaptive.precedent import NO_PRECEDENT
-from backend.bench.calibration import CalibrationResult, run_calibration
+from backend.bench.assembler import assemble
+from backend.bench.calibration import CalibrationResult, TargetRun, run_calibration
 from backend.bench.evaluator import Verdict
 from backend.bench.judge import (
     Exposure,
@@ -48,6 +49,8 @@ from backend.bench.narration import (
     narrate,
     narrate_successes,
 )
+from backend.bench.payload import TargetPayload, canonical_bytes
+from backend.bench.rendering import digest, render
 from backend.bench.unfinished import (
     NOT_AN_ANSWER,
     ReplyUnfinished,
@@ -68,6 +71,7 @@ from backend.tests.test_api_runs import (
     settled,
     watched_reference,
 )
+from backend.tests.test_payload import a_provenance
 from scripts.console import findings_section
 
 JUDGED = {
@@ -319,6 +323,99 @@ def test_a_target_that_succeeded_at_nothing_is_an_empty_queue_and_not_an_absent_
     assert target_run.findings == ()
     assert target_run.disagreements == ()
     assert held.judge.shown == []
+
+
+# --- The document says the same thing whether or not the judge ran -----------
+
+
+def test_the_signed_artefact_is_byte_identical_whether_or_not_the_run_narrated(
+    leakage_case: Case,
+) -> None:
+    """No judged reading reaches the artefact, and the article column proves it.
+
+    #52 put PLAN §4's central column in the signed document, and the choice that
+    decides whether that column is trustworthy is *where it is read from*. Off a
+    `Finding` it would be full on a run that held a narrative instrument and blank
+    on one that did not; off `labels.LABELS` it is a property of the family and the
+    same in both
+    ([ADR-0044](../../docs/adr/0044-a-familys-label-prints-beside-its-figures.md)).
+
+    Two runs against the same agent over the same case, one narrated and one not.
+    Both `narrations` readings that a run with successes can hold are exercised —
+    a tuple and `None` — and the canonical bytes and the rendering's digest are
+    equal, so nothing the judge produced reached either. `()` is the third reading
+    and is the run below.
+    """
+    explained = narrated(leakage_case)
+    assert explained.succeeded, (
+        "this run recorded no succeeded attempt, so the narrated document below "
+        "would be the unnarrated one and the comparison would prove nothing"
+    )
+    [narrating] = explained.result.target_runs
+    assert narrating.narrations
+
+    with reference_target(name="trivial") as reference:
+        silent = run_calibration(
+            cases=[leakage_case],
+            targets=[reference.target],
+            attestation=BENCH_ATTESTATION,
+            plant_nonce=reference.plant_nonce,
+            approve=CONFIRMING,
+            adjudicator=ADJUDICATING,
+        ).target_runs[0]
+    assert silent.narrations is None
+
+    _same_document(narrating, silent, leakage_case)
+
+
+def test_the_document_of_a_target_that_succeeded_at_nothing_carries_the_column_too(
+    leakage_case: Case,
+) -> None:
+    """The third reading: the instruments ran and there was nothing to explain.
+
+    A run whose target held everything produces `()` and therefore no finding at
+    all, and its report still names the family and still prints the duty that
+    family's failure would bear on. A column that appeared only where an attack had
+    landed would be a legal claim a reader loses by having a good agent.
+    """
+    held = narrated(leakage_case, name="hardened")
+    [nothing_to_explain] = held.result.target_runs
+    assert nothing_to_explain.narrations == ()
+
+    with reference_target(name="hardened") as reference:
+        silent = run_calibration(
+            cases=[leakage_case],
+            targets=[reference.target],
+            attestation=BENCH_ATTESTATION,
+            plant_nonce=reference.plant_nonce,
+            approve=CONFIRMING,
+            adjudicator=ADJUDICATING,
+        ).target_runs[0]
+    assert silent.narrations is None
+
+    document = _same_document(nothing_to_explain, silent, leakage_case)
+
+    # And the column is there rather than merely equal on both sides: two equal
+    # blanks would satisfy the comparison above and say nothing.
+    assert "this family bears article 15 of the EU AI Act" in document
+
+
+def _same_document(first: TargetRun, second: TargetRun, case: Case) -> str:
+    """The rendering these two runs share, or a failure naming what differs.
+
+    Asserts over the canonical bytes *and* over the rendering's digest, because
+    those are the two things a signature covers (ADR-0017) and a difference could
+    hide in either: the payload is what is signed, and the document's digest is
+    what is bound into it.
+    """
+    documents = [
+        TargetPayload(result=assemble(run, [case]), provenance=a_provenance())
+        for run in (first, second)
+    ]
+    assert canonical_bytes(documents[0]) == canonical_bytes(documents[1])
+    renderings = [render(one) for one in documents]
+    assert digest(renderings[0]) == digest(renderings[1])
+    return renderings[0]
 
 
 # --- Disagreements are logged and nothing resolves them ----------------------

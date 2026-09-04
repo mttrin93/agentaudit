@@ -686,6 +686,78 @@ about the field
   asserted by test instead, including that the version a gate run cites is the six and
   never the tier.
 
+### The article column is in the signed report, and both readings behind it are ours (#52)
+
+**PLAN §4's central column has been printed, for the first time, in the artefact it was
+written for.** The paragraph under #46 above said a reader of a signed report *sees no
+article at all, before this change and after it*; that is no longer true, and it is the
+one *never validated* entry in this file that this group falsified rather than added to.
+Every family the measured section names — published rate, withheld rate, or a
+precondition the target could not meet — now prints the EU AI Act duty its failure bears
+on and the entries it claims on the two published lists, in the payload, in the rendered
+Markdown and on the report screen
+([ADR-0044](./adr/0044-a-familys-label-prints-beside-its-figures.md)).
+
+What was validated is that the printed line is the **declared** one. What was not, and
+cannot be here, is whether the declaration is right.
+
+- **Two readings per family, and no external check on either.** That a family's failure
+  bears on the article the label names is this project's reading of the Act, recorded
+  under #46 as unvalidated and now printed in a signed document rather than only held in
+  a table. That a family was read onto a published entry is #42's judgement, recorded
+  under #45 and #47 on the same terms. Neither has been read by a lawyer and no test can
+  read either; the suite asserts that the sentence in the document is the sentence the
+  table declares, which is a different claim and the only one available. **What changed
+  is the audience**: an unvalidated reading held in `labels.py` was read by this
+  repository, and one printed in a signed artefact is read by a procurement analyst who
+  has no way to tell a transcribed table from a checked one. The document says the
+  article is from a table this project wrote and that a model did not choose it, which
+  is the honest half; it does not say a lawyer has never read it, and this file is where
+  that is recorded.
+- **The order inside the pair is now visible to a reader, and it is still a claim.**
+  Scope creep prints *articles 14 and 15* and wrongful commitment *articles 15 and 14* —
+  the same two duties in opposite orders, because the first is the one the failure
+  principally bears on (ADR-0040 decision 4). A reader may think either pair is the
+  wrong way round. Nothing external says which is right, and what the suite proves is
+  that the two orders are declared rather than derived.
+- **No figure moved, and the test is not an argument about it.** One case, one target,
+  two runs — one with the narrative instruments and one without — assemble to
+  byte-identical payloads and render to one digest, and a third run against a target
+  that held everything prints the same column. That is the property that makes the
+  column trustworthy: it is read off `labels.LABELS`, which is a property of the family,
+  and not off a `Finding`, which would have made a legal claim contingent on whether the
+  operator paid for a judge and on how badly their agent did.
+- **The golden rendering digest moved**, `f0d6e6baba43` to `a0c1893ced05`, for two lines
+  per published family and one clause carrying both halves on each family the report
+  names without a rate. Each claimed entry prints with the title its stored copy
+  transcribes, which is the published wording rather than this repository's paraphrase
+  ([ADR-0036](./adr/0036-a-published-identifier-resolves-to-a-stored-copy.md)) — so a
+  stale copy shows in the signed document as a mismatch against the source. The **library digest did not
+  move** at `sha256:84a94f471260`: no case record changed, because a case's identifier
+  and a family's label are two different claims (ADR-0037 §7). `ARTEFACT_VERSION` did
+  not move, on the additive-key footing #43, #47 and #45 each set. The gate citation of
+  2026-08-24 is as far from the live library as #50 left it, and no reading in this file
+  was re-measured.
+- **The judge's prose is still not in the document, and that is a decision rather than
+  an omission.** #52's title diagnoses the defect as *a finding never leaves judge.py*,
+  which was true when it was written and stopped being true at #45: the article moved
+  out of `judge.py` into the label record, so the report reaches it without a finding.
+  What a signed document may say about a target's failure is still ADR-0008's question
+  and still unanswered, and ADR-0030's fourth declared model is still unspent. An
+  operator reading the signed report learns *that* a family was broken and not what the
+  judge said about it.
+- **`narrations` still has three readings and needs a fourth.** ADR-0030 recorded that
+  *the instruments ran and failed* is a ticket rather than a line; #37's agent recorded
+  that one had been filed, and none had. It is #102 now. This change makes it cheaper to
+  defer: the document says the same thing under all three readings that exist, so a
+  fourth would move no column in it.
+- **The run progress screen names a family and does not print its label.** Deliberate,
+  and stated because #52 asks for the pairing at every site that names a family: the
+  progress rows come from the run route rather than from the signed payload, so a label
+  there would be a second wire shape carrying a claim the artefact already carries, and
+  two copies of one claim are two claims once one of them is edited. The adaptive
+  section names families too and carries no article, for the stronger reason in ADR-0010.
+
 ---
 
 ## Pre-gate observations

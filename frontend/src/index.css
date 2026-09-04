@@ -1172,6 +1172,25 @@ select option {
   margin-top: 0.7rem;
 }
 
+/*
+ * The two label lines under a family's name: the duty its failure bears on, and the
+ * published entries it claims.
+ *
+ * Quiet, and above the figures rather than under them, because a label is what the
+ * family *is* and the figures are what this run measured. Its own class rather than
+ * `.family > .kind`, which is documented as one word and is the verdict under a gate
+ * card: these are two full sentences and want the leading of a pair.
+ */
+.family > .label {
+  margin: 0.1rem 0;
+  font-size: 0.8rem;
+  color: var(--quiet);
+}
+
+.family > .label + .label {
+  margin-bottom: 0.6rem;
+}
+
 /* The verdict under the card, at the size of the legend above it: one word, and the
  * figures it was reached from are what the card is for. */
 .family > .kind {

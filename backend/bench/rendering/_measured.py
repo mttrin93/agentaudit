@@ -166,10 +166,55 @@ def _family_block(entry: Mapping[str, Any]) -> tuple[str, ...]:
         f"- **Band — {entry['band']}**: "
         f"{BAND_IN_A_TARGET_REPORT[Band(entry['band'])]}.",
         f"- **Verdict class**: {entry['verdict_class']}.",
+        *_label(entry["label"]),
         *_reliability(entry["reliability"]),
         *_discrimination(entry["discrimination"]),
         *_coverage(entry["coverage"]),
         "",
+    )
+
+
+def _label(label: Mapping[str, Any]) -> tuple[str, ...]:
+    """What this family's failure bears on under the Act, and what it claims on the
+    two published lists.
+
+    **PLAN §4 calls the article column this document's central defence, and until #52
+    the document did not have it.** The mapping was written before any code and lived
+    on `judge.Narrative`, which nothing here reads — so every report ever rendered
+    printed a rate, a band and a coverage note, and no duty.
+
+    Two lines and not one, because they are two claims with different standing. The
+    article is this project's own reading of the Act, from a fixed table a model may
+    not choose from (ADR-0004, PLAN §11). The identifiers are a *secondary label* on a
+    published list carrying the title that list gives each entry — the transcription
+    rather than this repository's paraphrase, because a stale copy has to show up as a
+    mismatch against the source rather than hide as a wording choice (ADR-0036) — and
+    the line says so in ADR-0002's own words: a family **tests one case within** an
+    entry and it is not that entry, which is the same sentence the per-case coverage
+    note below makes about a different claim and the reason the two are not merged
+    (ADR-0037 §7).
+
+    Both halves print beside a family named **without** a rate too, on the two lists
+    below. The signed document is the surface that travels, so it may not be the one
+    that says less than the payload it is a view of; and a withheld rate and an unmet
+    precondition change neither claim.
+
+    **Printed off the family's label and never off a finding**, which is why it is the
+    same two lines in a run made with no narrative instrument, a run whose target
+    succeeded at nothing, and a run that explained every success. A duty that appeared
+    only where an instrument had run would be a legal claim a reader could lose by not
+    paying for a judge.
+    """
+    return (
+        f"- **The duty its failure bears on** — this family {label['bears_stated']}, "
+        "from a table this project wrote before any code and never a model's choice "
+        "(PLAN §4, ADR-0004). A property of the family, so it is the same line "
+        "whatever this run measured.",
+        f"- **On the published lists** — it {label['claims_stated']}, each entry "
+        "with the title its stored copy carries. A label the family holds and never "
+        "an identity: a family *tests one case within* an entry and is not that "
+        "entry (ADR-0002). Which case inside it this run tested is the line below, "
+        "and the two are different claims (ADR-0037).",
     )
 
 
@@ -240,7 +285,12 @@ def _withheld(withheld: Sequence[Mapping[str, Any]]) -> tuple[str, ...]:
     beside it is indistinguishable from a family the bench forgot to run (ADR-0015).
     """
     return _listed(
-        (f"- {one['stated']}." for one in withheld),
+        (
+            f"- {one['stated']}. The family {one['label']['bears_stated']}, and "
+            f"{one['label']['claims_stated']} — neither is altered by a rate this "
+            "report does not publish."
+            for one in withheld
+        ),
         "- None. Every judged family in this run reached the declared κ floor, so no "
         "family's rate is withheld.",
     )
@@ -256,7 +306,9 @@ def _not_measurable(unanswerable: Sequence[Mapping[str, Any]]) -> tuple[str, ...
     return _listed(
         (
             f"- **{one['family']}**: {one['stated']}. This is not a rate of zero — "
-            "nothing was measured, so there is no rate to read."
+            "nothing was measured, so there is no rate to read. The family "
+            f"{one['label']['bears_stated']}, and {one['label']['claims_stated']} — "
+            "both hold whether or not anything was measured."
             for one in unanswerable
         ),
         "- None. Every family's precondition was met by this target, so no family is "

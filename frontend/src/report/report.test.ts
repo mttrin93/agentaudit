@@ -47,6 +47,7 @@ import {
   routeReading,
   verificationReading,
 } from './report'
+import { readFamily } from '../families'
 import { SERVED } from './served.fixture'
 
 /** Words no key anywhere in the view may contain (ADR-0005, D12). */
@@ -308,6 +309,80 @@ describe('a family’s answer', () => {
       'rate not published — no κ was measured against the gold set',
     )
     expect(JSON.stringify(withheld)).not.toContain('0.00')
+  })
+})
+
+describe('the label beside a family name', () => {
+  it('is on every answer shape, and is the payload’s own sentence', () => {
+    const answers = familyAnswers(SERVED.measured)
+    const [injection] = answers.filter((answer) => answer.kind === 'measured')
+    const [withheld] = answers.filter((answer) => answer.kind === 'withheld')
+    const [unanswerable] = answers.filter(
+      (answer) => answer.kind === 'not_measurable',
+    )
+
+    // Written out rather than read back off the fixture: a check that rebuilt the
+    // sentence the way the projection does would pass against any payload at all.
+    expect(injection.label).toEqual({
+      bears: 'bears article 15 of the EU AI Act',
+      claims:
+        'claims ASI01:2026 Agent Goal Hijack on the OWASP agentic list and ' +
+        'LLM01:2026 Prompt Injection on the OWASP GenAI LLM list',
+    })
+
+    // Both absences carry it too. A withheld rate says the evidence behind it
+    // cannot be stated and an unmet precondition says nothing was measured;
+    // neither says the duty went away (ADR-0044).
+    expect(withheld.label.bears).toBe('bears articles 15 and 14 of the EU AI Act')
+    expect(unanswerable.label.bears).toBe(
+      'bears article 14(4)(e) of the EU AI Act',
+    )
+
+    // Every answer carries one, so no card is a blank in the column.
+    for (const answer of answers) {
+      expect(answer.label.bears).toContain('EU AI Act')
+      expect(answer.label.claims.startsWith('claims ')).toBe(true)
+    }
+  })
+
+  it('is the bench’s wording and never a second copy of the mapping', () => {
+    // The two sentences come off the payload verbatim. A screen that assembled
+    // either from the identifier lists beside them would hold a second copy of a legal
+    // mapping in TypeScript — one that can disagree with the document a signature
+    // covers, and nobody would find out from the screen.
+    const [judged] = SERVED.measured.judged
+    const [answer] = familyAnswers(SERVED.measured).filter(
+      (one) => one.family === judged.family,
+    )
+
+    expect(answer.label.claims).toBe(judged.label.claims_stated)
+    expect(answer.label.bears).toBe(judged.label.bears_stated)
+
+    // Two articles, in the order the label declares and never sorted: 50 before 13
+    // is what no sort produces (ADR-0040).
+    expect(judged.label.articles).toEqual(['50', '13'])
+    expect(answer.label.bears).toBe('bears articles 50 and 13 of the EU AI Act')
+  })
+
+  it('is a second column and never a second vocabulary', () => {
+    // `families.ts` still does one thing, and the label does not change what the
+    // card joins on: every answer keeps the **wire** name, so an operator reading
+    // `data leakage` on the card and grepping `data_leakage` in the signed report
+    // is looking at the same word — and a projection that stored the readable name
+    // in the key, now that there is a second string beside it, would break here
+    // rather than in a lookup somewhere else.
+    const answers = familyAnswers(SERVED.measured)
+    const onTheWire = [
+      ...SERVED.measured.deterministic,
+      ...SERVED.measured.judged,
+      ...SERVED.measured.withheld,
+      ...SERVED.measured.not_measurable,
+    ].map((entry) => entry.family)
+
+    expect(answers.map((answer) => answer.family)).toEqual(onTheWire)
+    for (const answer of answers) {
+      expect(readFamily(answer.family)).toBe(answer.family.replace(/_/g, ' '))
+    }
   })
 })
 

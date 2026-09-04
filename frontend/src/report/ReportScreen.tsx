@@ -86,6 +86,7 @@ import {
   type FamilyBreakReading,
   type FamilyAnswer,
   type FamilyExchangeReading,
+  type LabelReading,
   type ReportView,
   type RouteReading,
 } from './report'
@@ -400,6 +401,31 @@ function TheFamilyExchanges({ family }: { family: FamilyExchangeReading }) {
 }
 
 /**
+ * What a family is labelled with, under the name and above whatever the run made of
+ * it.
+ *
+ * The article first, because it is the claim this project makes and the published
+ * entries are a secondary label on somebody else's list (ADR-0002). Both are the
+ * payload's own sentences printed verbatim: a screen that rebuilt either from the
+ * identifier lists beside them would hold a second copy of a legal mapping in
+ * TypeScript, and two copies of one claim are two claims the day one is edited
+ * (ADR-0044). Beside the family name and never instead of it — `readFamily` still
+ * does one thing, and this is a second column rather than a second vocabulary.
+ *
+ * Drawn on all three card shapes, the two that carry no figure included: a withheld
+ * rate says the evidence behind it cannot be stated and an unmet precondition says
+ * nothing was measured, and neither says the duty went away.
+ */
+function TheLabel({ label }: { label: LabelReading }) {
+  return (
+    <>
+      <p className="label">{label.bears}</p>
+      <p className="label">{label.claims}</p>
+    </>
+  )
+}
+
+/**
  * One family, as a card that opens with its figures.
  *
  * Three shapes rather than one row with empty cells: a family whose rate is
@@ -419,6 +445,7 @@ function TheFamily({
     return (
       <div className="family absent">
         <h3>{readFamily(answer.family)}</h3>
+        <TheLabel label={answer.label} />
         {/* Why there is no rate here, where the rate would be. What this card does
             not state is the figure with its interval and its band: the attempts were
             made and the measurement is on the run, and what it lacks is a statable
@@ -448,6 +475,7 @@ function TheFamily({
     return (
       <div className="family absent">
         <h3>{readFamily(answer.family)}</h3>
+        <TheLabel label={answer.label} />
         <p className="at">not measurable — {answer.reason}</p>
         <p>{answer.stated}</p>
         <p className="aside">{answer.note}</p>
@@ -458,6 +486,7 @@ function TheFamily({
   return (
     <div className="family">
       <h3>{readFamily(answer.family)}</h3>
+      <TheLabel label={answer.label} />
       <div className="rate-line">
         <p className="score">
           <span className="calls">{figures.rate}</span>

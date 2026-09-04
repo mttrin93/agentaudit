@@ -88,7 +88,8 @@ from backend.bench.capability import (
     capabilities_of,
 )
 from backend.bench.elective import ElectiveSelection
-from backend.bench.library import ExternalId, LibraryVersion
+from backend.bench.labels import FamilyLabel, bears_stated, claims_stated, label_for
+from backend.bench.library import ExternalId, Family, LibraryVersion
 from backend.bench.published import ClaimedInPart, UntestedCategory
 from backend.bench.registration import AttestationRecord
 from backend.bench.rule import DECLARED_RULE, GateRule
@@ -770,7 +771,6 @@ def _measured(section: MeasuredSection, rule: GateRule) -> dict[str, Any]:
     caller that could pass the list is a caller that could pass an empty one.
     """
     barred = withheld_entries(section)
-    withheld = tuple(Withheld.of(entry, rule) for entry in barred)
     barred_families = {entry.family for entry in barred}
     return {
         "reproducibility": section.reproducibility.value,
@@ -786,28 +786,40 @@ def _measured(section: MeasuredSection, rule: GateRule) -> dict[str, Any]:
             for entry in section.judged
             if entry.family not in barred_families
         ],
-        "withheld": [
-            {
-                "family": one.family,
-                "reason": one.reason.value,
-                "floor": one.floor,
-                "kappa": one.kappa,
-                "agreements": one.agreements,
-                "transcripts": one.transcripts,
-                "stated": one.stated(),
-            }
-            for one in withheld
-        ],
+        "withheld": [_barred(entry, rule) for entry in barred],
         "not_measurable": [
             {
                 "family": family.value,
                 "reason": reason.value,
                 "stated": reason.stated(),
+                "label": _label(family),
             }
             for family, reason in sorted(
                 section.not_measurable.items(), key=lambda pair: pair[0].value
             )
         ],
+    }
+
+
+def _barred(entry: FamilyEntry, rule: GateRule) -> dict[str, Any]:
+    """One judged family whose rate this payload may not publish, and no rate.
+
+    Built from the `FamilyEntry` rather than from the `Withheld` record alone,
+    because the label has to be read off the entry's own `Family`: `Withheld.family`
+    is a `str`, and a label looked up from a name would be the one route by which
+    something that is not one of the six could acquire an article
+    (`labels.label_for`, ADR-0035, ADR-0044).
+    """
+    withheld = Withheld.of(entry, rule)
+    return {
+        "family": withheld.family,
+        "reason": withheld.reason.value,
+        "floor": withheld.floor,
+        "kappa": withheld.kappa,
+        "agreements": withheld.agreements,
+        "transcripts": withheld.transcripts,
+        "stated": withheld.stated(),
+        "label": _label(entry.family),
     }
 
 
@@ -837,6 +849,50 @@ def _entry(entry: FamilyEntry, rule: GateRule) -> dict[str, Any]:
         "discrimination": entry.discrimination,
         "coverage": [_external(identifier) for identifier in entry.coverage],
         "reliability": _reliability(entry.reliability),
+        "label": _label(entry.family),
+    }
+
+
+def _label(family: Family) -> dict[str, Any]:
+    """The label this family carries: the entries it claims, and the articles it bears.
+
+    **PLAN §4's central column, in the artefact it was written for.** The article
+    mapping was written before any code and had never been printed in a signed
+    document: it lived on `judge.Narrative`, and nothing under `payload.py` reads a
+    narrative —
+    [ADR-0030](../../docs/adr/0030-the-judge-runs-over-the-scored-layers-successes.md)
+    left surfacing one to its own ticket. It arrives here off `labels.LABELS`
+    instead, so what a document says about a family's legal exposure does not depend
+    on whether the run held a narrative instrument, on whether the target succeeded
+    at anything, or on what a model wrote — which is the only shape in which a
+    judged reading cannot reach a column a reader acts on (ADR-0004, ADR-0010).
+
+    **Keyed on `Family`, so an elective family has no route in.** `label_for` reads
+    the table over the six and there is no argument here through which the tier's
+    table could be reached — the boundary ADR-0035 asks for, held by the key type
+    exactly as `judge.narrated` holds it at the other door.
+
+    Both halves of the record travel as data *and* as the sentence a reader prints,
+    for the reason every other figure in this document travels beside its counts: a
+    recipient matching `ASI01:2026` against a published list wants the identifier as
+    a key, and a reader wants the line. The two sentences are `labels.claims_stated`
+    and `labels.bears_stated` — **whole** sentences, naming the Act and the published
+    lists, so that this document and the screen print one rendering rather than each
+    appending its own words to a fragment
+    ([ADR-0040](../../docs/adr/0040-a-family-bears-more-than-one-article.md)
+    decision 7).
+    """
+    return _stated(label_for(family))
+
+
+def _stated(label: FamilyLabel) -> dict[str, Any]:
+    """One label as plain data: three lists, and the two sentences over them."""
+    return {
+        "agentic": list(label.agentic),
+        "llm": list(label.llm),
+        "articles": [article.value for article in label.articles],
+        "claims_stated": claims_stated(label),
+        "bears_stated": bears_stated(label.articles),
     }
 
 

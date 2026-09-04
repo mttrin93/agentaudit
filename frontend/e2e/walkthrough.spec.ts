@@ -264,6 +264,11 @@ test('an operator registers a target, is blocked, confirms, and reads the report
     .filter({ has: page.getByRole('heading', { level: 3, name: 'data leakage' }) })
   await expect(family).toHaveCount(1)
   await expect(family.locator('span.rate').first()).not.toBeEmpty()
+  // PLAN §4's central column, on a card drawn from a document this walk signed. It
+  // is the one end-to-end proof that the article reaches a screen: it is read off
+  // `labels.LABELS` into the payload, printed in the Markdown, and drawn here beside
+  // the family name rather than instead of it (#52, ADR-0044).
+  await expect(family.getByText('bears article 15 of the EU AI Act')).toBeVisible()
   // The three files a recipient verifies, under the names `scripts/verify.py` reads.
   for (const file of ['report.json', 'report.md', 'report.sig']) {
     await expect(page.getByRole('link', { name: file })).toBeVisible()

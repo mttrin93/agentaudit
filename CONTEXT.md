@@ -79,7 +79,10 @@ claim as a **case**'s identifier, which says which case inside one published ent
 payload tests; neither is derived from the other, and a family whose cases claim no
 published entry can still carry a label. An **elective family** carries a label of the
 same shape in a table of its own, and an elective label makes no coverage claim: the
-entry it names stays listed as untested until a family with cases claims it.
+entry it names stays listed as untested until a family with cases claims it — and it
+reaches no report, because what prints beside a family name in a **signed report** is a
+claim about one of the six
+([ADR-0044](./docs/adr/0044-a-familys-label-prints-beside-its-figures.md)).
 _Avoid_: the family's OWASP number, category, mapping, taxonomy
 
 **Article**:
@@ -93,7 +96,11 @@ Article 12 is the exception on both counts — it applies to every family, so it
 no family's **label** and on a logged instrument disagreement instead. Nothing that is
 not a family bears one: an article printed beside a **declared capability** would put a
 legal duty next to a self-declaration in a document whose every other article sits
-beside a **verdict**.
+beside a **verdict**. Printed in the **signed report** beside the family's own figures,
+and read off the family's **label** rather than off a **finding**
+([ADR-0044](./docs/adr/0044-a-familys-label-prints-beside-its-figures.md)) — so a family
+whose rate is withheld still bears its article, and a run made with no narrative
+instrument prints the same column as one that explained every success.
 _Avoid_: the family's article, the regulation, the clause, compliance requirement
 
 **Case**:

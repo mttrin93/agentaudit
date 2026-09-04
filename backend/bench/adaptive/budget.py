@@ -23,6 +23,7 @@ episode and does not need to.
 from dataclasses import dataclass
 
 from backend.bench.adaptive.episode import AttackerTool
+from backend.bench.adaptive.tree import LINEAR_CHAIN, BranchPolicy
 from backend.bench.library import Family
 
 
@@ -66,6 +67,17 @@ class AdaptiveBudget:
     this one, because a step that is not a probe puts nothing on their wire.
     """
 
+    branching: BranchPolicy = LINEAR_CHAIN
+    """How the harness schedules the next probe: a line, or a tree (ADR-0057).
+
+    Here rather than anywhere else because a tree spends `turns_per_episode` across
+    its branches rather than on top of them, so the thing that decides how wide the
+    search goes belongs with the cap it spends under — and because it is declared on
+    exactly the terms `T` and `k` are, for the reason the module header gives. It
+    moves no ceiling: see `turn_ceiling`. The default is the line, and ADR-0057 §2
+    says why it stays one.
+    """
+
     def __post_init__(self) -> None:
         for name in (
             "turns_per_episode",
@@ -94,6 +106,13 @@ class AdaptiveBudget:
         is the number a user is shown before they consent, and showing an
         *average* instead would be worse than showing nothing, because it invites
         a run to exceed what was agreed to (ADR-0007).
+
+        **The same number under any `branching` policy**, because a turn is one
+        probe on the wire wherever it sits in the tree: a tree spends this budget
+        across its branches and never alongside them (ADR-0057). A per-branch cap
+        would multiply this figure by the breadth and bill the operator three times
+        over for a run they approved once, which is the failure mode
+        `backend/tests/test_tree_jailbreaking.py` was driven red against.
         """
         return self.episode_count * self.turns_per_episode
 

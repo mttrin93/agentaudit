@@ -203,7 +203,12 @@ declared, someone else can run the same thing again and compare.
 
 It works one family at a time, and one step at a time: it is handed what came
 back from its last probe, picks a single tool, and goes again until it breaks the
-target or runs out of turns. A break is the harness applying the family's own
+target or runs out of turns. It can also branch — the harness may point the next
+probe at an earlier turn instead of the last one, and stop continuing from turns
+that have been live too long — and that is still five tools, because **a turn is
+one message to your agent wherever it sits in the tree**: branching changes the
+shape of the search and not what it costs you. The turn budget you approve is the
+number of messages your agent receives, under either shape. A break is the harness applying the family's own
 condition to the reply — never the attacker's claim that it won — and an episode
 that ends any other way is recorded as *censored*, meaning the attacker stopped
 rather than the target held.

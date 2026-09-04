@@ -76,6 +76,7 @@ from backend.bench.adaptive.tools import (
     retrieve_precedent,
     run_probe,
 )
+from backend.bench.adaptive.tree import Continuation, EpisodeTree
 from backend.bench.contract import TargetConfig, Transcript
 from backend.bench.evaluator import Verdict
 from backend.bench.library import Case, Family
@@ -211,6 +212,14 @@ class _Episode:
         `transcripts` by construction — both are appended in `_probe` and nowhere
         else — so a turn number indexes both."""
         self.proposals: list[ProposedRoute] = []
+        self.tree = EpisodeTree(budget.branching)
+        """Which turn the next probe continues from, and which turns are closed.
+
+        The schedule, and never the model's: `_step` asks the tree where the next
+        probe belongs and the brief says so, so a fifth tool did not become a sixth
+        and nothing the model returns decides how wide the search goes (ADR-0057).
+        `turns` is still `len(self.transcripts)` — the tree records the shape of the
+        budget's spending and never its size."""
         self.broken = False
         self.consulted_precedent = False
 
@@ -262,12 +271,24 @@ class _Episode:
                 for turn, reading in enumerate(self.readings, start=1)
                 if reading is None
             ),
+            # Empty where the episode ran as a line, so a linear record is
+            # unchanged in value by branching (ADR-0057). The tree decides that,
+            # not this call site.
+            parents=self.tree.recorded,
         )
         self.run_state.record_episode(episode)
         return episode
 
     def _step(self, sending: bool = True) -> None:
-        """One decision by the model, and the result of the tool it chose."""
+        """One decision by the model, and the result of the tool it chose.
+
+        The node the next probe would continue from is chosen **before** the model
+        answers and named in the brief. A step that reaches nothing — a tool that
+        is not `run_probe`, an unparseable answer, an empty probe — leaves the tree
+        untouched, so the next step is offered the same node: the schedule advances
+        on probes sent and on nothing else, which is the same rule `turns` follows.
+        """
+        continuation = self.tree.next()
         brief = episode_brief(
             handle=self.blinding.handle_for(self.target),
             objective=self.objective.case,
@@ -276,6 +297,7 @@ class _Episode:
             turns_used=self.turns,
             turn_cap=self.budget.turns_per_episode,
             log=self.log,
+            continuation=continuation,
         )
         invocation = self.attacker(ATTACKER_SYSTEM_PROMPT, self.blinding.redact(brief))
         if invocation is None:
@@ -284,12 +306,20 @@ class _Episode:
         if invocation.tool not in self.tools:
             self.log.append(f"{invocation.tool} — {TOOL_NOT_AVAILABLE}")
             return
-        result = self._invoke(invocation.tool, invocation.argument, sending)
+        result = self._invoke(
+            invocation.tool, invocation.argument, sending, continuation
+        )
         # Redacted on the way into the log rather than on the way out of it, so
         # that no later reader of the log has to remember to do it.
         self.log.append(f"{invocation.tool} — {self.blinding.redact(result)}")
 
-    def _invoke(self, tool: AttackerTool, argument: str, sending: bool) -> str:
+    def _invoke(
+        self,
+        tool: AttackerTool,
+        argument: str,
+        sending: bool,
+        continuation: Continuation,
+    ) -> str:
         """Run one tool and return what the attacker is told about it.
 
         The match has no fallback branch on purpose: a sixth tool must fail the
@@ -297,7 +327,7 @@ class _Episode:
         """
         match tool:
             case AttackerTool.RUN_PROBE:
-                return self._probe(argument, sending)
+                return self._probe(argument, sending, continuation)
             case AttackerTool.READ_TOOL_TRACE:
                 return read_tool_trace(self._last)
             case AttackerTool.CHECK_CANARY:
@@ -311,7 +341,7 @@ class _Episode:
     def _last(self) -> Transcript | None:
         return self.transcripts[-1] if self.transcripts else None
 
-    def _probe(self, probe: str, sending: bool) -> str:
+    def _probe(self, probe: str, sending: bool, continuation: Continuation) -> str:
         if not sending:
             return OBJECTIVE_ALREADY_MET
         if not probe.strip():
@@ -331,6 +361,10 @@ class _Episode:
                 session_id=f"episode-{uuid.uuid4()}",
             )
         self.transcripts.append(transcript)
+        # Recorded after the send and beside the transcript, so the tree's turn
+        # numbers and the transcript indices are the same numbers by construction —
+        # which is what `unverifiable_turns` and `parent_of` both depend on.
+        self.tree.record(continuation.parent)
         reading = self._verify(transcript)
         # The reading before the reply and not after it. The log entry a later brief
         # renders keeps only its first line intact for anything parsing it, and the

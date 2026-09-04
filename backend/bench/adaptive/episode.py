@@ -41,6 +41,7 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 
 from backend.bench.adaptive.proposal import ProposedRoute
+from backend.bench.adaptive.tree import deepest_path
 from backend.bench.contract import TargetConfig, Transcript
 from backend.bench.library import Family
 
@@ -159,6 +160,27 @@ class AdaptiveEpisode:
     and only one of them is a statement about the target.
     """
 
+    parents: tuple[int, ...] = ()
+    """Per turn, the one-based turn it continued from — zero for a root. The tree.
+
+    One extra field, and **empty for the linear chain** (ADR-0057). A linear
+    episode's record is therefore unchanged in value by tree jailbreaking and the
+    chain has one representation rather than two: `parent_of` reconstructs it, on
+    the same terms `Discoveries.of` refuses to word a family the search never
+    worked in as a count of zero (ADR-0056 §4).
+
+    **Not a count of anything, and nothing divides by it.** `turns` keeps its
+    definition — probes sent to the target, wherever they sit in the tree — because
+    that is what makes `A_effort`'s median the same quantity for a branching
+    attacker as for a linear one (ADR-0057, ADR-0011). A branch is not a turn, and
+    a shape is not a denominator.
+
+    **Indices are one-based, stable and append-only**, because
+    `unverifiable_turns` indexes into `transcripts` and a record whose turn numbers
+    moved would resolve those to the wrong turns. Pruning marks a turn as no longer
+    continuable and removes nothing.
+    """
+
     proposals: tuple[ProposedRoute, ...] = ()
     """The routes the attacker put forward during this episode.
 
@@ -170,6 +192,22 @@ class AdaptiveEpisode:
     def __post_init__(self) -> None:
         if self.turns < 0:
             raise ValueError("an episode cannot have taken fewer than no turns")
+        if not self.parents:
+            return
+        if len(self.parents) != self.turns:
+            raise ValueError(
+                f"a tree over {len(self.parents)} turns cannot describe an episode "
+                f"of {self.turns}: the parent index is per turn, and a record whose "
+                "indices did not line up with its turns would resolve "
+                "unverifiable_turns to the wrong turn (ADR-0057)"
+            )
+        for turn, parent in enumerate(self.parents, start=1):
+            if not 0 <= parent < turn:
+                raise ValueError(
+                    f"turn {turn} cannot have continued from turn {parent}: a turn "
+                    "continues from an earlier turn or from nothing, so the tree is "
+                    "acyclic and append-only by construction (ADR-0057)"
+                )
 
     @classmethod
     def against(
@@ -183,6 +221,7 @@ class AdaptiveEpisode:
         started_at: float | None = None,
         consulted_precedent: bool = False,
         unverifiable_turns: Sequence[int] = (),
+        parents: Sequence[int] = (),
     ) -> AdaptiveEpisode:
         """Record an episode with the kit the target's registration allowed it.
 
@@ -205,7 +244,45 @@ class AdaptiveEpisode:
             transcripts=tuple(transcripts),
             proposals=tuple(proposals),
             unverifiable_turns=tuple(unverifiable_turns),
+            parents=tuple(parents),
         )
+
+    @property
+    def branched(self) -> bool:
+        """Whether this episode is a tree rather than a line.
+
+        Read off the record rather than off the policy that produced it: a
+        branching policy whose episode happened to run out of turns before it
+        forked ran a line, and the record is the thing a reader has.
+        """
+        return bool(self.parents)
+
+    def parent_of(self, turn: int) -> int:
+        """The turn `turn` continued from, one-based, or zero for a root.
+
+        The one reader of `parents`, so that a linear episode — whose `parents` is
+        empty — and a branching one are walked the same way. Written as an accessor
+        rather than left to each caller because the empty tuple means *the chain*
+        and a caller that read the field directly would see it as *no tree*.
+        """
+        if not 1 <= turn <= self.turns:
+            raise ValueError(
+                f"turn {turn} is not a turn of an episode that took {self.turns}"
+            )
+        return self.parents[turn - 1] if self.parents else turn - 1
+
+    @property
+    def depth(self) -> int:
+        """The deepest path through the tree. Equal to `turns` on a line.
+
+        What breadth is bought with (ADR-0057): a tree spends one turn budget
+        across its branches, so a branching episode reaches shallower than a linear
+        one that spent the same turns.
+        """
+        # The chain filled in where this record carries none, and the one walk
+        # `EpisodeTree.depth` uses: two copies of it could come to disagree about
+        # the figure ADR-0057 rests *breadth is bought with depth* on.
+        return deepest_path(self.parents or tuple(range(self.turns)))
 
     @property
     def withheld(self) -> frozenset[AttackerTool]:

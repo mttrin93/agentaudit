@@ -7,7 +7,8 @@ records what this bench has **not** validated, because a validation document tha
 listed successful checks would be the least honest file in the repository.
 
 The adaptive layer is recorded in its **own section**, never in the tables above it:
-`A_break`, `A_effort` with censored counts, the sign-test result, the fraction of the
+`A_break`, `A_effort` with censored counts, the **branch policy** the search ran under
+(ADR-0057), the sign-test result, the fraction of the
 live library that is `discovered_by = adaptive`, the retirement rate by provenance,
 and a **prose** description of each route the attacker found. Never payload text —
 a successful route against the hardened agent is a working unpublished exploit, and
@@ -2007,6 +2008,82 @@ and the rendered document, and the only measured consequence is that
   `DiscoveriesReading`, `familyRows` and `NO_DENOMINATOR` — and `ReportView.answers` is
   now `ReportView.rows`, so a screen reading the old field fails `tsc`. #79's selection
   changes what a run *sent* and not how either reading is drawn.
+
+### Tree jailbreaking, and a turn that is still one probe (#78)
+
+The decisions are
+[ADR-0057](./adr/0057-a-tree-is-the-harnesss-schedule-and-a-turn-is-still-one-probe.md).
+Nothing here ran against a model either: the branching harness is exercised by the
+deterministic stand-in against the served reference agents, which is what the stand-in
+is for, and the readings below are about **arithmetic** rather than about attack
+quality. What a branching attacker would actually think of has its own evaluation and
+it is `A_break`, which is unaffected by this change — a difference over families, not
+over turns.
+
+- **A branching episode records one turn per probe and not one per branch.** Eight
+  probes under a breadth-3 schedule record `turns == len(transcripts) == 8`, a parent
+  index per turn of `(0, 1, 1, 1, 2, 3, 4, 5)`, and a deepest path of **four** where a
+  line reaches eight — breadth bought with depth, measured. Driven red by charging a
+  turn for the branch: the record refuses a tree that cannot describe its turns, so the
+  miscount cannot reach a statistic silently.
+- **One cap over the episode, never one per branch.** The branching episodes stop at
+  `T = 8` exactly as the linear ones do. Driven red by giving each branch its own cap,
+  which took the episode to **19** turns — the failure mode that spends the operator's
+  endpoint three times over on a run they approved once.
+- **What a branching episode costs is what it is billed.** The adaptive counter equals
+  the sum of the recorded turns, and the scored counter stays at nought. Driven red by
+  replaying a branch's prefix on the wire before its probe — a plausible way to
+  re-establish a node against a stateful target — which read **28 calls against 16
+  recorded turns**.
+- **The estimate and the ceiling do not move.** `turn_ceiling` is families × `T` × `k`
+  under any policy, and the estimate's call figure and basis string are identical to the
+  linear run's. Driven red by multiplying the ceiling by the breadth: 288 against 96,
+  which would have *authorised* three times as well as billed it (ADR-0007).
+- **Turn numbers still resolve after pruning.** Every index in `unverifiable_turns`
+  names its own transcript on a branched episode, and every turn's parent is an earlier
+  turn. Driven red by having `parent_of` return the turn itself.
+- **A linear episode's record is unchanged in value.** `parents` is empty, `branched` is
+  false, `depth == turns`, and `parent_of` walks the chain. Driven red by recording the
+  chain explicitly, which gives the line two representations.
+- **The schedule is stated and the pruning is by age.** The shallowest live turn, ties
+  by the lowest number; once more than `frontier_cap` turns are live the harness stops
+  continuing from the lowest-numbered of them — turns 2, 3, 4 and 5 in the run above.
+  Driven red by scheduling deepest-first, which is a line by another name.
+- **The brief names the node, and nothing else, and says nothing at all on a line.** A
+  branching brief carries *continues from turn 2*; a linear brief carries none of it,
+  because on a line the last entry in the log is the node. The depth and the closed set
+  were in the first draft and came out: the attacker does not choose the node, so
+  neither would change what it composes. Driven red in all three directions. No sixth
+  tool: `AttackerTool` still has five members and the schema set is generated from it.
+- **A proposed route says whether the harness branched, and a linear one does not.** The
+  description is the `propose_case` argument, which is the adaptive layer's one edge
+  into anything scored, so a linear episode claiming a tree would describe a route
+  nobody took. Driven red by appending the branching clause unconditionally, which is
+  how it was written first — every linear proposal then claimed a branch.
+- **The trade prints where `A_effort` is printed.** The adaptive block states
+  *probes-to-first-success* under every policy, and under a branching one adds
+  *breadth is bought with depth* and the second reading of a negative `A_break` — a
+  pruning rule that threw away the branch that was working. Driven red by dropping the
+  line.
+- **The stand-in branches too.** Its probes are a function of the node it was given as
+  well as of how many have gone, so a branching episode is a different route rather than
+  the same eight strings in the same order — driven red by ignoring the node, which
+  type-checks and passes every other test in the file. A linear episode's probe sequence
+  is exactly the one it always sent.
+- **No new `EpisodeOutcome`, so nothing new to word.** An episode still ends broken or
+  censored; pruning happens inside one and is not a way for one to end. `Discoveries.of`
+  and `report.ts`'s `readOutcome` are untouched, and `GOLDEN_ONE_FAMILY` did not move —
+  the artefact gains no field, because `payload._episode` carries the family, the
+  outcome, the turn count and the prose and gains nothing here.
+- **What downstream tickets inherit.** `adaptive/tree.py`'s `BranchPolicy`,
+  `LINEAR_CHAIN`, `Continuation` and `EpisodeTree`; `AdaptiveBudget.branching`, whose
+  default is the line; `AdaptiveEpisode.parents` / `parent_of` / `branched` / `depth`;
+  and `episode_brief`'s required `continuation` argument. **The branch policy has no
+  selection path yet** — no flag, no environment variable, no place in provenance — so
+  nothing but a caller constructing an `AdaptiveBudget` can ask for a tree, and every
+  reading in this document above was taken on the line. #79 selects layers and
+  techniques, and the schedule is a declared input of the adaptive layer waiting for the
+  mechanism `T` already has.
 
 ---
 

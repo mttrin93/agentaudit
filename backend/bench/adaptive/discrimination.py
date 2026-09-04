@@ -477,6 +477,13 @@ class AdaptiveDiscrimination:
                 f"{'episode' if self.budget.episodes_per_family == 1 else 'episodes'}"
                 " per family per agent, both declared in AdaptiveBudget and in no "
                 "gate rule",
+                # Where A_effort is printed, because A_effort's median is over
+                # turns and the schedule is what a turn's meaning rests on
+                # (ADR-0057). Printed under every policy, the line included: the
+                # claim a reader needs is what a turn *is*, and a block that said
+                # so only when the search branched would leave the linear reading
+                # to be inferred.
+                f"  {self.budget.branching.stated()}",
                 *(f"  {line}" for line in self.separation.stated().splitlines()),
                 *(f"  {effort.stated()}" for effort in self.effort),
                 f"  {self.sign_test.stated()}",

@@ -177,14 +177,35 @@ _Avoid_: red teamer, fuzzer, autonomous attacker, agentic attacker
 **Episode**:
 One attacker, one family, one target, one turn budget. The unit of the adaptive
 layer, and deliberately not a unit of measurement: an episode has no denominator,
-because its length varies with what the attacker decides to do.
+because its length varies with what the attacker decides to do. Its shape is a line
+or a **tree** since
+[ADR-0057](./docs/adr/0057-a-tree-is-the-harnesss-schedule-and-a-turn-is-still-one-probe.md) —
+recorded as the **turn** each turn continued from, empty where it is the line — and
+that shape is a shape and never a count: the turn budget is the only figure any
+statistic reads off an episode.
 _Avoid_: adaptive run, session, trial, attempt
 
+**Branch policy**:
+How the harness schedules an episode: how many probes may continue from one turn, and
+how many turns stay live before it stops continuing from the oldest of them. The
+harness's and never the attacker's — there is no sixth tool, and a model-invoked tool
+that chose how wide to search would be one that chose how much of the operator's
+endpoint to spend. Declared beside `T` and `k`, printed beside `A_effort`, and the
+declared default is the line. A **pruning** rule is a choice about what the attacker is
+allowed to forget, so it is stated: pruning by age can discard the branch that was
+working, which is the second reading a negative `A_break` has beside a blinding
+failure.
+_Avoid_: search strategy, beam, the attacker's plan, tree budget
+
 **Turn**:
-One exchange inside an episode — the attacker composes, the target replies. Turns
+One exchange inside an episode — the attacker composes, the target replies. **One
+probe on the target's wire, wherever it sits in the episode's tree**: branching
+multiplies the shapes an episode can take and multiplies nothing the operator pays
+for, which is what keeps the turn budget a budget and `A_effort` comparable across a
+linear attacker and a branching one (ADR-0057). A branch is not a turn. Turns
 within an episode are dependent by construction, which is why an episode is not a
 sample of attempts and why no rate is computed over turns.
-_Avoid_: attempt, step, iteration, round
+_Avoid_: attempt, step, iteration, round, branch
 
 **Probe**:
 One attacker-composed message sent inside a turn. Deliberately promoted to a term
@@ -195,7 +216,8 @@ for exactly that reason — it sends something that is not a case.
 _Avoid_: using it for **case**, payload, attempt
 
 **Route**:
-The path an episode took to a canary — the sequence of probes that worked.
+The path an episode took to a canary — the sequence of probes that worked, which in
+a branching episode is one path from the root and not every turn it took.
 Described in prose in the validation document; the payload text is never
 committed.
 _Avoid_: exploit, chain, attack path, kill chain
@@ -330,7 +352,7 @@ The adaptive layer's counterpart to `D`, written `A_break`, computed over episod
 _Avoid_: D, adaptive discrimination score, adaptive D
 
 **Adaptive effort**:
-Median turns-to-first-success per agent, written `A_effort`, always reported with the count of censored episodes beside it.
+Median turns-to-first-success per agent, written `A_effort`, always reported with the count of censored episodes beside it. A turn is a probe, so it is median *probes*-to-first-success and comparable across a linear attacker and a branching one — and what breadth costs is depth, which prints beside it (ADR-0057).
 _Avoid_: time to break, difficulty, adaptive rate
 
 **Band**:

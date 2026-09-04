@@ -26,6 +26,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from backend.api.app import create_app
+from backend.api.report import ReportConfig
 from backend.api.runs import BenchConfig, BenchRuns, RunStatus
 from backend.bench.adaptive.budget import AdaptiveBudget
 from backend.bench.adaptive.episode import AdaptiveEpisode, EpisodeOutcome
@@ -36,7 +37,6 @@ from backend.bench.evaluator import Verdict
 from backend.bench.judge import (
     Exposure,
     JudgeBrief,
-    JudgeFailed,
     NotAScoredAttempt,
     Reading,
     assess_finding,
@@ -44,13 +44,17 @@ from backend.bench.judge import (
 from backend.bench.labels import Article, article_for
 from backend.bench.library import Case, Family
 from backend.bench.narration import (
+    BrokenInstrument,
     Narration,
+    NarrativeFailure,
     Narrator,
     narrate,
     narrate_successes,
 )
 from backend.bench.payload import TargetPayload, canonical_bytes
+from backend.bench.remediation import RemediationFailed
 from backend.bench.rendering import digest, render
+from backend.bench.signing import SignedArtefact, generate
 from backend.bench.unfinished import (
     NOT_AN_ANSWER,
     ReplyUnfinished,
@@ -190,7 +194,10 @@ def test_a_scored_run_produces_a_finding_for_every_succeeded_attempt(
 
     [target_run] = leaking.result.target_runs
     narrations = target_run.narrations
-    assert narrations is not None
+    # A tuple and not one of the three readings that carry no finding: `None`, `()`
+    # and a `NarrativeFailure` would each satisfy an `is not None` or a truthiness
+    # check somewhere, and none of them is this run (ADR-0050).
+    assert isinstance(narrations, tuple)
     assert len(narrations) == len(leaking.succeeded)
     assert sorted(n.finding.case_id for n in narrations) == sorted(
         attempt.case_id for attempt in leaking.succeeded
@@ -211,8 +218,9 @@ def test_a_finding_carries_the_judges_narrative_and_the_tools_fix(
     coverage claim by asking a model (`judge.py`, PLAN §11).
     """
     [target_run] = leaking.result.target_runs
-    assert target_run.narrations is not None
-    narration = target_run.narrations[0]
+    narrations = target_run.narrations
+    assert isinstance(narrations, tuple)
+    narration = narrations[0]
 
     assert narration.finding.narrative.reason == JUDGED["reason"]
     assert narration.finding.narrative.remediation == JUDGED["remediation"]
@@ -400,6 +408,55 @@ def test_the_document_of_a_target_that_succeeded_at_nothing_carries_the_column_t
     assert "this family bears article 15 of the EU AI Act" in document
 
 
+def test_the_document_of_a_run_whose_narrative_instruments_broke_is_the_same_one(
+    leakage_case: Case,
+) -> None:
+    """The report question #102 had to answer, as bytes rather than as prose.
+
+    The fourth reading, against the same run made with no narrator at all. The
+    canonical bytes and the rendering's digest are equal, which is the whole of the
+    answer: a run whose judge broke signs the document a run with no judge signs,
+    every figure in it was measured before either instrument was asked, and the
+    article column is a property of the family (ADR-0044). So refusing to sign it
+    would withhold a complete and checkable artefact over an instrument no column
+    of it depends on, and signing it overstates nothing — the document makes no
+    claim about a finding under any of the four readings
+    ([ADR-0050](../../docs/adr/0050-a-run-whose-narrative-instruments-broke-is-measured-explained-nowhere-and-signable.md)).
+    """
+    with reference_target(name="trivial") as reference:
+        [broken] = run_calibration(
+            cases=[leakage_case],
+            targets=[reference.target],
+            attestation=BENCH_ATTESTATION,
+            plant_nonce=reference.plant_nonce,
+            approve=CONFIRMING,
+            adjudicator=ADJUDICATING,
+            narrator=Narrator(assess=_truncated, remediate=remediating()),
+        ).target_runs
+    assert isinstance(broken.narrations, NarrativeFailure), (
+        "this run's judge did not break, so the comparison below is between two "
+        "runs that explained nothing for the same reason and proves nothing"
+    )
+
+    with reference_target(name="trivial") as reference:
+        silent = run_calibration(
+            cases=[leakage_case],
+            targets=[reference.target],
+            attestation=BENCH_ATTESTATION,
+            plant_nonce=reference.plant_nonce,
+            approve=CONFIRMING,
+            adjudicator=ADJUDICATING,
+        ).target_runs[0]
+    assert silent.narrations is None
+
+    document = _same_document(broken, silent, leakage_case)
+
+    # And the column is present rather than merely equal on both sides, on the
+    # reasoning of the `()` test above: two equal blanks would satisfy the
+    # comparison and say nothing.
+    assert "this family bears article 15 of the EU AI Act" in document
+
+
 def _same_document(first: TargetRun, second: TargetRun, case: Case) -> str:
     """The rendering these two runs share, or a failure naming what differs.
 
@@ -473,7 +530,7 @@ def test_two_instruments_that_agree_leave_an_empty_review_queue(
     assert all(finding.disagreement is None for finding in target_run.findings or ())
 
 
-# --- An instrument that did not answer stops the run ------------------------
+# --- An instrument that did not answer is the fourth reading ----------------
 
 
 TRUNCATED_AFTER_FIVE_LINES = (
@@ -502,19 +559,147 @@ def _truncated(system_prompt: str, message: str) -> str:
     raise ReplyUnfinished(UnfinishedReply.TRUNCATED, "a model", "length")
 
 
-def test_a_truncated_narrative_is_a_named_refusal_and_never_a_finding(
+def test_a_truncated_narrative_is_the_fourth_reading_and_never_a_finding(
     leakage_case: Case,
 ) -> None:
-    """A finding built from half an answer would be an artefact nobody can read.
+    """The instruments ran and failed, which is a reading of its own.
 
-    The refusal leaves the run with no result at all, so there is no finding, no
-    partial narrative and nothing for a report to carry — which is the direction a
-    bench must fail in: the one that stops a run, never the one that prints a
-    figure (`unfinished.py`, PLAN §10).
+    A finding built from half an answer would be an artefact nobody can read, so
+    nothing partial survives this: no `Finding`, no narrative, and nothing for the
+    precedent writer or a report to carry. What survives is the measurement the
+    truncation did not touch — the attempts, and every rate read over them
+    ([ADR-0050](../../docs/adr/0050-a-run-whose-narrative-instruments-broke-is-measured-explained-nowhere-and-signable.md)).
+
+    The reading is a record and not an absence, which is the whole of #102: a
+    `None` here would say *nobody declared an instrument* and a `()` would say
+    *this target succeeded at nothing*, and both are false of this run.
     """
     remediation = remediating()
     with reference_target(name="trivial") as reference:
-        with pytest.raises(ReplyUnfinished) as refused:
+        result = run_calibration(
+            cases=[leakage_case],
+            targets=[reference.target],
+            attestation=BENCH_ATTESTATION,
+            plant_nonce=reference.plant_nonce,
+            approve=CONFIRMING,
+            adjudicator=ADJUDICATING,
+            narrator=Narrator(assess=_truncated, remediate=remediation),
+        )
+
+    [target_run] = result.target_runs
+    broken = target_run.narrations
+    # A type and not a value inside one, which is what makes the fourth reading
+    # impossible to mistake for `None` or for `()`.
+    assert isinstance(broken, NarrativeFailure)
+    assert broken.broken is BrokenInstrument.REPLY_UNFINISHED
+    assert NOT_AN_ANSWER in broken.detail
+    assert broken.explained == 0
+    succeeded = [
+        attempt
+        for attempt in target_run.attempts
+        if attempt.verdict is Verdict.SUCCEEDED
+    ]
+    assert succeeded, "nothing succeeded here, so no instrument was ever asked"
+    assert broken.successes == len(succeeded)
+
+    # Nothing partial reached a caller, and the fix was never written: nothing
+    # downstream of the judge ran on an answer that did not arrive.
+    assert target_run.findings is None
+    assert target_run.disagreements is None
+    assert remediation.shown == []
+
+    # And the run is still a measurement. Every rate, interval, band and `D` of a
+    # run whose judge broke is derivable, which is why the truncation discards no
+    # figure (ADR-0030's own costing of the refusal it took instead).
+    assert target_run.rates[Family(leakage_case.family)].value == 1.0
+
+
+def test_a_reply_the_judge_cannot_be_read_from_is_the_same_reading(
+    leakage_case: Case,
+) -> None:
+    """`JudgeFailed`, by the same route and under its own name.
+
+    An unreadable judge reply is an infrastructure failure, and infrastructure
+    failure must never reach a report as a finding that says nothing happened
+    (`judge.JudgeFailed`). What it reaches instead is the reading: the run finishes
+    with its rates and explains nothing, and the record says which instrument was
+    unreadable rather than leaving an operator to infer it from an empty section.
+    """
+    broken = narrated(
+        leakage_case, judge=Recording(lines={"reads_as": "unclear"})
+    ).result.target_runs[0]
+
+    reading = broken.narrations
+    assert isinstance(reading, NarrativeFailure)
+    assert reading.broken is BrokenInstrument.JUDGE_UNREADABLE
+    assert "carried no reason" in reading.detail
+    assert broken.findings is None
+
+
+def test_a_fix_that_cannot_be_read_discards_the_findings_written_before_it(
+    leakage_case: Case,
+) -> None:
+    """`RemediationFailed` mid-pass, which is where the partial run would be.
+
+    The third of the three named failures, and the one that reaches the reading
+    with narrations already in hand: this remediation tool answers for the first
+    success and breaks on the second. Those findings are dropped rather than
+    returned, because a run that explained *some* of its successes reports a subset
+    nobody chose (`TargetRun.__post_init__`, ADR-0030) — and how far it got is a
+    figure on the reading instead, because the tokens were spent and the ledger
+    will show them (ADR-0050).
+    """
+
+    def failing_second(system_prompt: str, message: str) -> str:
+        breaking.shown.append(message)
+        if len(breaking.shown) > 1:
+            raise RemediationFailed("the model answered with an empty fix")
+        return f"fix: {FIX}"
+
+    breaking = Recording(lines={})
+    explaining = judging()
+    with reference_target(name="trivial") as reference:
+        [target_run] = run_calibration(
+            cases=[leakage_case],
+            targets=[reference.target],
+            attestation=BENCH_ATTESTATION,
+            plant_nonce=reference.plant_nonce,
+            approve=CONFIRMING,
+            adjudicator=ADJUDICATING,
+            narrator=Narrator(assess=explaining, remediate=failing_second),
+        ).target_runs
+
+    reading = target_run.narrations
+    assert isinstance(reading, NarrativeFailure)
+    assert reading.broken is BrokenInstrument.REMEDIATION_UNREADABLE
+    assert reading.explained == 1, (
+        "the first success was explained and the second was not, so a reading that "
+        "says otherwise is not counting the pass it describes"
+    )
+    assert reading.successes > 1, (
+        "this target succeeded once, so the pass never got past its first finding "
+        "and the discard this test is about could not have happened"
+    )
+    # The one finding that was written reaches nobody: not the caller, not the
+    # precedent writer, not a report.
+    assert target_run.findings is None
+
+
+def test_a_fault_in_the_bench_is_not_a_broken_instrument(leakage_case: Case) -> None:
+    """The catch is three named failures wide and no wider.
+
+    An exception this module does not know is a fault in the bench rather than an
+    instrument that answered badly, and a catch-all here would turn every bug in
+    the narrative pass into a run that quietly explained nothing — which is the
+    failure mode PLAN §10 forbids, arrived at from the opposite direction to the
+    one #102 fixed.
+    """
+
+    def raising(system_prompt: str, message: str) -> str:
+        raise MemoryError("the bench itself broke")
+
+    with pytest.raises(MemoryError, match="the bench itself broke"):
+        with reference_target(name="trivial") as reference:
             run_calibration(
                 cases=[leakage_case],
                 targets=[reference.target],
@@ -522,28 +707,8 @@ def test_a_truncated_narrative_is_a_named_refusal_and_never_a_finding(
                 plant_nonce=reference.plant_nonce,
                 approve=CONFIRMING,
                 adjudicator=ADJUDICATING,
-                narrator=Narrator(assess=_truncated, remediate=remediation),
+                narrator=Narrator(assess=raising, remediate=remediating()),
             )
-
-    assert refused.value.unfinished is UnfinishedReply.TRUNCATED
-    assert NOT_AN_ANSWER in str(refused.value)
-    # And the fix was never written, so nothing downstream of the judge ran on an
-    # answer that did not arrive.
-    assert remediation.shown == []
-
-
-def test_a_reply_the_judge_cannot_be_read_from_stops_the_run_too(
-    leakage_case: Case,
-) -> None:
-    """`JudgeFailed`, for the same reason and by the same route.
-
-    An unreadable judge reply is an infrastructure failure, and infrastructure
-    failure must never reach a report as a finding that says nothing happened
-    (`judge.JudgeFailed`). It is not caught here, so a run whose instrument is
-    broken stops instead of signing a document over prose it invented.
-    """
-    with pytest.raises(JudgeFailed, match="carried no reason"):
-        narrated(leakage_case, judge=Recording(lines={"reads_as": "unclear"}))
 
 
 def test_the_five_lines_of_a_truncated_reply_would_have_parsed(
@@ -811,17 +976,79 @@ def test_a_run_over_http_tells_a_poller_that_its_review_queue_is_not_empty(
     assert target_run.rates[Family(leakage_case.family)].value == 1.0
 
 
+def test_a_run_whose_judge_broke_finishes_signs_and_tells_the_poller_so(
+    leakage_case: Case,
+) -> None:
+    """The fourth reading on the entry point a deployment uses, end to end.
+
+    Three facts in one run, and each of them used to be false. The run **finishes**
+    rather than settling `failed` with its attempts stranded on `RunState`. It is
+    **signed**, which is the report question #102 had to answer: no column of the
+    artefact is contingent on the judge having run (ADR-0044), so a run whose judge
+    broke is a complete measurement and refusing to sign it would withhold an
+    artefact the reader can check in full (ADR-0050). And the poller is **told** —
+    without a clause of its own the sentence a poller reads would call this an
+    ordinary finish, because the two clauses it does carry are keyed on a review
+    queue this run has none of and a filing it made none of.
+    """
+    with watched_reference() as watched:
+        app = create_app(
+            BenchConfig(
+                cases=[leakage_case],
+                adaptive=AdaptiveBudget(
+                    turns_per_episode=1, episodes_per_family=1, family_count=1
+                ),
+                adjudicator=None,
+                narrator=Narrator(assess=_truncated, remediate=remediating()),
+                approval_wait_seconds=60.0,
+                # A signing key, so that "may this be signed" is answered by the
+                # artefact this run published rather than by an `Unsigned` that a
+                # deployment with no key would have produced either way.
+                report=ReportConfig(signing_key=generate()),
+            )
+        )
+        with TestClient(app) as client:
+            bench = cast(BenchRuns, app.state.bench)
+            nonce = registered(client, watched)
+            started = client.post("/runs", json=a_request(watched.target, nonce)).json()
+            record = bench.record(str(started["run_id"]))
+            assert record is not None
+            client.post(
+                f"/runs/{record.run_id}/approval",
+                json={"confirmed": True, "identity": "operator"},
+            )
+            settled(record)
+
+    assert record.status is RunStatus.COMPLETED, record.statement
+    assert record.result is not None
+    [target_run] = record.result.target_runs
+    assert isinstance(target_run.narrations, NarrativeFailure)
+    assert target_run.findings is None
+
+    # Signed, on the same terms as any other run's artefact: every figure in it was
+    # measured before either instrument was asked. `SignedArtefact` and not merely
+    # a published report, because an `Unsigned` is what a run that *refused* the
+    # signature would leave here and it would satisfy an `is not None`.
+    assert isinstance(record.report, SignedArtefact), record.statement
+
+    assert "narrative instruments ran and failed" in record.statement
+    assert "no finding is carried" in record.statement
+    # And not the queue, which is a count over findings this run does not have.
+    assert "review queue" not in record.statement
+
+
 # --- What the terminal prints -----------------------------------------------
 
 
-def test_the_printed_section_says_which_of_the_three_readings_this_run_was(
+def test_the_printed_section_says_which_of_the_readings_this_run_was(
     leakage_case: Case,
 ) -> None:
     """The absence, the empty measurement and the findings, in the operator's words.
 
-    The one surface where the `None`/`()` distinction is easiest to lose: a section
-    printed under a heading with nothing under it reads the same either way, so the
-    two absences are two sentences rather than two empty lists.
+    Three of the four readings; the fourth is the test below it. The one surface
+    where the `None`/`()` distinction is easiest to lose: a section printed under a
+    heading with nothing under it reads the same either way, so each absence is a
+    sentence rather than an empty list.
     """
     [explained] = narrated(leakage_case).result.target_runs
     [held] = narrated(leakage_case, name="hardened").result.target_runs
@@ -845,6 +1072,45 @@ def test_the_printed_section_says_which_of_the_three_readings_this_run_was(
     assert "0 disagreement(s), logged and not resolved" in printed
 
 
+def test_the_printed_section_says_when_the_instruments_ran_and_failed(
+    leakage_case: Case,
+) -> None:
+    """The fourth reading, in the operator's words and in nobody else's.
+
+    The surface #102 asks for. It is the one place the four readings are easiest to
+    lose, because three of them print nothing under a heading — so this section
+    prints the failure as its own paragraph and prints neither of the two absences'
+    sentences beside it. No review queue either: nothing read a transcript twice,
+    so a `0 disagreement(s)` line would be a count over a population that does not
+    exist.
+    """
+    remediation = remediating()
+    with reference_target(name="trivial") as reference:
+        [target_run] = run_calibration(
+            cases=[leakage_case],
+            targets=[reference.target],
+            attestation=BENCH_ATTESTATION,
+            plant_nonce=reference.plant_nonce,
+            approve=CONFIRMING,
+            adjudicator=ADJUDICATING,
+            narrator=Narrator(assess=_truncated, remediate=remediation),
+        ).target_runs
+    broken = target_run.narrations
+    assert isinstance(broken, NarrativeFailure)
+
+    printed = findings_section(target_run)
+
+    assert "the instruments ran and failed" in printed
+    assert "refused before it was parsed" in printed
+    assert f"{broken.explained} of {broken.successes} succeeded attempt(s)" in printed
+    assert "no finding is carried" in printed
+    # And none of the other three readings' sentences, which is what makes this one
+    # a reading rather than a decorated absence.
+    assert "no narrative instrument" not in printed
+    assert "nothing to explain" not in printed
+    assert "review queue" not in printed
+
+
 def test_the_printed_finding_names_every_article_the_family_bears(
     leakage_case: Case,
 ) -> None:
@@ -861,7 +1127,8 @@ def test_the_printed_finding_names_every_article_the_family_bears(
 
     # The family is substituted onto the finding rather than run for: what is under
     # test is the printer, and data leakage bears one article by PLAN §4.
-    assert explained.narrations
+    narrations = explained.narrations
+    assert isinstance(narrations, tuple) and narrations
     bearing_two = tuple(
         replace(
             narration,
@@ -873,7 +1140,7 @@ def test_the_printed_finding_names_every_article_the_family_bears(
                 ),
             ),
         )
-        for narration in explained.narrations
+        for narration in narrations
     )
 
     printed = findings_section(replace(explained, narrations=bearing_two))

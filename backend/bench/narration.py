@@ -26,17 +26,24 @@ each say they exist to prevent. The two fields are annotated with the two aliase
 those modules declare *apart*, so a deployment may point them at separate models
 without either of them moving the other (`remediation.Completion`).
 
-**An instrument that answers with something that is not a narrative stops the
-run.** `JudgeFailed`, `RemediationFailed` and `ReplyUnfinished` are raised
-through, not caught: a truncated narrative is a named refusal rather than a
-finding, and a finding that said nothing happened because a token cap fell early
-is the one thing an artefact may not carry (`unfinished.py`, PLAN §10).
+**An instrument that answers with something that is not a narrative ends the
+narrative pass and not the run.** `JudgeFailed`, `RemediationFailed` and
+`ReplyUnfinished` are caught here, once, and become `NarrativeFailure` — the
+fourth reading of `narrations`
+([ADR-0050](../../docs/adr/0050-a-run-whose-narrative-instruments-broke-is-measured-explained-nowhere-and-signable.md),
+which reverses the refusal ADR-0030 took while it was the only alternative to a
+collapsed `None`). What does not change is what a broken instrument may put in an
+artefact: no partial narrative, no finding, and nothing that says nothing happened
+because a token cap fell early (`unfinished.py`, PLAN §10). Anything else raised
+through this pass is a fault in the bench and is not caught
+(`NarrativeFailure.of`).
 """
 
 from __future__ import annotations
 
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
+from enum import StrEnum
 
 from backend.bench.adaptive.precedent import PrecedentStore
 from backend.bench.evaluator import Verdict
@@ -45,12 +52,18 @@ from backend.bench.judge import (
     Disagreement,
     Finding,
     JudgeBrief,
+    JudgeFailed,
     assess_finding,
     disagreements,
 )
 from backend.bench.library import Case, one_of_the_six
 from backend.bench.remediation import Completion as Remediate
-from backend.bench.remediation import Remediation, suggest_remediation
+from backend.bench.remediation import (
+    Remediation,
+    RemediationFailed,
+    suggest_remediation,
+)
+from backend.bench.unfinished import ReplyUnfinished
 from backend.graph.runstate import Attempt
 
 
@@ -99,6 +112,163 @@ class Narration:
     remediation: Remediation
 
 
+class BrokenInstrument(StrEnum):
+    """Which named failure ended a narrative pass — one member per raised outcome.
+
+    Named after the outcome rather than after the instrument, and that is the
+    honest shape rather than the convenient one: `JudgeFailed` and
+    `RemediationFailed` each name their own instrument, and `ReplyUnfinished` is
+    raised at the client both of them share (`unfinished.py`), so which of the two
+    was mid-call is not derivable from it. A field that guessed would be a reader
+    un-guessing it later.
+
+    None of these is a verdict and none of them is a security result, on
+    `unfinished.UnfinishedReply`'s own terms: an instrument's health is not an axis
+    a target's defences are read on.
+    """
+
+    JUDGE_UNREADABLE = "judge_unreadable"
+    """`judge.JudgeFailed` — the model answered with something that is not a
+    narrative."""
+
+    REMEDIATION_UNREADABLE = "remediation_unreadable"
+    """`remediation.RemediationFailed` — the answer could not be read as a fix, so
+    the finding it belongs to would be true and unactionable."""
+
+    REPLY_UNFINISHED = "reply_unfinished"
+    """`unfinished.ReplyUnfinished` — a reply refused at the client before a parser
+    saw it, which is the mode the bench actually meets."""
+
+    def stated(self) -> str:
+        """The outcome in the words a run prints."""
+        match self:
+            case BrokenInstrument.JUDGE_UNREADABLE:
+                return "the judge answered with something that is not a narrative"
+            case BrokenInstrument.REMEDIATION_UNREADABLE:
+                return "the remediation tool's answer could not be read as a fix"
+            case BrokenInstrument.REPLY_UNFINISHED:
+                return (
+                    "a narrative instrument's reply was refused before it was "
+                    "parsed, because the provider did not say it finished"
+                )
+
+
+@dataclass(frozen=True)
+class NarrativeFailure:
+    """The instruments ran and failed: the fourth reading of `narrations`.
+
+    A record and not a sentinel, for the reason it is a fourth *reading* and not a
+    fourth meaning of `None`: `None` says nobody declared a narrative instrument
+    and `()` says the target succeeded at nothing, and a run whose judge broke is
+    neither of those facts
+    ([ADR-0050](../../docs/adr/0050-a-run-whose-narrative-instruments-broke-is-measured-explained-nowhere-and-signable.md),
+    ADR-0030). Every reader that can hold `narrations` can therefore tell the four
+    apart without reading a footnote, which is the property `payload.py` holds over
+    its own absences.
+
+    **It carries no `Narration`, and the count of the ones that had been written is
+    what it carries instead.** A run that explained some of its successes reports a
+    subset nobody chose (`TargetRun.__post_init__`), so the findings written before
+    the break are discarded — and discarded silently would be a report an operator
+    cannot reconcile with the judge's own token bill, so the two counts are stated.
+    """
+
+    broken: BrokenInstrument
+    """Which named failure ended the pass."""
+
+    detail: str
+    """What the failure said, verbatim.
+
+    The exception's own message rather than a re-worded one: it names the model and
+    the provider's stop reason, which is the sentence that tells an operator
+    whether to raise a token cap or to look at their provider — and a second wording
+    of it here would be a second statement that drifts.
+    """
+
+    explained: int
+    """How many of this target's successes had been explained when it broke.
+
+    Not a count of findings the run holds — it holds none. It is the figure that
+    says how far the instruments got, and it is on the record because the tokens
+    were spent and the ledger will show them.
+    """
+
+    successes: int
+    """How many of the six's succeeded attempts there were to explain.
+
+    The denominator of the sentence above, and the figure `TargetRun` checks this
+    reading against its own attempts with.
+    """
+
+    def __post_init__(self) -> None:
+        if self.successes < 1:
+            raise ValueError(
+                "a narrative failure over no successes is a failure of an "
+                "instrument that was never asked: a run with nothing to explain "
+                "reads `()`, which is a measurement and not a broken instrument"
+            )
+        if not 0 <= self.explained < self.successes:
+            raise ValueError(
+                f"{self.explained} of {self.successes} success(es) were explained "
+                "before the break. A pass that explained all of them did not "
+                "break, and a count outside its own denominator is not a reading "
+                "of how far the instruments got"
+            )
+
+    @classmethod
+    def of(cls, failure: Exception, explained: int, successes: int) -> NarrativeFailure:
+        """This reading, off the failure that ended the pass.
+
+        Refuses anything that is not one of the three, rather than filing it as a
+        broken instrument: an exception this module does not know is a fault in the
+        bench and not an instrument that answered badly. Why the catch is exactly
+        three failures wide is argued in ADR-0050.
+        """
+        match failure:
+            case JudgeFailed():
+                broken = BrokenInstrument.JUDGE_UNREADABLE
+            case RemediationFailed():
+                broken = BrokenInstrument.REMEDIATION_UNREADABLE
+            case ReplyUnfinished():
+                broken = BrokenInstrument.REPLY_UNFINISHED
+            case _:
+                raise failure
+        return cls(
+            broken=broken,
+            detail=str(failure),
+            explained=explained,
+            successes=successes,
+        )
+
+    def stated(self) -> str:
+        """The whole reading, for the two surfaces that print it.
+
+        The instrument's own words are quoted and terminated rather than spliced:
+        neither `JudgeFailed` nor `ReplyUnfinished` ends its message in a full
+        stop, and this sentence continues after it on a poller's one-line
+        statement.
+        """
+        return (
+            f"{self.broken.stated()}. The instrument said: "
+            f"{self.detail.rstrip('. ')}. "
+            f"{self.explained} of {self.successes} succeeded attempt(s) had been "
+            "explained when it broke, and no finding is carried — findings are all "
+            "of them or the stated absence of all of them. Every rate this run "
+            "measured stands: nothing here is a verdict and nothing here moved one"
+        )
+
+
+Narrations = tuple[Narration, ...] | NarrativeFailure | None
+"""The four readings of one target's explanation, as one name.
+
+Spelled once so that the union cannot be written out at a call site with three of
+the four arms in it. The four are: `None`, no narrative instrument was declared;
+`()`, the instruments ran and the target succeeded at nothing; a tuple, every
+succeeded attempt of the six explained; and a `NarrativeFailure`, the instruments
+ran and failed (ADR-0050).
+"""
+
+
 def narrate(
     attempt: Attempt,
     case: Case,
@@ -132,14 +302,16 @@ def narrate_successes(
     cases: Sequence[Case],
     narrator: Narrator | None,
     precedent: PrecedentStore,
-) -> tuple[Narration, ...] | None:
+) -> Narrations:
     """Every succeeded attempt of one target explained, in the order it was made.
 
-    **`None` and `()` are two facts and this returns both** (`budget.NOT_PRICED`'s
-    own reasoning, one artefact along). `None` is a run made with no narrative
-    instrument: it explained nothing, and a reader must not read that as a target
-    with nothing to explain. `()` is the instruments having run over a target that
-    succeeded at nothing, which is a measurement.
+    **`None`, `()` and a `NarrativeFailure` are three facts and this returns all
+    three** (`budget.NOT_PRICED`'s own reasoning, one artefact along). `None` is a
+    run made with no narrative instrument: it explained nothing, and a reader must
+    not read that as a target with nothing to explain. `()` is the instruments
+    having run over a target that succeeded at nothing, which is a measurement. A
+    `NarrativeFailure` is the instruments having run and broken, which is neither
+    of those and is the reading ADR-0050 adds.
 
     Whether there is a failure to explain is read off `Attempt.verdict` and off
     nothing else — never a case id, never an index, and never a family name. Which
@@ -162,11 +334,26 @@ def narrate_successes(
     if narrator is None:
         return None
     records = {case.id: case for case in cases}
-    return tuple(
-        narrate(attempt, _record_for(attempt, records), narrator, precedent)
+    narratable = [
+        attempt
         for attempt in attempts
         if attempt.verdict is Verdict.SUCCEEDED and one_of_the_six(attempt.family)
-    )
+    ]
+    explained: list[Narration] = []
+    for attempt in narratable:
+        try:
+            explained.append(
+                narrate(attempt, _record_for(attempt, records), narrator, precedent)
+            )
+        except (JudgeFailed, RemediationFailed, ReplyUnfinished) as failure:
+            # The pass ends here and the run does not. The narrations already
+            # written are dropped rather than returned, because `TargetRun` refuses
+            # a run that explained *some* of its successes and a subset nobody chose
+            # is exactly what this reading exists to avoid reporting.
+            return NarrativeFailure.of(
+                failure, explained=len(explained), successes=len(narratable)
+            )
+    return tuple(explained)
 
 
 def findings_in(narrations: Iterable[Narration]) -> tuple[Finding, ...]:

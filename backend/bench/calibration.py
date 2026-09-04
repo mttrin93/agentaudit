@@ -53,7 +53,7 @@ the adjudicator.
 from collections import defaultdict
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import Final
+from typing import Final, TypeGuard
 
 from backend.bench.adaptive.attacker import AttackerCompletion
 from backend.bench.adaptive.budget import DECLARED_ADAPTIVE_BUDGET, AdaptiveBudget
@@ -89,6 +89,8 @@ from backend.bench.measurability import (
 )
 from backend.bench.narration import (
     Narration,
+    Narrations,
+    NarrativeFailure,
     Narrator,
     disagreements_in,
     findings_in,
@@ -170,21 +172,25 @@ class TargetRun:
     number that a family-level skip would have to overwrite.
     """
 
-    narrations: tuple[Narration, ...] | None = None
-    """This target's succeeded attempts explained, or `None` for a run that
-    explained none.
+    narrations: Narrations = None
+    """This target's succeeded attempts explained, or which of the three reasons
+    there is nothing here.
 
     A fourth field beside the three above and, like them, not a fifth value inside
     `rates`: a finding is a verdict *plus* its narrative and a rate is a count of
     verdicts, so a consumer reading one may not reach the other (CONTEXT.md,
     ADR-0030).
 
-    **`None` and `()` are two facts.** `None` is a run made with no narrative
-    instrument — it explained nothing, and reading that as *nothing to explain*
-    would report a bench that did not look as a target that held. `()` is the two
-    instruments having run against a target that succeeded at nothing, which is a
-    measurement. Same distinction `budget.NOT_PRICED` draws about money and
-    `not_measurable` draws about a family.
+    **Four readings, and no two of them are the same fact.** `None` is a run made
+    with no narrative instrument — it explained nothing, and reading that as
+    *nothing to explain* would report a bench that did not look as a target that
+    held. `()` is the two instruments having run against a target that succeeded at
+    nothing, which is a measurement. A tuple is every succeeded attempt of the six
+    explained. A `NarrativeFailure` is the instruments having run and failed, which
+    is none of the other three
+    ([ADR-0050](../../docs/adr/0050-a-run-whose-narrative-instruments-broke-is-measured-explained-nowhere-and-signable.md)).
+    Same distinction `budget.NOT_PRICED` draws about money and `not_measurable`
+    draws about a family, one arm wider.
     """
 
     def __post_init__(self) -> None:
@@ -225,7 +231,25 @@ class TargetRun:
                 "the two must never meet (ADR-0004)"
             )
 
-        if self.narrations is not None:
+        if isinstance(self.narrations, NarrativeFailure):
+            # The fourth reading is checked against the run's own attempts for the
+            # reason the tuple below is: a count of successes that disagreed with
+            # the attempts would be a figure about a population this run did not
+            # measure (ADR-0050).
+            successes = sum(
+                1
+                for attempt in self.attempts
+                if attempt.verdict is Verdict.SUCCEEDED
+                and one_of_the_six(attempt.family)
+            )
+            if self.narrations.successes != successes:
+                raise ValueError(
+                    f"the narrative pass reports {self.narrations.successes} "
+                    f"success(es) to explain and this run made {successes}. The "
+                    "reading says how far the instruments got over this target's "
+                    "own successes, and one counted over anything else is not that"
+                )
+        elif self.narrations is not None:
             explained = sorted(
                 narration.finding.case_id for narration in self.narrations
             )
@@ -253,26 +277,36 @@ class TargetRun:
 
     @property
     def findings(self) -> tuple[Finding, ...] | None:
-        """The findings this target run produced, or `None` for a run with no
-        narrative instrument.
+        """The findings this target run produced, or `None` for a run that produced
+        none.
 
         The record CONTEXT.md names, for the consumers that want it without the
         fix beside it — the precedent writer, and a report. `None` carries through
-        from `narrations` rather than flattening to `()`, because the two are the
-        two facts that field exists to keep apart.
+        from a `narrations` of `None` rather than flattening to `()`, because those
+        two are the two facts that field exists to keep apart: `()` here is a
+        measured *nothing to file*.
+
+        **The fourth reading arrives here as `None`, and that is not the collapse
+        ADR-0050 exists against.** A projection into `Finding` has nothing to say
+        about why there is no `Finding`, and the reason is one attribute away on the
+        same object; what a caller must never get is a `()` it could file or print
+        as *this target succeeded at nothing*. Carrying the record through the two
+        projections instead was considered and rejected in ADR-0050.
         """
-        return None if self.narrations is None else findings_in(self.narrations)
+        return findings_in(self.narrations) if _explained(self.narrations) else None
 
     @property
     def disagreements(self) -> tuple[Disagreement, ...] | None:
         """The review queue for this target: the transcripts the two instruments
-        read differently, or `None` for a run that ran only one of them.
+        read differently, or `None` for a run with no findings to read it over.
 
         Read off the findings rather than accumulated during the run, so it cannot
         disagree with them, and it decides nothing: the verdict stands, the reading
         stands, and a human is handed the list (ADR-0004, PLAN §3).
         """
-        return None if self.narrations is None else disagreements_in(self.narrations)
+        return (
+            disagreements_in(self.narrations) if _explained(self.narrations) else None
+        )
 
     @property
     def rates(self) -> dict[Family, Rate]:
@@ -366,6 +400,24 @@ class TargetRun:
             len(grouped),
             self.rule,
         )
+
+
+def _explained(narrations: Narrations) -> TypeGuard[tuple[Narration, ...]]:
+    """Whether this reading is findings, as opposed to one of the three reasons
+    there are none.
+
+    `()` is on this side of the line: instruments that ran over a target with
+    nothing to explain produced findings, all zero of them, and that is a
+    measurement a caller may file and print (ADR-0030). `None` and a
+    `NarrativeFailure` are on the other side, and they are two different reasons
+    for the same emptiness.
+
+    A `TypeGuard` here rather than an `isinstance` at each of the two properties
+    below, so that a fifth reading is one edit in this function and mypy names
+    every reader that has to be told about it, instead of a fifth arm somebody has
+    to remember to write twice.
+    """
+    return isinstance(narrations, tuple)
 
 
 def _by_family(attempts: Iterable[Attempt]) -> dict[AnyFamily, list[Attempt]]:

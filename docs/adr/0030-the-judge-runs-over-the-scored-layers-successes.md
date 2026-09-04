@@ -1,8 +1,19 @@
 ---
 status: accepted
+amended_by: 0050-a-run-whose-narrative-instruments-broke-is-measured-explained-nowhere-and-signable.md
 ---
 
 # The judge runs over the scored layer's successes, and a finding never touches a rate
+
+> **Amended by [ADR-0050](./0050-a-run-whose-narrative-instruments-broke-is-measured-explained-nowhere-and-signable.md)
+> on the refusal, and on nothing else.** One paragraph below is reversed: a broken
+> narrative instrument ends the narrative pass and no longer ends the run. The
+> *costing* in that paragraph is what licensed the reversal rather than what it
+> overturned — a truncation after the last attempt discards a measurement it did not
+> affect, and the fourth reading of `narrations` this ADR priced as a ticket is now
+> built, so the collapse it refused to accept never happens. Everything else here
+> stands: nothing narrative reaches a rate, findings are all of a target's successes
+> or the stated absence of all of them, and no partial narrative reaches an artefact.
 
 [ADR-0004](./0004-deterministic-verdicts-judge-is-narrative.md) settled what the judge
 *is*: narrative fields only, blinded, no precedent, and no way to reach a verdict. It
@@ -106,7 +117,11 @@ truncated at the token cap is the case that matters: `assess_finding` reads five
 lines off the text, so a cap that fell *after* the last of them parses into a complete
 `Narrative` — and a finding built from one would be prose the model never finished, filed
 as though it had. `refuse_unfinished` sits at the client, before the parser, which is
-where it already sat for the adjudicator (`bench/unfinished.py`).
+where it already sat for the adjudicator (`bench/unfinished.py`). *[Amended by
+[ADR-0050](./0050-a-run-whose-narrative-instruments-broke-is-measured-explained-nowhere-and-signable.md):
+the three are caught once, at the pass, and become a `NarrativeFailure`. Everything
+this paragraph says about what may not be built from a partial reply still holds — no
+finding, no invented prose — and what changed is that the run finishes.]*
 
 **What that costs is real and is stated rather than absorbed.** The adjudicator stops a
 run because a missing verdict leaves a denominator short, and *a partial suite is void
@@ -119,7 +134,10 @@ because it would need a fourth reading of `narrations` — *the instruments ran 
 beside the three above, and a `None` that meant either *nobody declared one* or *it broke*
 is exactly the collapse this decision spends two paragraphs preventing. That fourth
 reading is a ticket, not a line: it needs a name in CONTEXT.md's terms and a surface that
-prints it, and #37 asked for the refusal rather than for the recovery.
+prints it, and #37 asked for the refusal rather than for the recovery. *[That ticket was
+#102 and it is built: ADR-0050. The costing in this paragraph is what licensed the
+reversal — the reading now exists, so nothing collapses into `None`, and the run keeps
+the measurement this refusal used to discard.]*
 
 **The review queue reaches a human on both entry points.** The findings and their
 disagreements are on the run's result, which is the record they are logged in, and a list

@@ -38,7 +38,7 @@ from backend.bench.adaptive.precedent import (
 )
 from backend.bench.adaptive.scripted import SCRIPTED_ATTACKER
 from backend.bench.adaptive.tools import retrieve_precedent
-from backend.bench.calibration import CalibrationResult, run_calibration
+from backend.bench.calibration import CalibrationResult, TargetRun, run_calibration
 from backend.bench.filing import Filing, file_precedent
 from backend.bench.library import Case, Family, VerdictClass
 from backend.bench.narration import Narration, Narrator, narrate
@@ -229,8 +229,24 @@ def test_the_second_run_is_shown_what_the_first_one_filed(leakage_case: Case) ->
 def _narrations(run: Narrated) -> tuple[Narration, ...]:
     """The one target run's narrations, refused rather than defaulted if absent."""
     [target_run] = run.result.target_runs
-    assert target_run.narrations is not None
-    return target_run.narrations
+    return _explained(target_run)
+
+
+def _explained(target_run: TargetRun) -> tuple[Narration, ...]:
+    """One target run's findings, refusing the three readings that carry none.
+
+    Refused rather than defaulted to `()`, because every test in this file that
+    reaches for narrations is asserting something about what the two instruments
+    produced: a run with no narrator, a target that succeeded at nothing and a
+    broken instrument would each make those assertions pass over an empty list
+    (ADR-0050).
+    """
+    narrations = target_run.narrations
+    assert isinstance(narrations, tuple), (
+        f"this target run explained nothing ({narrations!r}), so an assertion "
+        "over its findings would be an assertion over an empty list"
+    )
+    return narrations
 
 
 def test_no_targets_findings_become_precedent_for_the_next_targets_fix(
@@ -252,7 +268,7 @@ def test_no_targets_findings_become_precedent_for_the_next_targets_fix(
     explained = [
         narration
         for target_run in result.target_runs
-        for narration in target_run.narrations or ()
+        for narration in _explained(target_run)
     ]
     assert len({narration.finding.target_name for narration in explained}) == 2, (
         "only one target produced findings, so a write ordered between them could "
@@ -349,7 +365,7 @@ def test_a_run_that_reads_a_stocked_store_measures_what_an_empty_one_measured(
     assert any(
         narration.remediation.informed_by
         for target_run in second.target_runs
-        for narration in target_run.narrations or ()
+        for narration in _explained(target_run)
     ), (
         "run two read no precedent, so it is not the run this comparison needs "
         "and an unchanged rate would say nothing"

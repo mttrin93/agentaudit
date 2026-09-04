@@ -40,11 +40,12 @@ class Filing:
     filing nothing has to be a statement a reader can find rather than an absence
     they have to notice.
 
-    **Two empty tuples are not the three-state contract `narrations` carries.** A
+    **Two empty tuples are not the four-reading contract `narrations` carries.** A
     run made with no narrative instrument produced no findings, so it filed none —
-    and *which* of the two it was is already answered one field over, on
-    `narrations` itself (ADR-0030). Restating that distinction here would be two
-    fields claiming to be the authority for one fact.
+    and so did a run whose instruments ran and failed, and a run whose target
+    succeeded at nothing. *Which* of those it was is already answered one field
+    over, on `narrations` itself (ADR-0030, ADR-0050). Restating that distinction
+    here would be two fields claiming to be the authority for one fact.
     """
 
     filed: tuple[Precedent, ...] = ()

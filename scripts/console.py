@@ -33,6 +33,7 @@ from backend.bench.calibration import CalibrationResult, PlantNonce, TargetRun
 from backend.bench.contract import TargetConfig
 from backend.bench.labels import articles_stated
 from backend.bench.library import Case, Family, bar_for, trigger_counts
+from backend.bench.narration import NarrativeFailure
 from backend.bench.nonce import NONCE_PREFIX
 from backend.bench.registration import ECHO_PROBE, Attestation
 from backend.bench.retirement import (
@@ -211,16 +212,21 @@ def print_findings(target_run: TargetRun) -> None:
 def findings_section(target_run: TargetRun) -> str:
     """What the two narrative instruments said about this target's successes.
 
-    Three readings, and the first is the one a reader is most likely to
-    misidentify. `narrations is None` is a run made with no narrative instrument:
-    it explained nothing, and printing an empty section under a heading would read
-    as a target with nothing to explain. An empty tuple *is* that second reading.
-    The third is findings, one per succeeded attempt.
+    Four readings, and three of them print nothing under a heading — which is why
+    each of the three is a sentence instead. `narrations is None` is a run made
+    with no narrative instrument: it explained nothing, and an empty section would
+    read as a target with nothing to explain. An empty tuple *is* that second
+    reading. A `NarrativeFailure` is the instruments having run and failed, and it
+    prints what broke and how far it got
+    ([ADR-0050](../docs/adr/0050-a-run-whose-narrative-instruments-broke-is-measured-explained-nowhere-and-signable.md)).
+    The fourth is findings, one per succeeded attempt.
 
     The review queue is printed under the findings and never merged into them,
     because a disagreement is a fact about the two *instruments* rather than about
     the target: the verdict stands, the reading stands, and a human is handed the
-    list (ADR-0004, PLAN §3).
+    list (ADR-0004, PLAN §3). It is absent from the two readings above it and from
+    the broken one, and absent rather than zero: a count of disagreements over
+    findings nobody has is a figure about a population that does not exist.
     """
     narrations = target_run.narrations
     if narrations is None:
@@ -228,6 +234,11 @@ def findings_section(target_run: TargetRun) -> str:
             "\n  findings: none written — this run was made with no narrative "
             "instrument, so what it measured it did not explain. Not the same "
             "statement as a target with nothing to explain"
+        )
+    if isinstance(narrations, NarrativeFailure):
+        return (
+            "\n  findings: none written — the instruments ran and failed. "
+            f"{narrations.stated()}"
         )
     lines = ["", "  findings — a verdict and the narrative written about it"]
     if not narrations:

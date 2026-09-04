@@ -141,6 +141,7 @@ from backend.bench.adaptive.attacker import AttackerCompletion
 from backend.bench.calibration import CalibrationResult, run_calibration
 from backend.bench.contract import TargetConfig, TargetUnreachable
 from backend.bench.library import Family, LibraryVersion
+from backend.bench.narration import NarrativeFailure
 from backend.bench.nonce import issue_nonce
 from backend.bench.payload import GateCitation
 from backend.bench.registration import Attestation
@@ -808,6 +809,21 @@ def _run(record: RunRecord, config: BenchConfig, pending: PendingApproval) -> No
         finished = (
             f"{finished}, against an endpoint whose control was declared and not "
             "proved — the nonce was never echoed and this run waived that proof"
+        )
+    narrations = target_run.narrations
+    if isinstance(narrations, NarrativeFailure):
+        # The fourth reading, on the sentence a poller reads, for the reason the
+        # waived-proof clause above is on it: everything else this sentence carries
+        # goes quiet under it — `disagreements` is `None`, so the review queue
+        # clause below is skipped, and a run that filed nothing adds no filing
+        # clause either — so a run whose instruments broke would otherwise read as
+        # an ordinary finish. The report is already published above and deliberately
+        # is: no column of it is contingent on the judge having run (ADR-0044), so
+        # what a broken instrument costs is the explanation and never the
+        # measurement (ADR-0050).
+        finished = (
+            f"{finished}, and its narrative instruments ran and failed — "
+            f"{narrations.stated()}"
         )
     queue = target_run.disagreements
     if queue:

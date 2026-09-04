@@ -759,11 +759,13 @@ cannot be here, is whether the declaration is right.
   and still unanswered, and ADR-0030's fourth declared model is still unspent. An
   operator reading the signed report learns *that* a family was broken and not what the
   judge said about it.
-- **`narrations` still has three readings and needs a fourth.** ADR-0030 recorded that
+- **`narrations` had three readings and needed a fourth.** ADR-0030 recorded that
   *the instruments ran and failed* is a ticket rather than a line; #37's agent recorded
-  that one had been filed, and none had. It is #102 now. This change makes it cheaper to
-  defer: the document says the same thing under all three readings that exist, so a
-  fourth would move no column in it.
+  that one had been filed, and none had. It was #102, and it is built — see *A run whose
+  narrative instruments broke is measured, explained nowhere, and signable (#102)* below.
+  This change made it cheaper to defer and, in the event, decided the question the fourth
+  reading turned on: the document says the same thing under every reading of
+  `narrations`, so signing a run whose judge broke withholds and overstates nothing.
 - **The run progress screen names a family and does not print its label.** Deliberate,
   and stated because #52 asks for the pairing at every site that names a family: the
   progress rows come from the run route rather than from the signed payload, so a label
@@ -1439,6 +1441,61 @@ of 2026-09-04 below, where the family read `D = 0.90` against `gpt-4.1-nano` and
 `κ = 1.00`. The prediction this entry made before that run — that a family fit to
 report is not thereby a family that discriminates — was therefore tested rather than
 left standing, and the answer was that it does both.
+
+### A run whose narrative instruments broke is measured, explained nowhere, and signable (#102)
+
+`narrations` had three readings — `None` for a run made with no narrative instrument,
+`()` for a target that succeeded at nothing, a tuple for every succeeded attempt of the
+six explained — and no reading for the fourth fact: *the instruments ran and failed*.
+`JudgeFailed`, `RemediationFailed` and `ReplyUnfinished` were raised through
+`narration.narrate_successes` and never caught, so a narrative truncated at a token cap
+settled the whole run `failed`, with its attempts stranded on `RunState` and no result
+and no signable report. That was ADR-0030's deliberate choice while the alternative was
+a `None` meaning either *nobody declared one* or *it broke*; #102 built the distinction
+instead, and [ADR-0050](./adr/0050-a-run-whose-narrative-instruments-broke-is-measured-explained-nowhere-and-signable.md)
+records what follows from it.
+
+- **No figure in this file moved, and that is the finding rather than a caveat.** No gate
+  run, no `D`, no κ and no rate was re-measured, because the change touches nothing any
+  of them is read over: `TargetRun.rates` divides over `attempts`, and the narrative pass
+  records none. A run whose judge breaks now reports every figure it measured, where
+  before it reported none of them — so the change can only add readings, and it removed
+  the one way a complete measurement could be discarded by a token cap.
+- **The signed document is the same document, asserted as bytes.** A run whose judge
+  broke and the same run made with no narrator at all assemble to identical canonical
+  bytes and render to one digest — the fourth run in `test_narration.py`'s document
+  comparison, beside the three #52 left there. That equality is the whole of the report
+  question the ticket had to answer: since ADR-0044 the article column is read off
+  `labels.LABELS`, no column of the artefact is contingent on the judge having run, and
+  the judge's prose is in the document nowhere. So refusing to sign would withhold a
+  complete and checkable artefact over an instrument the artefact does not carry, and
+  signing overstates nothing.
+- **The golden rendering digest did not move and `ARTEFACT_VERSION` did not move.** No
+  key was added to the payload: the fourth reading is an absence of the run's
+  *explanation* and not a sixth kind of nothing beside `payload.py`'s five. The
+  consequence is stated rather than hidden — **a reader holding only the artefact still
+  cannot tell whether the judge ran**, which is exactly what a reader already could not
+  tell about a run made with no narrator, and it is the sentence ADR-0044 recorded as
+  still standing. Giving a narrative a place in the document remains the ticket that
+  declares the instrument that wrote it (ADR-0030).
+- **Nothing partial survives, and the discard is measured rather than asserted.** The
+  findings written before the break are dropped, because `TargetRun` refuses a run that
+  explained *some* of its successes. The test that holds it drives a remediation tool
+  that answers for the first success and breaks on the second: the reading carries
+  `explained = 1` over ten successes and `findings is None`, so the one finding that was
+  written reaches no caller, no precedent store and no report.
+- **The catch is three named failures wide and no wider**, and there is a test that a
+  `MemoryError` raised from the judge's seat still stops the run. A bare
+  `except Exception` there would have turned every bug in the narrative pass into a run
+  that quietly explained nothing, which is PLAN §10's own failure mode reached from the
+  opposite direction to the one this ticket fixed.
+- **What is still not measured.** How often a real declared model truncates a narrative:
+  every reading here is driven by stub instruments that raise on demand, on
+  `test_judge.py`'s standing reasoning that what the judge *says* is evaluated by the
+  gold-set run and not by the harness around it. So this ticket says what happens when
+  the instruments break and nothing about how often they do — and the two counts on the
+  reading (*n* of *m* explained) exist so that an operator meeting it in production can
+  reconcile it against their own token bill.
 
 ---
 

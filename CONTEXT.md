@@ -258,6 +258,22 @@ _Avoid_: using it for **not measurable**, deselected, disabled, opted out, n/a
 A verdict plus its narrative — reason, articles, external identifier, remediation, exposure type. Produced by the scored layer only; the adaptive layer produces an **adaptive finding**, which is a different thing and is named differently on purpose.
 _Avoid_: issue, vulnerability, defect, alert
 
+**Narrative failure**:
+The outcome of a run whose two **narrative instruments** ran and failed — the judge
+answered with something that is not a narrative, the remediation tool's answer could
+not be read as a fix, or a reply was refused before a parser saw it. A fourth thing a
+run's explanation can be, beside *no instrument was declared*, *the target succeeded
+at nothing* and a **finding** per succeeded attempt, and it is none of those three:
+the instruments were declared, the target succeeded, and no finding survives. It
+carries no **finding** at all — findings are all of a target's successes or the
+stated absence of all of them — and it moves no **verdict** and no rate: the run
+finishes, every figure it measured stands, and the signed report is the report it
+would have signed had the judge answered
+([ADR-0050](./docs/adr/0050-a-run-whose-narrative-instruments-broke-is-measured-explained-nowhere-and-signable.md)).
+Not one of the report's absences: nothing in the artefact names it, and what it is an
+absence of is the run's explanation.
+_Avoid_: no findings, none, empty, judge error, failed run, not measurable
+
 **Deterministic family / Judged family**:
 The two classes of family, separated by how a verdict is reached. Judged families carry a reliability figure and a wider stated limit.
 _Avoid_: hard/soft family, objective/subjective family

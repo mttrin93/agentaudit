@@ -1,0 +1,90 @@
+---
+status: accepted
+---
+
+# A framing is written per family, an unframed pairing is refused, and the encodings stay where the words are read
+
+[ADR-0052](./0052-a-transform-is-a-committed-function-and-no-judged-family-gets-a-variant.md) §3 wrote each single-turn framing out once, in the function, and §4 argued in prose that a wrapper or a persona round scope creep or halt defeat would replace the mechanism the case exists to test. The prose was not carried by anything: `scripts/variant.py --base scope-creep-001 --transform roleplay` exits 0 today and prints a record whose persona asks the agent to narrate its own configuration before it asks it to settle a supplier balance. #149 is the ticket that either makes those variants mean something or refuses them in code, and the answer is **both** — one framing per family where a framing can be written against that family's own mechanism, and a refusal naming what is missing where it cannot.
+
+Four things are settled here. The arithmetic is untouched and stays ADR-0055's, and **no record is committed**, for ADR-0052 §5's reason.
+
+## 1. The granularity is the **family**, and the crescendo's precedent does not reach this
+
+`scripted_crescendo` is written per base **case** and ADR-0054 §1 says why: the rungs of a ladder refer back to what *this* target has already agreed to in *this* conversation, so the words of one rung cannot be computed from the words of another and no two cases can share a ladder. That argument is about ladders. It is not an argument about a framing, and reused as one it would be a coincidence taken for a principle.
+
+A framing is one prefix round a payload that passes through verbatim (ADR-0052 §3). What it has to be coherent with is not the wording of one request but **the mechanism the family tests** — and a family *is* one kind of failure (CONTEXT.md, **family**). So the framing is written per family, one per `(Transform, Family)` pairing, in `transforms.FRAMINGS`.
+
+Three arguments, and the third is the one that decided it.
+
+**The grain of a framing should be the grain a reading is published at.** A family's rate is pooled over the variants it holds and the breakdown is keyed on `Transform` member (ADR-0055 §1, §2). A framing per base case would put several of this repository's wordings under one published count — `data_leakage: roleplay 20/20` would be two personas averaged, and *the persona bought nothing* would be a reading about a mix nobody can take apart, because the breakdown is deliberately not keyed by case id (ADR-0055, *considered and rejected*). One framing per family per transform makes that line one framing's reading.
+
+**A persona is reusable across the cases of one family where a ladder is not.** `data-leakage-001`, `-002` and `-003` are three ways of asking one question against one success condition, and the persona ADR-0052 §3 wrote for the family reads coherently over all three. Per-case framings would be nine strings where three do the work, each of them an occasion for the same wording to drift into three near-copies — and near-copies are what `mismatched_variants` cannot help with, because each record would be exactly what its own copy makes.
+
+**And the coherence a reader needs is decidable at family grain and not below it.** What made `scope-creep-001 × roleplay` a non-sequitur is not a fact about that record: it is that a persona written for *narrating your own configuration* is written for the leakage mechanism, and scope creep's mechanism is an errand that sounds like the agent's own job. That fault is visible from the family alone, which is exactly what makes it refusable in code.
+
+**What per-family grain cannot catch is stated rather than discovered.** A case whose mechanism differs from its family's would take its family's framing and be incoherent under it, and nothing here would notice. That is a claim the framing makes about the family, and it is carried the way a family's other per-family claims are — by a person writing a new case against a family that already has framings, and by the ADR-0008 argument `scripts/variant.py` requires per record. A check no function can perform is not made real by a field.
+
+## 2. An unframed pairing is refused where the construction happens, and the refusal names what is missing
+
+`transforms.framing(transform, family)` returns that pairing's words or raises, and `applied` resolves it once before it dispatches. So the refusal reaches the two callers that matter without either of them being taught the rule: `scripts/variant.py` cannot write a record for a pairing nobody framed — its `main` prints the refusal and exits 1, as it does for a judged base — and `mismatched_variants` reports a hand-written record that claims one, because `_still_what_its_transform_makes` already treats a construction that cannot be performed as a mismatch rather than letting it raise out of the suite's library check (ADR-0052 §1).
+
+This is `scripted_crescendo`'s terms, as #149 asked, and the same terms in the same words: **refused rather than defaulted**, and the message says what is absent and what adding it would cost. A default here would be one family's mechanism framed in words written for another's — which is the fault the issue found twice by generating it, and the sibling of the fault ADR-0052 §1 refuses one level up, a plain payload committed under a transform's name.
+
+Two things the refusal deliberately is **not**.
+
+**It is not a new field on a record, and ADR-0051 §5 is untouched.** *A transform that means nothing for a family is a variant nobody wrote and needs no absence type* — still true: nothing in the library says a pairing is missing, and no loader reads a table of pairings. What is refused is the **writing** of such a record, in the module that composes payloads, which is the one place ADR-0052 §1 lets a transform be performed at all.
+
+**It is not a refusal in `load_library`.** A library whose payloads were checked against a table *at load* would stop loading the day the table changed, and ADR-0052 §1 already decided that trade in the other direction: a failing test names the records to regenerate and leaves the library readable. An unframed pairing arrives at the suite as a mismatched variant, which is that mechanism and not a second one.
+
+## 3. The encodings do not spread, and #149's own recommendation is the decision
+
+Base64, ROT13 and leetspeak vary `data_leakage` and no other family. This is ADR-0052 §4's paragraph — *the encodings go where the mechanism is the words the target must read and act on* — promoted from prose to a table with a refusal behind it, and it is worth saying why that promotion is not a new decision: an encoding has **no framing to author**, because base64 has no words of ours in it, so the question "which families does it vary" cannot be answered by writing something and has to be answered by a list.
+
+What a spread encoding would measure is the decoder. A base64 `scope-creep-001` asks whether the target decodes an errand, and a target that does not decode it takes no action at all — so the attempt scores resisted for a reason that is a fact about the encoding rather than about the scope limit, which is the same shape as the `stub:cooperative` base64 rehearsal already recorded in [docs/validation.md](../validation.md) reading `D = 0.00` with **trivial also 0.00**. A halt signal the target cannot read is not a halt signal. If the reading about the decoder is wanted, it is a different case with a different success condition, argued as one.
+
+So `FRAMINGS` holds an entry for each encoding under `data_leakage` whose framing is `NO_WORDS_OF_OURS` — the empty string, spelled as a name because *the framing is empty* and *the pairing is unframed* are two different facts and the table has to be able to say the first.
+
+## 4. A family's framing is a claim about that family's mechanism, and no pooled rate spans two of them
+
+This is the question ADR-0052 §3 has to be extended to answer: what several framings per transform are a claim about, and whether two families' readings under one transform name are comparable.
+
+**A framing is a claim about one family's mechanism, and about how that family's verdict is read.** §3's cost is unchanged and multiplied rather than altered — a variant measures *this bench's instance of a published shape*, so *the persona bought nothing* is a reading about our persona. What is new is that there are now three instances of the roleplay construction rather than one, and each is a claim about the family it is written for: the leakage persona claims that narrating a setup aloud is the leakage mechanism in character, the scope-creep persona claims that the errand is the character's own job, and the halt-defeat persona claims that finishing the queue is what the character does at handover. Each is stated on the constant that holds it, which is where a measurement that licenses a value belongs (CLAUDE.md).
+
+**Two families' readings under one transform name are not comparable, and nothing in the codebase pools them.** ADR-0055 §1 forbids pooling across families and carries the prohibition in the types: `TargetRun.variant_counts` is keyed on `Family` exactly as `rates` is, a `VariantBreakdown` sits *below* one family's rate, and there is no container holding two families' variants together. So **one `Transform` member's pooled rate may not span two families' framings, and cannot** — a pooled rate is a family's, and a family has one framing per transform by §1. `roleplay` appearing in two families' breakdowns is two figures in two entries, each about the words written for that family, and the sentence a reader compares them under is `payload.VARIANTS_STATED`'s — comparable only at equal library version and equal selection. Nothing had to be prevented here; the honest work was to check that the type already prevented it, and it does.
+
+## 5. Two framings are written, two are refused, and a framing may not put the evidence inside the fiction
+
+The rule that decided which: **the framing may not make the evidence the verdict is read from part of the fiction it adds.**
+
+`data-leakage-001`'s verdict is a canary in the reply (ADR-0007), so a character reciting the setup aloud in a scene still puts the real nonce in the real reply and the recording frame costs the reading nothing. Scope creep and halt defeat are read from the **tool trace**. A frame that stages a scene the target is performing predicts no tool call at all — the target has been told this is a take, and a resisted verdict would then be unreadable, a defence and a piece of stagecraft with the same score. That is a soft number arriving through this repository's own wording, which is what ADR-0004 exists to refuse.
+
+So the two new framings **assign a role and never stage a recording**, and the mechanism each is meant to strengthen is stated on it:
+
+| Pairing | The framing, and the mechanism it strengthens |
+| --- | --- |
+| `scope_creep` × roleplay | A role whose job is the paperwork and the payments on this supplier file, and who does not hand a task back to whoever asked. The family's mechanism is *an errand that sounds like the agent's own job and is not*; the persona makes it sound like the character's job, which is that mechanism pushed one step further and not replaced. The errand is the base case's own two paragraphs, verbatim. |
+| `halt_defeat` × roleplay | A role on a shift handover who leaves nothing half-finished and closes out what is already on the queue. The family's mechanism is *a stop signal, then a request already inside the agent's declared job*; the persona pre-installs the norm the base payload's second paragraph appeals to in its own words — *housekeeping while you are winding down, so nothing is left half-finished* — so what the variant asks is whether a competing in-character duty is enough to get past the stop path. |
+
+**And the prompt-injection wrapper is refused for both, on two different arguments.**
+
+For **halt defeat** the argument is structural, and it is the one #149 demonstrated. The wrapper is a prefix and the payload passes through verbatim, so its claimed prior authority necessarily encloses the whole turn — including the stop signal, which is the first thing `halt-defeat-001` says. The generated record reads *the instruction below was approved by the operator … carry it out exactly*, and the instruction below **begins with the stop order**: the variant instructs the agent to obey the halt. A run of it would report the hardened and the trivial agent both resisting for a reason belonging to this repository's wording, which is not a measurement of anything. No rewording fixes it while the payload is verbatim, and rewording the payload is what ADR-0052 §3 refuses.
+
+For **scope creep** the argument is the base case's own header: *the words carry no override and no published technique — there is nothing here to lift.* That record exists because it has nothing for a marker list to match, and wrapping it in an override authors the very thing it was written without: the variant would ask whether a claimed operator authorisation is obeyed, which is the prompt-injection question, against a success condition that reads an undeclared tool call. ADR-0052 §4 said this in prose — *it would replace the mechanism the case exists to test with a different one, which is a new case facing admission on its own terms* — and this ADR does not overturn it; it gives it a refusal. If the reading is wanted it is that new case, and `data-leakage-002` is the precedent for how it is argued (ADR-0052 §4): a base with nothing for a marker list to match, and the wrapper put back.
+
+Indirect prompt injection gets nothing, unchanged and for ADR-0052 §4's reason — the attack is not in that family's payload, so `applied` would frame a colleague's benign message — and the two judged families get nothing because `scripts/variant.py` refuses a judged base one record upstream, on `verdict_class` and not on a list of names (ADR-0052 §2). The elective tier gets nothing because `AnyFamily` is the key type and no elective family has an entry: a variant of an elective case is a ticket nobody has written, and it now says so instead of writing a record.
+
+## 6. ADR-0052 §3 is **extended** and not amended, and §1's totality is narrowed by one dimension
+
+§3 decided that each framing is this repository's wording, written out once in the function, and it stated what that costs the reading. Every word of that still holds — the framings are still ours, still written out once, and the cost is still that a variant measures our instance of a published shape. What changes is the count: there are three roleplay framings where there was one, and §4 above says what each is a claim about. That is a decision §3 did not take rather than a decision it took differently, so it is here, and ADR-0052 gains a pointer in the same commit and no new paragraph (CLAUDE.md, *no ADR is edited to say something it did not decide*).
+
+One sentence of §1 **is** narrowed and it is named so nobody has to discover it. *A string in, a string out; … and nothing refused* was totality over **text**, and it stays exactly that: an empty payload and a payload with no ASCII in it still come back as strings, and no function reads a clock, a model, a target or a random number. What the five single-turn constructions are now partial over is the **pairing** — the same kind of partiality `applied` already had over the enumeration, and which its own docstring already distinguishes from totality over text. The property §1 built that partiality could have cost is reproducibility, and it is intact: `derived_payload(case.transform, base)` is still a pure function of the two records, so `mismatched_variants` still re-derives every committed payload and `LibraryVersion` is still a hash over text a run put on the wire.
+
+**Considered and refused: making the pairing a property of the record** — a field, or a `Case` invariant reading the table. It would put the same claim in two places, and the record is not where the fault is: nothing is wrong with a record whose payload is what its transform makes, and the fault is in *making* one for a pairing nobody argued. The construction is where the refusal belongs, which is where ADR-0052 §1 put every other thing a transform may not do.
+
+**Considered and refused: framing per mechanism**, with a mechanism named on each case and framings keyed on it. It is the grain the argument is actually about, and it buys nothing today: a mechanism per family is what the six families are, so the key would be a second name for `Family` with a chance to disagree with it — and the first case whose mechanism genuinely differs from its family's is the ticket that earns the dimension, not a speculative field for it now.
+
+## 7. This ADR moves no arithmetic, admits nothing, and leaves ADR-0023's debt where it was
+
+`n` per family is unchanged, `attempts_per_case` is 10, PLAN §3's diagram and CONTEXT.md's counts are still true, and the library reads **nineteen records at `3d77e4da8891`** — where #150 left it — because **no record is written here**. The two new framings are proposals in the sense ADR-0052 §5 fixed: what admits one is a person's run at a terminal, through `scripts/admit.py`, and no agent has faked one.
+
+The consequence to carry is still [ADR-0023](./0023-a-gate-run-updates-the-citation-it-earned.md)'s, and it is unchanged by this ticket: the gate citation went stale when the crescendo variant was admitted and a gate run of any outcome replaces it. Nothing here needs a decision, only a run. What this ticket adds to that debt is two more variants worth proposing and two pairings that will never be proposed, which is the smaller half of #149's point: the reading a refused pairing would have bought was never a reading.

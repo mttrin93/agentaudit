@@ -37,6 +37,7 @@ from backend.bench.contract import (
     ToolTrace,
 )
 from backend.bench.library import Plant
+from backend.bench.planting import TEARDOWN_HOOK
 from backend.targets.reference.server import (
     MessageReply,
     MessageRequest,
@@ -127,12 +128,18 @@ class ConfigCanaryPlanting(Protocol):
     The value is the run's registration nonce and the bench issues it — one planted
     value, two roles (ADR-0007) — so the hook receives it and does not choose it.
     **What calls this is `planting.plant`, before the registration probe and off every
-    counter** (ADR-0062); the namespace it plants into is #86. Nothing in *this*
-    module calls it, and there is deliberately no route by which a plant could arrive
-    through `send_message` as an attempt.
+    counter** (ADR-0062). Nothing in *this* module calls it, and there is deliberately
+    no route by which a plant could arrive through `send_message` as an attempt.
+
+    **`namespace` comes first and is the same value `teardown()` is given**, so
+    everything this hook writes goes somewhere one call can drop
+    ([ADR-0063](../../docs/adr/0063-one-run-scoped-namespace-dropped-wholesale.md)).
+    It arrives as an argument on both calls and is never stored here between them: a
+    shim that kept it would be a shim whose teardown could run against a namespace a
+    later run created.
     """
 
-    def plant_config_canary(self, canary: str) -> None: ...
+    def plant_config_canary(self, namespace: str, canary: str) -> None: ...
 
 
 class RetrievedContentPlanting(Protocol):
@@ -142,9 +149,34 @@ class RetrievedContentPlanting(Protocol):
     word a message uses when it means this content, and the text to file under it
     exactly. So the hook is handed what the case record already holds, and a user
     implements it by putting that text where their agent's retrieval would find it.
+
+    `namespace` is the run's own, first and on every planting hook, and it is what
+    `teardown()` drops (ADR-0063).
     """
 
-    def plant_retrieved_content(self, key: str, body: str) -> None: ...
+    def plant_retrieved_content(self, namespace: str, key: str, body: str) -> None: ...
+
+
+class DropsItsNamespace(Protocol):
+    """A callback that can drop everything this run put in its store, in one call.
+
+    Required of any callback that declares a planting hook, and checked by
+    `serve_callback` at construction — a shim that can plant and cannot clean up is
+    a shim this bench will not point at anything
+    ([ADR-0063](../../docs/adr/0063-one-run-scoped-namespace-dropped-wholesale.md)
+    §4). Not a withdrawal: withdrawal is the answer for a family a shim cannot
+    support, and this shim can support it and would leave the store poisoned doing so.
+
+    The namespace arrives as an argument rather than being remembered from the plant,
+    so the value dropped is the value planted into and cannot be a later run's.
+
+    **The contract is one sentence: the namespace is yours to create and yours to
+    drop, and nothing outside it is ours.** What this bench asks for is that a drop
+    be wholesale — the namespace goes, not the records inside it one at a time — so
+    that its failure is total and visible rather than partial and silent.
+    """
+
+    def teardown(self, namespace: str) -> None: ...
 
 
 class TextCallback(Protocol):
@@ -167,8 +199,9 @@ inherit from this bench to be measured by it, and a plain function, a bound meth
 and a callable object all satisfy either as written. The optional planting hooks are
 `ConfigCanaryPlanting` and `RetrievedContentPlanting` above, and nothing here
 requires them: a callback implementing neither is a target measured on the families
-that need no planting and withdrawn from the ones that do (ADR-0061). The
-`teardown()` that drops what they planted is #86.
+that need no planting and withdrawn from the ones that do (ADR-0061). A callback
+implementing *either* must also implement `DropsItsNamespace`, and `serve_callback`
+refuses one that does not (ADR-0063).
 
 **Two protocols rather than one returning `str | Turn`, because the union is what
 `exposes_tool_calls_of` reads and a callback that could return either would be
@@ -198,6 +231,49 @@ def declared_plants(callback: Callback) -> frozenset[Plant]:
     return frozenset(
         plant for plant in Plant if callable(getattr(callback, hook_name(plant), None))
     )
+
+
+class PlantsWithNothingToDropIt(TypeError):
+    """A callback that can plant and cannot drop what it planted.
+
+    Raised by `serve_callback` **at construction**, before a port is bound and long
+    before anything is planted, which is the whole point: the alternative is a run
+    that writes into somebody's store and then discovers it has no way to take it
+    back out
+    ([ADR-0063](../../docs/adr/0063-one-run-scoped-namespace-dropped-wholesale.md)
+    §4).
+
+    **Refused and not withdrawn.** Withdrawal is the answer for a family the shim
+    cannot support — no hook, `NotMeasurable`, the run carries on and measures the
+    rest (ADR-0061). This callback *can* support the family; what it cannot do is
+    clean up afterwards, and a bench that quietly measured it would be trading an
+    operator's store for a rate they did not ask to pay that for.
+    """
+
+    def __init__(self, name: str, plants: frozenset[Plant]) -> None:
+        declared = ", ".join(sorted(str(plant) for plant in plants))
+        super().__init__(
+            f"the callback served as {name!r} declares the planting hooks for "
+            f"{declared} and has no {TEARDOWN_HOOK}(). A plant writes into your own "
+            "configuration or content store, and the bench takes it back out by "
+            f"dropping one run-scoped namespace: implement "
+            f"{TEARDOWN_HOOK}(namespace) to drop the namespace wholesale, or remove "
+            "the planting hooks and have the families that need them withdrawn "
+            "instead (ADR-0063)"
+        )
+
+
+def _refuse_a_planter_that_cannot_clean_up(
+    callback: Callback, name: str, plants: frozenset[Plant]
+) -> None:
+    """Check the pair before anything is served: hooks, and something to drop them.
+
+    Here rather than in `declared_plants`, which answers *what can this object be
+    given* and is also the reading `TargetConfig.plants` carries — a check that
+    refused inside it would make an honest reading raise.
+    """
+    if plants and not callable(getattr(callback, TEARDOWN_HOOK, None)):
+        raise PlantsWithNothingToDropIt(name, plants)
 
 
 def exposes_tool_calls_of(callback: Callback) -> bool:
@@ -369,6 +445,11 @@ def serve_callback(
     field `None` and its plantings stay the caller's declaration, where ADR-0024 put
     them.
 
+    **A callback with planting hooks and no `teardown()` is refused here**, before a
+    port is bound: `PlantsWithNothingToDropIt`, and not a withdrawn family, because
+    this callback can support the family and would leave the operator's store holding
+    what the run planted (ADR-0063 §4).
+
     Not in scope here, stated so nobody adds it: **this module still calls no hook**.
     `planting.plant` does, from the harness and before the registration probe
     (ADR-0062), which is why `serve_callback` yields the target and the caller keeps
@@ -377,6 +458,11 @@ def serve_callback(
     could become an attempt: this module's one route is `MESSAGES_PATH`, and a hook is
     not on it.
     """
+    plants = declared_plants(callback)
+    # Before the port is bound and before anything is planted: a callback that can
+    # write into somebody's store and cannot drop what it wrote is refused rather
+    # than served (ADR-0063 §4).
+    _refuse_a_planter_that_cannot_clean_up(callback, name, plants)
     exposes_tool_calls = exposes_tool_calls_of(callback)
     auth_token = secrets.token_urlsafe(32)
     app = _create_callback_app(callback, auth_token, name, exposes_tool_calls)
@@ -388,7 +474,7 @@ def serve_callback(
             agent_type=agent_type,
             retry=retry,
             exposes_tool_calls=exposes_tool_calls,
-            plants=declared_plants(callback),
+            plants=plants,
             retains_session_state=retains_session_state,
             holds_personal_records=holds_personal_records,
             declared_tools=declared_tools,

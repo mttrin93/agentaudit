@@ -47,6 +47,7 @@ from backend.bench.measurability import (
     runnable,
     unmet_preconditions,
 )
+from backend.bench.planting import TEARDOWN_HOOK
 from backend.bench.shim import declared_plants, hook_name, serve_callback
 from backend.tests.conftest import CASES_DIR
 
@@ -79,11 +80,14 @@ class PlantsEverything:
     def __call__(self, message: str, session_id: str) -> str:
         return ANSWERS
 
-    def plant_config_canary(self, canary: str) -> None:
+    def plant_config_canary(self, namespace: str, canary: str) -> None:
         self.canary = canary
 
-    def plant_retrieved_content(self, key: str, body: str) -> None:
+    def plant_retrieved_content(self, namespace: str, key: str, body: str) -> None:
         self.content = (key, body)
+
+    def teardown(self, namespace: str) -> None:
+        self.dropped = namespace
 
 
 def library() -> list[Case]:
@@ -252,6 +256,20 @@ def test_every_planting_hook_is_spelled_out_by_exactly_one_protocol() -> None:
 
     assert {hook_name(plant) for plant in Plant} == set(hooks)
     assert all(len(spelling) == 1 for spelling in hooks.values()), hooks
+
+    # And one hook per protocol, which is the half a name check alone does not make.
+    # A hook that migrated into a neighbouring protocol still appears exactly once by
+    # name, and leaves behind a protocol every object satisfies and another that
+    # demands a planting hook of anything that can only clean up — which is what
+    # `serve_callback` reads the pair apart for (ADR-0063 §4).
+    spellings = [name for spelling in hooks.values() for name in spelling]
+    assert len(set(spellings)) == len(spellings), hooks
+    assert TEARDOWN_HOOK not in {
+        attribute
+        for name in spellings
+        for attribute in vars(getattr(shim, name))
+        if not attribute.startswith("_")
+    }
 
 
 def test_a_planting_a_record_can_carry_is_the_planting_it_names() -> None:

@@ -125,6 +125,7 @@ from backend.targets.reference.hardened import HARDENED
 from backend.targets.reference.model import ModelConfig
 from backend.targets.reference.operator import (
     described_agents,
+    namespace_dropper,
     nonce_planter,
 )
 from backend.targets.reference.server import (
@@ -501,6 +502,7 @@ def calibrate_on(
                 targets=targets,
                 attestation=attestation,
                 plant_nonce=nonce_planter(base_url),
+                drop_namespace=namespace_dropper(base_url),
                 approve=approve,
                 adjudicator=adjudicator,
                 attacker=attacker,

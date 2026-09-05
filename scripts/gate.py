@@ -146,6 +146,7 @@ from backend.targets.reference.hardened import HARDENED
 from backend.targets.reference.model import ModelConfig, measures_the_field
 from backend.targets.reference.operator import (
     described_agents,
+    namespace_dropper,
     nonce_planter,
 )
 from backend.targets.reference.server import (
@@ -398,6 +399,7 @@ def run_the_gate(args: argparse.Namespace) -> int:
                 targets=targets,
                 attestation=attestation,
                 plant_nonce=nonce_planter(base_url),
+                drop_namespace=namespace_dropper(base_url),
                 approve=terminal_approval(attestation.identity),
                 adjudicator=adjudicator,
                 attacker=attacker,

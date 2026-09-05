@@ -90,6 +90,7 @@ from backend.bench.capability import (
 from backend.bench.elective import ElectiveSelection
 from backend.bench.labels import FamilyLabel, bears_stated, claims_stated, label_for
 from backend.bench.library import ExternalId, Family, LibraryVersion
+from backend.bench.planting import NOTHING_WAS_PLANTED, Teardown
 from backend.bench.published import ClaimedInPart, UntestedCategory
 from backend.bench.registration import AttestationRecord
 from backend.bench.rule import DECLARED_RULE, GateRule
@@ -604,6 +605,23 @@ class Provenance:
 
     gate: GateCitation | None = None
     """The bench's own gate result, or nothing — and nothing still prints a line."""
+
+    teardown: Teardown | None = None
+    """What became of the namespace this run planted into, or nothing planted at all.
+
+    In the provenance block because it is a fact about *how this run was made* and
+    not a measurement of the target: a teardown that failed changes no rate, no
+    interval and no verdict — every attempt was made and every verdict stands — and
+    the only thing it changes is that the operator is holding a store this run wrote
+    into and did not clean up
+    ([ADR-0063](../../docs/adr/0063-one-run-scoped-namespace-dropped-wholesale.md)
+    §3).
+
+    `None` is *nothing was planted*, which is every endpoint run, and it prints
+    `planting.NOTHING_WAS_PLANTED` rather than nothing at all: silence here is the one
+    failure mode that costs somebody something after the run is over, so the document
+    always answers the question.
+    """
 
     control_proved: bool = True
     """Whether the target echoed the registration nonce (ADR-0007, as amended).
@@ -1211,6 +1229,7 @@ def _provenance(payload: TargetPayload) -> dict[str, Any]:
             "stated": provenance.selection.stated(),
         },
         "calls_spent": {layer.value: provenance.calls_spent[layer] for layer in Layer},
+        "teardown": _teardown(provenance.teardown),
         "gate": citation(provenance.gate),
         "rule": {
             "interval_confidence": payload.rule.interval_confidence,
@@ -1225,6 +1244,31 @@ def _provenance(payload: TargetPayload) -> dict[str, Any]:
             "kappa_floor": payload.rule.kappa_floor,
             "stated": payload.rule.stated(),
         },
+    }
+
+
+def _teardown(dropped: Teardown | None) -> dict[str, Any]:
+    """What became of this run's plantings, or the stated absence of any.
+
+    **The namespace travels only when the drop failed.** On a run that cleaned up
+    there is nothing for a reader to do with the name, and it is derived from the run
+    id — an identifier this document does not otherwise carry (ADR-0018). On a run
+    that did not, the name is the whole of what makes the sentence actionable: it is
+    what the operator types to find what is still in their store (ADR-0063 §3).
+
+    Never a missing key, on `citation`'s terms: a document that omitted the block
+    when nothing was planted would read as an older shape of artefact rather than as
+    a run that planted nothing.
+    """
+    if dropped is None:
+        return {"planted": False, "failed": False, "stated": NOTHING_WAS_PLANTED}
+    return {
+        "planted": True,
+        "failed": dropped.failed,
+        "namespace": dropped.namespace if dropped.failed else None,
+        "failure": str(dropped.failure) if dropped.failure is not None else None,
+        "error": dropped.error if dropped.failed else None,
+        "stated": dropped.stated(),
     }
 
 

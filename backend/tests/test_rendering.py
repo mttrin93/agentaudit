@@ -148,7 +148,7 @@ def test_every_section_states_its_own_reproducibility_and_three_read_the_payload
 
 # --- The golden digest: one document, pinned to the byte ---------------------
 
-GOLDEN_ONE_FAMILY = "679698ba19682236bc041e0511b60b7fedf42449a55236e1815bc12e8dbaae61"
+GOLDEN_ONE_FAMILY = "43c8116f78a1a5dc374a2f32fa516d9bb929319f23a8e678091507ffa78c63e5"
 """The sha256 of `_one_family()`'s rendering, written down.
 
 **A tripwire, and it is deliberately a strict one.** Every other assertion in this

@@ -714,7 +714,8 @@ else's system; authorised and counted are different questions
 ([ADR-0062](./docs/adr/0062-planting-is-a-pre-run-step-off-every-counter.md)). A plant
 that *fails* is not a withdrawn family: a withdrawal is a hook that does not exist,
 and this is one that exists and did not work, so the run stops before its first
-attempt and no family is measured. A
+attempt and no family is measured. Everything a plant writes goes into the **run
+namespace**, and a **teardown** drops it whichever way the run ends. A
 target that can be planted is one the bench can put the artefact into: a function
 this bench served says so by implementing the hook, and a URL says so through its
 operator, which is why the same missing plant is **not measurable** on one surface
@@ -723,6 +724,33 @@ session memory — is this one under another turn's name, performed by content t
 target fetched. Distinct from the **planted artefact**, which is the content itself,
 and from the **canary**, which is what carrying its instruction out produces.
 _Avoid_: seed, setup, fixture, injection, priming
+
+**Run namespace**:
+The one place everything a run **plants** goes, so that it can all be taken back out
+again: `run-<id>`, derived from the run's own id, one per **run** and not one per
+**target**. It reaches every planting hook and the **teardown** as an argument and is
+stored between the two calls by nothing, so a teardown cannot run against a namespace a
+later run created
+([ADR-0063](./docs/adr/0063-one-run-scoped-namespace-dropped-wholesale.md)). What it
+asks of whoever is planted into is one sentence: the namespace is theirs to create and
+theirs to drop, and nothing outside it is the bench's.
+_Avoid_: prefix, collection, bucket, scope, workspace
+
+**Teardown**:
+The one call that drops a **run namespace** wholesale when the run ends, however it
+ends — a clean finish, a declined checkpoint, a plant that raised, a budget breach, an
+unreachable target, a cancellation. The namespace goes, not the records inside it one
+at a time: a delete-by-item leaves a poisoned store behind the first failure and needs
+a manifest of what was planted to be correct at all. It is **off every counter** for
+the reasons a **plant** is, it never raises — it runs while the exception that is the
+run's real answer is on its way out — and a teardown that *failed* is a named outcome
+that reaches the artefact, naming the namespace and the error, because the run's
+figures are unaffected and nobody rereading them would otherwise find out
+([ADR-0063](./docs/adr/0063-one-run-scoped-namespace-dropped-wholesale.md)). A
+**callback target** that declares a planting hook and has no teardown is refused when
+it is served — refused and not **withdrawn**, because it *can* be measured and the
+cost of doing so is somebody's store.
+_Avoid_: cleanup, rollback, undo, delete, reset
 
 **Nonce**:
 The bench-issued value a user must plant in their target to prove they control it. Registration does not complete without its echo.

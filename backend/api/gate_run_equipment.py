@@ -31,7 +31,7 @@ from contextlib import AbstractContextManager, contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
-from backend.bench.calibration import PlantNonce
+from backend.bench.calibration import DropNamespace, PlantNonce
 from backend.bench.contract import TargetConfig
 
 GOLDSET_DIR = Path(__file__).resolve().parents[1] / "goldset"
@@ -104,6 +104,14 @@ class ServedAgents:
 
     targets: tuple[TargetConfig, ...]
     plant: PlantNonce
+    drop: DropNamespace
+    """The other half of `plant`: what drops this run's namespace when it ends.
+
+    Beside the planter rather than derived at the call site, because the two are one
+    piece of equipment and a run that wired up one and not the other would leave the
+    served app holding what it planted
+    ([ADR-0063](../../docs/adr/0063-one-run-scoped-namespace-dropped-wholesale.md)).
+    """
     trivial: str
     weak: str
     hardened: str
@@ -152,6 +160,7 @@ def shipped_agents(model: str) -> Equipment | None:
         from backend.targets.reference.model import ModelConfig, measures_the_field
         from backend.targets.reference.operator import (
             described_agents,
+            namespace_dropper,
             nonce_planter,
         )
         from backend.targets.reference.server import (
@@ -184,6 +193,7 @@ def shipped_agents(model: str) -> Equipment | None:
                     described_agents(base_url, auth_token, (TRIVIAL, WEAK, HARDENED))
                 ),
                 plant=nonce_planter(base_url),
+                drop=namespace_dropper(base_url),
                 trivial=TRIVIAL.name,
                 weak=WEAK.name,
                 hardened=HARDENED.name,

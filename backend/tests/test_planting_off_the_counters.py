@@ -64,6 +64,8 @@ class Agent:
         self.seen: list[str] = []
         self.canary: str | None = None
         self.content: list[tuple[str, str]] = []
+        self.namespaces: list[str] = []
+        self.dropped: list[str] = []
         self.counters_at_the_plant: list[tuple[int, int, int]] = []
         self.messages_at_the_plant: list[int] = []
 
@@ -82,13 +84,18 @@ class Agent:
                 )
             )
 
-    def plant_config_canary(self, canary: str) -> None:
+    def plant_config_canary(self, namespace: str, canary: str) -> None:
         self._note()
+        self.namespaces.append(namespace)
         self.canary = canary
 
-    def plant_retrieved_content(self, key: str, body: str) -> None:
+    def plant_retrieved_content(self, namespace: str, key: str, body: str) -> None:
         self._note()
+        self.namespaces.append(namespace)
         self.content.append((key, body))
+
+    def teardown(self, namespace: str) -> None:
+        self.dropped.append(namespace)
 
 
 class Blind:
@@ -210,6 +217,8 @@ def test_a_plant_is_recorded_with_what_authorised_it_and_with_no_send(
     assert {field.name for field in fields(Planting)} == {
         "plant",
         "case_id",
+        # Where it went, so the run can take it back out again (ADR-0063).
+        "namespace",
         "authorised_by",
     }
 
@@ -295,10 +304,12 @@ def test_the_config_canary_is_planted_once_however_many_cases_ask_for_it(
 
     agent = Agent()
     with serve_callback(agent, name="once") as target:
-        requested = required_plantings(leakage, target, canary="NONCE-1")
+        requested = required_plantings(
+            leakage, target, canary="NONCE-1", namespace="run-once"
+        )
 
     assert [request.plant for request in requested] == [Plant.CONFIG_CANARY]
-    assert requested[0].arguments == {"canary": "NONCE-1"}
+    assert requested[0].arguments == {"namespace": "run-once", "canary": "NONCE-1"}
 
 
 def test_a_url_target_is_planted_by_nobody(leakage_case: Case) -> None:
@@ -311,13 +322,19 @@ def test_a_url_target_is_planted_by_nobody(leakage_case: Case) -> None:
     endpoint = a_target()
     assert endpoint.plants is None
 
-    assert required_plantings([leakage_case], endpoint, canary="NONCE-1") == ()
+    assert (
+        required_plantings(
+            [leakage_case], endpoint, canary="NONCE-1", namespace="run-none"
+        )
+        == ()
+    )
     assert (
         plant(
             Agent(),
             endpoint,
             [leakage_case],
             canary="NONCE-1",
+            namespace="run-none",
             attestation=BENCH_ATTESTATION,
         )
         == ()
@@ -357,7 +374,12 @@ def test_a_planting_the_target_cannot_be_given_is_never_requested(
     """
     with serve_callback(Blind(), name="blind") as target:
         assert target.plants == frozenset()
-        assert required_plantings([leakage_case], target, canary="NONCE-1") == ()
+        assert (
+            required_plantings(
+                [leakage_case], target, canary="NONCE-1", namespace="run-blind"
+            )
+            == ()
+        )
 
 
 def test_a_planting_hook_that_raises_stops_the_run_before_the_first_attempt(
@@ -366,7 +388,7 @@ def test_a_planting_hook_that_raises_stops_the_run_before_the_first_attempt(
     cases = [leakage_case]
 
     class Breaks(Agent):
-        def plant_config_canary(self, canary: str) -> None:
+        def plant_config_canary(self, namespace: str, canary: str) -> None:
             raise RuntimeError("the content store was unreachable")
 
     agent = Breaks()

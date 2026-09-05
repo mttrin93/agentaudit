@@ -18,10 +18,10 @@ from collections.abc import Sequence
 
 import httpx
 
-from backend.bench.calibration import PlantNonce
+from backend.bench.calibration import DropNamespace, PlantNonce
 from backend.bench.contract import TargetConfig
 from backend.targets.reference.agent import ReferenceAgent
-from backend.targets.reference.server import REFERENCE_AGENTS
+from backend.targets.reference.server import NAMESPACES_PATH, REFERENCE_AGENTS
 from backend.targets.reference.tools import DECLARED_TOOL_NAMES
 
 PLANT_TIMEOUT = 10.0
@@ -30,15 +30,36 @@ PLANT_TIMEOUT = 10.0
 def nonce_planter(base_url: str) -> PlantNonce:
     """Build the planter for reference agents served at `base_url`."""
 
-    def plant(target: TargetConfig, nonce: str) -> None:
+    def plant(target: TargetConfig, nonce: str, namespace: str) -> None:
         response = httpx.put(
             f"{base_url}/reference/{target.name}/nonce",
-            json={"nonce": nonce},
+            json={"nonce": nonce, "namespace": namespace},
             timeout=PLANT_TIMEOUT,
         )
         response.raise_for_status()
 
     return plant
+
+
+def namespace_dropper(base_url: str) -> DropNamespace:
+    """Build the teardown for reference agents served at `base_url`.
+
+    The other half of `nonce_planter`, and the reason both exist: the test equipment
+    demonstrates the contract the user-facing hooks are held to, which is that the
+    namespace is created by whoever is planted into and dropped wholesale by one call
+    ([ADR-0063](../../../docs/adr/0063-one-run-scoped-namespace-dropped-wholesale.md)
+    §5). A caller that plants and does not wire this up leaves the app holding one
+    run's nonces for the life of the process, which is the state this replaced.
+    """
+
+    def drop(namespace: str) -> None:
+        response = httpx.delete(
+            f"{base_url}{NAMESPACES_PATH.format(namespace=namespace)}",
+            timeout=PLANT_TIMEOUT,
+        )
+        response.raise_for_status()
+
+    return drop
 
 
 def described_agents(

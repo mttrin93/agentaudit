@@ -3869,3 +3869,67 @@ issued and the registration probe. Read on 2026-09-05.
   `plan_for`'s two declared gaps still decide.
 - **No variant was admitted, and none was proposed.** Admission needs a person at a
   tty (ADR-0052 §5), and nothing here asks for one.
+
+### One namespace per run, dropped on every exit path there is (#86, 2026-09-05)
+
+**This section records a cleanup invariant, one tripwire that moved, and no figure that
+did.** ADR-0062 decided that a plant happens and left where it goes open;
+[ADR-0063](./adr/0063-one-run-scoped-namespace-dropped-wholesale.md) decides it — one
+namespace per run, `run-<id>`, reaching every hook as an argument, dropped wholesale
+from a `finally` on the run. Read on 2026-09-05.
+
+- **The namespace planted into is the namespace dropped.** A served callback records
+  what it was handed on both calls: `plant_config_canary(namespace, canary)` and
+  `teardown(namespace)` see the same `run-<id>` value, derived from the run's own id
+  and stored on the shim by nothing. Driven red by returning the run id unprefixed.
+- **The exit paths, and the list is the point.** Eight of them, each with its own test:
+  a clean finish; the approval checkpoint declined (which plants nothing and drops
+  anyway); a plant that raised; a raise inside the run *after* a plant landed, over two
+  targets; a `TargetUnreachable` that outlived the retry policy; a budget breached
+  mid-run; a cancellation, which is a `BaseException` and so is caught by the `finally`
+  and by no `except`; and a registration that never completed. **Driven red by moving
+  the drop from the `finally` to the end of the happy path** — the implementation this
+  decision rejects — which took five of the eight red and left the clean finish green,
+  which is the shape #86 asked for.
+- **A teardown that failed is on the result and moves no figure.** The failed run
+  records `TeardownFailure.HOOK_RAISED`, the namespace and the operator's own error
+  text, and the target run still holds `attempts_per_case` attempts. Driven red by
+  returning a clean `Teardown` from the `except` arm.
+- **It reaches the artefact, and only when it has to.** `Provenance.teardown` is a new
+  key in the provenance block and a new subsection of section 2. A failed drop prints
+  the namespace and the error; a drop that worked prints neither, because the name is
+  derived from the run id and there is nothing for a reader to do with it (ADR-0018);
+  a run that planted nothing prints `NOTHING_WAS_PLANTED` rather than nothing at all.
+  Driven red by naming the namespace in the success sentence, by omitting the rendered
+  line, and by rewording the nothing-planted sentence.
+- **A shim that can plant and cannot clean up is refused at construction.**
+  `PlantsWithNothingToDropIt`, before a port is bound, and not a withdrawn family — a
+  callback with no planting hooks is served exactly as before. Driven red by making the
+  refusal unreachable.
+- **The test equipment demonstrates the same contract.** The reference app keys nonces
+  by namespace and then by agent, and `DELETE /reference/namespaces/{namespace}` drops
+  one run's plants wholesale; two runs' plants coexist, dropping one leaves the other
+  answering, and dropping a namespace nobody created is a no-op. Driven red by keying
+  every plant under one namespace, which is the process-lifetime store this replaced.
+- **Every planting hook is spelled out by exactly one protocol, and by one that spells
+  no other.** The existing check counted names and would have passed a hook that
+  migrated into a neighbouring protocol — which is exactly the mistake this diff made
+  and code review caught: `RetrievedContentPlanting` was left with only a docstring,
+  so every object satisfied it. The check now also asserts one protocol per hook and
+  that no protocol spelling a plant also spells the teardown. Driven red by putting
+  `plant_retrieved_content` back on `DropsItsNamespace`.
+- **`GOLDEN_ONE_FAMILY` moved to `43c8116f78a1`** — the thirteenth recorded move of the
+  rendered document — because section 2 gained the subsection above. The tripwire was
+  updated with the reason and not loosened. `ARTEFACT_VERSION` did not move: `teardown`
+  is an additive key, on the footing #43, #45, #47 and #79 set.
+- **No rate, `D`, κ, interval, band, gate decision or gate citation moved, and the
+  library digest did not move either.** No case record is in this diff: the eighteen and
+  the three are the same records and `c515a89956cd` is still the digest. A teardown
+  happens after every verdict is reached and changes none of them.
+- **A teardown is on no counter either.** The ten ADR-0062 §2 enumerates are held here
+  by the same absences: `teardown` takes no `RunState`, no `Layer` and no `Attestation`,
+  constructs no `Attempt` and no `Transcript`, reaches no model, and lives in the module
+  whose import graph `test_the_planting_module_names_no_counter_and_no_way_onto_the_wire`
+  already walks. `PLANTING_CALLS` is still `0` and neither ceiling moved.
+- **No variant was admitted, and none was proposed.** Admission needs a person at a tty
+  (ADR-0052 §5), and nothing here asks for one.

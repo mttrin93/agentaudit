@@ -121,12 +121,16 @@ async function shrinkTheNextRun(request: APIRequestContext): Promise<void> {
  * Read off the screen rather than out of a response this test made, because what the
  * walk has to prove is that the value an operator is *shown* is the value that
  * registers.
+ *
+ * The namespace is `by-hand` and belongs to no run. Over HTTP the operator plants
+ * before the run exists, so this value is in no run's namespace and no `teardown()`
+ * drops it — exactly where ADR-0024 left a hand-planted nonce, and ADR-0063 says so.
  */
 async function plantWhatTheScreenShows(page: Page): Promise<void> {
   const nonce = await page.locator('p.nonce').innerText()
   expect(nonce).not.toEqual('')
   const planted = await page.request.put(servedTarget().plant_url, {
-    data: { nonce },
+    data: { nonce, namespace: 'by-hand' },
   })
   expect(planted.ok(), await planted.text()).toBeTruthy()
 }

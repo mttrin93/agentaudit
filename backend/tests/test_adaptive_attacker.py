@@ -113,7 +113,7 @@ def attackable(
     with served_references(model=model) as references:
         chosen = [served for served in references.served if served.target.name in names]
         for served in chosen:
-            served.plant_nonce(served.target, CANARY)
+            served.plant_nonce(served.target, CANARY, "run-adaptive")
         yield [
             AttackableTarget(target=served.target, canary=CANARY) for served in chosen
         ]
@@ -664,7 +664,7 @@ def test_a_target_without_tool_call_visibility_costs_the_attacker_a_tool(
 ) -> None:
     recording = Recording()
     with blind_target() as blind:
-        blind.plant_nonce(blind.target, CANARY)
+        blind.plant_nonce(blind.target, CANARY, "run-adaptive")
         _, episodes = attack(
             [AttackableTarget(target=blind.target, canary=CANARY)],
             [leakage_case],

@@ -18,6 +18,7 @@ from backend.bench.adaptive.budget import AdaptiveBudget
 from backend.bench.adaptive.episode import AdaptiveEpisode, EpisodeOutcome
 from backend.bench.contract import Transcript
 from backend.bench.library import Case, Family
+from backend.bench.planting import namespace_for
 from backend.graph.budget import REGISTRATION_PROBES_PER_TARGET, FigureKind
 from backend.graph.runstate import RunState
 from backend.tests.conftest import BENCH_ATTESTATION, a_target, reference_target
@@ -33,6 +34,10 @@ from scripts.attack import (
     main,
 )
 from scripts.console import EXIT_WITHHELD
+
+ATTACK_NAMESPACE = namespace_for("attack-script-test")
+"""The namespace this script would derive for itself, spelled once for the tests
+that call `attackable` directly (ADR-0063)."""
 
 
 def test_the_declared_scored_figure_is_the_registration_probe_and_nothing_else() -> (
@@ -84,7 +89,12 @@ def test_a_target_that_never_echoed_its_nonce_is_not_handed_to_the_layer(
         state = RunState(budget=declared_budget([reference.target], AdaptiveBudget()))
 
         registration, entry = attackable(
-            reference.target, library, BENCH_ATTESTATION, state, reference.plant_nonce
+            reference.target,
+            library,
+            BENCH_ATTESTATION,
+            state,
+            reference.plant_nonce,
+            ATTACK_NAMESPACE,
         )
 
     assert registration.refused
@@ -104,7 +114,12 @@ def test_the_canary_handed_to_the_layer_is_the_nonce_that_proved_control(
         state = RunState(budget=declared_budget([reference.target], AdaptiveBudget()))
 
         registration, entry = attackable(
-            reference.target, library, BENCH_ATTESTATION, state, reference.plant_nonce
+            reference.target,
+            library,
+            BENCH_ATTESTATION,
+            state,
+            reference.plant_nonce,
+            ATTACK_NAMESPACE,
         )
 
     assert registration.complete
@@ -200,6 +215,7 @@ def test_a_waived_registration_is_attacked_and_says_control_was_not_proved(
             BENCH_ATTESTATION,
             state,
             reference.plant_nonce,
+            ATTACK_NAMESPACE,
             proof_waived=True,
         )
 
@@ -229,6 +245,7 @@ def test_an_echoing_target_reads_as_proved_even_under_the_waiver(
             BENCH_ATTESTATION,
             state,
             reference.plant_nonce,
+            ATTACK_NAMESPACE,
             proof_waived=True,
         )
 

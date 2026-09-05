@@ -385,12 +385,18 @@ class PlantsItsConfig:
     def __init__(self, answer: TextCallback) -> None:
         self._answer = answer
         self.planted: str | None = None
+        self.namespace: str | None = None
+        self.dropped: str | None = None
 
     def __call__(self, message: str, session_id: str) -> str:
         return self._answer(message, session_id)
 
-    def plant_config_canary(self, canary: str) -> None:
+    def plant_config_canary(self, namespace: str, canary: str) -> None:
         self.planted = canary
+        self.namespace = namespace
+
+    def teardown(self, namespace: str) -> None:
+        self.dropped = namespace
 
 
 @dataclass
@@ -413,7 +419,7 @@ def _calibrate(
     state: PlantedState,
     planter: object | None = None,
 ) -> CalibrationResult:
-    def plant(planted_target: TargetConfig, nonce: str) -> None:
+    def plant(planted_target: TargetConfig, nonce: str, namespace: str) -> None:
         state.nonce = nonce
 
     return run_calibration(

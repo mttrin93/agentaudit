@@ -30,7 +30,9 @@ would be asking about a decision it had partly taken.
 `plant_nonce` stands in for the human who edits their target's system prompt when
 the bench issues a nonce. A user does that by hand — hence the default of `None`,
 which is the production case — and the reference agents have a test-equipment
-route for it, so the nonce protocol is exercised on every gate run.
+route for it, so the nonce protocol is exercised on every gate run. It is handed the
+run's namespace beside the nonce, and `drop_namespace` drops that namespace when the
+run ends however it ends (ADR-0063).
 
 `adjudicator` is the model that decides the two judged families (#9). It defaults
 to `None` because a library of deterministic cases needs none, and a run given judged
@@ -98,7 +100,21 @@ from backend.bench.narration import (
     narrate_successes,
 )
 from backend.bench.nonce import issue_nonce
-from backend.bench.planting import Planter, Planting, plant
+from backend.bench.planting import (
+    DropNamespace as _DropNamespace,
+)
+from backend.bench.planting import (
+    Planter,
+    Planting,
+    Teardown,
+    anonymous_run_id,
+    namespace_for,
+    plant,
+    teardown_all,
+)
+from backend.bench.planting import (
+    drop_namespace as _drop_namespace,
+)
 from backend.bench.registration import (
     Attestation,
     Registration,
@@ -128,7 +144,24 @@ from backend.observability import (
     traced,
 )
 
-PlantNonce = Callable[[TargetConfig, str], None]
+PlantNonce = Callable[[TargetConfig, str, str], None]
+"""The operator's hand, as a callable: plant this nonce for this target, in this run.
+
+The third argument is the run's namespace, and it is an **argument** rather than a
+value the planter was built with, for the reason the shim's hooks take one: a planter
+holding a namespace between the plant and the drop is a planter whose drop can run
+against a later run's namespace
+([ADR-0063](../../docs/adr/0063-one-run-scoped-namespace-dropped-wholesale.md) §1).
+"""
+
+DropNamespace = _DropNamespace
+"""The other half of `PlantNonce`: drop everything that hand planted, wholesale.
+
+Defined in `planting.py` beside `teardown`, because the two are one contract, and
+named here because this is where a caller meets it. `None` for the operator who
+plants by hand: a person who pasted a nonce into a system prompt takes it out the
+same way, and there is no call the bench can make on their behalf.
+"""
 
 
 @dataclass(frozen=True)
@@ -575,6 +608,27 @@ class CalibrationResult:
     (ADR-0010).
     """
 
+    namespace: str = ""
+    """The one namespace this run planted into, whether or not anything was planted.
+
+    Derived from the run id and computed once, at the top of `run_calibration`, so
+    the value a hook was given and the value `teardown()` was given are the same
+    value
+    ([ADR-0063](../../docs/adr/0063-one-run-scoped-namespace-dropped-wholesale.md)).
+    Empty only on a result some other code constructed; every run this module
+    produces holds one.
+    """
+
+    teardowns: tuple[Teardown, ...] = ()
+    """What became of that namespace, per object this run was handed.
+
+    Empty for a run with no planter, which is every endpoint run: nothing was planted,
+    so nothing had to be dropped, and `NOTHING_WAS_PLANTED` is the sentence a report
+    prints for it. A `Teardown` that failed is on the result rather than raised,
+    because the run's numbers are unaffected and the failure is still the operator's
+    to act on (ADR-0063 §3).
+    """
+
     filing: Filing = field(default_factory=Filing)
     """What this run contributed to the long-term memory, and what it withheld.
 
@@ -688,6 +742,7 @@ def run_calibration(
     usage: UsageLedger | None = None,
     planted_nonces: Mapping[str, str] | None = None,
     planters: Mapping[str, Planter] | None = None,
+    drop_namespace: DropNamespace | None = None,
     proof_waived: bool = False,
     trace: TracedRun | None = None,
     thread_id: str | None = None,
@@ -744,6 +799,14 @@ def run_calibration(
     run: a URL target does not answer for its own plantings and its operator plants
     by hand, exactly where ADR-0024 left that.
 
+    `drop_namespace` is `plant_nonce`'s other half, for the caller whose planting
+    equipment is reachable: the reference agents' app holds what a run planted under
+    that run's namespace and drops it wholesale when asked. Called from the same
+    `finally` the shim teardowns are, so the test equipment is cleaned up on exactly
+    the exit paths a user's store is
+    ([ADR-0063](../../docs/adr/0063-one-run-scoped-namespace-dropped-wholesale.md)
+    §5). `None` for the operator who plants by hand.
+
     `proof_waived` is the operator declaring that the run may start without the echo
     (ADR-0007, amended). It reaches `register` and changes one thing there: whether a
     missing echo stops the run. The probe is still sent and what came back is still
@@ -797,6 +860,11 @@ def run_calibration(
         )
     target_runs: list[TargetRun] = []
     filing = Filing()
+    # One namespace per run, derived from the run's own id and computed once here, so
+    # that the value every plant is given and the value every teardown is given are
+    # the same value and neither is stored on a shim in between (ADR-0063 §1).
+    namespace = namespace_for(trace.id if trace is not None else anonymous_run_id())
+    teardowns: tuple[Teardown, ...] = ()
 
     def run_suite() -> None:
         nonlocal filing
@@ -814,6 +882,7 @@ def run_calibration(
                     rule=rule,
                     planted=(planted_nonces or {}).get(target.name),
                     planter=(planters or {}).get(target.name),
+                    namespace=namespace,
                     proof_waived=proof_waived,
                 )
             )
@@ -897,6 +966,21 @@ def run_calibration(
                     }
                 )
     finally:
+        # **The cleanup, on every exit path there is**, and the list is the point: a
+        # clean finish, a budget breach that aborted mid-run, a `TargetUnreachable`
+        # that outlived the retry policy, a `PlantingFailed` that stopped the run
+        # before its first attempt, an unhandled exception, a cancellation, and the
+        # approval checkpoint being declined — which reaches here having planted
+        # nothing and drops a namespace that was never created, because a wholesale
+        # drop of nothing is a shim author's no-op and a special case here would be a
+        # branch nobody can test (ADR-0028, ADR-0063 §2).
+        #
+        # A `finally` on the run and not a line at the end of the happy path: the
+        # runs that end badly are exactly the runs that leave somebody's store
+        # holding what this bench put in it.
+        teardowns = teardown_all(planters or {}, namespace)
+        if drop_namespace is not None:
+            teardowns += (_drop_namespace(drop_namespace, namespace, target_name=None),)
         # Once the root span is closed and not before, so what is pushed is a whole
         # trace. In a `finally` for the same reason the figures above are: a run that
         # stopped on a transport failure is the run whose trace is worth having, and
@@ -911,6 +995,8 @@ def run_calibration(
         approval=approval,
         filing=filing,
         usage=ledger,
+        namespace=namespace,
+        teardowns=teardowns,
     )
 
 
@@ -925,6 +1011,7 @@ def _run_target(
     precedent: PrecedentStore,
     rule: GateRule,
     planted: str | None,
+    namespace: str,
     planter: Planter | None = None,
     proof_waived: bool = False,
 ) -> TargetRun:
@@ -938,10 +1025,16 @@ def _run_target(
     `planter` is the object this target's plantings are performed on, for a served
     callback that declared any (ADR-0061). `None` for every URL target, and for a
     served one that declared none — in both of those `plant` performs nothing.
+
+    `namespace` is the run's, not this target's: one run, one namespace, dropped
+    wholesale by `run_calibration`'s `finally`
+    ([ADR-0063](../../docs/adr/0063-one-run-scoped-namespace-dropped-wholesale.md)).
+    It is passed down rather than derived here so that a second target cannot plant
+    into a namespace the first target's teardown will not reach.
     """
     nonce = planted or issue_nonce()
     if plant_nonce is not None:
-        plant_nonce(target, nonce)
+        plant_nonce(target, nonce, namespace)
     # Applicability first, and here rather than after registration, because the plant
     # below is performed for the cases that will actually be attempted: planting an
     # artefact for a case this target's agent type was never written for would be an
@@ -962,7 +1055,12 @@ def _run_target(
     # hook that does not exist.
     measurable_here = runnable(written_for, target)
     plantings = plant(
-        planter, target, measurable_here, canary=nonce, attestation=attestation
+        planter,
+        target,
+        measurable_here,
+        canary=nonce,
+        namespace=namespace,
+        attestation=attestation,
     )
     # The hash and never the url, through the one function that derives it, and
     # recorded before the probe rather than after it: a registration that failed is

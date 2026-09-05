@@ -60,7 +60,7 @@ from backend.bench.adaptive.layer import (
 )
 from backend.bench.admission import NotAdmitted, admitted_library
 from backend.bench.applicability import applicable
-from backend.bench.calibration import PlantNonce
+from backend.bench.calibration import DropNamespace, PlantNonce
 from backend.bench.completion import (
     DEFAULT_ATTACKER_MODEL,
     attacker_completion_for,
@@ -69,6 +69,13 @@ from backend.bench.contract import TargetConfig
 from backend.bench.library import Case, Family, LibraryVersion
 from backend.bench.measurability import contradicted_by_the_reply
 from backend.bench.nonce import issue_nonce
+from backend.bench.planting import (
+    anonymous_run_id,
+    namespace_for,
+)
+from backend.bench.planting import (
+    drop_namespace as drop,
+)
 from backend.bench.registration import Attestation, Registration, register
 from backend.graph.approval import ApprovalOutcome, run_under_approval
 from backend.graph.budget import BudgetExceeded, CallPrice, Layer, RunBudget
@@ -77,6 +84,7 @@ from backend.targets.reference.hardened import HARDENED
 from backend.targets.reference.model import ModelConfig
 from backend.targets.reference.operator import (
     described_agents,
+    namespace_dropper,
     nonce_planter,
 )
 from backend.targets.reference.server import (
@@ -134,7 +142,8 @@ def attackable(
     cases: Sequence[Case],
     attestation: Attestation,
     run_state: RunState,
-    plant_nonce: PlantNonce | None = None,
+    plant_nonce: PlantNonce | None,
+    namespace: str,
     proof_waived: bool = False,
 ) -> tuple[Registration, AttackableTarget | None]:
     """Register one target, and describe it to the adaptive layer if it registered.
@@ -160,7 +169,7 @@ def attackable(
     """
     nonce = issue_nonce()
     if plant_nonce is not None:
-        plant_nonce(target, nonce)
+        plant_nonce(target, nonce, namespace)
     registration = register(target, nonce, attestation, run_state, proof_waived)
     if not registration.complete:
         return registration, None
@@ -410,6 +419,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     ],
                 ),
                 plant_nonce=nonce_planter(base_url),
+                drop_namespace=namespace_dropper(base_url),
                 cases=cases,
                 attestation=attestation,
                 attacker=attacker,
@@ -447,6 +457,8 @@ class Attacked:
 def _attack(
     targets: Sequence[TargetConfig],
     plant_nonce: PlantNonce | None,
+    drop_namespace: DropNamespace | None = None,
+    *,
     cases: Sequence[Case],
     attestation: Attestation,
     attacker: AttackerCompletion,
@@ -466,6 +478,10 @@ def _attack(
     of it is a second place for the consent interrupt to go missing (ADR-0007).
     """
     declared = declared_budget(targets, adaptive, call_price)
+    # One namespace for this run, dropped in the `finally` below however the run ends
+    # ([ADR-0063](../docs/adr/0063-one-run-scoped-namespace-dropped-wholesale.md)).
+    # This script holds no run record, so the id is drawn rather than read off one.
+    namespace = namespace_for(anonymous_run_id())
     state = Narrating(budget=declared, library=LibraryVersion.of(cases))
     registrations: list[Registration] = []
     entries: list[AttackableTarget] = []
@@ -473,7 +489,7 @@ def _attack(
     def attack() -> None:
         for target in targets:
             registration, entry = attackable(
-                target, cases, attestation, state, plant_nonce, proof_waived
+                target, cases, attestation, state, plant_nonce, namespace, proof_waived
             )
             registrations.append(registration)
             if entry is not None:
@@ -493,6 +509,17 @@ def _attack(
     except BudgetExceeded as abort:
         print(f"\nRun aborted on budget: {abort}")
         return None
+    finally:
+        # On every exit path, including the budget abort above and the checkpoint
+        # being declined: a run that ends badly is exactly the run that leaves what it
+        # planted behind (ADR-0063 §2).
+        if drop_namespace is not None:
+            # Through the never-raising wrapper and not called directly: this runs
+            # while the run's own exception is on its way out, and a cleanup that
+            # raised here would take its place (ADR-0063 §2).
+            dropped = drop(drop_namespace, namespace, target_name=None)
+            if dropped.failed:
+                print(f"\nCleanup: {dropped.stated()}")
     return Attacked(
         registrations=tuple(registrations),
         entries=tuple(entries),

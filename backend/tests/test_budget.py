@@ -296,7 +296,7 @@ def test_spend_is_visible_per_layer_while_the_run_is_still_in_progress(
     with reference_target(name="trivial") as reference:
         budget = RunBudget.declare(cases=[leakage_case], targets=[reference.target])
         run_state = RunState(budget=budget)
-        reference.plant_nonce(reference.target, nonce)
+        reference.plant_nonce(reference.target, nonce, "run-budget")
 
         seen = []
         for index in range(3):

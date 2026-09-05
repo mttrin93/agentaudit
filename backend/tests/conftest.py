@@ -33,6 +33,7 @@ from backend.bench.adaptive.precedent import DURABLE_PRECEDENT
 from backend.bench.adjudication import Completion
 from backend.bench.calibration import (
     CalibrationResult,
+    DropNamespace,
     PlantNonce,
     TargetRun,
     run_calibration,
@@ -80,7 +81,7 @@ from backend.graph.budget import BudgetPayload, RunBudget
 from backend.graph.runstate import Attempt
 from backend.targets.reference.agent import ReferenceAgent
 from backend.targets.reference.model import ModelConfig
-from backend.targets.reference.operator import nonce_planter
+from backend.targets.reference.operator import namespace_dropper, nonce_planter
 from backend.targets.reference.server import (
     REFERENCE_AGENTS,
     ReferenceConfig,
@@ -804,6 +805,7 @@ class ServedReference:
 
     target: TargetConfig
     plant_nonce: PlantNonce
+    drop_namespace: DropNamespace
 
 
 @dataclass(frozen=True)
@@ -812,6 +814,7 @@ class ServedReferences:
 
     served: tuple[ServedReference, ...]
     plant_nonce: PlantNonce
+    drop_namespace: DropNamespace
 
 
 @contextmanager
@@ -840,6 +843,7 @@ def calibrate(
             targets=[reference.target],
             attestation=BENCH_ATTESTATION,
             plant_nonce=reference.plant_nonce,
+            drop_namespace=reference.drop_namespace,
             approve=CONFIRMING,
             adjudicator=adjudicator,
             proof_waived=proof_waived,
@@ -873,6 +877,7 @@ def served_references(
     )
     with serve(app) as base_url:
         plant = nonce_planter(base_url)
+        drop = namespace_dropper(base_url)
         yield ServedReferences(
             served=tuple(
                 ServedReference(
@@ -901,10 +906,12 @@ def served_references(
                         holds_personal_records=True,
                     ),
                     plant_nonce=plant,
+                    drop_namespace=drop,
                 )
                 for agent in agents
             ),
             plant_nonce=plant,
+            drop_namespace=drop,
         )
 
 

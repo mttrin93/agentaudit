@@ -493,7 +493,7 @@ def test_a_script_reaches_a_served_target_over_the_one_transport(
     nonce = "AGENTAUDIT-CANARY-SCRIPTPATH"
 
     with reference_target(name="trivial") as reference:
-        reference.plant_nonce(reference.target, nonce)
+        reference.plant_nonce(reference.target, nonce, "run-scripted")
         target = replace(reference.target, retains_session_state=True)
         budget = RunBudget.declare(cases=[script], targets=[target])
         attempt = attacker.run_attempt(

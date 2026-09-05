@@ -412,6 +412,7 @@ def _decide(
             targets=served.targets,
             attestation=record.attestation,
             plant_nonce=served.plant,
+            drop_namespace=served.drop,
             approve=approve,
             adjudicator=instruments.adjudicator,
             attacker=instruments.attacker,

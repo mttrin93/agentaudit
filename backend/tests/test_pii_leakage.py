@@ -266,7 +266,7 @@ def one_turn(
     with served_references(model=model, agents=agents) as references:
         [served] = [one for one in references.served if one.target.name == agent]
         if nonce:
-            references.plant_nonce(served.target, nonce)
+            references.plant_nonce(served.target, nonce, "run-pii")
         return send_message(
             served.target, message, session_id=f"pii-{uuid.uuid4()}"
         ).reply_text

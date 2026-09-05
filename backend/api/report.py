@@ -228,6 +228,17 @@ def payload_for(
             # plan and the estimate from the same record (`BenchConfig.selection`).
             selection=selection,
             gate=config.gate,
+            # What became of anything this run planted, off the run's own record.
+            # Matched by target name, so the equipment teardown a gate run performs —
+            # which carries none — never reaches a target's artefact (ADR-0063 §5).
+            teardown=next(
+                (
+                    dropped
+                    for dropped in result.teardowns
+                    if dropped.target_name == target_run.target.name
+                ),
+                None,
+            ),
         ),
         rule=rule,
     )

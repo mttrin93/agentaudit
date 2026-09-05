@@ -269,6 +269,15 @@ def _how_the_run_was_made(body: Mapping[str, Any]) -> Section:
             "- Reported per layer and never as one figure: a blended number hides "
             "which half of the run spent the operator's budget.",
             "",
+            # The cleanup, printed whichever way it went. A run that planted nothing
+            # says so, and a run whose teardown failed says which namespace and what
+            # the error was — the run's figures are unaffected either way, and the
+            # only person who can act on a store this bench wrote into is the operator
+            # who is told about it (ADR-0063 §3).
+            "### What this run planted, and whether it took it back out",
+            "",
+            f"- {provenance['teardown']['stated']}",
+            "",
             "### The rule these figures were measured under",
             "",
             f"- **{rule['attempts_per_case']} attempts per case** — the denominator "

@@ -23,13 +23,93 @@ registration probe → run, and `calibration._run_target` is where it is spelled
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+import re
+import secrets
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
 
 from backend.bench.contract import TargetConfig
 from backend.bench.library import Case, Plant
 from backend.bench.registration import Attestation, AttestationRecord
+
+NAMESPACE_PREFIX = "run-"
+"""What every namespace this bench asks a shim to create begins with.
+
+A shim author who has to answer *is this mine to drop* answers it by looking at the
+prefix, and an operator reading a poisoned-store line in a report knows which of the
+things in their store the sentence is about.
+"""
+
+_NAMESPACE_BODY = re.compile(r"[A-Za-z0-9._-]+")
+"""What a run id may contribute to a namespace.
+
+A namespace is pasted into somebody else's store — a vector-store collection name, a
+folder, a key prefix — so what reaches it is restricted here rather than at each of
+the places that could be surprised by it. Refused rather than sanitised: a namespace
+quietly rewritten is a namespace a `teardown()` might not recognise, and the run id
+this is derived from is minted by this bench.
+"""
+
+DropNamespace = Callable[[str], None]
+"""A teardown that is reached as a call rather than as a method on an object.
+
+The reference agents' `DELETE /reference/namespaces/{namespace}` is the one of these
+that exists: test equipment served over HTTP, so the caller holds a function and not
+the object the namespace lives in. Held to the same contract as `teardown()` — one
+call, wholesale, and it never takes the run's own exception's place (ADR-0063 §5).
+"""
+
+TEARDOWN_HOOK = "teardown"
+"""The method a callback implements to drop its namespace.
+
+One name, spelled here, for the reason `Plant.hook` is spelled on the member: the
+shim's construction check, the harness's call and the protocol are three readers of
+one fact. Not a member of `Plant`, because a teardown is not a planting — there is
+one of these however many plantings a target declares, and that is the whole of the
+decision (ADR-0063).
+"""
+
+
+def anonymous_run_id() -> str:
+    """A run id for a run that holds no record of its own.
+
+    Every entry point in this repository hands `run_calibration` a `TracedRun` and so
+    a run id — the API from its run record, the five scripts from
+    `console.traced_run` — so this is a caller holding no record, which in practice is
+    the test suite. It is drawn fresh rather than fixed, because *this run's writes*
+    is the property a namespace has to carry and a constant would give two runs one
+    namespace: the second's teardown would drop the first's plants.
+
+    Deliberately not `issue_nonce`: a namespace named after the value the leakage
+    family reads would put the canary's own prefix into somebody's content store
+    (`nonce.inside_a_nonce`, ADR-0043).
+    """
+    return secrets.token_hex(8)
+
+
+def namespace_for(run_id: str) -> str:
+    """The one namespace this run plants into, derived from the run's own id.
+
+    `run-<id>`, and derived rather than stored: the value handed to a hook and the
+    value handed to `teardown()` are computed from the same run id, so there is no
+    field on a shim between the two calls that a later run could have overwritten
+    ([ADR-0063](../../docs/adr/0063-one-run-scoped-namespace-dropped-wholesale.md)).
+
+    One per run and not one per target: what it scopes is *this run's writes into
+    somebody's store*, and a run that dropped a namespace per target would be back to
+    a list of things to delete.
+    """
+    if not _NAMESPACE_BODY.fullmatch(run_id):
+        raise ValueError(
+            f"a run namespace cannot be derived from {run_id!r}: a run id reaches "
+            "somebody else's content store as the name of a namespace they have to "
+            "create and drop, so it is letters, digits, dot, dash and underscore or "
+            "it is refused. Sanitising it instead would hand a `teardown()` a name "
+            "the plant never used"
+        )
+    return f"{NAMESPACE_PREFIX}{run_id}"
+
 
 Planter = object
 """What a run is given to plant with: the operator's own object, whatever it is.
@@ -183,11 +263,20 @@ class Planting:
 
     plant: Plant
     case_id: str | None
+    namespace: str
+    """The run-scoped namespace this was planted into, and the one `teardown()` drops.
+
+    On the record because *where it went* is the only thing that makes a plant
+    reversible, and because a teardown that failed has to be able to say which
+    namespace an operator is now holding
+    ([ADR-0063](../../docs/adr/0063-one-run-scoped-namespace-dropped-wholesale.md)).
+    """
+
     authorised_by: AttestationRecord
 
 
 def required_plantings(
-    cases: Sequence[Case], target: TargetConfig, *, canary: str
+    cases: Sequence[Case], target: TargetConfig, *, canary: str, namespace: str
 ) -> tuple[PlantingRequest, ...]:
     """What this target has to be given before these cases may be attempted.
 
@@ -218,7 +307,7 @@ def required_plantings(
                 continue
             if needed not in target.plants:
                 continue
-            request = _request_for(needed, case, canary)
+            request = _request_for(needed, case, canary, namespace)
             key = (request.plant, request.case_id)
             if key in seen:
                 continue
@@ -233,6 +322,7 @@ def plant(
     cases: Sequence[Case],
     *,
     canary: str,
+    namespace: str,
     attestation: Attestation,
 ) -> tuple[Planting, ...]:
     """Put every artefact these cases need in place, before the run counts anything.
@@ -259,7 +349,7 @@ def plant(
     Every failure is a `PlantingFailed`, raised before the registration probe, so a
     run whose plant did not work has spent nothing and measures nothing.
     """
-    requests = required_plantings(cases, target, canary=canary)
+    requests = required_plantings(cases, target, canary=canary, namespace=namespace)
     if not requests:
         return ()
     authorised_by = AttestationRecord.of(attestation, target)
@@ -294,13 +384,201 @@ def plant(
             Planting(
                 plant=request.plant,
                 case_id=request.case_id,
+                namespace=namespace,
                 authorised_by=authorised_by,
             )
         )
     return tuple(performed)
 
 
-def _request_for(needed: Plant, case: Case, canary: str) -> PlantingRequest:
+class TeardownFailure(StrEnum):
+    """Why a namespace was not dropped — one named outcome per mode.
+
+    Two members and not three: there is no `NO_PLANTER` here, because a run holding
+    no object to tear down planted nothing with one either, and *nothing to drop* is
+    not a failure to drop it (ADR-0063 §3).
+    """
+
+    HOOK_MISSING = "hook_missing"
+    """The object handed in has no `teardown()`.
+
+    Unreachable through `serve_callback`, which refuses a callback with plant hooks
+    and no teardown at construction (ADR-0063 §4) — and named anyway, because the
+    caller hands the object to `run_calibration` separately and could hand over a
+    different one, which is the mistake `PlantingFailure.HOOK_MISSING` is also for.
+    """
+
+    HOOK_RAISED = "hook_raised"
+    """The teardown exists, was called, and threw. The store may now be poisoned."""
+
+    def stated(self) -> str:
+        """The outcome in the words a report prints.
+
+        No fallback branch, on `PlantingFailure.stated`'s terms.
+        """
+        match self:
+            case TeardownFailure.HOOK_MISSING:
+                return (
+                    "no teardown — the object this run was given has no "
+                    "`teardown()`, so nothing dropped the namespace it planted into"
+                )
+            case TeardownFailure.HOOK_RAISED:
+                return "the teardown raised, so the namespace was not dropped"
+
+
+@dataclass(frozen=True)
+class Teardown:
+    """What became of one run-scoped namespace, and it is always answered.
+
+    **A record and never a `None`**, because the outcome this exists to carry is the
+    one nobody would go looking for: the run's figures are unaffected — every attempt
+    was made and every verdict stands — and the only person who can act on a poisoned
+    store is an operator who is told (ADR-0063 §3). So a teardown that worked is a
+    record saying so, and a teardown that failed is the same record carrying the
+    namespace and the error.
+
+    `error` is the operator's own exception, in their own words, and this is the one
+    place in the bench where that text travels. It is not payload and not a reply
+    from a target: it is the operator's cleanup code failing against the operator's
+    own store, in a document written for them (ADR-0008 governs the other case, and
+    ADR-0063 says why this is not it).
+    """
+
+    namespace: str
+    target_name: str | None
+    """Whose planter this was, or `None` for the run's own equipment.
+
+    `None` is the reference-agent stand-in a gate run drops through `drop_namespace`
+    — test equipment, and deliberately not something a target's artefact reports on
+    (`calibration.run_calibration`).
+    """
+
+    failure: TeardownFailure | None = None
+    error: str | None = None
+
+    @property
+    def failed(self) -> bool:
+        return self.failure is not None
+
+    def stated(self) -> str:
+        """The sentence a report prints, whichever way this went."""
+        if self.failure is None:
+            # The name is deliberately not in this half. On a run that cleaned up
+            # there is nothing for a reader to do with it, and it is derived from the
+            # run id — which a signed artefact does not otherwise carry (ADR-0018,
+            # ADR-0063 §3).
+            return (
+                "the namespace this run planted into was dropped wholesale, so "
+                "nothing this run wrote is still in the store"
+            )
+        return (
+            f"the namespace {self.namespace} this run planted into was NOT dropped: "
+            f"{self.failure.stated()}. The figures in this report are unaffected — "
+            "every attempt was made and every verdict stands — and what is left is a "
+            f"store holding this run's planted content. The error was: {self.error}"
+        )
+
+
+NOTHING_WAS_PLANTED = (
+    "the bench planted nothing on this run, so no namespace was created and none "
+    "had to be dropped. Every target here was reached over the contract and any "
+    "artefact a family needed was put in place by its operator, where ADR-0024 left "
+    "it"
+)
+"""What a run with no planter says about its cleanup.
+
+A sentence rather than an absent line, on `PLANTING_CALLS = 0`'s reasoning: a
+document that said nothing about the cleanup would leave a reader deciding for
+themselves whether this bench had put something in their store and not taken it out.
+"""
+
+
+def teardown(
+    planter: Planter | None, namespace: str, *, target_name: str | None
+) -> Teardown | None:
+    """Drop this run's namespace on one planter, and never raise doing it.
+
+    `None` for a run holding no planter: there is nothing that could have planted, so
+    there is nothing to report having dropped.
+
+    **This never raises**, and that is the decision rather than an omission
+    ([ADR-0063](../../docs/adr/0063-one-run-scoped-namespace-dropped-wholesale.md)
+    §3). It is called from a `finally`, which is very often a `finally` unwinding an
+    exception that is the run's actual answer — a `TargetUnreachable`, a
+    `BudgetExceeded`, a `PlantingFailed`. A teardown that raised there would replace
+    the reason the run ended with the reason its cleanup failed, and the operator
+    would lose the first to learn the second. So both are kept: the original
+    propagates and this comes back as a record.
+
+    It drops the **namespace** and not the records. One call whose failure is total
+    and visible, rather than an item-by-item delete that leaves a poisoned document
+    behind the first failure and needs a manifest — a second copy of what was
+    planted, in this harness, going stale — to be correct at all.
+    """
+    if planter is None:
+        return None
+    hook = getattr(planter, TEARDOWN_HOOK, None)
+    if not callable(hook):
+        # No `error`: there was no call, so there are no words of the operator's to
+        # report, and `TeardownFailure.HOOK_MISSING.stated()` already says the whole
+        # of it (ADR-0063 §3).
+        return Teardown(
+            namespace=namespace,
+            target_name=target_name,
+            failure=TeardownFailure.HOOK_MISSING,
+        )
+    return drop_namespace(hook, namespace, target_name=target_name)
+
+
+def drop_namespace(
+    drop: DropNamespace, namespace: str, *, target_name: str | None
+) -> Teardown:
+    """Make one drop call, and never raise doing it.
+
+    The half of `teardown` that is about the call rather than about finding it, and
+    public because the test equipment's drop is reached as a function and needs the
+    same guarantee (`calibration.run_calibration`'s `drop_namespace`). One
+    never-raises wrapper and one spelling of the error, rather than a second copy
+    beside the caller that holds a callable.
+    """
+    try:
+        drop(namespace)
+    except Exception as raised:
+        # The operator's own words, unlike `PlantingFailed`'s: a plant that raised
+        # stops the run and its traceback is right there in the console, and this one
+        # happens while another exception is on its way out and has nowhere else to
+        # be read (ADR-0063 §3).
+        return Teardown(
+            namespace=namespace,
+            target_name=target_name,
+            failure=TeardownFailure.HOOK_RAISED,
+            error=f"{type(raised).__name__}: {raised}",
+        )
+    return Teardown(namespace=namespace, target_name=target_name)
+
+
+def teardown_all(
+    planters: Mapping[str, Planter], namespace: str
+) -> tuple[Teardown, ...]:
+    """Drop this run's namespace on every object the run was handed.
+
+    **Every planter, and not only the ones something was planted through.** A plant
+    that raised halfway through a target's requests left the earlier ones in place,
+    and a teardown that only visited the targets whose plant *finished* would leave
+    exactly those behind. The namespace is one call to drop and dropping one that was
+    never created is a shim author's no-op, so the safe direction is to ask everybody
+    (ADR-0063 §2).
+    """
+    return tuple(
+        dropped
+        for name, planter in planters.items()
+        if (dropped := teardown(planter, namespace, target_name=name)) is not None
+    )
+
+
+def _request_for(
+    needed: Plant, case: Case, canary: str, namespace: str
+) -> PlantingRequest:
     """One planting's arguments, off the member and the record that asked for it.
 
     A `match` with no fallback arm, on `Plant.stated`'s terms: the two hooks take
@@ -312,7 +590,9 @@ def _request_for(needed: Plant, case: Case, canary: str) -> PlantingRequest:
     match needed:
         case Plant.CONFIG_CANARY:
             return PlantingRequest(
-                plant=needed, case_id=None, arguments={"canary": canary}
+                plant=needed,
+                case_id=None,
+                arguments={"namespace": namespace, "canary": canary},
             )
         case Plant.RETRIEVED_CONTENT:
             artefact = case.planted_artefact
@@ -327,5 +607,9 @@ def _request_for(needed: Plant, case: Case, canary: str) -> PlantingRequest:
             return PlantingRequest(
                 plant=needed,
                 case_id=case.id,
-                arguments={"key": artefact.key, "body": artefact.body},
+                arguments={
+                    "namespace": namespace,
+                    "key": artefact.key,
+                    "body": artefact.body,
+                },
             )

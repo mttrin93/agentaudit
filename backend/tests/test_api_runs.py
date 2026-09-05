@@ -341,7 +341,10 @@ def a_request(
 def registered(client: TestClient, watched: Watched) -> str:
     """A nonce this bench issued, planted in the target the way an operator would."""
     nonce = str(client.post("/nonces").json()["nonce"])
-    watched.plant(watched.target, nonce)
+    # A namespace of its own, because over HTTP the operator plants by hand before
+    # the run exists: this value is not in any run's namespace and no teardown drops
+    # it, exactly where ADR-0024 left a hand-planted nonce (ADR-0063).
+    watched.plant(watched.target, nonce, "by-hand")
     return nonce
 
 

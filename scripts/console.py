@@ -626,7 +626,13 @@ def interactive_planter() -> PlantNonce:
     endpoint and nothing may reach it before the spend is confirmed (ADR-0007).
     """
 
-    def plant(target: TargetConfig, nonce: str) -> None:
+    def plant(target: TargetConfig, nonce: str, namespace: str) -> None:
+        # The namespace is accepted and not printed. It is what a `teardown()` drops
+        # in one call, and a person who pasted two lines into a system prompt takes
+        # them out by deleting them — there is no wholesale drop a hand performs, and
+        # printing a name nobody can act on would be an instruction with no action
+        # ([ADR-0063](../docs/adr/0063-one-run-scoped-namespace-dropped-wholesale.md)).
+        del namespace
         print(f"\nRegistration nonce for {target.name}: {nonce}")
         print(
             "\nPaste these two things into the target's system prompt. The first "

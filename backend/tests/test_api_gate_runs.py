@@ -99,7 +99,7 @@ from backend.graph.approval import Approval
 from backend.graph.budget import Layer
 from backend.targets.reference.hardened import HARDENED
 from backend.targets.reference.model import ModelConfig, measures_the_field
-from backend.targets.reference.operator import nonce_planter
+from backend.targets.reference.operator import namespace_dropper, nonce_planter
 from backend.targets.reference.server import ReferenceConfig, create_reference_app
 from backend.targets.reference.serving import serve
 from backend.targets.reference.tools import DECLARED_TOOL_NAMES
@@ -208,6 +208,7 @@ def watched_agents(ledger: Ledger) -> Iterator[ServedAgents]:
                 for agent in (TRIVIAL, WEAK, HARDENED)
             ),
             plant=nonce_planter(base_url),
+            drop=namespace_dropper(base_url),
             trivial=TRIVIAL.name,
             weak=WEAK.name,
             hardened=HARDENED.name,

@@ -52,6 +52,15 @@ from scripts.probe_target import OperatorGap
 ACTOR = "octocat"
 ENDPOINT = "https://staging.example/agent/messages"
 
+ACTION = Path(__file__).resolve().parents[2] / "action.yml"
+"""The composite action, read as text.
+
+Text and not parsed YAML: what these assertions are about is where a value is
+written in the file — bound in an `env:` block and referenced as `$VAR`, never
+interpolated into a `run:` body — and a parse would flatten exactly that
+distinction (ADR-0066 §2).
+"""
+
 WHOLE = """
 # AgentAudit attestation
 
@@ -584,6 +593,32 @@ def test_a_family_this_workflow_declared_away_is_named_in_the_signed_report(
     assert "### Families this run did not attempt" in rendering
     for one in declared_away.values():
         assert one["stated"] in rendering
+
+
+def test_the_action_offers_the_two_narrowings_and_hands_them_over_by_environment() -> (
+    None
+):
+    """#89's input table, minus the one that is not an input of a run (ADR-0075 §4).
+
+    `families` and `attempts-per-case` are inputs of the step because ADR-0025's
+    argument holds for them — a declared input of a run is recorded, so it should be
+    reviewable — and they are inputs *now* because the entrypoint finally records what
+    they narrow. Both reach the process through `env:` and are referenced as `$VAR`,
+    which is ADR-0066 §2's invariant and not a style: a `${{ inputs.x }}` pasted into
+    a `run:` body is the caller's text executed in a step holding their signing key.
+    """
+    text = ACTION.read_text(encoding="utf-8")
+
+    for declared in ("families:", "attempts-per-case:"):
+        assert f"\n  {declared}" in text, f"{declared} is not an input of the action"
+    for name, variable in (("families", "FAMILIES"), ("attempts-per-case", "ATTEMPTS")):
+        interpolation = "${{ inputs." + name + " }}"
+        assert f"{variable}: {interpolation}" in text
+        assert text.count(interpolation) == 1, (
+            f"{name} is interpolated somewhere other than its env binding"
+        )
+    assert '--families "${families[@]}"' in text
+    assert '--attempts-per-case "$ATTEMPTS"' in text
 
 
 def test_a_family_name_this_bench_does_not_hold_is_refused_before_anything_is_sent(

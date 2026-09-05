@@ -45,6 +45,17 @@ planted in it, so nothing was measured at all; and `EXIT_DISCLOSED`, which says 
 page this run was asked to write carried something a CI log may not (ADR-0008) and
 so was not written. Neither is a figure about the target.
 
+**What this run covers is declared, and what it does not cover is recorded.**
+`--families` and `--attempts-per-case` are the two inputs that move a scored
+denominator here, and they exist *because* every family this entrypoint does not
+attempt now reaches the signed document with the reason beside it — the plan's own
+gaps go into `payload_for`, so a family switched off in a workflow reads as **not
+run** rather than being absent with nothing beside it
+([ADR-0075](../docs/adr/0075-a-declared-gap-reaches-the-signed-artefact.md),
+ADR-0058). A run below the declared ten attempts per case is a real run and not a
+gate result, and the artefact says so beside every figure rather than leaving it to
+the workflow that asked (ADR-0025, ADR-0027).
+
 **`--summary` is the CI half's other half.** `scripts/summary.py` builds the page a
 step leaves on a run: the signed rendering itself, the families nothing was planted
 for, and where the three files went — and it refuses a page carrying payload text or

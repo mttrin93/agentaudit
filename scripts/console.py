@@ -112,6 +112,16 @@ def instruments(model: str, usage: UsageLedger) -> tuple[Completion, Narrator]:
     reason the attestation is: more than one script builds them, and a pair built in
     two places is a pair that can be built two ways.
 
+    **No temperature and no reasoning effort reaches this seam, and that is a
+    decision rather than an omission.** `DeclaredModels` carries a reasoning effort
+    for the *attacker* and for no other instrument, so an effort set here would be a
+    declared input of a run the signed artefact has no field for — which is the
+    defect #138 exists to close, one instrument over. It stays a library-level
+    setting, declared through `completion.ATTACKER_REASONING_EFFORT_ENV` where the
+    attacker's client is built beside the identifier its provenance names; the
+    argument is
+    [ADR-0075 §5](../docs/adr/0075-a-declared-gap-reaches-the-signed-artefact.md).
+
     Raises whatever the builders raise — `KeyError` or `ValueError` for a model
     string that names nothing this bench can construct — because each caller says
     something different about what to do without one, and the sentence a probe prints

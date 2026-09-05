@@ -81,6 +81,17 @@ jobs:
           max-spend: "2.50"
           price-per-call: "0.004"
 
+          # What this run covers, and at what denominator. Both optional and both
+          # commented out, because the defaults — all six families, ten attempts
+          # per case — are the only reading two reports may be compared at. A
+          # family you switch off is reported in the signed artefact as **not run**
+          # with the reason beside it, never measured at zero, and a run below ten
+          # attempts says in the document that it is not a gate result
+          # (ADR-0075, ADR-0027).
+          #
+          # families: scope_creep data_leakage halt_defeat
+          # attempts-per-case: "4"
+
           # Your provider key, for the instrument that decides the two judged
           # families. Drop it and set `deterministic-only: "true"` for a run that
           # reaches no provider and costs nothing.

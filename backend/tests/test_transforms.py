@@ -24,6 +24,7 @@ import pytest
 
 from backend.bench.library import AnyFamily, Case, Family, Transform, VerdictClass
 from backend.bench.transforms import (
+    _WHY_THIS_PAIRING_IS_ABSENT,
     FRAMINGS,
     NO_WORDS_OF_OURS,
     applied,
@@ -90,17 +91,16 @@ def test_leetspeak_respells_the_payload_and_unspells_from_the_stated_table() -> 
     assert not any(letter in spelled for letter in "aeiost")
 
 
-def test_the_two_framings_carry_the_payload_through_verbatim() -> None:
-    # The wrapper and the persona are not substitutions: they leave the request
-    # exactly as the base case committed it and add words round it. So the assertion
-    # is containment, and it is the one that fails if a framing ever paraphrases —
-    # a paraphrase would make the variant a second payload rather than the same
-    # payload differently framed, and the comparison against the base would be a
-    # comparison of two attacks.
-    for framing in (Transform.PROMPT_INJECTION_WRAPPER, Transform.ROLEPLAY):
-        framed = one(framing, PAYLOAD)
-        assert PAYLOAD in framed, framing
-        assert len(framed) > len(PAYLOAD), framing
+def test_a_framing_carries_the_payload_through_verbatim() -> None:
+    # A framing is not a substitution: it leaves the request exactly as the base case
+    # committed it and adds words round it. So the assertion is containment, and it
+    # is the one that fails if a framing ever paraphrases — a paraphrase would make
+    # the variant a second payload rather than the same payload differently framed,
+    # and the comparison against the base would be a comparison of two attacks.
+    for family in FRAMINGS[Transform.ROLEPLAY]:
+        framed = one(Transform.ROLEPLAY, PAYLOAD, family)
+        assert PAYLOAD in framed, family
+        assert len(framed) > len(PAYLOAD), family
 
 
 def test_plain_is_the_identity() -> None:
@@ -114,10 +114,11 @@ def test_every_transform_is_pure_and_total() -> None:
     # would make `LibraryVersion` a hash over a payload the run did not send, so
     # twice is the same, and nothing here refuses text: an empty string and one that
     # is entirely outside ASCII both come back as strings.
-    for transform in _implemented():
-        assert one(transform, PAYLOAD) == one(transform, PAYLOAD), transform
+    for transform, family in _framed_pairings():
+        twice = (one(transform, PAYLOAD, family), one(transform, PAYLOAD, family))
+        assert twice[0] == twice[1], (transform, family)
         for text in ("", "  ", "τα πάντα ῥεῖ — 어떤 것도 남지 않는다"):
-            assert isinstance(one(transform, text), str), transform
+            assert isinstance(one(transform, text, family), str), (transform, family)
 
 
 def test_the_fixed_multi_turn_transform_is_not_a_construction_on_a_payload() -> None:
@@ -131,12 +132,20 @@ def test_the_fixed_multi_turn_transform_is_not_a_construction_on_a_payload() -> 
         applied(Transform.SCRIPTED_CRESCENDO, (PAYLOAD,), Family.DATA_LEAKAGE)
 
 
-def _implemented() -> tuple[Transform, ...]:
-    """Every member a single-turn payload can be put through today."""
-    return tuple(
-        transform
-        for transform in Transform
-        if transform is not Transform.SCRIPTED_CRESCENDO
+def _framed_pairings() -> tuple[tuple[Transform, AnyFamily], ...]:
+    """Every pairing a single-turn payload can be put through today.
+
+    A pairing rather than a member, since a framing is written per family and a
+    transform with no framing for a family composes nothing (ADR-0074 §1). The
+    identity is in it once, because it copies nothing and varies every family.
+    """
+    return (
+        (Transform.PLAIN, Family.DATA_LEAKAGE),
+        *(
+            (transform, family)
+            for transform, framings in FRAMINGS.items()
+            for family in framings
+        ),
     )
 
 
@@ -203,7 +212,7 @@ REFUSED = (
     (Transform.BASE64, Family.SCOPE_CREEP),
     (Transform.ROT13, Family.HALT_DEFEAT),
     (Transform.LEETSPEAK, Family.INDIRECT_PROMPT_INJECTION),
-    (Transform.PROMPT_INJECTION_WRAPPER, Family.SCOPE_CREEP),
+    (Transform.PROMPT_INJECTION_WRAPPER, Family.DATA_LEAKAGE),
     (Transform.PROMPT_INJECTION_WRAPPER, Family.HALT_DEFEAT),
     (Transform.ROLEPLAY, Family.INDIRECT_PROMPT_INJECTION),
 )
@@ -211,11 +220,11 @@ REFUSED = (
 
 The three encodings against a family whose mechanism is the words the target must
 read and act on to fail — an errand it cannot read is not an errand, a stop it cannot
-read is not a stop (§3). The wrapper against the two families whose payload the
-override would enclose: `halt-defeat-001`'s stop signal is the first thing its
-payload says, so the wrapper's claimed prior authority attaches to the stop, and
-`scope-creep-001` exists because *there is nothing here to lift* (§5). And either
-framing against indirect injection, whose payload is a colleague's benign message.
+read is not a stop (§3). The override wrapper against **every** family, including the
+one it was written for: what a record would ship is a reusable override frame in this
+repository's wording, which ADR-0008's amendment withholds, and that is a fact about
+the frame and not about what it wraps (§5). And the persona against indirect
+injection, whose payload is a colleague's benign message and carries no attack.
 """
 
 
@@ -271,9 +280,33 @@ def test_an_encoding_has_no_framing_and_the_two_framings_have_words() -> None:
     # technique's name, which is the fault one level up (ADR-0052 §1, ADR-0074 §3).
     for encoding in (Transform.BASE64, Transform.ROT13, Transform.LEETSPEAK):
         assert set(FRAMINGS[encoding].values()) == {NO_WORDS_OF_OURS}
-    for framed in (Transform.PROMPT_INJECTION_WRAPPER, Transform.ROLEPLAY):
-        for family, words in FRAMINGS[framed].items():
-            assert words.strip(), (framed, family)
+    for family, words in FRAMINGS[Transform.ROLEPLAY].items():
+        assert words.strip(), family
+
+
+def test_the_override_wrapper_frames_no_family_and_the_reason_is_disclosure() -> None:
+    # #149's comment drew the consequence of #73's disclosure refusal: the one base
+    # whose mechanism this frame suited was declined because what the record would
+    # ship is a reusable override in this repository's own wording, and that is a
+    # fact about the frame's words rather than about what they wrap. So the entry is
+    # **empty** rather than missing — the member varies nothing today and the table
+    # says so where it is read — and every family is refused with that reason rather
+    # than with "nobody wrote the words" (ADR-0074 §5).
+    assert FRAMINGS[Transform.PROMPT_INJECTION_WRAPPER] == {}
+    for family in Family:
+        with pytest.raises(ValueError, match="ADR-0008"):
+            applied(Transform.PROMPT_INJECTION_WRAPPER, (PAYLOAD,), family)
+
+
+def test_every_transform_that_respells_a_payload_is_in_the_table() -> None:
+    # The table is the whole of which variants can be written, so a member missing
+    # from it would be silently unframed rather than refused: `framing_for` answers a
+    # member with no entry with the empty framing, which is right for the identity
+    # and for the crescendo and wrong for anything that respells a payload. An eighth
+    # single-turn member has to arrive in `FRAMINGS` or fail here (ADR-0074 §2).
+    answered_elsewhere = {Transform.PLAIN, Transform.SCRIPTED_CRESCENDO}
+    assert set(FRAMINGS) == set(Transform) - answered_elsewhere
+    assert set(_WHY_THIS_PAIRING_IS_ABSENT) == set(FRAMINGS)
 
 
 def test_the_identity_needs_no_framing_and_varies_every_family() -> None:

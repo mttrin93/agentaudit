@@ -4635,6 +4635,25 @@ rather than a figure moved.
   been given a reason to make no call at all, and *resisted* would then be stagecraft
   scored as a defence. That rule is a tripwire in `test_transforms.py` and not only a
   sentence in the ADR.
+- **The override wrapper now varies nothing, and that is #149's comment carried into
+  code.** The section above refused `data-leakage-002` under `prompt_injection_wrapper`
+  on ADR-0008's amended half — what the record would ship is a reusable override frame
+  in this repository's own wording — and #149's comment drew the consequence that the
+  member has **no record anywhere in the library**. That ground is a fact about the
+  frame's words and not about what they wrap, so it does not stop at one base: the
+  member's entry in `FRAMINGS` is **empty**, every family is refused, and the refusal
+  carries the disclosure reason rather than *nobody wrote the words*. Nothing breaks —
+  no type asserts a `Transform` member has a record and `VariantCounts` refuses an entry
+  at zero attempts — and the words themselves are gone from `transforms.py`, which
+  changes no history and only means no code path can put them in a record. **Restoring
+  the pairing is a disclosure decision**, and the message says so.
+- **The comment's argument for per-base framings is answered by its own reason.** It
+  observes that a framing per base case is what would give the wrapper a base it could
+  vary; what ADR-0008 withholds is the frame's words, so a per-base override framing is
+  another reusable override in our wording and the grain multiplies the problem instead
+  of solving it. ADR-0074 §1 records that, and the comment's own parenthesis is the
+  evidence — *an encoded or personated request carries no reusable frame, and a fake
+  system delimiter does*.
 - **What is still owed is what was owed.** The three variants #73 left unproposed —
   `data-leakage-001` under base64, `data-leakage-003` under roleplay, `halt-defeat-001`
   under scripted crescendo — are still unproposed, and two more are now writable that

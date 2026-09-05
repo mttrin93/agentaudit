@@ -48,6 +48,13 @@ from typing import Protocol
 
 from backend.bench.contract import TargetConfig, Transcript, send_message
 from backend.bench.evaluator import Verdict, evaluate_script
+from backend.bench.fix_standing import (
+    DIFF_TOO_LARGE_TO_PUBLISH,
+    FixStanding,
+    FixStandingReading,
+    over_the_ceiling,
+    unified,
+)
 from backend.bench.library import AnyFamily, Case, VerdictClass
 from backend.bench.shim import Callback, serve_callback
 from backend.bench.throwaway import Patch, apply_patch, throwaway_checkout
@@ -433,3 +440,47 @@ def _patched_entrypoint(
         yield served
     finally:
         sys.modules.pop(name, None)
+
+
+def standing_for(proof: PatchProof, replaced: str) -> FixStanding:
+    """The label one proof earns, and the change it was a proof of.
+
+    **The only constructor of a proven standing, and it takes a `PatchProof`** — which
+    comes from `prove_patch` above and from nowhere else, and which that function
+    makes only from a checkout on disk, a file inside it to patch and an entrypoint to
+    re-serve out of the copy. So a target that is a plain hosted endpoint has no route
+    to one, and its fixes are *proposed* by construction rather than by a rule
+    somebody remembered to apply
+    ([ADR-0073](../../docs/adr/0073-two-labels-on-a-fix-and-no-third.md) §2).
+
+    **Here rather than beside the record it builds**, and the import wall is why:
+    ADR-0072 §4 forbids `assembler.py` and every serialiser from reaching this module,
+    so a `standing_for` on the report side would have to import a `PatchProof` and
+    would drag a `PostPatchAttempt` into the modules that write figures. The direction
+    is proof to label and never label to proof; `fix_standing.py` holds a record, a
+    sentence and a diff over two strings, and this function is the one place the two
+    sides meet.
+
+    **Exactly one of the four outcomes earns the word.** `STILL_SUCCEEDS` is a change
+    that was applied and re-run and did not close its case, and
+    `JUDGED_AND_NOT_RE_DECIDED` and `NOT_RE_ATTEMPTED` are re-runs that did not
+    happen: none of the three is a proof, all three are *proposed*, and the sentence
+    each carries is the re-run's own — which is how *tested and found wanting* stays
+    distinguishable from *never tested* under one label (ADR-0073 §1).
+
+    `replaced` is the file as it was before the patch, read by the caller off the
+    checkout the anchor was resolved against. It reaches the diff and nothing else:
+    no part of it is published except the lines the change touches and the three
+    lines of context around them (ADR-0073 §3).
+    """
+    path = proof.patch.path
+    over = over_the_ceiling(replaced, proof.patch.contents, path)
+    said = proof.re_attempt.stated()
+    return FixStanding(
+        reading=FixStandingReading.PROVEN
+        if proof.re_attempt.outcome is PostPatchOutcome.NO_LONGER_SUCCEEDS
+        else FixStandingReading.PROPOSED,
+        evidence=f"{said}. {DIFF_TOO_LARGE_TO_PUBLISH}" if over else said,
+        patched=path,
+        diff="" if over else unified(replaced, proof.patch.contents, path),
+    )

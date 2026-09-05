@@ -2175,6 +2175,57 @@ code {
   font-size: 0.85rem;
 }
 
+/* What the two labels on a fix mean, above the blocks. Its own class rather than the
+ * page's `.consequence`, because there is already one of those in this section — who
+ * wrote these sentences — and two paragraphs under one name is two claims a selector
+ * cannot tell apart. Set quieter than the blocks it explains: it is a standing fact
+ * about what the words mean, read once, and not a finding. */
+section > .asserts {
+  margin-top: 0.4rem;
+  font-size: 0.9rem;
+  color: var(--quiet);
+}
+
+/* The label on a fix, and the change under it. Set apart from the sentences above by
+ * space alone, because what separates them is what wrote them: the two sentences are a
+ * judge's and a tool's, and this is what the bench did with the second of them. */
+.findings .finding .change {
+  margin-top: 0.9rem;
+}
+
+/* The word itself, in the type of the case id and the location — a token a reader
+ * matches, not prose they read. **No tint and no badge.** A green *proven* and a
+ * yellow *proposed* would be a two-step severity scale arriving as a colour, which is
+ * the one thing #109 names as out of scope because every reviewer UI this borrows from
+ * has one (D3, D12, ADR-0005). The two labels are told apart by the word and by the
+ * sentence under it, which is how they are told apart in the signed document too. */
+.findings .finding .change > .label {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+/* Collapsed to begin with, on `details.family`'s own terms: a change is what a reader
+ * opens after deciding to read it, and a page that opened every diff by default would
+ * bury the sentences that say what each one is. The summary carries the label and the
+ * location — the two facts that decision is made on. */
+.findings .finding details.diff > summary {
+  cursor: pointer;
+  list-style-position: outside;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.85rem;
+  margin-top: 0.6rem;
+}
+
+/* The diff itself, in the page's own `pre` and scrolling inside its own box: a change
+ * is wide, and a page that scrolled sideways for one would move every figure above it
+ * out from under the reader's eye. */
+.findings .finding details.diff pre {
+  margin-top: 0.5rem;
+  overflow-x: auto;
+  white-space: pre;
+}
+
 /* The scored layer's exchanges, as the same cards the rest of this page is in: one
  * per family, and no rule under them. A stacked pair with a line beneath it is a
  * table waiting for a total, and the total of two families' successes is a figure

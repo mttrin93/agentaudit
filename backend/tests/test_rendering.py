@@ -155,7 +155,7 @@ def test_every_section_states_its_own_reproducibility_and_four_read_the_payload(
 
 # --- The golden digest: one document, pinned to the byte ---------------------
 
-GOLDEN_ONE_FAMILY = "3ae88fadb9c1e2cdab6b28d0bd8b39959ea5b0b56f435f26cda2f6101c10026b"
+GOLDEN_ONE_FAMILY = "088f733ae8567b285d4c88367c5adb2f7155be07a6cebc069cf15e9cc016cb14"
 """The sha256 of `_one_family()`'s rendering, written down.
 
 **A tripwire, and it is deliberately a strict one.** Every other assertion in this
@@ -344,6 +344,15 @@ block moved here and no path is in this document**: the fixture's result carries
 that every rendering of this section carries, which is the point of putting the
 explanation above the blocks rather than inside each one. A reader of a report with no
 findings in it is still told what the bench can and cannot see of a target's code.
+
+Moved a seventeenth time, by #116, and it is the same kind of move: section 3b now
+says what the two labels on a fix assert and what they deliberately do not — *proven*
+is a claim about one case against one patched revision and never that a family is
+closed, and a target reached only over the network can carry nothing but *proposed*
+([ADR-0073](../../docs/adr/0073-two-labels-on-a-fix-and-no-third.md)). **No block
+moved and no diff is in this document**: the fixture's result carries the `None`
+reading, so there is no fix here to label — what moved is the standing paragraph every
+rendering of this section carries, above the blocks rather than inside each one.
 """
 
 

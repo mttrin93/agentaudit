@@ -293,6 +293,8 @@ export interface ReportedFinding {
   withheld: string[]
   /** Where this failure is in the caller's own checkout, or the absence of it. */
   source_anchor: FindingSourceAnchor
+  /** Whether this fix was proven or is proposed, and the change it makes. */
+  fix_standing: FindingFixStanding
   /** The whole failure in one line, for a surface that wants one. */
   stated: string
 }
@@ -316,6 +318,38 @@ export interface ReportedFinding {
 export interface FindingSourceAnchor {
   reading: string
   location: string | null
+  stated: string
+}
+
+/**
+ * Whether a fix was **proven** or is **proposed**, and the change it makes.
+ *
+ * **Two labels and there is no third** (ADR-0073). *Proven* means the bench applied
+ * the change to a throwaway copy of the caller's own checkout, re-served the target
+ * out of it and re-attempted the case — a claim about *that one case against that one
+ * patched revision*, and never that the family is closed. *Proposed* means it has not
+ * been shown to close its case, and `stated` says whether it was tested and did not
+ * close it or was never tested at all. A target this bench reached only over the
+ * network can carry nothing but the second: the bench cannot restart somebody else's
+ * server, and that is the questionnaire ADR-0001 exists to displace, reproduced inside
+ * the tool meant to replace it.
+ *
+ * `reading` is the name off the closed pair and `stated` is the sentence, both carried
+ * for the reason the section's own reading is: a consumer that told the two apart by
+ * matching prose stops telling them apart the day the prose is reworded.
+ *
+ * `diff` is the change as a unified diff, **already rendered by the bench** — this app
+ * computes no diff and has no `before` to compute one from, which is this module's
+ * standing rule and, for a diff, also the disclosure answer: what a reader is shown is
+ * what the bench decided to publish (ADR-0008, ADR-0073 §3). It is the empty string on
+ * every run that patched nothing, which is every run this repository's own API serves,
+ * and on a change longer than the document publishes — and in both cases the sentence
+ * above says which. `patched` is the file, relative to the checkout root, or `null`.
+ */
+export interface FindingFixStanding {
+  reading: string
+  patched: string | null
+  diff: string
   stated: string
 }
 

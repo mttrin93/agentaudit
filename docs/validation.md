@@ -4329,3 +4329,85 @@ vocabulary and the two surfaces are #116's and are deliberately not decided here
   `3ae88fadb9c1e2cdab6b28d0bd8b39959ea5b0b56f435f26cda2f6101c10026b` because no document
   gained a character, and the library digest is `c515a89956cd`, eighteen records, with no
   variant admitted or proposed.
+
+### Proven or proposed, on both surfaces, and the diff on the screen (#116, 2026-09-05)
+
+The last of group K. ADR-0072 built the loop that can *try* a fix and published none of
+it; this decides what a tried fix is called, what an untried one is called, and what a
+document and a screen may show of the change.
+[ADR-0073](./adr/0073-two-labels-on-a-fix-and-no-third.md) is the decision, and it is
+the group's sixth ADR against the four #109's table proposed — the table was already out
+by one when ADR-0072 noted it, and it is out by two now.
+
+- **Two labels and the third is unrepresentable, not merely undocumented.**
+  `FixStandingReading` has two members; `FixStanding.stated()` matches them with no
+  fallback branch, so adding a third takes `uv run mypy` red with *missing return
+  statement* at that match rather than letting a new label inherit a sentence written
+  for one of the other two — confirmed by adding `PARTLY_PROVEN` and reading the error.
+  The pair itself is held by a test driven red the same way.
+- **A fix from a target with no checkout cannot be proven** — the issue's own named red,
+  and it is a refusal at the record that publishes both facts.
+  `ReportedFinding.__post_init__` raises for a `PROVEN` standing under any
+  `SourceAnchorReading` but `ANCHORED`, walked over all six readings; #114's note — *a
+  finding with no anchor can only ever carry proposed* — made a mechanism. Driven red by
+  neutering the condition. The other half is upstream: *proven* is not a value any
+  caller passes, it is derived by `proving.standing_for` from a `PatchProof`, and
+  `prove_patch` cannot make one without a checkout on disk, a file in it and an
+  entrypoint to re-serve. So a plain hosted endpoint reaches *proposed* by construction,
+  and `scripts/bench.py` says so in one sentence rather than refusing the run.
+- **Exactly one of ADR-0072's four outcomes earns the word**, and the other three keep
+  their own sentences: *applied and did not close it*, *judged and not re-decided*, *not
+  re-attempted*. Driven red by earning the word on all four. This is what makes the
+  reading not a boolean — `proven=False` and *we did not test this* are the same bit,
+  and `tested and found wanting` and `never tested` are asserted to be different
+  sentences under one label.
+- **What *proven* asserts is one case against one patched revision.**
+  `FixStanding.stated()` composes with `PostPatchAttempt.stated()` rather than rewording
+  it, so *deliberately not about its family*, *thirty attempts* and *the operator's to
+  ask for* travel into the document, the screen and the payload unchanged (`n = 30`,
+  ADR-0003, ADR-0072 §5). The document says it once above the blocks, in
+  `WHAT_A_LABEL_ON_A_FIX_ASSERTS`; the screen draws it under the label rather than in a
+  legend, because a fact carried elsewhere is a fact a screenshot loses.
+- **The diff is computed once, by the bench, and bounded.** Three lines of context, one
+  file, path relative to the checkout root. A change over `MAX_PUBLISHED_DIFF_LINES` =
+  400 publishes **no diff and a stated absence** rather than half of one, and the label
+  is unchanged by that — driven red by lifting the ceiling. A patch that changes nothing
+  publishes no diff and *no* excuse, because *there is no change* and *the change is too
+  long to print* are two facts. What it publishes and what it withholds is argued in
+  ADR-0073 §3 against ADR-0071 §4's withholding of every byte of a file the bench read:
+  the difference is who chose, and the published set is the lines the operator's own
+  patch touched plus their context, on a run they asked for a proof on.
+- **The supply surface is `--fix case-id=path/to/replacement.py`**, repeatable, in the
+  one entrypoint that holds both a workspace and an object imported out of it. It never
+  ends the run: an unreadable file, a refused patch or a case with no succeeded attempt
+  is printed and skipped and the fix stays *proposed* — three guards, each driven red on
+  its own. What is refused outright is refused **at the parser**, where a refusal is
+  free: a `--fix` with no `=` in it never reaches a run at all, and a case named by two
+  `--fix` values has neither change tested and says so — *the last one wins* would put a
+  label on a change the caller may not have meant. Both driven red. The reference
+  agent's patched re-run stays what #109 says it is: a test fixture, printed and
+  reported nowhere.
+- **The screen says what the two labels assert under all four readings**, not only where
+  there is a block — written app-side on `A_MODEL_WROTE_THESE_SENTENCES`'s precedent,
+  because the reading it matters most on is the common one, where the bench attacked a
+  URL and every fix on the page is *proposed*. Driven red by blanking it. Everything the
+  screen says *about a particular fix* is still the payload's own wording.
+- **No severity, no rank, no confidence and no figure.** Asserted over the label's own
+  sentence, over the whole findings view in `report.test.ts` (every leaf a string), and
+  over the rendered section in a browser. No tint stands for a label in the CSS either:
+  a green *proven* and an amber *proposed* is a two-step severity scale arriving as a
+  colour, and promptfoo's is the one already refused on the record (D3, D12, ADR-0005).
+- **`GOLDEN_ONE_FAMILY` moved for the seventeenth time**, to
+  `088f733ae8567b285d4c88367c5adb2f7155be07a6cebc069cf15e9cc016cb14`, again on a document
+  with **no findings in it**: what moved is the standing paragraph and nothing else, and
+  `ReportedFinding.stated()` gained one clause so that a collapsed one-line summary
+  cannot carry *what to change* without saying whether it was ever tested.
+- **The served fixture was regenerated** with `fix_standing` on all three findings — one
+  *proven* with a real diff and two *proposed*, because a proof is per finding and not
+  per run — and the identity assertion `report.test.ts` holds over every block still
+  passes character for character, the diff included. `failures.spec.ts` opens the
+  collapsed change in a real browser and asserts the label on its header.
+- **`ARTEFACT_VERSION` does not move**: `fix_standing` is additive inside a block a
+  recipient already reads (ADR-0044 §8's footing). **No rate, `D`, κ, interval, band,
+  gate decision or gate citation moved.** The library digest is `c515a89956cd`, eighteen
+  records, and no variant was admitted or proposed.

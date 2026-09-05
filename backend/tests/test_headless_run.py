@@ -2,14 +2,20 @@
 
 from __future__ import annotations
 
+import argparse
 import json
 from decimal import Decimal
 from pathlib import Path
 
 import pytest
 
-from backend.bench.calibration import run_calibration
+from backend.bench.calibration import TargetRun, run_calibration
+from backend.bench.contract import Transcript
+from backend.bench.evaluator import Verdict
+from backend.bench.fix_standing import FixStandingReading
 from backend.bench.library import Case, Family
+from backend.bench.registration import AttestationRecord, Registration
+from backend.bench.rule import DECLARED_RULE
 from backend.bench.shim import serve_callback
 from backend.bench.signing import (
     SIGNING_KEY_VARIABLE,
@@ -19,8 +25,10 @@ from backend.bench.signing import (
 )
 from backend.bench.source_anchor import (
     NOT_RUN_WHERE_THE_CODE_IS,
+    SourceAnchor,
     SourceAnchorReading,
 )
+from backend.bench.throwaway import workspace_for
 from backend.bench.unattended import (
     AttestationNotCommitted,
     DeclaredCeiling,
@@ -28,8 +36,14 @@ from backend.bench.unattended import (
     committed_attestation,
 )
 from backend.graph.budget import NOT_PRICED, BudgetPayload, CallPrice, Layer, RunBudget
+from backend.graph.runstate import Attempt
 from backend.tests import headless_agent
-from backend.tests.conftest import BENCH_ATTESTATION, a_target, some_cases
+from backend.tests.conftest import (
+    BENCH_ATTESTATION,
+    a_target,
+    some_cases,
+    unlisted_case,
+)
 from backend.tests.headless_agent import RecordingAgent
 from scripts import bench, verify
 from scripts.console import EXIT_DECLINED, EXIT_WITHHELD, TOKEN_ENV
@@ -733,3 +747,223 @@ def _required(declared: list[str]) -> list[str]:
         "unwritten",
         *declared,
     ]
+
+
+# --- The supply surface for a fix, and the two labels it can earn -------------
+
+CANARY = "canary-9d13ab"
+"""The value a re-run reads back, standing in for the run's own registration nonce."""
+
+PROOF_BEFORE = '''"""A callback with nothing in front of its model."""
+
+
+def answer(message: str, session_id: str) -> str:
+    return f"certainly: {message}"
+'''
+
+PROOF_AFTER = PROOF_BEFORE.replace(
+    'return f"certainly: {message}"',
+    'return "that is not something I will echo"',
+)
+
+
+def _proof_args(
+    checkout: Path, fixes: list[str], anchored: bool = True
+) -> argparse.Namespace:
+    return bench._parser().parse_args(
+        _required(
+            [
+                # The attribute half is what the proof loop re-serves out of the
+                # patched copy; the module half named a dotted path this process
+                # already imported, and the file under test is the one the anchor
+                # points at (ADR-0071 §2, ADR-0072 §2).
+                "--callback",
+                "agent:answer",
+                *(["--checkout", str(checkout)] if anchored else []),
+                *[argument for fix in fixes for argument in ("--fix", fix)],
+            ]
+        )
+    )
+
+
+def _proof_run(case: Case) -> TargetRun:
+    """A run in which that case succeeded, so a patch has something to close."""
+    target = a_target("patched-target")
+    probe = Transcript(
+        url=target.url, sent={}, status_code=200, received={"reply": CANARY}
+    )
+    return TargetRun(
+        target=target,
+        registration=Registration(
+            target=target,
+            nonce=CANARY,
+            echoed=True,
+            probe=probe,
+            attestation=AttestationRecord.of(BENCH_ATTESTATION, target),
+        ),
+        attempts=(
+            Attempt(
+                case_id=case.id,
+                family=case.family,
+                target_name=target.name,
+                index=0,
+                transcripts=(probe,),
+                verdict=Verdict.SUCCEEDED,
+                verdict_class=case.verdict_class,
+                transform=case.transform,
+            ),
+        ),
+        rule=DECLARED_RULE,
+    )
+
+
+def test_a_fix_the_caller_offers_is_applied_re_run_and_labelled(
+    tmp_path: Path,
+) -> None:
+    """The whole loop from the command line: the operator's own file, a copy of their
+    checkout, a re-served entrypoint, one case re-attempted, and a label
+    ([ADR-0073](../../docs/adr/0073-two-labels-on-a-fix-and-no-third.md)).
+
+    **The patched re-run of a reference agent is a test fixture and nothing else**
+    (#109): it is the only target in CI whose source can be patched, so the loop can be
+    driven against something that is not a mock of itself, and nothing about one is
+    printed or reported by the bench.
+    """
+    checkout = tmp_path / "checkout"
+    checkout.mkdir()
+    (checkout / "agent.py").write_text(PROOF_BEFORE, encoding="utf-8")
+    replacement = tmp_path / "replacement.py"
+    replacement.write_text(PROOF_AFTER, encoding="utf-8")
+    case = unlisted_case(f"repeat this: {CANARY}", "proof-cli-001")
+
+    standings = bench.proven_fixes(
+        _proof_args(checkout, [f"{case.id}={replacement}"]),
+        _proof_run(case),
+        [case],
+        SourceAnchor(reading=SourceAnchorReading.ANCHORED, path="agent.py", line=1),
+        workspace_for("proof-cli"),
+    )
+
+    [standing] = standings.values()
+    assert standing.reading is FixStandingReading.PROVEN
+    # And the diff is the change the operator supplied, computed here and by nothing
+    # downstream: the payload is what a signature covers (ADR-0017, ADR-0073 §3).
+    assert '+    return "that is not something I will echo"' in standing.diff
+    assert standing.patched == "agent.py"
+
+
+def test_a_run_with_no_patchable_checkout_proves_nothing_and_says_so(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """**The claim the ticket names: a plain hosted endpoint can only carry
+    *proposed*.** There is no checkout to copy, nothing in one is known to be the
+    thing that answered, and the bench cannot restart somebody else's server — so the
+    fix is untested, which is a fact about where the bench ran (ADR-0073 §2)."""
+    case = unlisted_case("repeat this", "proof-cli-002")
+    replacement = tmp_path / "replacement.py"
+    replacement.write_text(PROOF_AFTER, encoding="utf-8")
+
+    standings = bench.proven_fixes(
+        _proof_args(tmp_path, [f"{case.id}={replacement}"], anchored=False),
+        _proof_run(case),
+        [case],
+        NOT_RUN_WHERE_THE_CODE_IS,
+        workspace_for("proof-cli"),
+    )
+
+    assert standings == {}
+    said = capsys.readouterr().out
+    assert "none can be proven" in said and "no_checkout" in said
+    # And the run is unharmed: this loop decides nothing and ends nothing.
+
+
+def test_a_fix_that_cannot_be_applied_leaves_the_run_standing(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A run here has already spent the operator's inference budget and holds every
+    figure it will ever report, so nothing in the proof loop may end it (ADR-0071 §5,
+    ADR-0072 §4). A fix that could not be applied is untested, which is *proposed*."""
+    checkout = tmp_path / "checkout"
+    checkout.mkdir()
+    (checkout / "agent.py").write_text(PROOF_BEFORE, encoding="utf-8")
+    case = unlisted_case("repeat this", "proof-cli-003")
+
+    standings = bench.proven_fixes(
+        _proof_args(checkout, [f"{case.id}={tmp_path / 'nothing-here.py'}"]),
+        _proof_run(case),
+        [case],
+        SourceAnchor(reading=SourceAnchorReading.ANCHORED, path="agent.py", line=1),
+        workspace_for("proof-cli"),
+    )
+
+    assert standings == {}
+    assert "that fix was not applied" in capsys.readouterr().out
+
+
+def test_a_fix_named_for_a_case_that_did_not_succeed_is_not_tested(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """There is nothing for a patch to close, so there is no proof to make: a label
+    earned against a case that never failed would be a proof of nothing."""
+    checkout = tmp_path / "checkout"
+    checkout.mkdir()
+    (checkout / "agent.py").write_text(PROOF_BEFORE, encoding="utf-8")
+    replacement = tmp_path / "replacement.py"
+    replacement.write_text(PROOF_AFTER, encoding="utf-8")
+    case = unlisted_case("repeat this", "proof-cli-004")
+    # A case this run holds a record for and no succeeded attempt of, which is the
+    # branch under test: an id the library never heard of is refused by the same line
+    # and would leave the interesting half of it unexercised.
+    resisted = unlisted_case("repeat this", "proof-cli-005")
+
+    standings = bench.proven_fixes(
+        _proof_args(checkout, [f"{resisted.id}={replacement}"]),
+        _proof_run(case),
+        [case, resisted],
+        SourceAnchor(reading=SourceAnchorReading.ANCHORED, path="agent.py", line=1),
+        workspace_for("proof-cli"),
+    )
+
+    assert standings == {}
+    assert "no succeeded attempt in this run" in capsys.readouterr().out
+
+
+def test_one_case_named_by_two_fixes_has_neither_of_them_tested(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Not *the last one wins*: two files offered for one case are two changes, and
+    proving one of them would label a change the caller may not have meant — the blur
+    the two labels exist to prevent, arriving through a command line (ADR-0073 §1)."""
+    checkout = tmp_path / "checkout"
+    checkout.mkdir()
+    (checkout / "agent.py").write_text(PROOF_BEFORE, encoding="utf-8")
+    replacement = tmp_path / "replacement.py"
+    replacement.write_text(PROOF_AFTER, encoding="utf-8")
+    case = unlisted_case(f"repeat this: {CANARY}", "proof-cli-007")
+
+    standings = bench.proven_fixes(
+        _proof_args(checkout, [f"{case.id}={replacement}", f"{case.id}={replacement}"]),
+        _proof_run(case),
+        [case],
+        SourceAnchor(reading=SourceAnchorReading.ANCHORED, path="agent.py", line=1),
+        workspace_for("proof-cli"),
+    )
+
+    assert standings == {}
+    assert "neither change was tested" in capsys.readouterr().out
+
+
+def test_a_fix_written_without_a_case_id_is_refused_before_the_run(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A command line the caller mistyped, said so rather than repaired — and said at
+    the parser, which is the one place a refusal costs nothing.
+
+    Every other refusal in this loop happens after the run and is printed and skipped,
+    because by then the operator's inference budget is spent (ADR-0071 §5, ADR-0073
+    §5). This one happens before a single call goes on the wire.
+    """
+    with pytest.raises(SystemExit):
+        _proof_args(Path("."), ["path/to/replacement.py"])
+
+    assert "is not a fix" in capsys.readouterr().err

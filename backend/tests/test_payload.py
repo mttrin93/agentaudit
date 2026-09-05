@@ -21,6 +21,7 @@ fired it (ADR-0015).
 """
 
 import json
+from collections.abc import Mapping
 from dataclasses import replace
 from datetime import UTC, date, datetime
 from pathlib import Path
@@ -51,6 +52,7 @@ from backend.bench.contract import AgentCapability, DeclaredControl, Transcript
 from backend.bench.editions import AGENTIC_TOP_10_2026, LLM_TOP_10_2026
 from backend.bench.elective import ElectiveSelection
 from backend.bench.evaluator import Verdict
+from backend.bench.fix_standing import FixStanding
 from backend.bench.library import (
     Case,
     ElectiveFamily,
@@ -1372,6 +1374,7 @@ def explaining(
     library: list[Case],
     fix: str = A_FIX,
     source_anchor: SourceAnchor = NOT_RUN_WHERE_THE_CODE_IS,
+    standings: Mapping[str, FixStanding] | None = None,
 ) -> TargetResult:
     """The shared result, with one explained failure on it.
 
@@ -1409,6 +1412,7 @@ def explaining(
             [case],
             Scan(declared=(DeclaredControl.INPUT_CHECK,)),
             source_anchor,
+            standings,
         ),
     )
 

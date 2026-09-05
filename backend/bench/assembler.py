@@ -65,6 +65,7 @@ from backend.bench.calibration import TargetRun
 from backend.bench.contract import DeclaredControl
 from backend.bench.elective import NOTHING_REQUESTED, ElectiveSelection
 from backend.bench.evaluator import Verdict
+from backend.bench.fix_standing import NOT_PROVEN, FixStanding, FixStandingReading
 from backend.bench.judge import Exposure
 from backend.bench.library import (
     AnyFamily,
@@ -103,7 +104,11 @@ from backend.bench.scorer import (
     VariantBreakdown,
     band_for,
 )
-from backend.bench.source_anchor import NOT_RUN_WHERE_THE_CODE_IS, SourceAnchor
+from backend.bench.source_anchor import (
+    NOT_RUN_WHERE_THE_CODE_IS,
+    SourceAnchor,
+    SourceAnchorReading,
+)
 from backend.graph.runstate import Attempt
 
 
@@ -890,6 +895,52 @@ class ReportedFinding:
     print two claims about one anchor.
     """
 
+    standing: FixStanding = NOT_PROVEN
+    """Whether this fix was **proven** or is **proposed**, and the change it makes
+    ([ADR-0073](../../docs/adr/0073-two-labels-on-a-fix-and-no-third.md)).
+
+    **Defaulted to the untested reading**, on `source_anchor`'s own terms: the
+    ordinary run patches nothing — a hosted bench attacking a URL cannot restart
+    somebody else's server — so a field a caller forgot to fill reads as *this was not
+    tested* rather than as a proof it declined to mention. There is no third value it
+    could hold and no boolean under it (ADR-0073 §1).
+
+    **Per finding and not per run**, which is the one way it differs from the anchor
+    beside it: a patch replaces one file to close one case, and a run that proved one
+    fix has proved nothing about the next failure in the same report.
+    """
+
+    def __post_init__(self) -> None:
+        """Refuse a proven fix on a run that never saw the code, at the door.
+
+        The second of the two refusals ADR-0073 §2 rests on, and the one that closes
+        the case the ticket names: **a fix from a target with no checkout cannot be
+        proven.** `standing_for` is the only constructor of a proven standing and it
+        takes a `PatchProof`, which `prove_patch` makes only from a checkout on disk —
+        this holds the same line one record along, where the two facts are side by
+        side, so a hand-built finding cannot pair a proof with an anchor that says the
+        bench never saw this target's source.
+
+        Every reading but `ANCHORED` is a run with no located file (ADR-0071 §3), and
+        a plain hosted endpoint has one of them by construction: there is nothing in
+        the caller's checkout that is known to be the thing that answered, so there is
+        nothing to patch and nothing to re-serve.
+        """
+        if (
+            self.standing.reading is FixStandingReading.PROVEN
+            and self.source_anchor.reading is not SourceAnchorReading.ANCHORED
+        ):
+            raise ValueError(
+                f"a fix was reported proven on a run whose source anchor reads "
+                f"{self.source_anchor.reading.value!r}. Proven means this bench "
+                "patched a file of the caller's own checkout, re-served the target "
+                "out of the copy and re-attempted the case — and every reading but "
+                "the anchored one is a run with no file to patch, which a plain "
+                "hosted endpoint always is. An untested change published as a proven "
+                "one is the self-graded claim ADR-0001 exists to displace "
+                "(ADR-0071 §3, ADR-0073 §2)"
+            )
+
     @property
     def case_id(self) -> str:
         """The case whose attempt succeeded, read off the attribution."""
@@ -907,6 +958,7 @@ class ReportedFinding:
         attribution: Attribution,
         case: Case,
         source_anchor: SourceAnchor = NOT_RUN_WHERE_THE_CODE_IS,
+        standing: FixStanding = NOT_PROVEN,
     ) -> "ReportedFinding":
         """One narration as the document reports it, with the disclosure rule applied.
 
@@ -958,6 +1010,11 @@ class ReportedFinding:
             ),
             withheld=withheld,
             source_anchor=source_anchor,
+            # Derived where the patch was applied and passed in already labelled:
+            # this classmethod builds no proof and reads no filesystem, and the
+            # refusal above is what stops one arriving that the anchor contradicts
+            # (ADR-0073 §2).
+            standing=standing,
         )
 
     def informed_by_stated(self) -> str:
@@ -1005,7 +1062,13 @@ class ReportedFinding:
             # document — and the two spellings would differ by which instrument read
             # the transcript, which is not a difference a reader should see.
             f"{self.disagreement.rstrip('.')}. "
-            f"Where: {self.source_anchor.stated()}"
+            # The label is inside the one-line form rather than only beside the fix,
+            # because this line is what a surface prints when it shows a failure
+            # collapsed — and a summary that carried *what to change* without saying
+            # whether the change was ever tested is the blur the two labels exist to
+            # prevent (ADR-0001, ADR-0073 §1).
+            f"Where: {self.source_anchor.stated()}. This fix is "
+            f"{self.standing.stated()}"
         )
 
 
@@ -1427,6 +1490,7 @@ def reported_findings(
     cases: Sequence[Case],
     scanned: Scan,
     source_anchor: SourceAnchor = NOT_RUN_WHERE_THE_CODE_IS,
+    standings: Mapping[str, FixStanding] | None = None,
 ) -> FindingsSection:
     """Every explained failure joined to what it is read against, or a reading that
     carries none.
@@ -1460,6 +1524,15 @@ def reported_findings(
     Nothing here reads a filesystem: the anchor arrives already resolved, from the one
     entrypoint that has a checkout to resolve it against, which keeps every module on
     this side of the run a reader of records (ADR-0068 §1).
+
+    **The standings arrive per case and default to the untested reading**, which is
+    the one way they differ from the anchor above: an anchor is a fact about where
+    this run ran and a proof is a fact about one patch and one case, so a run that
+    proved one fix says nothing about the next failure in the same report
+    ([ADR-0073](../../docs/adr/0073-two-labels-on-a-fix-and-no-third.md)). A case with
+    no entry reads *proposed*, which is every finding of every run that patched
+    nothing — and nothing here builds a proof either: like the anchor, a standing
+    arrives already derived from the one entrypoint that had a checkout to patch.
     """
     if narrations is None or isinstance(narrations, NarrativeFailure):
         return FindingsSection(reported=narrations)
@@ -1492,6 +1565,7 @@ def reported_findings(
                 attributed_cause(pending.pop(0), case, scanned),
                 case,
                 source_anchor,
+                (standings or {}).get(case_id, NOT_PROVEN),
             )
         )
     return FindingsSection(reported=tuple(reported))
@@ -1558,6 +1632,7 @@ def assemble(
     reliability: Mapping[Family, Reliability] | None = None,
     elective: ElectiveSelection = NOTHING_REQUESTED,
     source_anchor: SourceAnchor = NOT_RUN_WHERE_THE_CODE_IS,
+    standings: Mapping[str, FixStanding] | None = None,
 ) -> TargetResult:
     """Assemble one target's result from what was recorded against it.
 
@@ -1628,6 +1703,11 @@ def assemble(
             # (ADR-0071 §3). Its default is the absence every run without a checkout
             # has, which is every run this repository's own API serves.
             source_anchor,
+            # Whether each fix was proven, from the one entrypoint that could patch
+            # anything. Empty for every run this repository's own API serves: a
+            # hosted bench cannot restart somebody else's server, so its fixes are
+            # proposed by construction (ADR-0073 §2).
+            standings,
         ),
         coverage_gaps=coverage_gaps,
         elective=elective,

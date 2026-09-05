@@ -96,6 +96,7 @@ import {
   type FamilyExchangeReading,
   type FamilyFindingsReading,
   type FamilyRow,
+  type FindingReading,
   type FindingsView,
   type LabelReading,
   type ReportView,
@@ -406,6 +407,11 @@ function TheFailures({ findings }: { findings: FindingsView }) {
           somewhere else is a fact a screenshot loses. */}
       <p className="consequence">{findings.label}</p>
       <p className="aside">{findings.stated}</p>
+      {/* What the two labels on a fix mean, above the blocks and under every reading —
+          including the common one, where the bench attacked a URL and every fix is
+          *proposed*. A reader who took *proven* for *this family is closed* would have
+          been handed the stronger of two claims by a word (ADR-0073 §4). */}
+      <p className="asserts">{findings.asserts}</p>
       {findings.kind === 'explained' ? (
         <div className="findings">
           {findings.families.map((family) => (
@@ -484,9 +490,62 @@ function TheFamilyFailures({ family }: { family: FamilyFindingsReading }) {
             <p className="location">{finding.location}</p>
           ) : null}
           <p className="aside">{finding.sourceAnchor}</p>
+          <TheChange finding={finding} />
         </article>
       ))}
     </details>
+  )
+}
+
+/**
+ * The label on a fix, and the change under it the way a reviewer reads one.
+ *
+ * **The label is the load-bearing part and the diff is the presentation.** Every fix
+ * carries one of two words and there is no third: *proven* — the bench patched a copy
+ * of the caller's own checkout, re-served the target and re-attempted the case — or
+ * *proposed* — it could not be tested. A plain hosted endpoint can only ever carry the
+ * second, because the bench cannot restart somebody else's server, and blurring the
+ * two would put an untested assertion in front of a procurement reader under the word
+ * *proven*: the hand-filled questionnaire ADR-0001 exists to displace, reproduced
+ * inside the tool meant to replace it (ADR-0073).
+ *
+ * **What *proven* asserts is on the screen beside it, not in a legend.** *This case no
+ * longer succeeds against the patched revision* — not that the family is closed and
+ * not that the agent is fixed. A fact carried somewhere else is a fact a screenshot
+ * loses, which is why the sentence is drawn under the label rather than once at the
+ * top of the section.
+ *
+ * **Collapsed, expandable, with the label on the header**, which is how every reviewer
+ * UI this borrows from draws a change and the one convention worth taking from them —
+ * and none of the others: no severity word, no tint that stands for one, no ordering
+ * of one change against another and no count of them (D3, D12, ADR-0005). The header
+ * carries the label, the file and the line, and nothing else.
+ *
+ * **The diff is drawn and never assembled.** It arrives already rendered from the
+ * patch the run recorded; this component has no *before* and no way to build one,
+ * which is `api/report.ts`'s standing rule (ADR-0073 §3). Where the run recorded none
+ * — every run this repository's own API serves — there is nothing to expand, and the
+ * sentence above still says why the fix is proposed rather than leaving a gap a reader
+ * would take for a clean result.
+ */
+function TheChange({ finding }: { finding: FindingReading }) {
+  return (
+    <div className="change">
+      <p className="label">{finding.fixLabel}</p>
+      <p className="aside">{finding.fixStanding}</p>
+      {finding.diff ? (
+        <details className="diff">
+          <summary>
+            {/* The label beside the file and the line, on the header a reader opens
+                from — the two facts a reviewer needs before deciding to read a
+                change, and the payload's own strings for both. */}
+            {finding.fixLabel}
+            {finding.location ? ` — ${finding.location}` : ''}
+          </summary>
+          <pre>{finding.diff}</pre>
+        </details>
+      ) : null}
+    </div>
   )
 }
 

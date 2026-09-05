@@ -40,6 +40,7 @@ import type {
 } from '../api/bench'
 import {
   A_MODEL_WROTE_THESE_SENTENCES,
+  WHAT_A_LABEL_ON_A_FIX_ASSERTS,
   BAND_IN_A_TARGET_REPORT,
   EXPLAINED,
   INSTRUMENTS_BROKE,
@@ -680,6 +681,72 @@ describe('the failures the bench explained', () => {
     const [unanchored] = hosted.families[0].findings
     expect(unanchored.location).toBe('')
     expect(unanchored.sourceAnchor).toContain('could not see')
+  })
+
+  it('labels every fix proven or proposed, and draws the change under it', () => {
+    // The load-bearing part of #116, and it is the label rather than the diff. Every
+    // fix carries one of two words and there is no third: *proven* — the bench patched
+    // a copy of the caller's own checkout, re-served the target and re-attempted the
+    // case — or *proposed* — it could not be tested. Blurring the two would put an
+    // untested assertion in front of a procurement reader under the word *proven*,
+    // which is the hand-filled questionnaire ADR-0001 exists to displace (ADR-0073).
+    const view = findingsReading(SERVED.findings)
+    if (view.kind !== 'explained') {
+      throw new Error('the fixture explains its failures')
+    }
+    const drawn = view.families.flatMap((family) => family.findings)
+
+    for (const block of drawn) {
+      expect(['proven', 'proposed']).toContain(block.fixLabel)
+      expect(block.fixStanding.startsWith(`${block.fixLabel} —`)).toBe(true)
+    }
+
+    // A proof is per finding and not per run — a patch closes one case, and a run that
+    // proved one fix has proved nothing about the next failure in the same report.
+    // The fixture carries one of each, which is what a screen cannot invent.
+    const [proven, ...rest] = drawn
+    expect(proven.fixLabel).toBe('proven')
+    expect(rest.map((block) => block.fixLabel)).toEqual(['proposed', 'proposed'])
+
+    // What *proven* asserts, on the screen and not in a legend: this case no longer
+    // succeeds against the patched revision — not that the family is closed and not
+    // that the agent is fixed. `n = 30` per family (ADR-0003, ADR-0072 §5).
+    expect(proven.fixStanding).toContain('deliberately not about its family')
+    expect(proven.fixStanding).toContain('thirty attempts')
+
+    // And a fix nobody could test says so, rather than reading as one that failed:
+    // a plain hosted endpoint is somebody else's server and the bench cannot restart
+    // it, which is a fact about where the bench ran and not about the fix.
+    expect(rest[0].fixStanding).toContain('cannot restart')
+    expect(rest[0].diff).toBe('')
+
+    // The change itself, as the bench rendered it. This app is handed no *before* and
+    // computes no diff: what a reader is shown is what the bench decided to publish
+    // (ADR-0017, ADR-0073 §3).
+    expect(proven.diff).toBe(SERVED.findings.findings[0].fix_standing.diff)
+    expect(proven.diff.startsWith('--- a/app/agent.py')).toBe(true)
+    expect(proven.diff).toContain('+    return reply.replace')
+  })
+
+  it('says what proven asserts under every reading, including the ones with no fix', () => {
+    // #116's third item: *what proven actually asserts, spelled out in the UI* — this
+    // case no longer succeeds against the patched revision, not that the family is
+    // closed and not that the agent is fixed. It is a fact about what the words mean
+    // rather than about this run, so it is on the page under all four readings — and
+    // the reading it matters most on is the common one, where the bench attacked a URL
+    // and every fix is *proposed* (ADR-0003, ADR-0072 §5, ADR-0073 §4).
+    for (const reading of [
+      'explained',
+      'nothing_to_explain',
+      'no_narrative_instrument_declared',
+      'instruments_broke',
+    ]) {
+      const view = findingsReading({ ...SERVED.findings, reading, findings: [] })
+      expect(view.asserts).toBe(WHAT_A_LABEL_ON_A_FIX_ASSERTS)
+    }
+    expect(WHAT_A_LABEL_ON_A_FIX_ASSERTS).toContain('there is no third')
+    expect(WHAT_A_LABEL_ON_A_FIX_ASSERTS).toContain('never that the family is closed')
+    expect(WHAT_A_LABEL_ON_A_FIX_ASSERTS).toContain('cannot restart somebody')
   })
 
   it('writes not one word of its own into a block, so nothing withheld can reach one', () => {

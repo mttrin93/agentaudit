@@ -51,6 +51,7 @@ interface ServedFindings {
       informed_by_stated: string
       withheld: string[]
       source_anchor: { location: string | null; stated: string }
+      fix_standing: { reading: string; diff: string; stated: string }
     }[]
   }
 }
@@ -173,6 +174,42 @@ test('a failure, its fix, and what informed it, are on the report screen', async
   // at fault. Both are the payload's own strings and this app words neither.
   await expect(first.getByText('app/agent.py:61', { exact: true })).toBeVisible()
   await expect(first.getByText(alone.source_anchor.stated)).toBeVisible()
+
+  // What the two labels mean, above the blocks and on the page under every reading —
+  // including the common one, where the bench attacked a URL and every fix is
+  // *proposed*. #116's third item: what *proven* asserts, spelled out where a reader
+  // is, and not in a legend a screenshot loses (ADR-0073 §4).
+  await expect(
+    failures.getByText(/^Every fix below carries one of two labels/),
+  ).toBeVisible()
+
+  // **Proven or proposed, and no third label.** The word is the load-bearing part of
+  // this block: *proven* means the bench patched a copy of the caller's own checkout,
+  // re-served the target and re-attempted the case, and *proposed* means it could not
+  // be tested — a plain hosted endpoint can only ever carry the second, because the
+  // bench cannot restart somebody else's server. Blurring them would put an untested
+  // assertion in front of a procurement reader under the word *proven* (ADR-0001,
+  // ADR-0073).
+  await expect(first.locator('.change > .label')).toHaveText(
+    alone.fix_standing.reading,
+  )
+  await expect(first.getByText(alone.fix_standing.stated)).toBeVisible()
+  // What it asserts, beside it rather than in a legend: one case against one patched
+  // revision, and never that the family is closed (ADR-0003, ADR-0072 §5).
+  expect(alone.fix_standing.stated).toContain('deliberately not about its family')
+
+  // The change, collapsed and expandable, with the label on the header beside the
+  // file and the line — the one convention worth taking from the reviewer UIs this
+  // borrows from, and none of the others.
+  const change = first.locator('details.diff')
+  await expect(change.locator('pre')).toBeHidden()
+  await change.locator('summary').click()
+  await expect(change.locator('pre')).toHaveText(alone.fix_standing.diff)
+
+  // And a fix nobody could test carries no change to expand and says why in words —
+  // not a gap a reader would take for a clean result.
+  await expect(second.locator('.change > .label')).toHaveText('proposed')
+  await expect(second.locator('details.diff')).toHaveCount(0)
 
   // And no severity anywhere, in any of the words a reviewer UI would use for one.
   // #109 names this as out of scope precisely because every UI this borrows from has

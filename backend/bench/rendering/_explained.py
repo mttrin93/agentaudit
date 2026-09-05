@@ -84,6 +84,28 @@ is* and *this is where the bug is* — for a reader who has skipped every other 
 this section, which is the reader a reviewer UI's file-and-line is written for.
 """
 
+WHAT_A_LABEL_ON_A_FIX_ASSERTS = (
+    "Every fix below carries one of two labels and there is no third. **Proven** "
+    "means this bench applied the change to a throwaway copy of the caller's own "
+    "checkout, re-served the target out of it and re-attempted the case — and it is "
+    "a claim about *that one case against that one patched revision*, never that the "
+    "family is closed and never that the target is fixed. A family is measured over "
+    "thirty attempts against every live case in it, and re-running one is the "
+    "operator's cost to choose (ADR-0003, ADR-0072). **Proposed** means it has not "
+    "been shown to close its case: the sentence beside it says whether the change "
+    "was tested and did not close it, or was never tested at all. A target this "
+    "bench reached only over the network can carry nothing but the second — the "
+    "bench cannot restart somebody else's server (ADR-0073)."
+)
+"""What the two labels assert, said once above the blocks rather than in each.
+
+The sentence that keeps the strong reading out of the word: a reader who took
+*proven* for *this family is closed* would have been handed the stronger of two
+claims by a label, and #109's arithmetic reason is the one this states in prose.
+It sits beside `WHERE_A_BLOCK_POINTS` because both do the same job — a reviewer UI's
+conventions borrowed without the claims they usually come attached to.
+"""
+
 WHAT_IS_WITHHELD = (
     "The exchange itself is not here and has nowhere here to arrive: no payload "
     "text, no reply, no tool trace. A sentence that reproduced the case's own "
@@ -122,6 +144,8 @@ def _explained(findings: Mapping[str, Any]) -> Section:
             "",
             WHERE_A_BLOCK_POINTS,
             "",
+            WHAT_A_LABEL_ON_A_FIX_ASSERTS,
+            "",
             NO_FIGURE_HERE,
             "",
             f"{findings['stated']}.",
@@ -159,5 +183,31 @@ def _block(finding: Mapping[str, Any]) -> tuple[str, ...]:
         # block that simply had no location line would read as a failure nobody could
         # place rather than as one this bench was not standing beside (ADR-0071 §3).
         f"- **Where** — {finding['source_anchor']['stated']}.",
+        # The label on the fix, in the record's own sentence and never worded here:
+        # the document and the report screen print one claim about one fix, which is
+        # the rule `Attribution.stated()` already holds one record over (ADR-0068 §3,
+        # ADR-0073 §1).
+        f"- **Is this fix proven?** — {finding['fix_standing']['stated']}.",
         "",
+        # And the change itself, where the run recorded one — which is only on a run
+        # that had a checkout to patch, so most documents end the block above this
+        # line. Fenced rather than listed, because a diff whose leading `-` and `+`
+        # were rendered as list markup would be a change a reader could not read
+        # (ADR-0073 §3).
+        *_change(finding["fix_standing"]),
     )
+
+
+def _change(standing: Mapping[str, Any]) -> tuple[str, ...]:
+    """The diff, fenced, or nothing at all where the run recorded none.
+
+    **Nothing rather than a stated absence, alone in this section**, and the reason is
+    that the absence is already stated one line above: `fix_standing['stated']` says
+    why there is no proof, and a second line saying there is no diff either would be
+    the same fact printed twice. Every other absence in this document is said because
+    nothing else says it.
+    """
+    diff = standing["diff"]
+    if not diff:
+        return ()
+    return ("```diff", *diff.splitlines(), "```", "")

@@ -47,6 +47,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import (
 
 from backend.bench.assembler import assemble, reported_episodes
 from backend.bench.calibration import CalibrationResult
+from backend.bench.fix_standing import FixStanding
 from backend.bench.library import Case, Family
 from backend.bench.payload import (
     DeclaredModels,
@@ -185,6 +186,23 @@ class ReportConfig:
     and no module of the API layer reads a filesystem to fill it in.
     """
 
+    standings: Mapping[str, FixStanding] = field(default_factory=dict)
+    """Whether each fix was proven, per case id, from the run that could patch one.
+
+    **Empty for every run this route serves, and that is the honest answer rather than
+    a gap.** Proving a fix means patching a copy of the caller's checkout, re-serving
+    the target out of it and re-attempting the case; a hosted bench attacks a URL and
+    cannot restart somebody else's server, so its fixes are *proposed* by construction
+    and a case with no entry here reads exactly that
+    ([ADR-0073](../../docs/adr/0073-two-labels-on-a-fix-and-no-third.md) §2).
+
+    Per case rather than per run, which is the one way it differs from the anchor
+    above: a patch replaces one file to close one case, and a run that proved one fix
+    has proved nothing about the next failure in the same report. On this record for
+    the anchor's own reason — it arrives already derived from the one entrypoint that
+    had a checkout to patch, and no module of the API layer patches anything.
+    """
+
     pinned: Ed25519PublicKey | None = None
     """The public key a verification of this bench's reports is run against.
 
@@ -235,6 +253,10 @@ def payload_for(
             # this route serves — a hosted bench never has a checkout, and the honest
             # reading is the default rather than an omission (ADR-0071 §3).
             source_anchor=config.source_anchor,
+            # Whether each fix was proven, from the one entrypoint that could patch
+            # anything. Empty on this route, always: the bench cannot restart
+            # somebody else's server (ADR-0073 §2).
+            standings=config.standings,
         ),
         provenance=Provenance(
             # Read off the record that authorised the run rather than off the

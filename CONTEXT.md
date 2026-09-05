@@ -871,6 +871,23 @@ family is the operator's cost to choose
 ADR-0010).
 _Avoid_: attempt, retry, re-test, regression run, verification
 
+**Fix standing**:
+Whether a **fix** was **proven** — the bench applied it to a **throwaway checkout**,
+re-served the target out of the copy and re-attempted the **case**, and that case no
+longer succeeds — or is **proposed**, which is every other answer. **Two labels and
+there is no third**: a middle state is where an untested change gets read as a tested
+one, which is the hand-filled questionnaire ADR-0001 exists to displace reproduced
+inside the tool built to replace it. Which one is *reachable* is a property of the
+**target** and not of the fix: proving needs the code and the bench in the same place,
+so a plain hosted endpoint can only ever carry the second — the bench cannot restart
+somebody else's server. It is not a boolean, because *we tested it and it did not
+close the case* and *we could not test it* are the same bit and different sentences,
+and the sentence travels beside the label. What *proven* asserts is **one case against
+one patched revision** and never that the **family** is closed. Not a **severity**,
+not a rank, not a figure: nothing counts these and no rate may read one
+([ADR-0073](./docs/adr/0073-two-labels-on-a-fix-and-no-third.md), ADR-0072, ADR-0001).
+_Avoid_: verified, confirmed, validated, fixed, closed, resolved, severity
+
 **Nonce**:
 The bench-issued value a user must plant in their target to prove they control it. Registration does not complete without its echo.
 _Avoid_: token, challenge, secret, key

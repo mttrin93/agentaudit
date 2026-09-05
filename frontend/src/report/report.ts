@@ -653,6 +653,40 @@ export interface FindingReading {
    * makes (ADR-0071 §3).
    */
   location: string
+  /**
+   * Whether this fix was **proven** or is **proposed**, as the payload's own name.
+   *
+   * Drawn as the label on the header of the change, beside the file and the line,
+   * which is where a reviewer reads one. The name and not only the sentence, for the
+   * reason `reading` is carried on the section itself: a screen that told the two
+   * apart by matching prose would stop telling them apart the day the prose was
+   * reworded — and here that is the difference between an untested change and a
+   * tested one, which is the whole of ADR-0073.
+   */
+  fixLabel: string
+  /**
+   * What that label asserts and what it does not, in the record's own sentence.
+   *
+   * **The sentence a human reads for *what proven actually means*.** *This case no
+   * longer succeeds against the patched revision* — not *this family is closed*, and
+   * not *your agent is fixed*: `n = 30` per family, and a patch that defeats one
+   * case's exact payload while leaving the family open is overfitting to the test
+   * (ADR-0003, ADR-0072 §5). Carried whole and never worded here, on
+   * `attributedCause`'s terms — the standing explanation above the blocks is
+   * `WHAT_A_LABEL_ON_A_FIX_ASSERTS`, and this is what the payload says about *this*
+   * fix.
+   */
+  fixStanding: string
+  /**
+   * The change as a unified diff, or empty where the run recorded none.
+   *
+   * **Rendered by the bench and never recomputed here** — this app is handed no
+   * *before* to compute one from, which is the rule this module is already held to
+   * for every figure and which for a diff is also the disclosure answer (ADR-0008,
+   * ADR-0073 §3). Empty on every run that patched nothing, which is every run this
+   * repository's own API serves, and the sentence above says why.
+   */
+  diff: string
 }
 
 /**
@@ -710,6 +744,8 @@ export type FindingsView =
       kind: 'explained'
       reading: string
       label: string
+      /** What the two labels on a fix assert, and what they do not (ADR-0073 §4). */
+      asserts: string
       stated: string
       families: FamilyFindingsReading[]
     }
@@ -717,6 +753,7 @@ export type FindingsView =
       kind: 'broken'
       reading: string
       label: string
+      asserts: string
       stated: string
       /**
        * The pass's own counts, or `null` from a payload that carries none.
@@ -728,7 +765,7 @@ export type FindingsView =
        */
       broke: BrokenInstrumentReading | null
     }
-  | { kind: 'none'; reading: string; label: string; stated: string }
+  | { kind: 'none'; reading: string; label: string; asserts: string; stated: string }
 
 /**
  * What this section is, printed with it wherever it is read.
@@ -763,6 +800,36 @@ export const A_MODEL_WROTE_THESE_SENTENCES =
  * branch that does not exist, and the fallback would stop covering a fifth reading
  * added upstream (`readOutcome`).
  */
+export const WHAT_A_LABEL_ON_A_FIX_ASSERTS =
+  'Every fix below carries one of two labels and there is no third. Proven means ' +
+  'this bench applied the change to a throwaway copy of the caller\u2019s own ' +
+  'checkout, re-served the target out of it and re-attempted the case \u2014 and it ' +
+  'is a claim about that one case against that one patched revision, never that the ' +
+  'family is closed and never that the target is fixed. Proposed means it has not ' +
+  'been shown to close its case: the sentence beside it says whether the change was ' +
+  'tested and did not close it, or was never tested at all. A target this bench ' +
+  'reached only over the network can carry nothing but the second \u2014 the bench ' +
+  'cannot restart somebody else\u2019s server.'
+
+/**
+ * What the two labels assert, above the blocks rather than inside each one.
+ *
+ * **Written here rather than drawn out of the payload, exactly as
+ * `A_MODEL_WROTE_THESE_SENTENCES` is and for the same reason.** It is a fact about
+ * what this section's words mean rather than a fact about this run, so it has to be on
+ * the page under every reading — including the readings with no block on them, and
+ * including the common one where every fix is *proposed* because the bench attacked a
+ * URL. A reader who took *proven* for *this family is closed* would have been handed
+ * the stronger of two claims by a word, and `n = 30` per family is the arithmetic
+ * reason (ADR-0003, ADR-0072 §5, ADR-0073 §4).
+ *
+ * The signed document says the same thing in `rendering/_explained.py`'s
+ * `WHAT_A_LABEL_ON_A_FIX_ASSERTS`, with its ADR citations. This is the screen's
+ * wording of the same standing explanation and not a second claim about any one fix:
+ * every sentence *about a fix* is the payload's own, character for character, and
+ * `report.test.ts` holds that over every block.
+ */
+
 export const EXPLAINED = 'explained'
 export const INSTRUMENTS_BROKE = 'instruments_broke'
 
@@ -796,6 +863,10 @@ export function findingsReading(section: FindingsSection): FindingsView {
     // On the reading rather than in the markup, on `AdaptiveReading.label`'s terms: a
     // shape that could be drawn without it is a shape somebody draws without it.
     label: A_MODEL_WROTE_THESE_SENTENCES,
+    // Under all four readings, on the label's own terms: a shape that could be drawn
+    // without it is a shape somebody draws without it, and the reading where every
+    // fix is *proposed* is the one this sentence matters most on (ADR-0073 §4).
+    asserts: WHAT_A_LABEL_ON_A_FIX_ASSERTS,
     stated: section.stated,
   }
   if (section.reading === INSTRUMENTS_BROKE) {
@@ -841,6 +912,15 @@ export function findingsReading(section: FindingsSection): FindingsView {
       // print one claim about one anchor (ADR-0068 §3, ADR-0071 §4).
       sourceAnchor: finding.source_anchor.stated,
       location: finding.source_anchor.location ?? '',
+      // The payload's own name for the label and the payload's own sentence under
+      // it — neither reworded, neither derived from the other, and no third value
+      // this app could compute between them (ADR-0073 §1).
+      fixLabel: finding.fix_standing.reading,
+      fixStanding: finding.fix_standing.stated,
+      // Already a diff when it arrives. There is no `before` on this record and
+      // nowhere for one: a client that assembled a change would be showing one no
+      // signature was over (ADR-0017, ADR-0073 §3).
+      diff: finding.fix_standing.diff,
     })
   }
   return { ...said, kind: 'explained', families }

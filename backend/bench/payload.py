@@ -1256,6 +1256,17 @@ def _finding(reported: ReportedFinding) -> dict[str, Any]:
     Neither is any byte of the file itself: the bench read it to count its lines and
     published none of it.
 
+    `fix_standing` is whether the fix was proven or is proposed, and the change it
+    makes. **What a diff publishes and what it withholds** is ADR-0073 §3's decision
+    and is deliberately narrow: the lines the operator's own patch changed, three
+    lines of context around them, and the relative path — never the file, never a
+    second file, and nothing at all on a run that patched nothing, which is every run
+    this repository's own API serves. ADR-0071 §4 withholds every byte of a file the
+    bench read *uninvited*, to count its lines; this is material the operator
+    constructed and handed over so that a proof could be made, and the before-side is
+    the least without which the after-side is unreadable. A change over the ceiling is
+    a stated absence rather than half a diff.
+
     `informed_by` carries the precedents' **case ids** and never their prose: a
     precedent is a different target's failure and a different target's fix, and this
     document is about one target (ADR-0011, ADR-0070 §2). The ids are what ADR-0019's
@@ -1293,6 +1304,18 @@ def _finding(reported: ReportedFinding) -> dict[str, Any]:
             "reading": reported.source_anchor.reading.value,
             "location": reported.source_anchor.location,
             "stated": reported.source_anchor.stated(),
+        },
+        # Whether this fix was **proven** — patched, re-served and re-attempted — or
+        # is **proposed**, off a closed set of two with no third member, beside the
+        # change it makes. A reading and a sentence for the reason every closed set
+        # here carries both, and the diff computed once on this side of the wire: a
+        # surface that assembled one would be showing a change no signature was over
+        # (ADR-0017, ADR-0073).
+        "fix_standing": {
+            "reading": reported.standing.reading.value,
+            "patched": reported.standing.patched,
+            "diff": reported.standing.diff,
+            "stated": reported.standing.stated(),
         },
         "stated": reported.stated(),
     }

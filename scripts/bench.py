@@ -69,18 +69,26 @@ from dotenv import load_dotenv
 from backend.api.report import ReportConfig, payload_for
 from backend.bench.adjudication import Completion
 from backend.bench.admission import NotAdmitted, admitted_library
-from backend.bench.calibration import run_calibration
+from backend.bench.calibration import TargetRun, run_calibration
 from backend.bench.cited import the_citation, the_reliability
 from backend.bench.completion import DEFAULT_ADJUDICATOR_MODEL
 from backend.bench.contract import TargetConfig
+from backend.bench.evaluator import Verdict
+from backend.bench.fix_standing import FixStanding
 from backend.bench.library import AnyFamily, Case, Family, Plant, Precondition
 from backend.bench.narration import Narrator
 from backend.bench.payload import DeclaredModels
+from backend.bench.proving import prove_patch, standing_for
 from backend.bench.rule import DECLARED_RULE
 from backend.bench.selection import EVERY_CONSTRUCTION
 from backend.bench.shim import serve_callback
 from backend.bench.signing import NoSigningKey, publish_signed, signing_key
-from backend.bench.source_anchor import SourceAnchor, anchor_for
+from backend.bench.source_anchor import (
+    SourceAnchor,
+    SourceAnchorReading,
+    anchor_for,
+)
+from backend.bench.throwaway import Patch, PatchRefused, workspace_for
 from backend.bench.unattended import (
     DeclaredCeiling,
     ceiling_approval,
@@ -318,6 +326,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         withdrawn.update({family: gap for family, gap in gaps.items()})
         withdrawn.update(unplanted)
 
+        # Held in a name rather than built inside the call below, because the proof
+        # loop derives the workspace it patches in from this run's own id — the same
+        # id the plant namespace is derived from, and derived once for the reason
+        # `planting.namespace_for` gives: two names for one run is a drop that runs
+        # against a directory the copy was never made under (ADR-0063 §1, ADR-0072 §1).
+        trace = traced_run(adjudicator_model=adjudicator_model)
         try:
             result = run_calibration(
                 cases=cases,
@@ -337,7 +351,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 # Waived where nothing planted a value: a run in a runner has nobody
                 # to paste one, and `WAIVED` above says what that costs the reading.
                 proof_waived=waived,
-                trace=traced_run(adjudicator_model=adjudicator_model),
+                trace=trace,
             )
         except BudgetExceeded as abort:
             print(f"\nRun aborted on budget: {abort}")
@@ -364,6 +378,12 @@ def main(argv: Sequence[str] | None = None) -> int:
             f"of a declared ceiling of {result.budget.ceiling(layer)}"
         )
     print(f"confirmed by: {result.approval.identity}")
+
+    # Resolved once and read twice: the proof loop needs the file to patch and the
+    # report needs the file to name, and two resolutions of one anchor would be two
+    # claims about one checkout (ADR-0068 §3).
+    anchor = checkout_anchor(args, planter)
+    standings = proven_fixes(args, target_run, cases, anchor, workspace_for(trace.id))
 
     published = publish_signed(
         payload_for(
@@ -392,7 +412,12 @@ def main(argv: Sequence[str] | None = None) -> int:
                 # `planter` is the served callback object itself — `_target` hands it
                 # back for the planting hooks — and it is the one thing in this
                 # process the interpreter can point at a file for.
-                source_anchor=checkout_anchor(args, planter),
+                source_anchor=anchor,
+                # Whether each fix the caller offered was proven, from the one
+                # process in this repository that can patch anything. Empty on every
+                # run that offered none, and every finding then reads *proposed*,
+                # which is a fact about where this bench ran (ADR-0073 §2).
+                standings=standings,
             ),
             EVERY_CONSTRUCTION,
         ),
@@ -541,6 +566,158 @@ def checkout_anchor(args: argparse.Namespace, callback: object | None) -> Source
     return anchor_for(callback, checkout=Path(declared) if declared else None)
 
 
+def proven_fixes(
+    args: argparse.Namespace,
+    target_run: TargetRun,
+    cases: Sequence[Case],
+    anchor: SourceAnchor,
+    workspace: str,
+) -> dict[str, FixStanding]:
+    """Apply each fix the caller offered, re-attempt its case, and label the result.
+
+    **The supply surface for a patch, and it is the caller's own code.** `--fix
+    case-id=path` names a file the operator wrote; nothing in this bench composes one,
+    and no model is asked to
+    ([ADR-0072](../docs/adr/0072-a-post-patch-re-run-is-its-own-record.md) §2). What
+    comes back is a label per case, and a case with no entry reads *proposed*
+    ([ADR-0073](../docs/adr/0073-two-labels-on-a-fix-and-no-third.md)).
+
+    **This entrypoint and no other**, for `checkout_anchor`'s own reason: it is the
+    only process in this repository holding both a workspace and an object imported
+    out of it, so it is the only one that can patch a copy of the first and re-serve
+    the second. A hosted bench attacks a URL and cannot restart somebody else's
+    server, which is why *proven* is unreachable there rather than merely unused.
+
+    **It never ends the run.** Every failure below is printed and skipped, and the fix
+    stays *proposed*: the run has already spent the operator's inference budget and
+    holds every figure it will ever report, so ending it over the one part that
+    decides nothing would be `anchor_for`'s hazard one field along (ADR-0071 §5). A
+    fix that could not be applied is untested, which is what *proposed* says.
+    """
+    offered = _offered_once(args.fix or ())
+    if not offered:
+        return {}
+    if anchor.reading is not SourceAnchorReading.ANCHORED or args.callback is None:
+        # The one sentence this loop prints instead of a proof, and the reason it is
+        # not a refusal: a target with no checkout is the ordinary case, and every
+        # fix offered against one is *proposed* rather than rejected.
+        print(
+            f"\n{len(offered)} fix(es) offered and none can be proven: this run has "
+            f"no patchable checkout ({anchor.reading.value}). Proving needs the code "
+            "and the bench in the same place, and a target reached over the network "
+            "is somebody else's server (ADR-0073)."
+        )
+        return {}
+    records = {case.id: case for case in cases}
+    succeeded = {
+        attempt.case_id
+        for attempt in target_run.attempts
+        if attempt.verdict is Verdict.SUCCEEDED
+    }
+    checkout = Path((args.checkout or "").strip())
+    _, entrypoint = callback_reference(args.callback)
+    standings: dict[str, FixStanding] = {}
+    for case_id, replacement in offered.items():
+        case = records.get(case_id)
+        if case is None or case_id not in succeeded:
+            print(
+                f"{case_id}: no succeeded attempt in this run, so there is nothing "
+                "for a patch to close. The fix is not tested and not reported."
+            )
+            continue
+        try:
+            patch = Patch.for_anchor(anchor, Path(replacement).read_text("utf-8"))
+            # The file as the bench read it, for the diff and for nothing else: the
+            # patch is applied to a copy, and this text never leaves this process
+            # except as the lines the change touches (ADR-0073 §3).
+            replaced = (checkout / patch.path).read_text("utf-8")
+        except (OSError, PatchRefused) as unusable:
+            print(f"{case_id}: that fix was not applied — {unusable}")
+            continue
+        proof = prove_patch(
+            patch,
+            case,
+            checkout=checkout,
+            workspace=workspace,
+            entrypoint=entrypoint,
+            # The nonce that proved control is the canary the leakage cases read, on
+            # `run_calibration`'s own terms: a re-run decided against a different
+            # value would be decided by a different success condition.
+            canary=target_run.registration.nonce,
+        )
+        standing = standing_for(proof, replaced)
+        standings[case_id] = standing
+        print(f"{case_id}: {standing.stated()}")
+    return standings
+
+
+def callback_reference(declared: str) -> tuple[str, str]:
+    """`package.module:attribute`, split once for the two places that need it.
+
+    Parsed here rather than at each site, because there are two now and they read the
+    two halves: `_target` imports the module and serves the attribute, and
+    `proven_fixes` re-serves that same attribute out of the patched copy
+    (ADR-0072 §2). Two partitions of one string would only have to disagree once for
+    the proof loop to re-serve something the run never attacked.
+    """
+    module_name, _, attribute = declared.partition(":")
+    if not attribute:
+        raise TypeError(
+            f"{declared!r} is not a callback reference. It is written "
+            "`package.module:attribute`, which is the module a workflow committed "
+            "and the name in it that answers a message"
+        )
+    return module_name, attribute
+
+
+def _a_fix(offered: str) -> tuple[str, str]:
+    """One `--fix case-id=path`, split once at the parser and never guessed at.
+
+    **At the parser, so that a mistyped command line costs nothing.** Refused rather
+    than repaired: a value with no `=` in it is a command line the caller mistyped, and
+    a value quietly re-read is a patch applied to a file nobody named. Every other
+    refusal in this loop happens after the run and is printed and skipped, because by
+    then the operator's inference budget is spent — this one happens before anything is
+    sent, which is the only place a refusal is free (ADR-0073 §5).
+    """
+    case_id, sep, path = offered.partition("=")
+    if not sep or not case_id.strip() or not path.strip():
+        raise argparse.ArgumentTypeError(
+            f"{offered!r} is not a fix. It is written "
+            "`case-id=path/to/replacement.py`: the case whose failure the change is "
+            "meant to close, and the whole file that replaces the one the bench "
+            "anchored this run's target to (ADR-0072 §2)"
+        )
+    return case_id.strip(), path.strip()
+
+
+def _offered_once(declared: Sequence[tuple[str, str]]) -> dict[str, str]:
+    """The fixes, one per case, with a case named twice dropped and said so.
+
+    **Not the last one wins.** Two changes offered for one case are two files, and a
+    bench that quietly proved one of them would report a label earned by a change the
+    caller may not have meant — which is the blur this whole ticket is about, arriving
+    through a command line instead of through a word (ADR-0073 §1). Neither is tested
+    and the case keeps *proposed*, which is what an untested fix says.
+
+    Printed and skipped rather than raised, on `proven_fixes`'s own terms: this runs
+    after the operator's inference budget is spent, and nothing here may end the run
+    (ADR-0071 §5).
+    """
+    twice = {
+        case_id
+        for index, (case_id, _) in enumerate(declared)
+        if case_id in {named for named, _ in declared[:index]}
+    }
+    for case_id in sorted(twice):
+        print(
+            f"{case_id}: named by more than one --fix, so neither change was tested. "
+            "Two files offered for one case are two changes, and proving one of them "
+            "would label a change the caller may not have meant (ADR-0073)."
+        )
+    return {case_id: path for case_id, path in declared if case_id not in twice}
+
+
 def _target(
     args: argparse.Namespace, serving: ExitStack
 ) -> tuple[TargetConfig, object | None]:
@@ -566,13 +743,7 @@ def _target(
             ),
             None,
         )
-    module_name, _, attribute = args.callback.partition(":")
-    if not attribute:
-        raise TypeError(
-            f"{args.callback!r} is not a callback reference. It is written "
-            "`package.module:attribute`, which is the module a workflow committed "
-            "and the name in it that answers a message"
-        )
+    module_name, attribute = callback_reference(args.callback)
     callback = getattr(importlib.import_module(module_name), attribute)
     target = serving.enter_context(
         serve_callback(
@@ -622,6 +793,29 @@ def _parser() -> argparse.ArgumentParser:
             "secret, so it is written on the command line where a reviewer of the "
             "workflow sees which directory the bench was pointed at. Read only: "
             "nothing in this bench writes into it"
+        ),
+    )
+    parser.add_argument(
+        "--fix",
+        action="append",
+        default=None,
+        # Split and refused here rather than after the run, which is the whole of why
+        # it is a `type=` and not a check inside the proof loop: a mistyped command
+        # line is caught before a single call goes on the wire, and the loop that runs
+        # after the operator's budget is spent then has nothing left it can refuse
+        # (ADR-0073 §5).
+        type=_a_fix,
+        metavar="CASE_ID=PATH",
+        help=(
+            "a change to prove, as `case-id=path/to/replacement.py`. The file is the "
+            "caller's own code and replaces the one this run anchored the target to; "
+            "the bench copies the checkout, writes it into the copy, re-serves the "
+            "entrypoint out of it and re-attempts that one case, and the copy is "
+            "dropped however the run ends (ADR-0072). A case that no longer succeeds "
+            "is reported as a **proven** fix, and everything else — including a "
+            "change that was applied and did not close its case — as **proposed**. "
+            "Repeatable, one case per fix. Without a --checkout there is nothing to "
+            "patch and every fix stays proposed (ADR-0073)"
         ),
     )
     parser.add_argument("--token", default=os.environ.get(TOKEN_ENV, ""))

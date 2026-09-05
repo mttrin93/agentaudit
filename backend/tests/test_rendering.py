@@ -148,7 +148,7 @@ def test_every_section_states_its_own_reproducibility_and_three_read_the_payload
 
 # --- The golden digest: one document, pinned to the byte ---------------------
 
-GOLDEN_ONE_FAMILY = "43c8116f78a1a5dc374a2f32fa516d9bb929319f23a8e678091507ffa78c63e5"
+GOLDEN_ONE_FAMILY = "38ad974fdc60562157703612b39cf5892abef3bae52e9f60ed864ec4ef1d4964"
 """The sha256 of `_one_family()`'s rendering, written down.
 
 **A tripwire, and it is deliberately a strict one.** Every other assertion in this
@@ -288,6 +288,19 @@ declared input like the models above it and not a measurement of anything. Here 
 reads that every construction was sent, because the fixture narrowed nothing — and a
 narrowed run's block says which constructions it sent and that the rest are *not
 measured*, which is the fact an absent line in a family's mix cannot state on its own.
+
+Moved a fourteenth time, by #87, and it is section 2's planting subsection — the
+thirteenth was #86's, which moved this digest and left this list at twelve. The
+subsection that says what became of what a run planted now says, first, **what the run
+planted and whether it read the value back out of the target**
+([ADR-0064](../../docs/adr/0064-the-harness-reads-its-own-canary-back.md)). Here it
+reads that this run planted nothing itself, because the fixture is an endpoint run and
+a target that is a URL plants through its own operator — which is the line this digest
+pins: the strongest claim the block can make is *verified*, and it is not available to
+an endpoint target under any configuration. **No figure moved and no figure arrived**:
+a plant is a precondition of measurement and never an input to one (ADR-0006,
+ADR-0024), and what the block changes is how a reader should read a rate of zero and
+not what the rate is.
 """
 
 

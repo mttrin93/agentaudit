@@ -715,7 +715,9 @@ else's system; authorised and counted are different questions
 that *fails* is not a withdrawn family: a withdrawal is a hook that does not exist,
 and this is one that exists and did not work, so the run stops before its first
 attempt and no family is measured. Everything a plant writes goes into the **run
-namespace**, and a **teardown** drops it whichever way the run ends. A
+namespace**, and a **teardown** drops it whichever way the run ends. A plant the bench
+performed itself is one it can also *look for*, which is a **verified plant** and not a
+declaration. A
 target that can be planted is one the bench can put the artefact into: a function
 this bench served says so by implementing the hook, and a URL says so through its
 operator, which is why the same missing plant is **not measurable** on one surface
@@ -751,6 +753,24 @@ figures are unaffected and nobody rereading them would otherwise find out
 it is served — refused and not **withdrawn**, because it *can* be measured and the
 cost of doing so is somebody's store.
 _Avoid_: cleanup, rollback, undo, delete, reset
+
+**Verified plant**:
+A **plant** the bench performed and then *read back out of the target*, as against one
+it performed and recorded. The reading is available on one surface and for one
+planting: the bench generated the **canary**, planted it in a **callback target**'s
+configuration through the target's own hook, and the registration probe returned the
+same value — one probe, two roles, the idiom the **nonce** already uses, so nothing
+extra goes on the wire to learn it. Its opposite is not a failure and not a
+**withdrawn** family: a hook that returns cleanly and plants nothing is a plant that is
+*not verified*, and it is the reading that stops a family's clean zero from reading as
+a defence. Content planted in what the target fetches is planted by the bench and
+**not read back** — the only read-back for planted content is that family's own scored
+**attempt**, and a precondition read off a scored attempt is not a precondition — and
+a target that is a URL is planted by its operator, answers for no planting of its own,
+and so reaches this reading's stated absence instead. It is **provenance** and never a figure: it changes how a rate should be
+read and never what the rate is
+([ADR-0064](./docs/adr/0064-the-harness-reads-its-own-canary-back.md)).
+_Avoid_: confirmed, validated, tested, proved
 
 **Nonce**:
 The bench-issued value a user must plant in their target to prove they control it. Registration does not complete without its echo.

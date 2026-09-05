@@ -454,9 +454,12 @@ def serve_callback(
     `planting.plant` does, from the harness and before the registration probe
     (ADR-0062), which is why `serve_callback` yields the target and the caller keeps
     the object — the hooks are on the callback and the served app has no route to
-    them. There is no `teardown()` yet (#86), and there is no route by which a plant
-    could become an attempt: this module's one route is `MESSAGES_PATH`, and a hook is
-    not on it.
+    them. `teardown()` is reached the same way and from the same harness (ADR-0063),
+    and so is the read-back that decides whether a plant is *verified* — which is the
+    registration probe over `MESSAGES_PATH` and nothing this module added
+    ([ADR-0064](../../docs/adr/0064-the-harness-reads-its-own-canary-back.md)). There
+    is no route by which a plant could become an attempt: this module's one route is
+    `MESSAGES_PATH`, and a hook is not on it.
     """
     plants = declared_plants(callback)
     # Before the port is bound and before anything is planted: a callback that can

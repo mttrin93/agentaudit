@@ -220,6 +220,9 @@ def test_a_plant_is_recorded_with_what_authorised_it_and_with_no_send(
         # Where it went, so the run can take it back out again (ADR-0063).
         "namespace",
         "authorised_by",
+        # Whether the bench read the value back out of the target, which is a
+        # reading and not a figure (ADR-0064).
+        "check",
     }
 
 

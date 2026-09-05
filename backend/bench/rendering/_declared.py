@@ -276,6 +276,11 @@ def _how_the_run_was_made(body: Mapping[str, Any]) -> Section:
             # who is told about it (ADR-0063 §3).
             "### What this run planted, and whether it took it back out",
             "",
+            # What was planted and how good the evidence is that it landed, ahead of
+            # what became of it. On an endpoint run this is the sentence that says
+            # the bench planted nothing, so the strongest claim the block can make is
+            # not one a target that is a URL ever prints (ADR-0064 §5).
+            f"- {provenance['planting']['stated']}",
             f"- {provenance['teardown']['stated']}",
             "",
             "### The rule these figures were measured under",

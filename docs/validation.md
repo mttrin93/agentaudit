@@ -3933,3 +3933,91 @@ from a `finally` on the run. Read on 2026-09-05.
   already walks. `PLANTING_CALLS` is still `0` and neither ceiling moved.
 - **No variant was admitted, and none was proposed.** Admission needs a person at a tty
   (ADR-0052 §5), and nothing here asks for one.
+
+### The harness read its own canary back, and *planted* stopped being a declaration (#87, 2026-09-05)
+
+**This section records a check that did not exist, one tripwire that moved, and no
+figure that did.** ADR-0062 and ADR-0063 made a plant a step the run takes into a
+namespace it drops; what neither did is *look*, and `TargetRun.plantings` reached no
+reporting surface at all.
+[ADR-0064](./adr/0064-the-harness-reads-its-own-canary-back.md) decides both — the
+registration probe is the read-back, and the reading reaches the signed artefact. Read
+on 2026-09-05.
+
+- **The headline reading: a hook that plants nothing and reports success is caught.**
+  A served callback implementing `plant_config_canary` as a clean no-op, run with the
+  echo waived so the run goes all the way through. It comes back with
+  `attempts_per_case` leakage attempts, **a rate of exactly 0.0** — ADR-0024's clean
+  zero, unchanged and still a real measurement of what the target did — and a planting
+  recorded `PlantCheck.NOT_RETURNED`, with `verified: false` in the provenance block.
+  **The waiver is load-bearing in that reading**: unwaived, the same target is refused
+  at registration and spends no attempt at all, which is the read-back doing its job
+  one step earlier and is why the run that produces the clean zero is a waived one.
+  The same run against a callback that keeps what it is planted with reads
+  `PlantCheck.VERIFIED` and `verified: true`. **The two runs differ in the hook and in
+  nothing else**, which is the whole of what the shim buys: before this diff their
+  artefacts were byte-identical in every line that says how good the evidence is.
+- **The probe is unchanged and still sent, including on the waived path.** The lying
+  run's `Transcript.sent["message"]` is `ECHO_PROBE` exactly, `waived` is true and
+  `echoed` is false — what the waiver decides is whether a missing echo stops the run
+  and never whether the bench looks (ADR-0007 as amended). No second call goes on the
+  wire for the read-back and no counter moved: `PLANTING_CALLS` is still `0` and the
+  registration probe is charged where it always was.
+- **Content is planted by the bench and still reads `NO_READ_BACK`.** A callback
+  implementing both hooks over `indirect-injection-001` records the retrieved-content
+  planting as not read back, and the run's block reports `verified: false` — the
+  boolean is conjunctive on purpose, because *true if any* is the flattering answer on
+  the one block that exists to stop a plant being taken on trust.
+- **The strongest claim is not available to a target this bench did not plant into.**
+  A target answering for no planting of its own — `plants is None`, which is every
+  target built from a URL — has nothing requested for it and prints
+  `NOTHING_WAS_PLANTED_BY_THE_BENCH` and no other line, **with the planter handed in
+  and refused**. Asserted over a whole run as well as over a rendered document, because
+  a payload fixture holding an empty tuple proves the rendering and not the run. Driven
+  red by making `required_plantings` treat *answers for none* as *can be given all*:
+  the run comes back holding a `VERIFIED` config-canary planting against a target
+  nobody may plant.
+- **The canary has one provenance and one hand.** `refuse_a_canary_the_run_did_not_issue`
+  refuses both `planted_nonces` and `plant_nonce` for a target that plants its own
+  configuration canary. The second is the one that matters: a second hand planting the
+  same value makes the read-back a reading about the other hand's work, and
+  `test_callback_shim.py`'s flaky-callback test — which planted by both hands — is in
+  this diff for exactly that reason and now answers with what its own hook was given.
+- **Nine guards, and every one of them was driven red for its own reason** — the ninth is the endpoint drive two bullets above. The
+  read-back forced to `VERIFIED` fails the lying test on the check, and forced to
+  `NOT_RETURNED` fails the verified test on the same line — neither on an import error.
+  Retrieved content forced to `VERIFIED` fails the content test alone. The
+  `planted_nonces` refusal made unreachable fails the two-provenances test and nothing
+  else. `planted` hardcoded true fails the endpoint test on `planted is False`.
+  `Provenance.plantings` not passed at `payload_for` fails both shim tests on a block
+  that says nothing was planted. **Removing the `checked` call in `_run_target` fails
+  three tests with `TargetRun`'s own refusal**, naming the planting that reached the
+  record unchecked — which is the guard that keeps a defaulted reading out of a signed
+  artefact. And dropping the rendered line fails the endpoint test on the document.
+- **`GOLDEN_ONE_FAMILY` moved to `38ad974fdc60`** — the fourteenth recorded move of the
+  rendered document, and the docstring that lists them is repaired to say so: the
+  thirteenth was #86's and was never written down there. Section 2's planting
+  subsection gained one line above the teardown line. `ARTEFACT_VERSION` did not move:
+  `planting` is an additive key, on the footing #43, #45, #47, #79 and #86 set.
+- **No rate, `D`, κ, interval, band, gate decision or gate citation moved, and the
+  library digest did not move either.** No case record is in this diff: the eighteen
+  and the three are the same records and `c515a89956cd` is still the digest. A plant is
+  a precondition of measurement and never an input to one (ADR-0006, ADR-0024), and the
+  invariant is held by the signature the way ADR-0062 holds it — `checked` takes
+  plantings and a `Registration`, and no `RunState`, no `Layer` and no `Attempt` is in
+  scope for it.
+- **`Planting` gained a fifth field**, so the record test's field-set assertion is in
+  this diff. It is the designed tripwire for a field arriving on a record that travels,
+  and it is updated with the reason and not loosened.
+- **The review found six things and each was answered.** Five ADR section pointers in
+  docstrings resolved to the wrong decision and are repaired; `_planting`,
+  `PlantCheck` and `CanaryFromTwoPlaces` restated an ADR's argument and now link it and
+  keep the local consequence; a boolean squeezed out of `plant_nonce is not None` at the
+  call site is now the equipment itself; the endpoint claim was asserted over a payload
+  fixture rather than over a run, and is now driven at the run seam; `NOT_RETURNED`'s
+  printed sentence claimed to know which of two things happened, and now says that a
+  hardened target's refusal looks the same from here and that neither is called
+  verified; and the clean zero's dependence on the waiver was unstated. None of the six
+  changed a figure.
+- **No variant was admitted, and none was proposed.** Admission needs a person at a tty
+  (ADR-0052 §5), and nothing here asks for one.

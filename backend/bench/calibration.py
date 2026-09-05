@@ -104,12 +104,15 @@ from backend.bench.planting import (
     DropNamespace as _DropNamespace,
 )
 from backend.bench.planting import (
+    PlantCheck,
     Planter,
     Planting,
     Teardown,
     anonymous_run_id,
+    checked,
     namespace_for,
     plant,
+    refuse_a_canary_the_run_did_not_issue,
     teardown_all,
 )
 from backend.bench.planting import (
@@ -250,6 +253,26 @@ class TargetRun:
     """
 
     def __post_init__(self) -> None:
+        # A planting that never went through the read-back, on a record of a run that
+        # is over. `plant` makes these before the registration probe and `checked`
+        # fills the reading in from what the probe answered, so an `UNCHECKED` one
+        # here is a harness that planted and did not look — and the block it reaches
+        # in the artefact is the one whose strongest claim has to be earned
+        # ([ADR-0064](../../docs/adr/0064-the-harness-reads-its-own-canary-back.md)).
+        unchecked = sorted(
+            str(performed.plant)
+            for performed in self.plantings
+            if performed.check is PlantCheck.UNCHECKED
+        )
+        if unchecked:
+            raise ValueError(
+                f"the {unchecked} planting(s) of target {self.target.name!r} reached "
+                "this record without being checked. The bench generated the value "
+                "and planted it, so whether it is in place is a reading this run "
+                "takes rather than a declaration it repeats: `planting.checked` is "
+                "what takes it, off the registration probe"
+            )
+
         attempted_families = {attempt.family for attempt in self.attempts}
         both = (
             set(self.not_measurable) | set(self.elective_not_measurable)
@@ -1032,6 +1055,13 @@ def _run_target(
     It is passed down rather than derived here so that a second target cannot plant
     into a namespace the first target's teardown will not reach.
     """
+    # `issue_nonce` is the only source of this value on a surface where the bench
+    # plants it, and neither of the two ways a caller can supply one reaches such a
+    # target: a canary the caller supplied is one the caller could also have put in a
+    # payload, and one value with two provenances is two values (ADR-0064 §1).
+    refuse_a_canary_the_run_did_not_issue(
+        target, planted=planted, hand_planter=plant_nonce
+    )
     nonce = planted or issue_nonce()
     if plant_nonce is not None:
         plant_nonce(target, nonce, namespace)
@@ -1090,6 +1120,13 @@ def _run_target(
     # the families that depend on it *before* an attempt is spent, so the run finishes
     # and signs a report over what could be measured rather than stopping at the first
     # trace-dependent verdict with nothing to read (ADR-0004).
+    # The read-back, and the reason the plant is ahead of the probe. The value this
+    # run generated went into the target through its own hook, and the probe is where
+    # the same value either comes back or does not — one probe, two roles, which is
+    # the idiom ADR-0007 already uses for the nonce (ADR-0064 §2). Nothing extra goes
+    # on the wire to learn it.
+    plantings = checked(plantings, registration)
+
     contradicted = contradicted_by_the_reply(written_for, target, registration.probe)
     attempts: tuple[Attempt, ...] = ()
     if registration.complete:

@@ -26,12 +26,12 @@ from __future__ import annotations
 import re
 import secrets
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import StrEnum
 
 from backend.bench.contract import TargetConfig
 from backend.bench.library import Case, Plant
-from backend.bench.registration import Attestation, AttestationRecord
+from backend.bench.registration import Attestation, AttestationRecord, Registration
 
 NAMESPACE_PREFIX = "run-"
 """What every namespace this bench asks a shim to create begins with.
@@ -246,6 +246,175 @@ class PlantingRequest:
     out — `canary` for one, `key` and `body` for the other."""
 
 
+class PlantCheck(StrEnum):
+    """Whether the bench read its own planted value back out of the target.
+
+    **The decision, the trade ADR-0024 named and why a served target is not held to
+    it are
+    [ADR-0064](../../docs/adr/0064-the-harness-reads-its-own-canary-back.md).** The
+    consequence here is the shape of the enumeration: four members and three answers,
+    because `UNCHECKED` is the state between the plant and the registration probe and
+    is a state no record may carry — `TargetRun` refuses one, since a planting that
+    reached the artefact without being looked for would print the strongest claim on
+    this block off a default.
+    """
+
+    UNCHECKED = "unchecked"
+    """The read-back has not happened yet.
+
+    `plant` runs before the registration probe (ADR-0062's ordering), so every
+    `Planting` is born in this state and `checked` is what takes it out of one. It
+    exists so that *not looked for* is not spelled the same way as *looked for and
+    absent*, which is the difference this whole enumeration is about, one level up.
+    """
+
+    VERIFIED = "verified"
+    """The bench planted the value and the target gave the same value back.
+
+    The registration probe is the read-back, and it is deliberately not a second call
+    on the wire: the echo was already sent on every path, including a waived one
+    (ADR-0007 as amended), and what changes on this surface is only *what it proves*.
+    Against an endpoint it proves the operator can configure the target. Against a
+    shim the bench did the configuring, so what came back is evidence the plant
+    landed.
+
+    **What this does not claim.** A callback constructed to lie could keep the value
+    it was handed and answer with it, and this reading would not catch that. It is
+    evidence about *measurement* on a target its own author is testing, and it is not
+    evidence about who owns the agent behind the callback — that is the attestation,
+    and ADR-0024's *"authorisation loses its evidence and keeps only its record"* is
+    untouched by anything here.
+    """
+
+    NOT_RETURNED = "not_returned"
+    """The hook returned cleanly and the value did not come back.
+
+    The failure this member exists for is a planting hook that plants nothing and
+    reports success — which is not `PlantingFailure.HOOK_RAISED`, because nothing
+    raised, and not a withdrawal, because the hook is there. Under ADR-0024 the
+    family reports every attempt resisted against a value that is nowhere in the
+    target, and this is the only thing on the page that contradicts the reading.
+
+    **It is not only that failure, and the sentence says so.** A shim target that is
+    hardened against the echo probe holds the value and will not return it, and from
+    here the two are one reading. Nothing about such a target's refusal changes —
+    it is unregistered where ADR-0007 left it, or it ran on a waiver — and what this
+    member refuses to do is call either one verified.
+    """
+
+    NO_READ_BACK = "no_read_back"
+    """Planted by the bench, and this bench has no probe that reads it back.
+
+    Every retrieved-content planting, and the honest answer for one. The content and
+    the word that retrieves it come off the case record (ADR-0060), so *that it is
+    there* is no longer the operator's statement — but the only read-back available
+    for planted content is the family's own scored attempt, and a precondition read
+    off a scored attempt is not a precondition (ADR-0004, ADR-0010's shape).
+    """
+
+    def stated(self) -> str:
+        """The reading in the words an artefact prints.
+
+        No fallback branch, on `PlantingFailure.stated`'s terms: a fifth member has
+        to fail the type check rather than reach a reader as a bare member name.
+        """
+        match self:
+            case PlantCheck.UNCHECKED:
+                return (
+                    "not checked — this planting has not been through the read-back, "
+                    "which is a state no finished run may report"
+                )
+            case PlantCheck.VERIFIED:
+                return (
+                    "verified — the bench generated this value, planted it through "
+                    "the target's own hook, and the target gave the same value back "
+                    "over the contract. That it is in place is measured here rather "
+                    "than declared"
+                )
+            case PlantCheck.NOT_RETURNED:
+                return (
+                    "NOT verified — the bench planted this value and the target did "
+                    "not give it back. Two things look like this from here: a "
+                    "planting hook that returned cleanly and planted nothing, and a "
+                    "target that will not echo what it holds. This bench cannot tell "
+                    "them apart and does not call either one verified, so a rate of "
+                    "zero on a family that reads this canary is what an unplanted "
+                    "canary looks like as well as what a defence looks like"
+                )
+            case PlantCheck.NO_READ_BACK:
+                return (
+                    "planted by the bench, and not read back — the content and the "
+                    "word that retrieves it come off the case record, so that it is "
+                    "in place is not the operator's statement. What this bench has "
+                    "no probe for is whether the target can reach it: the only "
+                    "read-back for planted content is this family's own scored "
+                    "attempt, and a precondition read off a scored attempt is not a "
+                    "precondition"
+                )
+
+
+NOTHING_WAS_PLANTED_BY_THE_BENCH = (
+    "this run planted nothing itself, so there is no plant here for it to have "
+    "checked. Any artefact a family needed was put in place by this target's "
+    "operator before the run, and that it is in place is their declaration rather "
+    "than something measured here (ADR-0024)"
+)
+"""What a run that planted nothing says about its plantings.
+
+Every endpoint run, and the sentence rather than an empty block for the reason
+`NOTHING_WAS_PLANTED` is one: the block is where a reader asks *how good is the
+evidence that the canary was there*, and a document that answered by saying nothing
+would leave them to assume the flattering answer. It is also the guard on the
+strongest claim this block can make — a target that is a URL reaches this line and
+no other, under every configuration (ADR-0064 §5).
+"""
+
+
+class CanaryFromTwoPlaces(ValueError):
+    """The run was handed a config canary it did not issue, for a target that plants.
+
+    **Why this value has one provenance and one hand is
+    [ADR-0064](../../docs/adr/0064-the-harness-reads-its-own-canary-back.md) §1.**
+    The consequence here is where it is raised: at the top of the target's run,
+    before the hook is called and before anything is sent, so a run that would have
+    checked somebody else's plant has spent nothing.
+    """
+
+    def __init__(self, target_name: str, source: str) -> None:
+        super().__init__(
+            f"target {target_name!r} declares the {Plant.CONFIG_CANARY.hook} hook "
+            f"and this run was handed a canary from {source}. On this surface the "
+            "bench issues the value (`registration.issue_nonce`), plants it through "
+            "the hook and reads the same value back out of the target: a value the "
+            "caller supplied is one the caller could also have put in a payload, "
+            "and one value with two provenances is two values"
+        )
+
+
+def refuse_a_canary_the_run_did_not_issue(
+    target: TargetConfig, *, planted: str | None, hand_planter: object | None
+) -> None:
+    """Check the provenance of the canary before this target is planted or probed.
+
+    Two callers can supply one — `planted_nonces`, for the nonce an earlier request
+    issued, and `plant_nonce`, the hand-planting equipment a gate run reaches the
+    reference agents with. Both are correct for a target that is a URL and neither
+    may reach a target that plants its own configuration canary, because the whole of
+    what this surface buys is that the value has one provenance.
+
+    `hand_planter` is the equipment itself rather than a boolean about it, so that
+    the fact and its name travel together from the one caller that holds it — the
+    object is never called here, and this function's only reading of it is whether
+    the run has one.
+    """
+    if target.plants is None or Plant.CONFIG_CANARY not in target.plants:
+        return
+    if planted is not None:
+        raise CanaryFromTwoPlaces(target.name, "`planted_nonces`")
+    if hand_planter is not None:
+        raise CanaryFromTwoPlaces(target.name, "`plant_nonce`")
+
+
 @dataclass(frozen=True)
 class Planting:
     """One planting that was performed, and what authorised it.
@@ -273,6 +442,56 @@ class Planting:
     """
 
     authorised_by: AttestationRecord
+
+    check: PlantCheck = PlantCheck.UNCHECKED
+    """Whether the bench read this planted value back out of the target.
+
+    Defaulted rather than required, because a `Planting` is made before the read-back
+    exists: `plant` runs ahead of the registration probe and `checked` fills this in
+    from what the probe answered. The default is the reading that claims nothing, and
+    `TargetRun` refuses a record that still carries it — so the two-step construction
+    cannot leak a default into a signed artefact
+    ([ADR-0064](../../docs/adr/0064-the-harness-reads-its-own-canary-back.md) §2).
+    """
+
+
+def checked(
+    plantings: Sequence[Planting], registration: Registration
+) -> tuple[Planting, ...]:
+    """These plantings with the read-back filled in, off the registration probe.
+
+    **One probe, two roles, which is ADR-0007's own idiom applied one surface over.**
+    The echo probe is sent on every path and is unchanged by this: against a URL the
+    value came from the operator's own configuration and the echo proves they control
+    the target, and against a shim the bench planted it and the same reply proves the
+    plant landed. Nothing extra goes on the wire to learn it, and a target that
+    refuses to cooperate is exactly where ADR-0007 left it — a hardened target's
+    refusal is not a failed plant, which is why `NOT_RETURNED` is a reading on this
+    block and never a withdrawal.
+
+    Retrieved content answers `NO_READ_BACK` and there is no arm that could give it
+    anything else: the only read-back for planted content is the family's own scored
+    attempt.
+    """
+    return tuple(
+        replace(one, check=_check_for(one.plant, registration)) for one in plantings
+    )
+
+
+def _check_for(planted: Plant, registration: Registration) -> PlantCheck:
+    """One planting's reading, off the member and the probe.
+
+    A `match` with no fallback arm, on `_request_for`'s terms: a third member has to
+    fail the type check here rather than default onto `VERIFIED`, which is the
+    flattering direction and the one claim on this block that has to be earned.
+    """
+    match planted:
+        case Plant.CONFIG_CANARY:
+            return (
+                PlantCheck.VERIFIED if registration.echoed else PlantCheck.NOT_RETURNED
+            )
+        case Plant.RETRIEVED_CONTENT:
+            return PlantCheck.NO_READ_BACK
 
 
 def required_plantings(

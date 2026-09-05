@@ -135,24 +135,27 @@ def test_a_callback_that_raises_twice_costs_sends_and_not_attempts(
             state.failed += 1
             raise RuntimeError("the callback fell over")
         state.failed = 0
-        return state.nonce
+        # What the hook was planted with, and nothing else. A served target's
+        # configuration canary has one provenance — the bench issues it and plants it
+        # through the hook — so a callback that answered from anywhere else would be
+        # answering with a value no plant put there (ADR-0064 §1).
+        return agent.planted or ""
 
     # Wrapped so the target declares the config-canary planting hook, which is what
     # data leakage now requires of a served target: a callback with no hook has that
     # family withdrawn as `NotMeasurable` and there would be no rate below to read
     # (ADR-0061). The object is handed to the run as its planter, so the bench plants
-    # through the hook before it registers (ADR-0062); `_calibrate`'s `plant_nonce`
-    # stands in beside it for the human who edits a URL target's configuration, and
-    # is what puts the value where this callback reads it from.
+    # through the hook before it registers (ADR-0062), and no `plant_nonce` stands
+    # beside it: a second hand planting the same value is a read-back that checks the
+    # other hand's work (ADR-0064 §1).
     agent = PlantsItsConfig(flaky)
     with serve_callback(agent, name="flaky", retry=IMPATIENT) as target:
         result = _calibrate(target, leakage_case, state, planter=agent)
 
+    [target_run] = result.target_runs
     # The planting happened, off every counter: the hook was called with the run's
     # own nonce, and the sends below are the attempts and the probe alone.
-    assert agent.planted == state.nonce
-
-    [target_run] = result.target_runs
+    assert agent.planted == target_run.registration.nonce
     assert target_run.registration.complete
     rate = target_run.rates[Family(leakage_case.family)]
     assert rate.attempts == DECLARED_RULE.attempts_per_case
@@ -426,7 +429,13 @@ def _calibrate(
         cases=[case],
         targets=[target],
         attestation=BENCH_ATTESTATION,
-        plant_nonce=plant,
+        # The operator's hand, and only for the callback that has no hook of its own.
+        # A target that plants its own configuration canary is refused one, because
+        # the bench reads that value back out of the target and a value a second hand
+        # also planted is a read-back checking somebody else's plant
+        # ([ADR-0064](../../docs/adr/0064-the-harness-reads-its-own-canary-back.md)
+        # §1).
+        plant_nonce=None if planter is not None else plant,
         planters={} if planter is None else {target.name: planter},
         approve=CONFIRMING,
     )

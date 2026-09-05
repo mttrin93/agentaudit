@@ -228,6 +228,10 @@ def payload_for(
             # plan and the estimate from the same record (`BenchConfig.selection`).
             selection=selection,
             gate=config.gate,
+            # What this run planted and whether the value came back, off the run's
+            # own record. Empty for every endpoint target, which is what keeps the
+            # verified claim on the served surface (ADR-0064 §5).
+            plantings=target_run.plantings,
             # What became of anything this run planted, off the run's own record.
             # Matched by target name, so the equipment teardown a gate run performs —
             # which carries none — never reaches a target's artefact (ADR-0063 §5).

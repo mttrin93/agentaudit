@@ -90,7 +90,13 @@ from backend.bench.capability import (
 from backend.bench.elective import ElectiveSelection
 from backend.bench.labels import FamilyLabel, bears_stated, claims_stated, label_for
 from backend.bench.library import ExternalId, Family, LibraryVersion
-from backend.bench.planting import NOTHING_WAS_PLANTED, Teardown
+from backend.bench.planting import (
+    NOTHING_WAS_PLANTED,
+    NOTHING_WAS_PLANTED_BY_THE_BENCH,
+    PlantCheck,
+    Planting,
+    Teardown,
+)
 from backend.bench.published import ClaimedInPart, UntestedCategory
 from backend.bench.registration import AttestationRecord
 from backend.bench.rule import DECLARED_RULE, GateRule
@@ -605,6 +611,21 @@ class Provenance:
 
     gate: GateCitation | None = None
     """The bench's own gate result, or nothing — and nothing still prints a line."""
+
+    plantings: tuple[Planting, ...] = ()
+    """What this run planted itself, and whether it read each value back.
+
+    In the provenance block and not among the figures, because it is a fact about
+    *how this run was made*: a plant is a precondition of measurement and never an
+    input to one (ADR-0006, ADR-0024), and nothing here moves a rate, an interval or
+    a verdict. What it moves is how a reader should read one.
+
+    Empty is *this run planted nothing*, which is every endpoint run, and it prints
+    `planting.NOTHING_WAS_PLANTED_BY_THE_BENCH` rather than nothing at all — the
+    absence of a claim is a fact a reader needs, and it is the line that keeps the
+    strongest claim on this block off a target that is a URL
+    ([ADR-0064](../../docs/adr/0064-the-harness-reads-its-own-canary-back.md) §5).
+    """
 
     teardown: Teardown | None = None
     """What became of the namespace this run planted into, or nothing planted at all.
@@ -1229,6 +1250,10 @@ def _provenance(payload: TargetPayload) -> dict[str, Any]:
             "stated": provenance.selection.stated(),
         },
         "calls_spent": {layer.value: provenance.calls_spent[layer] for layer in Layer},
+        # What this run planted and whether it read it back, beside what became of it
+        # afterwards: the two are the two halves of one question about somebody's
+        # store, and a reader asks them in this order.
+        "planting": _planting(provenance.plantings),
         "teardown": _teardown(provenance.teardown),
         "gate": citation(provenance.gate),
         "rule": {
@@ -1244,6 +1269,42 @@ def _provenance(payload: TargetPayload) -> dict[str, Any]:
             "kappa_floor": payload.rule.kappa_floor,
             "stated": payload.rule.stated(),
         },
+    }
+
+
+def _planting(plantings: tuple[Planting, ...]) -> dict[str, Any]:
+    """What this run planted, and how good the evidence is that it landed.
+
+    **`verified` is conjunctive**, which is
+    [ADR-0064](../../docs/adr/0064-the-harness-reads-its-own-canary-back.md) §4. The
+    consequence here is that a run which planted a configuration canary the probe
+    returned and content nothing read back reports `false` and prints both lines, and
+    that a reader who needs the detail reads the per-plant list below.
+
+    Never a missing key and never an empty block, on `_teardown`'s terms: a run that
+    planted nothing says so in a sentence, because *nobody checked* and *there was
+    nothing to check* are two different readings of the same rate.
+    """
+    return {
+        "planted": bool(plantings),
+        "verified": bool(plantings)
+        and all(one.check is PlantCheck.VERIFIED for one in plantings),
+        "plants": [
+            {
+                "plant": str(one.plant),
+                # The record that asked for it, or `null` for the configuration
+                # canary — the value is the run's own nonce and no case names it
+                # (ADR-0007). The body never travels: it is on the case record, and a
+                # signed artefact is not a place for payload text (ADR-0008).
+                "case": one.case_id,
+                "check": str(one.check),
+                "stated": one.check.stated(),
+            }
+            for one in plantings
+        ],
+        "stated": NOTHING_WAS_PLANTED_BY_THE_BENCH
+        if not plantings
+        else "; ".join(f"{one.plant}: {one.check.stated()}" for one in plantings),
     }
 
 

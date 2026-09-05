@@ -36,6 +36,8 @@ import {
   ANSWER_UNREACHABLE,
   fetched,
   refusalIn,
+  refusalRead,
+  type FieldRefusal,
 } from './http'
 
 
@@ -256,7 +258,16 @@ export const REGISTRATION_REFUSED = 'registration_refused'
  */
 export type StartOutcome =
   | { kind: 'registered'; run: RunStarted }
-  | { kind: 'refused'; statement: string }
+  /**
+   * The bench said no, in its own sentence and — where it named one — at a field.
+   *
+   * `fields` is always present and often empty: a refusal about the registration
+   * has no input to land on, and the screen shows the statement over the form for
+   * it. Where the API's own validation refused a body field, the entry carries the
+   * `loc` path the screen names that input by (ADR-0076), so the message reaches
+   * the field rather than the top of the page.
+   */
+  | { kind: 'refused'; statement: string; fields: FieldRefusal[] }
   | { kind: 'unreachable'; statement: string }
 
 const UNREACHABLE =
@@ -285,7 +296,8 @@ export async function startRun(body: StartRunBody): Promise<StartOutcome> {
   if (response.ok) {
     return { kind: 'registered', run: (await response.json()) as RunStarted }
   }
-  return { kind: 'refused', statement: await refusalIn(response) }
+  const { statement, fields } = await refusalRead(response)
+  return { kind: 'refused', statement, fields }
 }
 
 /** Where one run has got to, or the reason this app could not find out. */

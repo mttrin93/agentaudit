@@ -135,7 +135,7 @@ describe('a registration the bench refuses', () => {
 
     const outcome = await startRun(bodyOf())
 
-    expect(outcome).toEqual({ kind: 'refused', statement: refusal })
+    expect(outcome).toEqual({ kind: 'refused', statement: refusal, fields: [] })
   })
 
   it('keeps the field name when the refusal is the API’s own validation', async () => {
@@ -149,6 +149,34 @@ describe('a registration the bench refuses', () => {
     expect(outcome.kind === 'refused' && outcome.statement).toContain(
       'body.cost.price_per_call',
     )
+  })
+
+  it('names the field the API refused, in the path an input is named by', async () => {
+    // The convention ADR-0076 settles: an input is named by the `loc` path the API
+    // would refuse it at, joined with dots and not edited on the way. The screen
+    // marks the input with this id invalid and prints this message under it, so a
+    // rejection lands on the field it names rather than at the top of the page.
+    answering(422, {
+      detail: [{ loc: ['body', 'cost', 'price_per_call'], msg: 'not a price' }],
+    })
+
+    const outcome = await startRun(bodyOf())
+
+    expect(outcome.kind === 'refused' && outcome.fields).toEqual([
+      { field: 'body.cost.price_per_call', msg: 'not a price' },
+    ])
+  })
+
+  it('names no field when the refusal is the bench’s own sentence about the run', async () => {
+    // A raised `HTTPException` is about the registration and not about a field —
+    // the nonce was never issued, a run is already in flight — and there is no
+    // input on the walk it could be pinned to. An empty list rather than a guess:
+    // the sentence is shown where it already is, over the whole form.
+    answering(422, { detail: 'this bench never issued that nonce' })
+
+    const outcome = await startRun(bodyOf())
+
+    expect(outcome.kind === 'refused' && outcome.fields).toEqual([])
   })
 
   it('says a bench that never answered is a different fact from one that refused', async () => {

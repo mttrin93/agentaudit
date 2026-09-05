@@ -315,6 +315,27 @@ function TheTuning({
     pending.current = setTimeout(() => void send(asked), SETTLED_MS)
   }
 
+  /**
+   * Enter in a number box sends what it now reads, without waiting it out.
+   *
+   * There is no button on this form and there is deliberately not going to be one —
+   * nothing here spends anything, so there is nothing to confirm — but a form with
+   * no submit at all is a form where Enter does nothing at all, which on a screen of
+   * number boxes is the one key an operator will press. So the form has a submit
+   * handler and no submit control: the settled timer is dropped and the request goes
+   * now, which is the same request the pause would have sent 400ms later.
+   *
+   * Without the timer being cleared this would send twice, and the second would be a
+   * `PUT` of a reading the bench had just answered with.
+   */
+  const sendNow = () => {
+    if (pending.current !== null) {
+      clearTimeout(pending.current)
+      pending.current = null
+    }
+    void send({ model, effort, temperature, numbers })
+  }
+
   return (
     <section>
       {/* The heading and the block's own paragraph are built and not drawn. It argued why these
@@ -324,7 +345,16 @@ function TheTuning({
           decides, and `block.warning` stays, because that one is not an
           explanation of the screen but a limit on what a run at that setting may
           be called. */}
-      <div className="tuning">
+      <form
+        className="tuning"
+        onSubmit={(event) => {
+          // Always: a form that reached the browser's own submit would reload the
+          // console, and what an operator would see is a screen that forgot the
+          // number they had just typed into it.
+          event.preventDefault()
+          sendNow()
+        }}
+      >
         <label>
           <span className="kind">the adaptive attacker</span>
           <select
@@ -467,8 +497,10 @@ function TheTuning({
 
             There is no button either. Nothing here spends anything: these are the
             settings the *next* run starts with, and that run has its own attestation
-            and its own halt in front of its own estimate. */}
-      </div>
+            and its own halt in front of its own estimate — and Enter still sends,
+            because a form with no control at all is one a keyboard cannot finish
+            (`sendNow`). */}
+      </form>
 
       {refused ? (
         <div className="citation uncited" role="alert">

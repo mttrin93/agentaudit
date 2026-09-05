@@ -727,11 +727,19 @@ describe('nothing on this screen changes a setting', () => {
     // guards is the shape of the call and not what the screen looks like. Six since
     // #5 added the reasoning effort; this list said five until #57 counted it.
     const call = component.slice(component.indexOf('await tuneBench({'))
-    // No button and no submit: these are the settings the *next* run starts with,
-    // and that run has its own attestation and its own halt in front of its own
-    // estimate (ADR-0007). Nothing on this screen spends anything.
+    // No button: these are the settings the *next* run starts with, and that run has
+    // its own attestation and its own halt in front of its own estimate (ADR-0007).
+    // Nothing on this screen spends anything, so there is nothing here to confirm.
     expect(component).not.toContain('<button')
-    expect(component).not.toContain('onSubmit')
+    // `onSubmit` was banned beside it and is not any more, and the claim the ban was
+    // making is the one above: no confirm step. The handler this screen has now is
+    // not one — it sends the same six settings the settled timer would have sent,
+    // 400ms earlier, because a form of number boxes where Enter does nothing is a
+    // form a keyboard cannot finish (#120). What would be a confirm step is a
+    // control to press, and the line above still says there is none.
+    // And the send is still the one call, on change and on Enter alike: `tuneBench`
+    // is reached from `send` and from nowhere else.
+    expect(component.match(/tuneBench\(/g) ?? []).toHaveLength(1)
     for (const field of [
       'attacker_model:',
       'temperature:',

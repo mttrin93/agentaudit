@@ -382,6 +382,46 @@ elective case is a ticket nobody has written.
 """
 
 
+_NO_FRAMING_TO_WRITE = (
+    "An encoding has no framing to write, so this is not a wording somebody could "
+    "supply: it destroys a situational mechanism rather than varying it, because an "
+    "errand or a stop the target cannot read is not one (ADR-0052 §4)."
+)
+"""Why an encoding is absent from a family: there was never a framing to author.
+
+The three encodings substitute over the payload and add no words of ours, so *which
+families does this vary* cannot be answered by writing something and is answered by
+a list. Kept apart from the sentence below because the two refusals ask a reader for
+different things — one to write a framing, the other to stop.
+"""
+
+_NO_FRAMING_WRITTEN = (
+    "A framing is one prefix round a payload that passes through verbatim, so what "
+    "it has to be coherent with is the mechanism that family tests — and it is "
+    "written per family, against that mechanism, rather than defaulted from the "
+    "words another family's framing was written in (ADR-0074 §1)."
+)
+"""Why a framing transform is absent from a family: nobody has written those words.
+
+The refusable case a reader can act on, and the one the two framings this repository
+wrote are refused for: an override that reads coherently against one family's
+mechanism can invert another's, so the words are one per family or there are none.
+"""
+
+_WHY_THIS_PAIRING_IS_ABSENT: Mapping[Transform, str] = {
+    Transform.BASE64: _NO_FRAMING_TO_WRITE,
+    Transform.ROT13: _NO_FRAMING_TO_WRITE,
+    Transform.LEETSPEAK: _NO_FRAMING_TO_WRITE,
+    Transform.PROMPT_INJECTION_WRAPPER: _NO_FRAMING_WRITTEN,
+    Transform.ROLEPLAY: _NO_FRAMING_WRITTEN,
+}
+"""Which of the two arguments a refusal carries, per member of `FRAMINGS`.
+
+Keyed on the same members, so a transform added to one table and not the other fails
+the lookup where it is read rather than printing half a reason.
+"""
+
+
 def framing_for(transform: Transform, family: AnyFamily) -> str:
     """That transform's framing for that family, or a refusal naming what is missing.
 
@@ -392,7 +432,8 @@ def framing_for(transform: Transform, family: AnyFamily) -> str:
 
     **The refusal names the transform and the family**, because what a reader has to
     decide is whether to write the framing or to stop — and it says which of the two
-    arguments applies, since an encoding has no framing to author at all.
+    arguments applies (`_WHY_THIS_PAIRING_IS_ABSENT`), since a framing transform is
+    missing words somebody could supply where an encoding never had any.
     """
     held = FRAMINGS.get(transform)
     if held is None:
@@ -400,15 +441,9 @@ def framing_for(transform: Transform, family: AnyFamily) -> str:
     if family not in held:
         raise ValueError(
             f"{transform.value} has no framing for {family.value}, so no record of "
-            "that pairing is written. A framing is one prefix round a payload that "
-            "passes through verbatim, so what it has to be coherent with is the "
-            "mechanism that family tests — and it is written per family, against "
-            "that mechanism, rather than defaulted from the words of another "
-            "family's (ADR-0074 §1). An encoding has no framing to write: it "
-            "destroys a situational mechanism rather than varying it, because an "
-            "errand or a stop the target cannot read is not one (ADR-0052 §4). "
+            f"that pairing is written. {_WHY_THIS_PAIRING_IS_ABSENT[transform]} "
             "Adding a pairing is a ticket that says what the framing strengthens "
-            "and what the reading costs against the plain payload"
+            "and what the reading costs against the plain payload (ADR-0074 §1)"
         )
     return held[family]
 

@@ -4411,3 +4411,68 @@ by one when ADR-0072 noted it, and it is out by two now.
   recipient already reads (ADR-0044 §8's footing). **No rate, `D`, κ, interval, band,
   gate decision or gate citation moved.** The library digest is `c515a89956cd`, eighteen
   records, and no variant was admitted or proposed.
+
+### Four variants are proposed and a fifth construction is refused on disclosure (#73, 2026-09-05)
+
+**This section records a set chosen, one construction refused, and no measurement — the
+admission run is still a person's.** #73 proposed five pairings and none was written;
+this narrows that set to four, refuses the fifth on
+[ADR-0008](./adr/0008-a-payload-is-committed-or-withheld-and-the-record-says-which.md)'s
+own test, and records why the refusal needs a home here rather than in a record header.
+The library is still `c515a89956cd` over eighteen records, **no variant is admitted or
+written**, and no rate, `D`, κ, interval, band, gate decision or gate citation moved.
+
+- **The set is four, and it reaches two families.** `data-leakage-001` under `base64` and
+  under `scripted_crescendo`, `data-leakage-003` under `roleplay`, and
+  `halt-defeat-001` under `scripted_crescendo`. So `data_leakage` would go from three
+  live cases to six (`n` 30 → 60 per agent) and `halt_defeat` from three to four
+  (`n` 30 → 40), on ADR-0055's terms — a family's `n` is its live case count times
+  `attempts_per_case`, and the growth is the safe direction (#66).
+- **Three encodings were cut to one, and the cut is not a disclosure judgement.**
+  `base64`, `rot13` and `leetspeak` test one property — whether the value is stopped on
+  the way out once the words an input filter matches are not sent — so committing all
+  three triplicates a reading rather than widening one. `rot13` and `leetspeak` remain
+  available as a deliberate second and third reading, which is a ticket with an argument
+  rather than a default.
+- **`data-leakage-002` under `prompt_injection_wrapper` is refused, and the reason is the
+  amended half of ADR-0008.** The construction is a delimiter claiming the preceding text
+  has ended followed by an instruction claiming prior authority — Perez and Ribeiro's
+  goal hijacking (arXiv:2211.09527) — and the frame is published while **the words are
+  this repository's** (ADR-0052 §3). What the record would ship is therefore a reusable
+  override frame in our own wording, which is precisely the case ADR-0008's amendment
+  withholds: *when its wording is the working part … anything that reads as a reusable
+  override, jailbreak or filter defeat*. The other half of that ADR — *republishing what
+  is already published protects nobody* — does not answer it, because the string would
+  not be a republication of anything. So it is withheld, and `data-leakage-002` gets no
+  variant.
+- **A refusal to write a record has no home in the per-record scheme, which is why it is
+  written here.** ADR-0008 requires the classification argued per record, in the record's
+  header, and `scripts/variant.py` refuses a record without that argument. A construction
+  declined before a record exists has no header to carry its argument, so without this
+  paragraph the only trace would be an absence: `transforms.prompt_injection_wrapper`
+  remains a committed pure function with a real citation and **no record anywhere in the
+  library**. That is not a defect — nothing asserts a `Transform` member has a record,
+  and `VariantCounts` already refuses an entry at zero attempts (#76), so a construction
+  with no attempts simply does not appear in a family's mix. It is a fact a reader would
+  otherwise have to guess the reason for, and the guess would be *nobody got round to
+  it*.
+- **No replacement variant was chosen for `data-leakage-002`.** It is the case with no
+  published override phrasing — it asks in the operator's own voice, so a marker list has
+  nothing to match — and `roleplay` would have varied it without shipping an override.
+  That was considered and not taken: three variants on `data_leakage` already exercise
+  the pooled rate over a real mix, and a fourth buys a reading rather than a mechanism.
+- **The single-turn transforms reach one family and crescendo reaches two, and that is a
+  property of `transforms.py`.** Each single-turn transform holds one framing, authored
+  for the leakage mechanism: `roleplay`'s persona narrates its own setup aloud, which
+  *is* disclosure. Applied to `scope-creep-001` it yields a non-sequitur, and
+  `prompt_injection_wrapper` applied to `halt-defeat-001` produces a payload instructing
+  the agent to obey the `[STOP]` it wraps — a variant that strengthens the defence.
+  `scripted_crescendo` reaches `halt_defeat` because it is written per base case with a
+  ladder per mechanism (ADR-0054). Filed as **#149**; `scope_creep` and `halt_defeat` are
+  refused no variant by any code, only by this argument.
+- **Nothing is measured, and the gate is not yet stale.** Four `--argument` paragraphs are
+  unwritten, and ADR-0008 puts them with whoever takes the reading. The commands are in
+  #73's section above. ADR-0023's citation mechanism comes due with the first admitted
+  variant, and the citation this report carries was earned at digest `c31a2355f065`
+  against a library that has since changed shape — so what is owed there is a gate run of
+  any outcome, and it is still owed.

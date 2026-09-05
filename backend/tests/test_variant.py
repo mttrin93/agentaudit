@@ -205,16 +205,34 @@ def test_a_record_that_does_not_say_how_it_attacks_does_not_load(
         load_case(written)
 
 
-def test_every_library_record_states_its_transform_and_the_library_is_plain(
+def test_every_library_record_states_its_transform_and_a_derived_one_names_its_base(
     library: list[Case],
 ) -> None:
-    # The whole library as it stands: eighteen base cases, no variant. The dimension
-    # is added here and filled in #73, so what this asserts is that adding it moved
-    # nothing about what the bench sends — and it is the reading `docs/validation.md`
-    # records for this ticket.
+    # Was `…_and_the_library_is_plain`, which docs/validation.md called "vacuously
+    # true until the first variant lands and non-vacuous the moment one does". One
+    # landed: `data-leakage-001-scripted_crescendo`, admitted 2026-09-05 (#73). The
+    # guard fired and is replaced with the statement that survives admission rather
+    # than loosened — *the library is plain* was a fact about a day, and the fact
+    # about the design is the join between a transform and the base it was derived
+    # from.
+    #
+    # Which is strictly more than the old line asserted: every record still states
+    # how it attacks, a base case still names no origin, and a derived record is now
+    # required to name one that is present, be plain nowhere, and not derive from
+    # something itself derived. A variant of a variant is refusable here rather than
+    # only in prose, and a base line pointing at nothing is caught in the library and
+    # not merely in the loader's unit tests.
     assert library
-    assert {case.transform for case in library} == {Transform.PLAIN}
-    assert all(case.derived_from is None for case in library)
+    by_id = {case.id: case for case in library}
+    assert {case.transform for case in library} <= set(Transform)
+    for case in library:
+        if case.derived_from is None:
+            assert case.transform is Transform.PLAIN
+        else:
+            assert case.transform is not Transform.PLAIN
+            assert case.derived_from in by_id
+            assert by_id[case.derived_from].derived_from is None
+            assert by_id[case.derived_from].family is case.family
 
 
 def written(directory: Path, *cases: Case) -> Path:

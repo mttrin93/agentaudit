@@ -732,11 +732,19 @@ def test_the_superseding_reaches_a_screen_the_way_it_reaches_a_report(
 def test_the_library_the_next_run_uses_is_different_because_of_it(
     tmp_path: Path,
 ) -> None:
-    # PLAN §10's sentence, asserted: the family the attacker grew holds four cases
-    # where the others hold three, so the next run draws forty attempts from it and
-    # thirty from them — and the library version has moved, which is what makes two
-    # runs either comparable or provably not.
+    # PLAN §10's sentence, asserted: the family the attacker grew holds one case
+    # more than it did, so the next run draws ten attempts more from it and as many
+    # as before from the others — and the library version has moved, which is what
+    # makes two runs either comparable or provably not.
+    #
+    # Counted against what the copied library held a moment ago rather than against
+    # `4` and `3`. Those literals were a statement about `backend/cases/` holding
+    # three cases per family, which is a fact about a day and not about `enter`:
+    # admitting `data-leakage-001-scripted_crescendo` made data-leakage four and this
+    # assertion five (#150). What `enter` owes is *one more in that family and none
+    # anywhere else*, and that is what is written here.
     library = authored_library(tmp_path / "cases")
+    started = Counter(one.family for one in live_library(admitted_library(library)))
     before = LibraryVersion.of(admitted_library(library))
     case = an_admitted_case()
 
@@ -744,8 +752,10 @@ def test_the_library_the_next_run_uses_is_different_because_of_it(
 
     after = admitted_library(library)
     held = Counter(one.family for one in live_library(after))
-    assert held[case.family] == 4
-    assert {count for family, count in held.items() if family != case.family} == {3}
+    assert held[case.family] == started[case.family] + 1
+    assert {
+        family: count for family, count in held.items() if family != case.family
+    } == {family: count for family, count in started.items() if family != case.family}
     assert written.version == LibraryVersion.of(after) != before
     assert written.version.cases == before.cases + 1
 

@@ -185,6 +185,19 @@ class Precedent:
         """
         if finding.verdict_class is not VerdictClass.DETERMINISTIC:
             raise JudgedPrecedent(finding)
+        if not fix.strip():
+            # The other end of `Remediation.__post_init__`. A blank reaching this
+            # door is a caller in the bench rather than a model that answered
+            # badly — an instrument with no fix was refused where it answered — but
+            # a row filed with one renders as `fix written then: ` in front of the
+            # next run's model, which is the "nothing to report" PLAN §10 forbids.
+            # A `ValueError` because importing `RemediationFailed` would close the
+            # cycle `remediation.py` -> this module.
+            raise ValueError(
+                f"{finding.case_id} would be filed with no fix, and a precedent is "
+                "a failure and the fix written for it. A row with a blank in it is "
+                "read back as an earlier fix to prefer (ADR-0069, ADR-0019)"
+            )
         return cls(
             family=finding.family,
             failure=finding.narrative.reason,

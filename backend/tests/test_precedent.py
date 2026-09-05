@@ -662,6 +662,31 @@ def test_the_fix_a_precedent_records_is_the_one_the_remediation_tool_wrote(
     )
 
 
+def test_a_precedent_with_no_fix_in_it_cannot_be_filed(store_file: Path) -> None:
+    """The refusal that ADR-0069 moved, held at the second door as well.
+
+    `Remediation.__post_init__` refuses a blank fix, so the live path cannot reach
+    here with one. But `Precedent.of` now takes the fix as a *string*, and a string
+    parameter is a door a `Remediation` used to be: a blank one files a row that
+    renders as `fix written then: ` in front of the next run's model, which is
+    precisely the "nothing to report" `RemediationFailed` exists to prevent (PLAN
+    §10). The guarantee is carried at both ends rather than by which caller happened
+    to pass what.
+
+    A `ValueError` and not a `RemediationFailed`, which this module cannot import
+    without closing the cycle `remediation.py` -> here: an instrument that answered
+    with no fix was already refused where it answered, so a blank arriving at this
+    door is a caller in the bench and not a broken model — the distinction
+    `JudgedPrecedent` draws one exception up.
+    """
+    store = DurablePrecedents.at(store_file)
+
+    with pytest.raises(ValueError, match="no fix"):
+        store.record(a_finding(), "   ")
+
+    assert store.for_family(Family.DATA_LEAKAGE) == ()
+
+
 def test_the_remediation_tool_is_shown_why_it_failed_and_no_fix_but_precedent(
     store_file: Path,
 ) -> None:

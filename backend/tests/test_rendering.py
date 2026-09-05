@@ -155,7 +155,7 @@ def test_every_section_states_its_own_reproducibility_and_four_read_the_payload(
 
 # --- The golden digest: one document, pinned to the byte ---------------------
 
-GOLDEN_ONE_FAMILY = "b1d5952f2ae1d11f06be35852814434c953b62ceaccc3beec05bf55e453f5819"
+GOLDEN_ONE_FAMILY = "3ae88fadb9c1e2cdab6b28d0bd8b39959ea5b0b56f435f26cda2f6101c10026b"
 """The sha256 of `_one_family()`'s rendering, written down.
 
 **A tripwire, and it is deliberately a strict one.** Every other assertion in this
@@ -335,6 +335,15 @@ And a third thing in the same ticket: section 2's model list is four models rath
 three, because a document carrying a model's prose names the instrument that wrote it.
 That is the second of the two decisions ADR-0030 costed and left, and the heading moved
 with the list rather than being left saying *three* over four rows.
+
+Moved a sixteenth time, by #114, and it is one paragraph inside the section #112 added:
+section 3b now says what a location line in it would mean and why most runs have none
+([ADR-0071](../../docs/adr/0071-a-finding-points-at-a-file-the-bench-read.md)). **No
+block moved here and no path is in this document**: the fixture's result carries the
+`None` reading, so there is no block to anchor — what moved is the standing paragraph
+that every rendering of this section carries, which is the point of putting the
+explanation above the blocks rather than inside each one. A reader of a report with no
+findings in it is still told what the bench can and cannot see of a target's code.
 """
 
 

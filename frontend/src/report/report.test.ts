@@ -645,6 +645,43 @@ describe('the failures the bench explained', () => {
     expect(reused.informedBy).toBe(second.informed_by_stated)
   })
 
+  it('says where a failure is, and says the bench could not look where it could not', () => {
+    // The line every reviewer UI this section borrows from leads with, and the one
+    // thing the bench structurally could not know: a target is a URL, and the only
+    // circumstance in which the bench and the code are in the same place is an Action
+    // running in the caller's own repository (ADR-0066, ADR-0071). So the anchor is
+    // sometimes available, and the absence is the ordinary case — it has to read as a
+    // failure nobody could place rather than as a target with nothing wrong with it.
+    const anchored = findingsReading(SERVED.findings)
+    if (anchored.kind !== 'explained') {
+      throw new Error('the fixture explains its failures')
+    }
+    const [block] = anchored.families[0].findings
+    expect(block.location).toBe('app/agent.py:61')
+    expect(block.sourceAnchor).toBe(SERVED.findings.findings[0].source_anchor.stated)
+
+    // And the absence, which is what every run against a hosted endpoint draws. The
+    // location is empty and the sentence is the payload's, which is where the reason
+    // for the emptiness is written — this screen never words one of its own.
+    const hosted = findingsReading({
+      ...SERVED.findings,
+      findings: SERVED.findings.findings.map((finding) => ({
+        ...finding,
+        source_anchor: {
+          reading: 'no_checkout',
+          location: null,
+          stated: 'not anchored — the bench could not see this target\u2019s source',
+        },
+      })),
+    })
+    if (hosted.kind !== 'explained') {
+      throw new Error('the fixture explains its failures')
+    }
+    const [unanchored] = hosted.families[0].findings
+    expect(unanchored.location).toBe('')
+    expect(unanchored.sourceAnchor).toContain('could not see')
+  })
+
   it('writes not one word of its own into a block, so nothing withheld can reach one', () => {
     // The rule `api/report.ts` is already held to, applied to prose: *nothing here
     // computes a figure*, and no sentence is assembled in TypeScript either. For this

@@ -17,6 +17,10 @@ from backend.bench.signing import (
     generate,
     public_pem,
 )
+from backend.bench.source_anchor import (
+    NOT_RUN_WHERE_THE_CODE_IS,
+    SourceAnchorReading,
+)
 from backend.bench.unattended import (
     AttestationNotCommitted,
     DeclaredCeiling,
@@ -662,3 +666,70 @@ def test_an_endpoint_in_the_environment_does_not_silently_outrank_a_callback(
     )
 
     assert code == EXIT_WITHHELD
+
+
+# --- Where the run ran, for the one entrypoint that can be beside a checkout ---
+
+
+def test_the_entrypoint_anchors_a_served_callback_in_the_checkout_it_was_given(
+    tmp_path: Path,
+) -> None:
+    """The wiring ADR-0071 exists for, at the one place a checkout is on disk.
+
+    `scripts/bench.py` is the entrypoint the composite Action shells out to
+    (ADR-0066), so it is the only process in this repository that has both the
+    caller's workspace and the object it imported out of it. Everything downstream
+    reads records: the anchor is resolved once here and travels on the report.
+    """
+    reference = "backend.tests.headless_agent:AGENT"
+    checkout = Path(headless_agent.__file__).parents[2]
+
+    anchor = bench.checkout_anchor(
+        bench._parser().parse_args(
+            _required(["--callback", reference, "--checkout", str(checkout)])
+        ),
+        headless_agent.AGENT,
+    )
+
+    assert anchor.reading is SourceAnchorReading.ANCHORED
+    assert anchor.path == "backend/tests/headless_agent.py"
+    assert anchor.line is not None and anchor.line > 0
+
+
+def test_a_run_with_no_workspace_declares_that_it_could_not_see_the_source() -> None:
+    """The population every other run of this bench is in.
+
+    A URL target has no object to point at and an unattended run outside a runner has
+    no workspace to point into — and both are stated absences rather than an omitted
+    field, because a finding that simply carried no location would read as one nobody
+    could place (ADR-0071 §3).
+    """
+    outside = bench._parser().parse_args(_required(["--url", ENDPOINT]))
+
+    assert bench.checkout_anchor(outside, None) is NOT_RUN_WHERE_THE_CODE_IS
+    # And an empty one is no checkout rather than this process's own directory: the
+    # action interpolates an input, so an unset one arrives as an empty string.
+    blank = bench._parser().parse_args(_required(["--url", ENDPOINT, "--checkout", ""]))
+    assert bench.checkout_anchor(blank, None) is NOT_RUN_WHERE_THE_CODE_IS
+    assert (
+        bench.checkout_anchor(
+            bench._parser().parse_args(
+                _required(["--url", ENDPOINT, "--checkout", "."])
+            ),
+            None,
+        ).reading
+        is SourceAnchorReading.TARGET_IS_A_URL
+    )
+
+
+def _required(declared: list[str]) -> list[str]:
+    """The three arguments every headless run takes, beside the ones under test."""
+    return [
+        "--identity",
+        ACTOR,
+        "--attestation-file",
+        "unread.md",
+        "--out",
+        "unwritten",
+        *declared,
+    ]

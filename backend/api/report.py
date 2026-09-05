@@ -58,6 +58,10 @@ from backend.bench.rule import GateRule
 from backend.bench.scorer import Reliability
 from backend.bench.selection import AttackSelection
 from backend.bench.signing import SignedArtefact, encoded, public_key, signed
+from backend.bench.source_anchor import (
+    NOT_RUN_WHERE_THE_CODE_IS,
+    SourceAnchor,
+)
 from backend.bench.verification import Published, Verification, checked
 
 UNDECLARED_MODEL = (
@@ -166,6 +170,21 @@ class ReportConfig:
     which is the same durable path the citation already takes.
     """
 
+    source_anchor: SourceAnchor = NOT_RUN_WHERE_THE_CODE_IS
+    """Where the checkout this run was made beside is, or the absence of one.
+
+    **The default is the absence, and for this route it is the only answer.** A hosted
+    bench attacks a URL and has no source tree in the picture; the one circumstance in
+    which the bench and the code are in the same place is the composite Action running
+    in the caller's own repository (ADR-0066), and `scripts/bench.py` is the entrypoint
+    that resolves one there
+    ([ADR-0071](../../docs/adr/0071-a-finding-points-at-a-file-the-bench-read.md)).
+
+    On this record rather than measured here, on `reliability`'s own terms: it arrives
+    already resolved from the one process that had a checkout to resolve it against,
+    and no module of the API layer reads a filesystem to fill it in.
+    """
+
     pinned: Ed25519PublicKey | None = None
     """The public key a verification of this bench's reports is run against.
 
@@ -211,6 +230,11 @@ def payload_for(
             # and the configuration is where it was already checked against the model
             # these runs adjudicate with.
             reliability=config.reliability,
+            # Where the caller's checkout was, for a bench running as a step in the
+            # repository that holds one. `NOT_RUN_WHERE_THE_CODE_IS` for every run
+            # this route serves — a hosted bench never has a checkout, and the honest
+            # reading is the default rather than an omission (ADR-0071 §3).
+            source_anchor=config.source_anchor,
         ),
         provenance=Provenance(
             # Read off the record that authorised the run rather than off the

@@ -291,7 +291,31 @@ export interface ReportedFinding {
   disagreement: string
   /** Which of the two sentences the disclosure rule replaced, and usually neither. */
   withheld: string[]
+  /** Where this failure is in the caller's own checkout, or the absence of it. */
+  source_anchor: FindingSourceAnchor
   /** The whole failure in one line, for a surface that wants one. */
+  stated: string
+}
+
+/**
+ * Where in the caller's own checkout a failure is, or which absence stands for it.
+ *
+ * The bench's subject is a URL, so most runs have none: the one circumstance in which
+ * the bench and the code are in the same place is the Action running in the caller's
+ * repository on their runner (ADR-0066, ADR-0071). `reading` is a name off a closed
+ * set of six and `stated` is the sentence, both carried for the reason the section's
+ * own reading is — a consumer that told the absences apart by matching prose stops
+ * telling them apart the day the prose is reworded.
+ *
+ * `location` is `path:line` as one string and `null` where there is none. **One
+ * string and not a path beside a number**: this section carries no figure at any
+ * depth, and a line number in a numeric field is a figure a later edit can lift off
+ * (ADR-0005, D12). The path is relative to the checkout root — an absolute one names
+ * the runner's filesystem rather than the repository, and it is not in the document.
+ */
+export interface FindingSourceAnchor {
+  reading: string
+  location: string | null
   stated: string
 }
 

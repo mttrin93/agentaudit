@@ -380,6 +380,13 @@ runs:
         # something, or nothing, was written.
         echo "report-directory=$REPORT_DIR" >> "$GITHUB_OUTPUT"
 
+        # `--checkout` is the caller's own workspace, and it is the whole reason a
+        # finding in this report can name a file and a line: this is the one place
+        # the bench and the code are on the same disk (ADR-0071). It is read and
+        # never written — nothing in the bench patches a working tree — and a path
+        # rather than a secret, so it goes on the command line where a reviewer of
+        # this file can see which directory was handed over. A run against an
+        # endpoint passes it too and simply has no object in there to point at.
         uv run --no-sync python -m scripts.bench \
           --identity "$IDENTITY" \
           --attestation-file "$attestation" \
@@ -387,6 +394,7 @@ runs:
           --name "$TARGET_NAME" \
           --agent-type "$AGENT_TYPE" \
           --currency "$CURRENCY" \
+          --checkout "$WORKSPACE" \
           "${declared[@]}"
 
     # `always()`, because a red run is still evidence and the three files are written

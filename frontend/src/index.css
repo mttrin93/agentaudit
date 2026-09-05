@@ -2165,6 +2165,16 @@ code {
   margin-top: 0.6rem;
 }
 
+/* Where the failure is, in the type a file and a line are read in — the same
+ * monospace the case id above is set in, because both are pointers a reader copies
+ * rather than prose they read. No colour and no icon: a location is not a severity,
+ * and most blocks have none at all (D3, ADR-0071). */
+.findings .finding .location {
+  margin-top: 0.6rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.85rem;
+}
+
 /* The scored layer's exchanges, as the same cards the rest of this page is in: one
  * per family, and no rule under them. A stacked pair with a line beneath it is a
  * table waiting for a total, and the total of two families' successes is a figure

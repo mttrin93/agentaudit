@@ -95,6 +95,12 @@ from backend.bench.scorer import (
     failure_rate,
 )
 from backend.bench.selection import EVERY_CONSTRUCTION, AttackLayer, AttackSelection
+from backend.bench.source_anchor import (
+    NOT_RUN_WHERE_THE_CODE_IS,
+    SourceAnchor,
+    SourceAnchorReading,
+    anchor_for,
+)
 from backend.graph.budget import Layer
 from backend.graph.runstate import Attempt
 from backend.tests.conftest import (
@@ -1216,6 +1222,85 @@ def test_the_document_carries_every_failure_with_its_reason_its_fix_and_no_figur
     ]
 
 
+def test_a_finding_says_where_it_is_or_which_absence_stands_in_for_a_location(
+    library: list[Case],
+) -> None:
+    """The anchor a reviewer UI prints first, and the absence that is the usual case.
+
+    Three populations and one key (ADR-0071 §3): a run beside the caller's checkout
+    can name a file and a line, and every other run says the bench could not see this
+    target's source. The absence is a reading off a closed set and a sentence, never a
+    blank and never a location that quietly is not there — `payload.py`'s
+    three-kinds-of-nothing rule, applied to a fact about the bench's own position.
+    """
+    unanchored = document(a_payload(result=explaining(library)))["findings"]
+    [finding] = unanchored["findings"]
+
+    assert finding["source_anchor"]["reading"] == SourceAnchorReading.NO_CHECKOUT.value
+    assert finding["source_anchor"]["location"] is None
+    assert "could not see this target's source" in finding["source_anchor"]["stated"]
+
+    anchored = document(
+        a_payload(
+            result=explaining(
+                library,
+                source_anchor=SourceAnchor(
+                    reading=SourceAnchorReading.ANCHORED,
+                    path="app/agent.py",
+                    line=61,
+                ),
+            )
+        )
+    )["findings"]
+    [located] = anchored["findings"]
+
+    assert located["source_anchor"]["reading"] == SourceAnchorReading.ANCHORED.value
+    assert located["source_anchor"]["location"] == "app/agent.py:61"
+    # And the line arrives as part of that string rather than as a number of its own:
+    # this section carries no figure at any depth, and a line number sitting in a
+    # numeric field is a figure a later edit can lift off (ADR-0005, D12).
+    assert not [
+        (path, value)
+        for path, value in figures({"findings": anchored})
+        if isinstance(value, int | float) and not isinstance(value, bool)
+    ]
+
+
+def test_no_absolute_path_from_the_runner_reaches_the_document(
+    library: list[Case], tmp_path: Path
+) -> None:
+    """What a path may say about the caller's machine, which is nothing.
+
+    The path is new material about somebody else's code, and it is published relative
+    to the checkout root: the absolute one carries the runner's layout and the
+    workspace's own name, and a signed artefact that travels is the wrong place for
+    either (ADR-0008, ADR-0071 §4). The anchor is built where the checkout is, and the
+    document has no field an absolute path could arrive in — this is the same claim
+    from the document's end, over a real read of a real directory.
+    """
+    checkout = tmp_path / "workspace"
+    (checkout / "app").mkdir(parents=True)
+    source = checkout / "app" / "agent.py"
+    source.write_text("def answer(message):\n    return ''\n", encoding="utf-8")
+    namespace: dict[str, object] = {}
+    exec(compile(source.read_text(encoding="utf-8"), str(source), "exec"), namespace)
+
+    body = document(
+        a_payload(
+            result=explaining(
+                library,
+                source_anchor=anchor_for(namespace["answer"], checkout=checkout),
+            )
+        )
+    )
+
+    [finding] = body["findings"]["findings"]
+    assert finding["source_anchor"]["location"] == "app/agent.py:1"
+    prose = [value for _, value in figures(body) if isinstance(value, str)]
+    assert all(str(checkout) not in value for value in prose)
+    assert all("workspace" not in value for value in prose)
+
+
 def test_the_four_readings_of_narrations_are_four_documents() -> None:
     """The question ADR-0050 answered for a document with no narrative in it.
 
@@ -1283,7 +1368,11 @@ def test_no_prose_that_reproduces_a_case_payload_reaches_the_document(
     assert all(case.payload[0] not in value for value in prose)
 
 
-def explaining(library: list[Case], fix: str = A_FIX) -> TargetResult:
+def explaining(
+    library: list[Case],
+    fix: str = A_FIX,
+    source_anchor: SourceAnchor = NOT_RUN_WHERE_THE_CODE_IS,
+) -> TargetResult:
     """The shared result, with one explained failure on it.
 
     Public rather than private because `test_verify.py` builds a *published* artefact
@@ -1319,6 +1408,7 @@ def explaining(library: list[Case], fix: str = A_FIX) -> TargetResult:
             (attempt,),
             [case],
             Scan(declared=(DeclaredControl.INPUT_CHECK,)),
+            source_anchor,
         ),
     )
 

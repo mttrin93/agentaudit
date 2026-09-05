@@ -631,6 +631,28 @@ export interface FindingReading {
   disagreement: string
   /** Which sentences the disclosure rule replaced, in the payload's own names. */
   withheld: string
+  /**
+   * Where this failure is, in the record's own sentence — or which absence holds.
+   *
+   * The line every reviewer UI this section borrows from leads with, and the one the
+   * bench structurally could not write until the Action put it in the caller's own
+   * repository (ADR-0066, ADR-0071). **Most runs draw an absence here**, because the
+   * bench's subject is an endpoint: the sentence then says the bench could not see
+   * this target's source, which is a fact about where the bench ran and not a claim
+   * that there is nothing to find. Carried whole and never worded here, on
+   * `attributedCause`'s terms.
+   */
+  sourceAnchor: string
+  /**
+   * `path:line` as one string, or empty where the run was not beside a checkout.
+   *
+   * The compact form a block can print beside its heading, and the form an editor
+   * opens. Empty rather than absent because every field on this record is a string:
+   * the sentence above is what says *why* there is no location, and a screen that had
+   * to explain the emptiness itself would be wording a claim the payload already
+   * makes (ADR-0071 §3).
+   */
+  location: string
 }
 
 /**
@@ -814,6 +836,11 @@ export function findingsReading(section: FindingsSection): FindingsView {
       // reworded: the sentence standing where a withheld one was already says what
       // happened, and this is the countable half beside it (ADR-0070 §2c).
       withheld: finding.withheld.join(', '),
+      // The payload's own sentence and the payload's own compact location, neither
+      // reworded and neither assembled from the other: the document and this screen
+      // print one claim about one anchor (ADR-0068 §3, ADR-0071 §4).
+      sourceAnchor: finding.source_anchor.stated,
+      location: finding.source_anchor.location ?? '',
     })
   }
   return { ...said, kind: 'explained', families }

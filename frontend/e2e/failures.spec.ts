@@ -50,6 +50,7 @@ interface ServedFindings {
       informed_by: string[]
       informed_by_stated: string
       withheld: string[]
+      source_anchor: { location: string | null; stated: string }
     }[]
   }
 }
@@ -163,6 +164,15 @@ test('a failure, its fix, and what informed it, are on the report screen', async
   await expect(denial.getByText(quoted.fix)).toBeVisible()
   await expect(denial.getByText(quoted.case_id, { exact: true })).toBeVisible()
   expect(quoted.withheld).toEqual(['fix'])
+
+  // Where the failure is, when the bench ran where the code is — the line every
+  // reviewer UI this section borrows from leads with, and the one thing the bench
+  // could not know until the Action put it in the caller's own repository (ADR-0066,
+  // ADR-0071). The compact `path:line` and the sentence that says what it is: the
+  // definition site of the object that answered, and not a claim about which line is
+  // at fault. Both are the payload's own strings and this app words neither.
+  await expect(first.getByText('app/agent.py:61', { exact: true })).toBeVisible()
+  await expect(first.getByText(alone.source_anchor.stated)).toBeVisible()
 
   // And no severity anywhere, in any of the words a reviewer UI would use for one.
   // #109 names this as out of scope precisely because every UI this borrows from has

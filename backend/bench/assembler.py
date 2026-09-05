@@ -103,6 +103,7 @@ from backend.bench.scorer import (
     VariantBreakdown,
     band_for,
 )
+from backend.bench.source_anchor import NOT_RUN_WHERE_THE_CODE_IS, SourceAnchor
 from backend.graph.runstate import Attempt
 
 
@@ -871,6 +872,24 @@ class ReportedFinding:
     ask how much of a document was withheld without parsing sentences.
     """
 
+    source_anchor: SourceAnchor = NOT_RUN_WHERE_THE_CODE_IS
+    """Where in the caller's own checkout the target's entrypoint is, or which
+    absence holds
+    ([ADR-0071](../../docs/adr/0071-a-finding-points-at-a-file-the-bench-read.md)).
+
+    **Defaulted to the absence rather than to `None`.** The ordinary run has no
+    checkout — a hosted bench attacking a URL never had one — so the honest reading is
+    the common one, and a field a caller forgot to fill reads as *the bench could not
+    see this target's source* rather than as a location it declined to print. It is
+    the same anchor on every finding of one run and is passed once into
+    `reported_findings`: it is a fact about where this run ran, and a per-finding one
+    would claim the bench knows which file each failure came out of (ADR-0071 §2).
+
+    Carried whole rather than flattened, on `attribution`'s own terms: the sentence a
+    surface prints is `SourceAnchor.stated()`, so the document and the screen cannot
+    print two claims about one anchor.
+    """
+
     @property
     def case_id(self) -> str:
         """The case whose attempt succeeded, read off the attribution."""
@@ -883,7 +902,11 @@ class ReportedFinding:
 
     @classmethod
     def of(
-        cls, narration: Narration, attribution: Attribution, case: Case
+        cls,
+        narration: Narration,
+        attribution: Attribution,
+        case: Case,
+        source_anchor: SourceAnchor = NOT_RUN_WHERE_THE_CODE_IS,
     ) -> "ReportedFinding":
         """One narration as the document reports it, with the disclosure rule applied.
 
@@ -934,6 +957,7 @@ class ReportedFinding:
                 else finding.disagreement.stated()
             ),
             withheld=withheld,
+            source_anchor=source_anchor,
         )
 
     def informed_by_stated(self) -> str:
@@ -974,7 +998,14 @@ class ReportedFinding:
         """
         return (
             f"{self.attribution.stated()}. What went wrong: {self.reason} What to "
-            f"change: {self.fix} {self.informed_by_stated()} {self.disagreement}"
+            f"change: {self.fix} {self.informed_by_stated()} "
+            # Stripped rather than assumed: `INSTRUMENTS_AGREED` ends without a stop
+            # and `Disagreement.stated()` ends with one, so a sentence joined to the
+            # next clause with a full stop of its own would publish `..` into a signed
+            # document — and the two spellings would differ by which instrument read
+            # the transcript, which is not a difference a reader should see.
+            f"{self.disagreement.rstrip('.')}. "
+            f"Where: {self.source_anchor.stated()}"
         )
 
 
@@ -1395,6 +1426,7 @@ def reported_findings(
     attempts: Sequence[Attempt],
     cases: Sequence[Case],
     scanned: Scan,
+    source_anchor: SourceAnchor = NOT_RUN_WHERE_THE_CODE_IS,
 ) -> FindingsSection:
     """Every explained failure joined to what it is read against, or a reading that
     carries none.
@@ -1420,6 +1452,14 @@ def reported_findings(
     with no case record or no succeeded attempt behind it is a fault in the bench,
     and dropping it would publish a subset of a run's findings that nobody chose
     (ADR-0030).
+
+    **The source anchor is passed once and reaches every finding**, because it is one
+    fact about where this run ran rather than one fact per failure, and its default is
+    the stated absence every run without a checkout has
+    ([ADR-0071](../../docs/adr/0071-a-finding-points-at-a-file-the-bench-read.md)).
+    Nothing here reads a filesystem: the anchor arrives already resolved, from the one
+    entrypoint that has a checkout to resolve it against, which keeps every module on
+    this side of the run a reader of records (ADR-0068 §1).
     """
     if narrations is None or isinstance(narrations, NarrativeFailure):
         return FindingsSection(reported=narrations)
@@ -1448,7 +1488,10 @@ def reported_findings(
             )
         reported.append(
             ReportedFinding.of(
-                narration, attributed_cause(pending.pop(0), case, scanned), case
+                narration,
+                attributed_cause(pending.pop(0), case, scanned),
+                case,
+                source_anchor,
             )
         )
     return FindingsSection(reported=tuple(reported))
@@ -1514,6 +1557,7 @@ def assemble(
     coverage_gaps: tuple[CoverageGap, ...] = DECLARED_COVERAGE_GAPS,
     reliability: Mapping[Family, Reliability] | None = None,
     elective: ElectiveSelection = NOTHING_REQUESTED,
+    source_anchor: SourceAnchor = NOT_RUN_WHERE_THE_CODE_IS,
 ) -> TargetResult:
     """Assemble one target's result from what was recorded against it.
 
@@ -1575,7 +1619,15 @@ def assemble(
         ),
         adaptive=AdaptiveSection(episodes=tuple(episodes)),
         findings=reported_findings(
-            target_run.narrations, target_run.attempts, cases, scanned
+            target_run.narrations,
+            target_run.attempts,
+            cases,
+            scanned,
+            # Resolved once, where the checkout is, and read by nothing else here:
+            # this function combines no two sections and reads no filesystem
+            # (ADR-0071 §3). Its default is the absence every run without a checkout
+            # has, which is every run this repository's own API serves.
+            source_anchor,
         ),
         coverage_gaps=coverage_gaps,
         elective=elective,

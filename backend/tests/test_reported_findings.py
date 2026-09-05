@@ -39,6 +39,11 @@ from backend.bench.library import Case, Family
 from backend.bench.narration import BrokenInstrument, Narration, NarrativeFailure
 from backend.bench.reproducibility import Reproducibility
 from backend.bench.scanner import Scan, control_claiming
+from backend.bench.source_anchor import (
+    NOT_RUN_WHERE_THE_CODE_IS,
+    SourceAnchor,
+    SourceAnchorReading,
+)
 from backend.graph.runstate import Attempt
 from backend.tests.conftest import A_FIX, a_narration
 
@@ -321,3 +326,70 @@ def _attribution(narration: Narration, case: Case) -> Attribution:
         transform=case.transform,
         control=control_claiming(case.family),
     )
+
+
+# --- Where the failure is, when the bench ran where the code is (ADR-0071) -----
+
+
+def test_a_finding_carries_the_stated_absence_of_an_anchor_by_default(
+    library: list[Case],
+) -> None:
+    # The default is the honest one, because the ordinary run has no checkout: a
+    # hosted bench attacking a URL never had one and never will. An optional field a
+    # caller forgets to fill would then read as a location the bench declined to
+    # print rather than as one it could not have (ADR-0071 §3).
+    case = a_case(library)
+    narration = a_narration(case_id=case.id, family=Family.DATA_LEAKAGE)
+
+    reported = ReportedFinding.of(narration, _attribution(narration, case), case)
+
+    assert reported.source_anchor is NOT_RUN_WHERE_THE_CODE_IS
+    assert "could not see this target's source" in reported.stated()
+
+
+def test_a_finding_from_a_run_beside_the_checkout_carries_the_file_and_the_line(
+    library: list[Case],
+) -> None:
+    # And the whole sentence is the record's own, so section 3b and the report screen
+    # print one claim about one anchor rather than two wordings of it — the rule
+    # `Attribution.stated()` already holds one record over (ADR-0068 §3).
+    case = a_case(library)
+    narration = a_narration(case_id=case.id, family=Family.DATA_LEAKAGE)
+    anchored = SourceAnchor(
+        reading=SourceAnchorReading.ANCHORED, path="app/agent.py", line=61
+    )
+
+    reported = ReportedFinding.of(
+        narration, _attribution(narration, case), case, source_anchor=anchored
+    )
+
+    assert reported.source_anchor is anchored
+    assert anchored.stated() in reported.stated()
+
+
+def test_one_anchor_reaches_every_finding_of_the_run_that_read_it(
+    library: list[Case],
+) -> None:
+    # The anchor is a fact about *where this run ran*, so it is the same on every
+    # finding of one run and is passed once. A per-finding anchor would be a claim
+    # that the bench knows which file each failure came out of, and it does not
+    # (ADR-0071 §2).
+    case = a_case(library)
+    attempts = (_succeeded(case, index=0), _succeeded(case, index=1))
+    narrations = (
+        a_narration(case_id=case.id, family=Family.DATA_LEAKAGE),
+        a_narration(case_id=case.id, family=Family.DATA_LEAKAGE, fix="A second fix."),
+    )
+    anchored = SourceAnchor(
+        reading=SourceAnchorReading.ANCHORED, path="app/agent.py", line=61
+    )
+
+    section = reported_findings(
+        narrations,
+        attempts,
+        [case],
+        Scan(declared=(DeclaredControl.OUTPUT_FILTER,)),
+        source_anchor=anchored,
+    )
+
+    assert [finding.source_anchor for finding in section.findings] == [anchored] * 2

@@ -393,6 +393,29 @@ the screen's own words are the heading over the section and the label saying a m
 wrote it (#113).
 _Avoid_: remediation, recommendation, advisory, severity, root cause
 
+**Source anchor**:
+Where a **reported finding** is in the caller's own checkout — a path relative to the
+checkout root and a line, as one string — or which of five named absences holds
+instead. **Never the bare word *anchor***, which this project has used since
+[ADR-0014](./docs/adr/0014-band-cut-points-are-the-reference-agents-constructed-rates.md)
+for the two reference agents' constructed rates: a **band** is anchored to an *agent*
+and a finding is anchored to a *file*, and one word over two subjects in one report is
+a word that has stopped being arithmetic. It is available **only** where the bench runs
+where the code is — an Action in the caller's own repository, on their runner, with the
+checkout on disk — so most runs carry an absence, and the absence says *the bench could
+not see this target's source* rather than rendering blank or reading as a target with
+nothing wrong with it. What it points at is the **entrypoint** the bench served, read
+off the checkout and verified against it, and deliberately not a claim about which line
+is at fault: the bench has no mapping from a defeated **declared control** to a
+statement, and a model asked to invent one would be a fourth **instrument** making
+unverifiable claims about somebody else's code. The absolute path, the file's own
+contents and any path resolving outside the checkout are withheld, and nothing about it
+reaches an **instrument** — a path in a **judge brief** un-blinds the judge more
+thoroughly than a target name would
+([ADR-0071](./docs/adr/0071-a-finding-points-at-a-file-the-bench-read.md), ADR-0004,
+ADR-0008).
+_Avoid_: anchor, location, line number, source location, file reference
+
 **Deterministic family / Judged family**:
 The two classes of family, separated by how a verdict is reached. Judged families carry a reliability figure and a wider stated limit.
 _Avoid_: hard/soft family, objective/subjective family

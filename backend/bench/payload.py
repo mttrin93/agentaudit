@@ -1247,6 +1247,15 @@ def _finding(reported: ReportedFinding) -> dict[str, Any]:
     rule replaced — countable rather than only legible, so a reader can ask how much of
     a document was withheld without reading it.
 
+    `source_anchor` is where the bench read the target's entrypoint off the caller's
+    own checkout, or the stated absence of it — **the absolute path is not here and has
+    nowhere here to arrive**: what travels is a path relative to the checkout root,
+    because the absolute one carries a runner's layout and a workspace's own name and
+    this document is about a target (ADR-0008,
+    [ADR-0071](../../docs/adr/0071-a-finding-points-at-a-file-the-bench-read.md) §4).
+    Neither is any byte of the file itself: the bench read it to count its lines and
+    published none of it.
+
     `informed_by` carries the precedents' **case ids** and never their prose: a
     precedent is a different target's failure and a different target's fix, and this
     document is about one target (ADR-0011, ADR-0070 §2). The ids are what ADR-0019's
@@ -1274,6 +1283,17 @@ def _finding(reported: ReportedFinding) -> dict[str, Any]:
         "informed_by_stated": reported.informed_by_stated(),
         "disagreement": reported.disagreement,
         "withheld": [one.value for one in reported.withheld],
+        # Where the bench read this target's entrypoint off a checkout, or which of
+        # five absences holds. `location` is one string rather than a path and a line
+        # number, because this section carries no figure at any depth (ADR-0005, D12,
+        # ADR-0071 §4), and `reading` travels beside the sentence for the reason the
+        # section's own reading does: a consumer matching prose stops telling the
+        # absences apart the day the prose is reworded.
+        "source_anchor": {
+            "reading": reported.source_anchor.reading.value,
+            "location": reported.source_anchor.location,
+            "stated": reported.source_anchor.stated(),
+        },
         "stated": reported.stated(),
     }
 

@@ -43,6 +43,7 @@ from backend.bench.signing import (
     public_pem,
     publish_signed,
 )
+from backend.bench.source_anchor import SourceAnchor, SourceAnchorReading
 from backend.bench.verification import (
     CHECKS,
     BindingOutcome,
@@ -97,6 +98,47 @@ def test_a_verified_report_prints_three_named_results_and_both_claims(
     assert "Integrity, for the whole document" in printed
     assert "Re-derivability, for the scored layer only" in printed
     assert "recorded and not reproducible" in printed
+
+
+def test_a_failure_says_where_it_is_and_an_unanchored_one_says_the_bench_could_not(
+    tmp_path: Path, library: list[Case]
+) -> None:
+    """The file and the line on the page a human reads, and the absence beside it.
+
+    The one thing reviewer UIs print first and the bench structurally could not know:
+    a target is a URL, and the only circumstance in which the bench and the code are
+    in the same place is the Action of ADR-0066
+    ([ADR-0071](../../docs/adr/0071-a-finding-points-at-a-file-the-bench-read.md)).
+    Both readings are checked on the rendered document rather than on the payload,
+    because *never renders as blank* is a claim about the page: the absence has to be
+    a sentence a reader sees, and it must not read as a target with nothing wrong
+    with it.
+    """
+    unanchored = _publish(tmp_path / "hosted", result=explaining(library))
+    rendered = (tmp_path / "hosted" / REPORT_MARKDOWN).read_text(encoding="utf-8")
+
+    assert unanchored.pubkey.exists()
+    assert "**Where** — not anchored — the bench could not see this target's" in (
+        rendered
+    )
+
+    beside = tmp_path / "beside"
+    _publish(
+        beside,
+        result=explaining(
+            library,
+            source_anchor=SourceAnchor(
+                reading=SourceAnchorReading.ANCHORED, path="app/agent.py", line=61
+            ),
+        ),
+    )
+    anchored = (beside / REPORT_MARKDOWN).read_text(encoding="utf-8")
+
+    assert "**Where** — anchored at app/agent.py, line 61" in anchored
+    # And the sentence says which claim it is making. A reader who took the line as
+    # the bench's opinion of where the defect is would be reading an accusation the
+    # bench never made and could not support (ADR-0071 §2).
+    assert "not a claim that this line is the defect" in anchored
 
 
 def test_a_report_carrying_findings_verifies_and_the_section_is_inside_the_signature(

@@ -4178,3 +4178,62 @@ is the section that ADR put in the payload.
 - **No rate, `D`, κ, interval, band, gate decision or gate citation moved, and no byte
   of the backend changed.** The library digest is `c515a89956cd`, eighteen records, and
   no variant was admitted or proposed.
+
+### A finding is anchored to a file and a line, where the bench can see one (#114, 2026-09-05)
+
+The line every reviewer UI this findings section borrows from prints first, and the one
+thing the bench structurally could not know: **a target is a URL**, and the only
+circumstance in which the bench and the code are in the same place is the composite
+Action of [ADR-0066](./adr/0066-the-action-is-a-composite-step-in-the-callers-own-repository.md).
+[ADR-0071](./adr/0071-a-finding-points-at-a-file-the-bench-read.md) is the decision.
+
+- **The absence is the ordinary reading, and it is named rather than blank.**
+  `SourceAnchorReading` is a closed set of six — anchored, and five absences that are
+  five different facts: no checkout, a checkout with an endpoint target in front of it,
+  an object the interpreter can point at no source for, a file that resolved outside the
+  checkout, and a file that could not be read. `payload.py`'s three-kinds-of-nothing rule
+  applied to a fact about where the bench itself stood. An unanchored finding says *the
+  bench could not see this target's source*, which is not a target with nothing wrong
+  with it, and the section carries a standing paragraph saying so above the blocks — so
+  a reader of a hosted run is told anchoring was possible and did not happen here.
+- **The anchor is evidence and it is evidence of the entrypoint.** The definition site of
+  the object the bench served, read off the checkout with `co_filename`/`co_firstlineno`
+  and then **verified against the file** before it is published. No model is asked where
+  the bug is: that would be a fourth instrument making unverifiable claims about somebody
+  else's code, and the fix for it is not κ but refusing to print one. The record's own
+  sentence says which of the two claims it is making, because a reader who took the line
+  as an accusation would be reading one the bench never made.
+- **What is published about a user's paths, and what is not.** Published: a path relative
+  to the checkout root and a line, as **one string** `path:line`. Withheld: the absolute
+  path (a runner's layout and a workspace's own name), every byte of the file itself, and
+  any path that resolved outside the checkout — refused rather than trimmed, with its own
+  reading. The line travels inside the string because this section carries no figure at
+  any depth, and `test_payload.py` walks every leaf under it to say so (ADR-0005, D12).
+- **Reading a stranger's checkout, stated as properties and driven red one guard at a
+  time.** Containment is decided on the **resolved** path, so a symlink inside the
+  workspace pointing outside it is outside it; at most `MAX_ANCHORED_FILE_BYTES` = 4 MiB
+  is read; the line is verified against the file rather than asserted from the object;
+  nothing raises, because a `FileNotFoundError` escaping would end a run that had already
+  spent an operator's budget over the one part of the report that decides nothing. Each
+  of those five was driven red by removing exactly its guard, and the issue's own named
+  red — *a finding whose file cannot be read is unanchored and says so* — is
+  `test_source_anchor.py`'s second test.
+- **The checkout is read and never written**, and it is **declared and not discovered**:
+  `scripts/bench.py --checkout`, passed `github.workspace` by the action's own run step,
+  where a reviewer of the workflow sees which directory the bench was handed. Patching is
+  #115 and it must not arrive here by accident.
+- **Nothing about the anchor reaches an instrument.** An import-level test holds
+  `judge.py`, `narration.py`, `remediation.py` and `adjudication.py` clear of the module:
+  a path un-blinds the judge more thoroughly than a target name would (ADR-0004), and the
+  anchor is resolved after every verdict is decided. Driven red by adding the import.
+- **`GOLDEN_ONE_FAMILY` moved for the sixteenth time**, to
+  `3ae88fadb9c1e2cdab6b28d0bd8b39959ea5b0b56f435f26cda2f6101c10026b`, on a document with
+  **no findings in it at all** — what moved is the standing paragraph, which is the point
+  of putting the explanation above the blocks rather than inside each one.
+- **The served fixture was regenerated** with `source_anchor` on all three findings — the
+  same anchor on each, because it is a fact about where the run ran — and the screen draws
+  the compact location beside the sentence, both the payload's own strings, so the
+  identity assertion `report.test.ts` holds over every block still passes character for
+  character. `failures.spec.ts` asserts both in a real browser.
+- **No rate, `D`, κ, interval, band, gate decision or gate citation moved.** The library
+  digest is `c515a89956cd`, eighteen records, and no variant was admitted or proposed.

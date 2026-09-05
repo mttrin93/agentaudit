@@ -68,6 +68,22 @@ WHICH_INSTRUMENT_IS_STOCHASTIC = (
     "by success conditions and are re-derivable in section 4 (ADR-0004, ADR-0017)."
 )
 
+WHERE_A_BLOCK_POINTS = (
+    "Where a block names a file, it is a path relative to the repository the bench "
+    "ran in and a line in it, read off that checkout at the time of the run — the "
+    "definition site of the object that answered, and not a claim about which line "
+    "is at fault. Most runs name none: the bench's subject is an endpoint, and it "
+    "sees a source tree only when it runs as a step in the repository that holds one "
+    "(ADR-0066, ADR-0071). A block that names no file says so in its own words, and "
+    "nothing about a target's code should be read out of it either way."
+)
+"""What the location line means, said once above the blocks rather than in each.
+
+The sentence that keeps the two claims apart — *this is where the target's entrypoint
+is* and *this is where the bug is* — for a reader who has skipped every other line of
+this section, which is the reader a reviewer UI's file-and-line is written for.
+"""
+
 WHAT_IS_WITHHELD = (
     "The exchange itself is not here and has nowhere here to arrive: no payload "
     "text, no reply, no tool trace. A sentence that reproduced the case's own "
@@ -104,6 +120,8 @@ def _explained(findings: Mapping[str, Any]) -> Section:
             "",
             WHAT_IS_WITHHELD,
             "",
+            WHERE_A_BLOCK_POINTS,
+            "",
             NO_FIGURE_HERE,
             "",
             f"{findings['stated']}.",
@@ -134,5 +152,12 @@ def _block(finding: Mapping[str, Any]) -> tuple[str, ...]:
         f"- **What to change** — {finding['fix']}",
         f"- {finding['informed_by_stated']}",
         f"- {finding['disagreement'].capitalize()}.",
+        # Last in the block, and printed under all six readings. It is the line a
+        # reviewer UI leads with and the one thing the bench structurally could not
+        # know before ADR-0066 put it in the caller's own repository — so most runs
+        # print an absence here, and the absence is a sentence rather than a gap: a
+        # block that simply had no location line would read as a failure nobody could
+        # place rather than as one this bench was not standing beside (ADR-0071 §3).
+        f"- **Where** — {finding['source_anchor']['stated']}.",
         "",
     )

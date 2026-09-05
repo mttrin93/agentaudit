@@ -80,6 +80,7 @@ from backend.bench.rule import DECLARED_RULE
 from backend.bench.selection import EVERY_CONSTRUCTION
 from backend.bench.shim import serve_callback
 from backend.bench.signing import NoSigningKey, publish_signed, signing_key
+from backend.bench.source_anchor import SourceAnchor, anchor_for
 from backend.bench.unattended import (
     DeclaredCeiling,
     ceiling_approval,
@@ -385,6 +386,13 @@ def main(argv: Sequence[str] | None = None) -> int:
                 reliability=the_reliability(CASES_DIR).for_adjudicator(
                     adjudicator_model or UNDECLARED
                 ),
+                # Resolved before the run and read by nothing that decides anything:
+                # it reaches the findings section and no instrument, no verdict and
+                # no rate (ADR-0071 §6, D13).
+                # `planter` is the served callback object itself — `_target` hands it
+                # back for the planting hooks — and it is the one thing in this
+                # process the interpreter can point at a file for.
+                source_anchor=checkout_anchor(args, planter),
             ),
             EVERY_CONSTRUCTION,
         ),
@@ -514,6 +522,25 @@ def _declared_ceiling(
     )
 
 
+def checkout_anchor(args: argparse.Namespace, callback: object | None) -> SourceAnchor:
+    """Where this run's target is defined in the caller's checkout, or which absence.
+
+    **This entrypoint is the only process in this repository that holds both a
+    workspace and an object imported out of it**, which is why the resolution happens
+    here and nowhere downstream — the argument is
+    [ADR-0071](../docs/adr/0071-a-finding-points-at-a-file-the-bench-read.md), and the
+    consequence here is that `--checkout` is read once, before the run, and handed to
+    `ReportConfig` and to nothing else. It decides nothing about what is sent, and it
+    reaches no instrument.
+    """
+    # A blank `--checkout` is no checkout and never the working directory: the action
+    # interpolates an input into it, so an unset one arrives as an empty string, and
+    # `Path("")` is `.` — which would point the reader at whatever directory this
+    # process happens to be in (ADR-0071 §5).
+    declared = (args.checkout or "").strip()
+    return anchor_for(callback, checkout=Path(declared) if declared else None)
+
+
 def _target(
     args: argparse.Namespace, serving: ExitStack
 ) -> tuple[TargetConfig, object | None]:
@@ -583,6 +610,20 @@ def _parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--name", default="target")
     parser.add_argument("--agent-type", default="assistant")
+    parser.add_argument(
+        "--checkout",
+        default=None,
+        help=(
+            "the caller's own checkout, which the composite action passes as "
+            "`github.workspace`. It is what lets a finding name a file and a line in "
+            "their repository, and without one every finding says the bench could "
+            "not see this target's source (ADR-0066, ADR-0071). Declared rather "
+            "than guessed from the environment, and it is a path rather than a "
+            "secret, so it is written on the command line where a reviewer of the "
+            "workflow sees which directory the bench was pointed at. Read only: "
+            "nothing in this bench writes into it"
+        ),
+    )
     parser.add_argument("--token", default=os.environ.get(TOKEN_ENV, ""))
     parser.add_argument(
         "--nonce",

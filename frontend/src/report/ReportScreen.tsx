@@ -474,6 +474,16 @@ function TheFamilyFailures({ family }: { family: FamilyFindingsReading }) {
             <p className="aside">withheld — {finding.withheld}</p>
           ) : null}
           <p className="aside">{finding.disagreement}</p>
+          {/* Where it is, when the bench ran where the code is — an Action in the
+              caller's own repository, which is the only place the two are on one disk
+              (ADR-0066, ADR-0071). Most runs draw the sentence alone, and it says the
+              bench could not see this target's source rather than leaving a gap a
+              reader would take for a clean result. The compact `path:line` is drawn
+              only where there is one, and it is the payload's own string. */}
+          {finding.location ? (
+            <p className="location">{finding.location}</p>
+          ) : null}
+          <p className="aside">{finding.sourceAnchor}</p>
         </article>
       ))}
     </details>

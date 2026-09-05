@@ -44,6 +44,7 @@ import {
   runStanding,
   startRun,
   type FieldRefusal,
+  type Refusal,
   type NoteToPlant,
   type NonceIssued,
   type StartOutcome,
@@ -65,11 +66,11 @@ import {
 import { rememberTheFigures, rememberWhoAttested } from '../run/interrupt'
 
 /*
- * The steps and the rule that decides when one may be left are in
- * `declarations.ts`, beside the guard that refuses the registration in the same
- * sentences. What is here is what each step is called and what it draws.
+ * The steps and the rule that decides when one may be left are `WALK_STEPS` and
+ * `unmetConditions` in `declarations.ts`, beside the guard that refuses the
+ * registration in the same sentences. What is here is what each step is called and
+ * what it draws.
  */
-const STEPS = WALK_STEPS
 
 /**
  * One short title a step, and the title is the whole of the header.
@@ -104,7 +105,22 @@ const STEP_TITLES: Record<Step, string> = {
  * change to a walk.
  */
 
-const PLANT_STEP = STEPS.indexOf('plant')
+const PLANT_STEP = WALK_STEPS.indexOf('plant')
+
+/** Nothing refused, which is what this screen holds until the bench says otherwise. */
+const NOTHING_REFUSED: Refusal = { statement: '', fields: [] }
+
+/**
+ * A refusal that named no field, which is every refusal that is not the API's own
+ * validation: a bench that could not be reached, a run whose standing could not be
+ * read, a nonce this bench never issued.
+ */
+function said(statement: string): Refusal {
+  return { statement, fields: [] }
+}
+
+/** Where the reasons the primary button is dead are written, for the button to cite. */
+const STILL_UNDECLARED = 'still-undeclared'
 
 /**
  * Every input on this walk, named by the path the API would refuse it at.
@@ -115,10 +131,13 @@ const PLANT_STEP = STEPS.indexOf('plant')
  * it arrived with. Listed in one place because these strings are a contract with
  * `backend/api/app.py`'s models: a field renamed there is renamed here, and a
  * refusal about a name nothing draws is drawn over the form instead of lost.
+ *
+ * **The last four are declarations rather than fields, and they are listed anyway.**
+ * A tick and a pair of radios carry no `id` a message could be hung under, but the
+ * API can refuse any of them, and `stepShowing` below has to know which step to send
+ * the operator to. Listing them is what keeps that routing matching *these* strings
+ * exactly rather than a prefix of them.
  */
-/** Where the reasons the primary button is dead are written, for the button to cite. */
-const STILL_UNDECLARED = 'still-undeclared'
-
 const FIELDS = {
   name: 'body.target.name',
   url: 'body.target.url',
@@ -129,6 +148,11 @@ const FIELDS = {
   identity: 'body.attestation.identity',
   price_per_call: 'body.cost.price_per_call',
   currency: 'body.cost.currency',
+  exposes_tool_calls: 'body.target.exposes_tool_calls',
+  note_planted: 'body.note_planted',
+  nonce: 'body.nonce',
+  nonce_planted: 'body.nonce_planted',
+  echo_waived: 'body.echo_waived',
 } as const
 
 /**
@@ -137,19 +161,22 @@ const FIELDS = {
  * A message bound to an input two steps back is a message nobody reads: this walk
  * is one step at a time, so a `422` naming a field lands on a screen the operator
  * is not on unless the walk returns to it. The default is the endpoint step because
- * that is where all but three of the fields are, and a field this screen does not
- * draw at all — `body.note_planted`, or a name the API grows and this file has not
- * met — still sends the operator to the start of the walk with the bench's own
- * sentence over it rather than nowhere.
+ * that is where all but five of the fields are, and a name the API grows that this
+ * file has not met still sends the operator to the start of the walk with the
+ * bench's own sentence over it rather than nowhere.
+ *
+ * **Every name is matched whole**, which is ADR-0076's *nothing translates* read one
+ * step on: a `startsWith('body.nonce')` here would silently claim the next field the
+ * API names under that prefix, and claim it for the step this walk happens to draw
+ * the nonce on today.
  */
 function stepShowing(field: string): Step {
-  if (field === FIELDS.declared_tools || field === 'body.target.exposes_tool_calls') {
-    return 'tools'
+  const on: Record<Step, readonly string[]> = {
+    tools: [FIELDS.declared_tools, FIELDS.exposes_tool_calls],
+    plant: [FIELDS.nonce, FIELDS.nonce_planted, FIELDS.echo_waived],
+    target: [],
   }
-  if (field.startsWith('body.nonce') || field === 'body.echo_waived') {
-    return 'plant'
-  }
-  return 'target'
+  return WALK_STEPS.find((step) => on[step].includes(field)) ?? 'target'
 }
 
 /**
@@ -216,16 +243,18 @@ export function RegisterScreen() {
   const [declarations, setDeclarations] = useState<Declarations>(nothingDeclared)
   const [step, setStep] = useState(0)
   const [issued, setIssued] = useState<NonceIssued | null>(null)
-  const [refusal, setRefusal] = useState('')
   /**
-   * The fields the API named in its refusal, if it named any.
+   * The refusal this screen is holding: the sentence, and the fields it named.
    *
-   * Held beside the sentence rather than instead of it: a `422` that names a field
-   * still has a statement, and a refusal about the registration as a whole names no
-   * field at all. Cleared wherever the sentence is cleared, because a mark left on
-   * an input after the value under it changed is a mark about a body nobody posted.
+   * **One state and not two.** A `422` that names a field still has a statement, and
+   * a refusal about the registration as a whole names no field at all — so the two
+   * are always set together and must always be cleared together. Held as two
+   * `useState`s they were not: a later refusal that named nothing left the previous
+   * one's marks standing on inputs, and the operator was shown a sentence about this
+   * registration beside `aria-invalid` about the one before it. There is no setter
+   * here that can move one without the other.
    */
-  const [refusedFields, setRefusedFields] = useState<readonly FieldRefusal[]>([])
+  const [refusal, setRefusal] = useState<Refusal>(NOTHING_REFUSED)
   const [busy, setBusy] = useState(false)
   /**
    * The agent types the loaded library has cases for, to offer beside the field.
@@ -331,11 +360,12 @@ export function RegisterScreen() {
           return
         }
         const missingEcho = echoRefusal(standing)
-        setRefusedFields([])
         setRefusal(
-          missingEcho ??
-            `run ${standing.run_id} is ${standing.status} and did not stop at ` +
-              `registration, so there is nothing here to re-plant: ${standing.statement}`,
+          said(
+            missingEcho ??
+              `run ${standing.run_id} is ${standing.status} and did not stop at ` +
+                `registration, so there is nothing here to re-plant: ${standing.statement}`,
+          ),
         )
         if (missingEcho) {
           setStep(PLANT_STEP)
@@ -343,7 +373,7 @@ export function RegisterScreen() {
       })
       .catch((unknown: unknown) => {
         if (current) {
-          setRefusal(`${unknown}`)
+          setRefusal(said(`${unknown}`))
         }
       })
     return () => {
@@ -357,10 +387,9 @@ export function RegisterScreen() {
       const nonce = await issueNonce()
       setIssued(nonce)
       declare({ nonce: nonce.nonce, nonce_planted: false })
-      setRefusal('')
-      setRefusedFields([])
+      setRefusal(NOTHING_REFUSED)
     } catch (unusable: unknown) {
-      setRefusal(`${unusable}`)
+      setRefusal(said(`${unusable}`))
     }
     // Cleared after the `try`, and deliberately not in a `finally`: the React
     // Compiler does not lower a `finally` clause and skips the whole enclosing
@@ -409,8 +438,10 @@ export function RegisterScreen() {
     // bench's own sentence, and nothing else the operator declared is lost.
     setIssued(null)
     declare({ nonce: '', nonce_planted: false })
-    setRefusal(outcome.statement)
-    setRefusedFields(outcome.kind === 'refused' ? outcome.fields : [])
+    setRefusal({
+      statement: outcome.statement,
+      fields: outcome.kind === 'refused' ? outcome.fields : [],
+    })
     // Where the API named a field, the walk goes to the step that draws it and puts
     // the keyboard on it, instead of to the plant step. Both are true of a refusal —
     // the nonce is spent either way and the sentence above says so — but a message
@@ -422,7 +453,7 @@ export function RegisterScreen() {
       setStep(PLANT_STEP)
       return
     }
-    setStep(STEPS.indexOf(stepShowing(named)))
+    setStep(WALK_STEPS.indexOf(stepShowing(named)))
     // After the step it is on has been drawn. The input does not exist until then,
     // and a focus call against a screen that has not rendered moves nothing.
     setFocusOn(named)
@@ -444,8 +475,8 @@ export function RegisterScreen() {
     setFocusOn(null)
   }, [focusOn, setFocusOn])
 
-  const current = STEPS[step]
-  const last = current === STEPS[STEPS.length - 1]
+  const current = WALK_STEPS[step]
+  const last = current === WALK_STEPS[WALK_STEPS.length - 1]
   /**
    * What is holding the primary button, in the words it will be refused in.
    *
@@ -474,10 +505,10 @@ export function RegisterScreen() {
         <h1>{STEP_TITLES[current]}</h1>
       </header>
 
-      {refusal ? (
+      {refusal.statement ? (
         <section className="refusal" role="alert">
           <h2>Registration did not complete</h2>
-          <p>{refusal}</p>
+          <p>{refusal.statement}</p>
           <p className="aside">
             Nothing about this is final. Plant a value the bench issues now and
             register again — one nonce starts one run, so the refused one is spent.
@@ -516,7 +547,7 @@ export function RegisterScreen() {
               declare={declare}
               kinds={kinds}
               notes={notes}
-              refusals={refusedFields}
+              refusals={refusal.fields}
               unpaired={unpaired}
             />
             {/* The three statements, at the foot of the screen that names the endpoint
@@ -524,7 +555,7 @@ export function RegisterScreen() {
             <AttestationStep
               declarations={declarations}
               declare={declare}
-              refusals={refusedFields}
+              refusals={refusal.fields}
             />
           </>
         ) : null}
@@ -541,7 +572,7 @@ export function RegisterScreen() {
           <ToolVisibilityStep
             declarations={declarations}
             declare={declare}
-            refusals={refusedFields}
+            refusals={refusal.fields}
           />
         ) : null}
 
@@ -637,7 +668,7 @@ function AgentType({
 }: RefusableProps & { kinds: readonly string[] }) {
   if (kinds.length === 0) {
     return (
-      <label htmlFor={FIELDS.agent_type}>
+      <label>
         Agent type
         <input
           {...refusedAttributes(refusals, FIELDS.agent_type)}
@@ -650,7 +681,7 @@ function AgentType({
     )
   }
   return (
-    <label htmlFor={FIELDS.agent_type}>
+    <label>
       Agent type
       {/* No empty row over the kinds. The list is the kinds, one of them is chosen
           from the moment it arrives, and there is no state in which this field is
@@ -695,7 +726,7 @@ function TargetStep({
         no zero for one. It is not something an operator needs told before typing a URL.
       */}
       <p>The endpoint the bench will attack, and the price you pay per call on it.</p>
-      <label htmlFor={FIELDS.name}>
+      <label>
         Name
         <input
           {...refusedAttributes(refusals, FIELDS.name)}
@@ -705,7 +736,7 @@ function TargetStep({
         />
         <Refused refusals={refusals} field={FIELDS.name} />
       </label>
-      <label htmlFor={FIELDS.url}>
+      <label>
         URL
         <input
           {...refusedAttributes(refusals, FIELDS.url)}
@@ -715,7 +746,7 @@ function TargetStep({
         />
         <Refused refusals={refusals} field={FIELDS.url} />
       </label>
-      <label htmlFor={FIELDS.auth_token}>
+      <label>
         Bearer token
         <input
           {...refusedAttributes(refusals, FIELDS.auth_token)}
@@ -745,7 +776,7 @@ function TargetStep({
         kinds={kinds}
         refusals={refusals}
       />
-      <label htmlFor={FIELDS.sends}>
+      <label>
         Sends per message
         <input
           {...refusedAttributes(refusals, FIELDS.sends)}
@@ -764,7 +795,7 @@ function TargetStep({
           How many times one message may go on the wire to this endpoint.
         </span>
       </label>
-      <label htmlFor={FIELDS.price_per_call}>
+      <label>
         Price per call
         <input
           {...refusedAttributes(refusals, FIELDS.price_per_call)}
@@ -774,7 +805,7 @@ function TargetStep({
         />
         <Refused refusals={refusals} field={FIELDS.price_per_call} />
       </label>
-      <label htmlFor={FIELDS.currency}>
+      <label>
         Currency
         <input
           {...refusedAttributes(refusals, FIELDS.currency)}
@@ -1026,7 +1057,7 @@ function WaiveTheProof({
 function AttestationStep({ declarations, declare, refusals }: RefusableProps) {
   return (
     <section>
-      <label htmlFor={FIELDS.identity}>
+      <label>
         Who is attesting
         <input
           {...refusedAttributes(refusals, FIELDS.identity)}
@@ -1101,7 +1132,7 @@ function ToolVisibilityStep({ declarations, declare, refusals }: RefusableProps)
         ) : null}
       </fieldset>
       {declarations.exposes_tool_calls === true ? (
-        <label htmlFor={FIELDS.declared_tools}>
+        <label>
           The tools this target has, one per line
           <textarea
             {...refusedAttributes(refusals, FIELDS.declared_tools)}

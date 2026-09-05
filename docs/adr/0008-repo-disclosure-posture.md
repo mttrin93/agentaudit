@@ -1,6 +1,6 @@
 ---
 status: accepted
-amended_by: 0047-a-retrieved-case-cites-its-row-and-a-person-signs-for-its-family.md
+amended_by: 0047-a-retrieved-case-cites-its-row-and-a-person-signs-for-its-family.md, 0070-a-signed-document-may-carry-a-remediation.md
 ---
 
 # Repository disclosure posture

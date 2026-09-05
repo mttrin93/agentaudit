@@ -65,6 +65,7 @@ from backend.bench.calibration import TargetRun
 from backend.bench.contract import DeclaredControl
 from backend.bench.elective import NOTHING_REQUESTED, ElectiveSelection
 from backend.bench.evaluator import Verdict
+from backend.bench.judge import Exposure
 from backend.bench.library import (
     AnyFamily,
     Case,
@@ -75,6 +76,7 @@ from backend.bench.library import (
     one_of_the_six,
 )
 from backend.bench.measurability import NotMeasurable
+from backend.bench.narration import Narration, Narrations, NarrativeFailure
 from backend.bench.published import (
     CLAIMED_IN_PART,
     UNTESTED_CATEGORIES,
@@ -710,6 +712,423 @@ class AdaptiveSection:
         )
 
 
+# --- One failure, explained, with the fix beside it (ADR-0070) ----------------
+
+
+class FindingsReading(StrEnum):
+    """Which of the four readings of `narrations` a findings section holds.
+
+    A closed set beside the sentence, because a consumer that had to tell the four
+    apart by matching prose would be a consumer that stops telling them apart the
+    day the prose is reworded — and the four are four different facts about a run
+    (ADR-0050). The report screen computes nothing the payload does not carry
+    (#113), so the payload carries the reading and not only the sentence.
+    """
+
+    NO_NARRATIVE_INSTRUMENT_DECLARED = "no_narrative_instrument_declared"
+    """`None` — the bench was not asked to explain anything."""
+
+    NOTHING_TO_EXPLAIN = "nothing_to_explain"
+    """`()` — the instruments ran and this target succeeded at nothing."""
+
+    EXPLAINED = "explained"
+    """A tuple — every succeeded attempt of the six explained."""
+
+    INSTRUMENTS_BROKE = "instruments_broke"
+    """A `NarrativeFailure` — the instruments ran and failed (ADR-0050)."""
+
+
+class WithheldProse(StrEnum):
+    """Which sentence of a finding was withheld from the artefact, and never why not.
+
+    Two members, one per instrument, because the two are written by two instruments
+    and a reader has to be told which of the two they are not being shown
+    ([ADR-0069](../../docs/adr/0069-the-judge-writes-why-it-failed-the-remediation-tool-writes-what-to-change.md)).
+    An empty tuple is *nothing was withheld*, which is the ordinary case, and the
+    members are countable rather than only readable for the reason every other
+    absence in this codebase is a closed set (`payload.py`).
+    """
+
+    REASON = "reason"
+    """The judge's sentence was withheld: it reproduced the case's own payload."""
+
+    FIX = "fix"
+    """The remediation tool's sentence was withheld, for the same reason."""
+
+
+PROSE_QUOTED_THE_PAYLOAD = (
+    "withheld — this sentence reproduced the case's own payload text, and a report "
+    "that travels is the worst possible place for a working attack. The case id "
+    "above is the pointer into the evidence, and the payload itself is in the case "
+    "record where the disclosure posture governs it (ADR-0008, ADR-0070)"
+)
+"""What the artefact says in place of a sentence that quoted the payload.
+
+Said rather than omitted, and the finding is kept rather than dropped: a finding
+dropped for its prose would take its case id, its family and its attributed cause
+with it, and those are the three things a reader can check against the record.
+"""
+
+INSTRUMENTS_AGREED = (
+    "the success condition and the judge read this transcript the same way, so "
+    "nothing here is queued for a human"
+)
+"""What a finding says where its two instruments did not disagree.
+
+A stated agreement rather than a blank, on `Provenance`'s own terms: a missing line
+reads as a document that had nothing to declare, and this one has something to
+declare.
+"""
+
+
+@dataclass(frozen=True)
+class ReportedFinding:
+    """One failure as the signed document reports it: why, what to change, and what
+    informed the fix.
+
+    **The record that carries a model's prose into an artefact that travels**, which
+    is why the disclosure rule is enforced here rather than asked for in a prompt
+    ([ADR-0070](../../docs/adr/0070-a-signed-document-may-carry-a-remediation.md)
+    §2). `of` is the only way to build one from a `Narration`, and it holds the case
+    record — the one thing a check for quoted payload text needs and the one thing
+    `payload.py` does not have. Blinding happens on the harness side of a call for
+    the same reason (`JudgeBrief.about`): a rule a model is asked to follow is a
+    request, and a rule a record enforces is a mechanism.
+
+    **No confidence, and no field one could arrive in.** `Narrative.confidence` is a
+    number the model wrote about its own answer, and a number in a signed document is
+    read as a measurement by every reader who did not write it — which is ADR-0005's
+    concern arriving through prose. What this record carries about the instruments'
+    agreement is `disagreement`, which is a fact about two instruments rather than
+    one instrument's self-report.
+
+    **Nothing here reaches a rate.** It is prose about one verdict, on `Attribution`'s
+    own terms: no rate, band, interval or `D` may read it (D13, ADR-0006), and the
+    prohibition is structural — every field below is prose, a name off a closed set,
+    or an id.
+    """
+
+    attribution: Attribution
+    """What this failure is read against, derived from the case record and the scan.
+
+    Carried whole rather than flattened into three fields, so the sentence a surface
+    prints is `Attribution.stated()` and the two surfaces cannot print two different
+    claims about one attribution (ADR-0068 §3). It also carries the case id, the
+    family and the transform, which is why none of them is repeated here.
+    """
+
+    external_id: str
+    """The published identifier this case tests within, as a string.
+
+    The identifier alone rather than the `ExternalId`, on `Precedent`'s own reasoning:
+    the other half of that record is a coverage boundary, which is a claim about the
+    *family* and is printed with the family's figures (ADR-0044).
+    """
+
+    exposure: Exposure
+    """What a reader of this finding is exposed to, off the judge's closed set.
+
+    A closed set rather than prose, so an exposure can be counted by a reader rather
+    than only read — and counted by a reader rather than by this bench, because a
+    count over two families would be the composite ADR-0005 refused.
+    """
+
+    reason: str
+    """Why it failed, in the judge's own sentence — or the statement that the
+    sentence was withheld (`PROSE_QUOTED_THE_PAYLOAD`)."""
+
+    fix: str
+    """What to change, in the remediation tool's own sentence — or the same
+    statement. The one answer to *what to change* a reader is handed (ADR-0069)."""
+
+    informed_by: tuple[str, ...] = ()
+    """The case ids of the precedents this fix was written against, most recent first.
+
+    **The ids and never the precedents' own prose.** A precedent's `failure` and
+    `remediation` are a *different target's* finding and a different target's fix,
+    and a document about this target is not the place a second operator's failure
+    travels — that is the identity question `retrieve_precedent` already redacts for
+    (ADR-0011). What a reader needs is ADR-0019's claim: whether this fix came from
+    their own transcript alone or from a corpus, and how much of one. An empty tuple
+    is the truthful answer on run one, and it is the reason ADR-0019 says the store
+    cannot be demonstrated inside a single run.
+    """
+
+    disagreement: str = INSTRUMENTS_AGREED
+    """What the two instruments made of this transcript, in one sentence.
+
+    Stated on every finding rather than only where they disagreed, because a section
+    that printed the judge's reason and said nothing about whether the judge agreed
+    with the verdict would present one instrument's reading as both. The verdict is
+    unmoved either way: a disagreement is recorded under Article 12 and resolved
+    nowhere (ADR-0004).
+    """
+
+    withheld: tuple[WithheldProse, ...] = ()
+    """Which of the two sentences the disclosure rule withheld, and usually neither.
+
+    Countable rather than only legible in the prose, so a reader — and a test — can
+    ask how much of a document was withheld without parsing sentences.
+    """
+
+    @property
+    def case_id(self) -> str:
+        """The case whose attempt succeeded, read off the attribution."""
+        return self.attribution.case_id
+
+    @property
+    def family(self) -> AnyFamily:
+        """The family that case belongs to, read off the attribution."""
+        return self.attribution.family
+
+    @classmethod
+    def of(
+        cls, narration: Narration, attribution: Attribution, case: Case
+    ) -> "ReportedFinding":
+        """One narration as the document reports it, with the disclosure rule applied.
+
+        Three records in and no instrument, in `attributed_cause`'s shape: the
+        narration is what two instruments wrote, the attribution is what the failure
+        is read against, and the case record is what the prose is checked against.
+        There is no parameter through which a caller could supply the prose that
+        travels, which is what makes the rule a property of this type rather than of
+        whoever calls it.
+
+        Refuses a narration joined to another case, on `JudgeBrief.about`'s and
+        `attributed_cause`'s reason: a finding checked against the wrong record would
+        be checked against a payload it never sent, so the disclosure rule would pass
+        by looking in the wrong place.
+        """
+        finding = narration.finding
+        if finding.case_id != case.id or attribution.case_id != case.id:
+            raise ValueError(
+                f"a finding about {finding.case_id!r} and an attribution about "
+                f"{attribution.case_id!r} were reported against case {case.id!r}. "
+                "The disclosure rule checks this finding's prose against this case's "
+                "payload, so one joined to the wrong record would be checked against "
+                "a payload it never sent (ADR-0070)"
+            )
+        reason, fix = finding.narrative.reason, narration.remediation.fix
+        withheld = tuple(
+            sentence
+            for sentence, prose in (
+                (WithheldProse.REASON, reason),
+                (WithheldProse.FIX, fix),
+            )
+            if quotes_the_payload(prose, case)
+        )
+        return cls(
+            attribution=attribution,
+            external_id=finding.narrative.external_id.identifier,
+            exposure=finding.narrative.exposure,
+            reason=PROSE_QUOTED_THE_PAYLOAD
+            if WithheldProse.REASON in withheld
+            else reason,
+            fix=PROSE_QUOTED_THE_PAYLOAD if WithheldProse.FIX in withheld else fix,
+            informed_by=tuple(
+                precedent.case_id for precedent in narration.remediation.informed_by
+            ),
+            disagreement=(
+                INSTRUMENTS_AGREED
+                if finding.disagreement is None
+                else finding.disagreement.stated()
+            ),
+            withheld=withheld,
+        )
+
+    def informed_by_stated(self) -> str:
+        """What this fix was written against, in the words ADR-0019's claim needs.
+
+        On the record rather than in a renderer, in `Attribution.stated()`'s pattern
+        and for its reason: a reader handed remediation advice has to be able to tell
+        advice derived from one transcript from advice derived from a corpus, and two
+        surfaces wording that differently would be two claims about one fix. The
+        payload carries this sentence, `stated` below composes it rather than
+        rewriting it, and section 3b prints it.
+
+        The precedents' ids and never their prose: a precedent is a *different
+        target's* failure and a different target's fix (ADR-0011, ADR-0070 §2).
+        """
+        if not self.informed_by:
+            return (
+                "This fix was written against no precedent — nothing had been filed "
+                "against this family when it was written, which is a fact about the "
+                "store and not about this fix (ADR-0019)."
+            )
+        return (
+            "This fix was written with earlier findings of this family in front of "
+            "it — " + ", ".join(self.informed_by) + " — so it is a control this "
+            "bench has written down before rather than one derived from this "
+            "transcript alone (ADR-0019)."
+        )
+
+    def stated(self) -> str:
+        """This whole failure in one sentence, for a surface that wants one line.
+
+        The one-line form, in `ReportedEpisode.stated()`'s pattern: a console line, a
+        poller's summary, a screen that shows a failure collapsed. Section 3b prints
+        the fields apart instead, because two sentences from two instruments are the
+        point of that section and a paragraph would bury the second — and it prints
+        `informed_by_stated` rather than a second wording of it, which is why that
+        sentence is composed here and not written twice.
+        """
+        return (
+            f"{self.attribution.stated()}. What went wrong: {self.reason} What to "
+            f"change: {self.fix} {self.informed_by_stated()} {self.disagreement}"
+        )
+
+
+PAYLOAD_QUOTE_FLOOR = 40
+"""How much of a case payload a sentence has to reproduce before it is withheld.
+
+A floor rather than any match at all, because a payload's turns are ordinary English
+and a short one shares phrases with any sentence written about it — a rule that fired
+on *what is in your configuration* would withhold every honest fix ever written about
+that family. Forty characters is a run no two independent sentences about one
+exchange share by accident, and it is short enough that reproducing *half* a payload
+is caught — what transfers is the phrasing, and a rule that only caught a whole turn
+would be defeated by a model that trimmed the last clause. A turn shorter than the
+floor is checked whole rather than skipped, so no payload is unguardable for being
+short.
+
+The figure is a property of this literal: raising it lets more of a payload through
+and lowering it withholds honest prose, and `test_reported_findings.py` measures both
+ends against the committed library — no committed payload and no half of one survives
+the check, and no sentence written *about* a case trips it. The high end is pinned
+there with a literal of its own rather than a multiple of this one, because a bound
+written as a multiple moves with the constant it exists to bound.
+"""
+
+
+def quotes_the_payload(prose: str, case: Case) -> bool:
+    """Whether this sentence reproduces the case's own payload text.
+
+    Over the payload's turns and never over the rendered script, because a scripted
+    case sends one turn at a time and what would transfer is one turn's wording
+    (ADR-0053). Whitespace is normalised on both sides so that a model that
+    re-wrapped a payload has still reproduced it.
+    """
+    written = " ".join(prose.split())
+    for turn in case.payload:
+        text = " ".join(turn.split())
+        if not text:
+            continue
+        if len(text) <= PAYLOAD_QUOTE_FLOOR:
+            if text in written:
+                return True
+            continue
+        if any(
+            text[start : start + PAYLOAD_QUOTE_FLOOR] in written
+            for start in range(len(text) - PAYLOAD_QUOTE_FLOOR + 1)
+        ):
+            return True
+    return False
+
+
+NO_NARRATIVE_INSTRUMENT = (
+    "no narrative instrument was declared for this run, so no failure here is "
+    "explained and none was left unexplained: the bench was not asked. A stated "
+    "absence and not an empty list — a report that printed nothing would be "
+    "indistinguishable from a run whose target succeeded at nothing (ADR-0030)"
+)
+"""What this section says when `narrations` reads `None`."""
+
+NOTHING_HERE_TO_EXPLAIN = (
+    "the narrative instruments ran and this target succeeded at nothing in the six "
+    "measured families, so there is no failure here to explain. A measurement, and "
+    "not a bench that declined to look (ADR-0030)"
+)
+"""What this section says when `narrations` reads `()`."""
+
+
+@dataclass(frozen=True)
+class FindingsSection:
+    """Every failure of the six explained, or the stated absence of all of them.
+
+    **Four readings and one section**, because `narrations` reads four ways and a
+    section that printed the same thing under all four would put ADR-0050's collapse
+    back into the artefact: *nobody declared an instrument*, *there was nothing to
+    explain*, *here is every failure* and *the instruments ran and broke* are four
+    facts, and a reader holding only the document has to be able to tell them apart
+    ([ADR-0070](../../docs/adr/0070-a-signed-document-may-carry-a-remediation.md)
+    §4). ADR-0050 signed all four on the footing that no byte of the document moved
+    between them, and said in as many words that a ticket putting a narrative into
+    the document inherits the question and not the answer. This is that ticket: the
+    bytes now differ, and all four are still signed, because every figure in the
+    document was measured before either instrument was asked.
+
+    **Findings are all of them or the stated absence of all of them** (ADR-0030), and
+    that invariant is `TargetRun`'s rather than this record's — a subset nobody chose
+    never reaches here, because a pass that broke returns a `NarrativeFailure` and
+    discards what it had written.
+
+    **Not reproducible, and not a field a caller can set.** A model wrote the prose,
+    so the label is the one ADR-0017 already has for that class, and no third
+    evidentiary class is invented here (`rendering/__init__.py`).
+    """
+
+    reported: tuple[ReportedFinding, ...] | NarrativeFailure | None = None
+    """The four readings of `narrations`, one type along.
+
+    `ReportedFinding` rather than `Narration`, because what travels is what the
+    disclosure rule passed and never what the instruments wrote — a section holding
+    the second would make the withholding a property of a renderer.
+    """
+
+    @property
+    def reproducibility(self) -> Reproducibility:
+        """Not reproducible, always, and not a field any caller can set."""
+        return Reproducibility.NOT_REPRODUCIBLE
+
+    @property
+    def findings(self) -> tuple[ReportedFinding, ...]:
+        """The findings this section carries, which is none under three readings."""
+        return self.reported if isinstance(self.reported, tuple) else ()
+
+    @property
+    def reading(self) -> FindingsReading:
+        """Which of the four this section holds, as a name a consumer can match."""
+        match self.reported:
+            case None:
+                return FindingsReading.NO_NARRATIVE_INSTRUMENT_DECLARED
+            case NarrativeFailure():
+                return FindingsReading.INSTRUMENTS_BROKE
+            case ():
+                return FindingsReading.NOTHING_TO_EXPLAIN
+            case _:
+                return FindingsReading.EXPLAINED
+
+    @property
+    def broken(self) -> NarrativeFailure | None:
+        """The instrument failure this section holds, or nothing broke.
+
+        Exposed so a surface reads the failure's own fields rather than parsing them
+        back out of `stated()` — the counts an operator reconciles against a token
+        bill are figures, and figures a reader has to extract from prose are figures
+        that drift (ADR-0050).
+        """
+        return self.reported if isinstance(self.reported, NarrativeFailure) else None
+
+    def stated(self) -> str:
+        """Which of the four readings this section holds, in the words it prints."""
+        match self.reported:
+            case None:
+                return NO_NARRATIVE_INSTRUMENT
+            case NarrativeFailure() as broken:
+                return broken.stated()
+            case ():
+                return NOTHING_HERE_TO_EXPLAIN
+            case found:
+                return (
+                    f"{len(found)} failure(s) of the six explained, one per succeeded "
+                    "attempt: what went wrong as the judge read it, and what to "
+                    "change as the remediation tool wrote it (ADR-0069). "
+                    f"{self.reproducibility.stated()} — a model wrote both sentences, "
+                    "and re-running the instruments would not reproduce them. No "
+                    "figure above was measured from any of this (ADR-0006)"
+                )
+
+
 @dataclass(frozen=True)
 class CoverageGap:
     """A published risk category the bench does not test at all.
@@ -797,6 +1216,21 @@ class TargetResult:
     measured: MeasuredSection
     declared: DeclaredSection
     adaptive: AdaptiveSection
+    findings: FindingsSection = FindingsSection()
+    """Every failure of the six explained, or the stated absence of all of them.
+
+    A fourth section, and the first one that is neither a measurement nor a search:
+    it is what two instruments wrote about the failures the measured section counted
+    ([ADR-0070](../../docs/adr/0070-a-signed-document-may-carry-a-remediation.md)).
+    It reads none of the three above and none of them reads it — a rate is over
+    attempts, and a finding is prose about one verdict (D13, ADR-0006).
+
+    The default is the `None` reading, which is *no narrative instrument was
+    declared*: a gate run and a `--deterministic-only` probe both produce it, and a
+    default of `()` would report a target that succeeded at nothing for a run nobody
+    asked to look (ADR-0030).
+    """
+
     coverage_gaps: tuple[CoverageGap, ...] = DECLARED_COVERAGE_GAPS
     elective: ElectiveSelection = NOTHING_REQUESTED
     """The elective families this run was asked to test, and so the ones it was not.
@@ -956,6 +1390,70 @@ def attributed_cause(attempt: Attempt, case: Case, scanned: Scan) -> Attribution
     )
 
 
+def reported_findings(
+    narrations: Narrations,
+    attempts: Sequence[Attempt],
+    cases: Sequence[Case],
+    scanned: Scan,
+) -> FindingsSection:
+    """Every explained failure joined to what it is read against, or a reading that
+    carries none.
+
+    The one place the narrative pass and the scan meet, and it is a join over
+    **records**: `attributed_cause` derives the reading from the case record and the
+    registration, this walks the narrations in the order they were written, and no
+    model is asked anything (ADR-0068 §1).
+
+    **Three of the four readings pass straight through.** `None`, `()` and a
+    `NarrativeFailure` are three facts about a run rather than three spellings of an
+    empty section, so each arrives at `FindingsSection` as itself and the document
+    says which one holds (ADR-0050, ADR-0070 §4).
+
+    **The attempts are matched in order and consumed**, because `narrate_successes`
+    writes one narration per succeeded attempt of the six in the order they were
+    made: a lookup that reused one attempt per case id would attribute the second
+    success of a case against the first one's record, which is fine today — the
+    reading is a function of the case and the scan — and would silently stop being
+    fine the moment a per-attempt field joins this record.
+
+    Refuses rather than skips, on `narration._record_for`'s reasoning: a narration
+    with no case record or no succeeded attempt behind it is a fault in the bench,
+    and dropping it would publish a subset of a run's findings that nobody chose
+    (ADR-0030).
+    """
+    if narrations is None or isinstance(narrations, NarrativeFailure):
+        return FindingsSection(reported=narrations)
+    records = {case.id: case for case in cases}
+    unclaimed: dict[str, list[Attempt]] = {}
+    for attempt in attempts:
+        if attempt.verdict is Verdict.SUCCEEDED:
+            unclaimed.setdefault(attempt.case_id, []).append(attempt)
+    reported = []
+    for narration in narrations:
+        case_id = narration.finding.case_id
+        case = records.get(case_id)
+        if case is None:
+            raise ValueError(
+                f"a finding about {case_id!r} has no case record among the cases "
+                "this target was run against, so there is no payload to check its "
+                "prose against and no record to derive its cause from"
+            )
+        pending = unclaimed.get(case_id) or []
+        if not pending:
+            raise ValueError(
+                f"a finding about {case_id!r} has no succeeded attempt left to "
+                "attribute it to. A narration is written per succeeded attempt, so "
+                "more findings than successes is a run that explained something it "
+                "did not record"
+            )
+        reported.append(
+            ReportedFinding.of(
+                narration, attributed_cause(pending.pop(0), case, scanned), case
+            )
+        )
+    return FindingsSection(reported=tuple(reported))
+
+
 def reported_episodes(
     episodes: Iterable[AdaptiveEpisode], target_name: str
 ) -> tuple[ReportedEpisode, ...]:
@@ -1076,6 +1574,9 @@ def assemble(
             rule_of_two=scanned.rule_of_two,
         ),
         adaptive=AdaptiveSection(episodes=tuple(episodes)),
+        findings=reported_findings(
+            target_run.narrations, target_run.attempts, cases, scanned
+        ),
         coverage_gaps=coverage_gaps,
         elective=elective,
     )

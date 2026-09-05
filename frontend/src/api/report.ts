@@ -240,6 +240,14 @@ export interface ReportProvenance {
     calibration: string
     adjudicating: string
     attacking: string
+    /**
+     * The model the judge and the remediation tool ran on — the instrument that
+     * wrote the per-failure prose the signed document now carries. Typed here rather
+     * than left out because an unattributed sentence in a signed artefact is what
+     * this field exists to prevent, and a screen that showed three of four declared
+     * models would be showing the run as it was before ADR-0070.
+     */
+    narrative: string
     /** The attacker's sampling temperature, or `null` for two different absences. */
     attacking_temperature: number | null
     /**

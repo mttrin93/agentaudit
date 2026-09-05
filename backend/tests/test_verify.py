@@ -29,8 +29,8 @@ from typing import Any
 import pytest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
-from backend.bench.assembler import TargetResult
-from backend.bench.library import Family, Transform
+from backend.bench.assembler import PROSE_QUOTED_THE_PAYLOAD, TargetResult
+from backend.bench.library import Case, Family, Transform
 from backend.bench.measurability import NotMeasurable
 from backend.bench.payload import Provenance, canonical
 from backend.bench.rendering import REPORT_MARKDOWN, REPORT_PAYLOAD, publish
@@ -49,7 +49,14 @@ from backend.bench.verification import (
     ReDerivationOutcome,
     SignatureOutcome,
 )
-from backend.tests.test_payload import a_payload, a_provenance, a_result
+from backend.tests.conftest import A_FIX
+from backend.tests.test_payload import (
+    MODELS,
+    a_payload,
+    a_provenance,
+    a_result,
+    explaining,
+)
 from scripts.verify import (
     EXIT_DID_NOT_VERIFY,
     EXIT_NOT_ESTABLISHED,
@@ -90,6 +97,107 @@ def test_a_verified_report_prints_three_named_results_and_both_claims(
     assert "Integrity, for the whole document" in printed
     assert "Re-derivability, for the scored layer only" in printed
     assert "recorded and not reproducible" in printed
+
+
+def test_a_report_carrying_findings_verifies_and_the_section_is_inside_the_signature(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], library: list[Case]
+) -> None:
+    """ADR-0070's whole claim, end to end and from the recipient's side.
+
+    The scope item this ticket was cut for says the findings section lands **inside**
+    the signature — ADR-0017 covers the whole document, so this adds material to both
+    claims rather than a new unprotected region — and the honest way to show that is
+    to publish one, verify it, and then delete a sentence from it the way a vendor
+    with something to hide would.
+
+    All three results hold on the published artefact: the signature is over these
+    bytes, the Markdown hashes to the digest inside them, and the arithmetic still
+    re-derives — because a finding is prose about a verdict and no figure reads a word
+    of it (D13, ADR-0006).
+    """
+    published = _publish(tmp_path, result=explaining(library))
+
+    code = main([str(tmp_path), "--pubkey", str(published.pubkey)])
+
+    printed = capsys.readouterr().out
+    assert code == 0
+    assert SignatureOutcome.VALID.value in printed
+    assert ReDerivationOutcome.AGREES.value in printed
+
+    # The prose reached the document a human reads, both sentences and apart.
+    rendered = (tmp_path / REPORT_MARKDOWN).read_text(encoding="utf-8")
+    assert "**What went wrong** — The reply carried the configured secret" in rendered
+    assert f"**What to change** — {A_FIX}" in rendered
+    assert "data-leakage-001" in rendered
+    # And what informed the fix, in one wording rather than two: the sentence is
+    # composed on the record and printed from the payload, so this surface and the
+    # report screen cannot make two claims about one fix (ADR-0019, ADR-0070 §2).
+    assert "written against no precedent" in rendered
+    # The fourth declared model, in the provenance section beside the other three.
+    # An unattributed sentence in a signed artefact is what that line prevents.
+    assert "### The four declared models" in rendered
+    assert (
+        f"- **{MODELS.narrative}** — the model the judge and the remediation tool "
+        "ran on" in rendered
+    ), (
+        "the provenance block does not name the model that wrote section 3b, or "
+        "names another one. An unattributed sentence in a signed artefact is the "
+        "one thing this project's provenance rules exist to prevent (ADR-0070 §5)"
+    )
+    assert MODELS.narrative != MODELS.adjudicating, (
+        "this fixture declares one string for both, so the assertion above would "
+        "hold over a document naming the adjudicator"
+    )
+
+    # And the payload it is a view of carries the same two sentences, so nothing in
+    # the document is a sentence the recipient cannot find in what they verified.
+    body = json.loads((tmp_path / REPORT_PAYLOAD).read_text(encoding="utf-8"))
+    [finding] = body["findings"]["findings"]
+    assert finding["fix"] == A_FIX
+    assert body["provenance"]["models"]["narrative"] == MODELS.narrative
+
+    # Now take the fix out, the way a vendor handing this to a customer would. The
+    # section is inside the signature, so the recipient is told.
+    payload_path = tmp_path / REPORT_PAYLOAD
+    payload_path.write_text(
+        payload_path.read_text(encoding="utf-8").replace(A_FIX, "no fix needed"),
+        encoding="utf-8",
+    )
+
+    code = main([str(tmp_path), "--pubkey", str(published.pubkey)])
+
+    printed = capsys.readouterr().out
+    assert code == EXIT_DID_NOT_VERIFY
+    assert SignatureOutcome.INVALID.value in printed
+
+
+def test_no_case_payload_reaches_a_published_report_through_a_models_sentence(
+    tmp_path: Path, library: list[Case]
+) -> None:
+    """The disclosure answer, from the recipient's side rather than the record's.
+
+    `test_reported_findings.py` holds the rule at the record. This holds the property
+    the rule exists for, over the two files that actually leave the building: a
+    remediation that reproduced the case's payload is published as a statement that
+    it was withheld, and the payload itself is in neither file (ADR-0008, ADR-0070).
+    """
+    case = next(one for one in library if one.id == "data-leakage-001")
+    _publish(tmp_path, result=explaining(library, fix=case.payload[0]))
+
+    published = [
+        (tmp_path / name).read_text(encoding="utf-8")
+        for name in (REPORT_PAYLOAD, REPORT_MARKDOWN)
+    ]
+
+    for text in published:
+        assert case.payload[0] not in text, (
+            "a committed payload reached a published report through the prose a "
+            "model wrote about it, which is the one route ADR-0070 §2 closes"
+        )
+    assert PROSE_QUOTED_THE_PAYLOAD in published[1]
+    # And the finding is still here: a finding dropped for its prose would take the
+    # case id and the attributed cause with it.
+    assert "data-leakage-001" in published[1]
 
 
 def test_one_altered_byte_of_the_payload_fails_under_its_own_named_outcome(

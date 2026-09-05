@@ -97,6 +97,7 @@ from backend.bench.rendering._declared import (
     _general_description,
     _how_the_run_was_made,
 )
+from backend.bench.rendering._explained import _explained
 
 # Re-exported, not merely imported: these five names were defined in this module
 # before it became a package, and `signing.py`, `verification.py`, `app.py` and the
@@ -265,6 +266,7 @@ def _sections_of(body: Mapping[str, Any]) -> tuple[Section, ...]:
         _general_description(body),
         _how_the_run_was_made(body),
         _controls(body["declared"]),
+        _explained(body["findings"]),
         _figures(body["measured"], body["elective"], body["adaptive"]),
         _not_tested(
             body["coverage_gaps"],
@@ -300,8 +302,8 @@ def _masthead(body: Mapping[str, Any], ordered: Sequence[Section]) -> tuple[str,
         f"`{body['artefact']}`, artefact version {body['artefact_version']}. "
         "One run against one target.",
         "",
-        "**Contents** — the nine points of Annex IV in the Act's order, point 5 "
-        "answered in two sections:",
+        "**Contents** — the nine points of Annex IV in the Act's order, points 3 "
+        "and 5 each answered in two sections:",
         "",
         *(f"- {section.number} — {section.title}" for section in ordered),
         "",
@@ -314,7 +316,10 @@ def _masthead(body: Mapping[str, Any], ordered: Sequence[Section]) -> tuple[str,
 # --- 2. The elements, and the process that produced this ---------------------
 
 
-# --- 3. Monitoring, functioning and control ----------------------------------
+# --- 3a. Monitoring, functioning and control: the declared controls ----------
+
+
+# --- 3b. Monitoring, functioning and control: each failure, and its fix -------
 
 
 # --- 4. The appropriateness of the performance metrics -----------------------

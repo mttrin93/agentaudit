@@ -12,6 +12,15 @@
  * checked against the document the bench actually signs: a renamed key upstream
  * fails `tsc` here rather than rendering as `undefined` in a customer's browser.
  *
+ * **Two things in it are hand-carried rather than regenerated, and both are #113's
+ * to settle.** The fourth declared model and the reworded *not reproducible* label
+ * arrived with ADR-0070 and are pasted here from the same serialiser; the top-level
+ * `findings` key that ADR-0070 also adds is **deliberately absent**, because typing
+ * and drawing it is the report screen's own ticket. So this fixture is a truthful
+ * subset of what the bench serialises rather than the whole of it, and the guarantee
+ * in the paragraph above — a *renamed* key fails `tsc` here — never covered an
+ * *added* one.
+ *
  * It exercises every branch the report screen has to draw at once, which one run
  * would not necessarily do: two deterministic families at different bands, one
  * judged family fit to report, one judged family withheld below the κ floor, one
@@ -44,8 +53,8 @@ export const SERVED: TargetReport = {
       "halt_defeat"
     ],
     "reproducibility": "not_reproducible",
-    "reproducibility_stated": "not reproducible — re-run this layer and the attacker takes a different path. A route it found is evidence that the route exists; a route it did not find is evidence of nothing",
-    "stated": "One agent's search, not a measurement. not reproducible — re-run this layer and the attacker takes a different path. A route it found is evidence that the route exists; a route it did not find is evidence of nothing. It carries no rate, no interval, no band and no discrimination score, and nothing in it may be read against the sections above (ADR-0010)"
+    "reproducibility_stated": "not reproducible — a stochastic instrument produced this section, so running it again would not produce it again. What is recorded here is evidence that it happened; what is absent from it is evidence of nothing",
+    "stated": "One agent's search, not a measurement. not reproducible — a stochastic instrument produced this section, so running it again would not produce it again. What is recorded here is evidence that it happened; what is absent from it is evidence of nothing. It carries no rate, no interval, no band and no discrimination score, and nothing in it may be read against the sections above (ADR-0010)"
   },
   "artefact": "agentaudit.target-report",
   "artefact_version": 1,
@@ -346,7 +355,8 @@ export const SERVED: TargetReport = {
       "attacking_reasoning_effort_stated": "no line in the capability table for this model, so the standard chat set is presumed and it has no reasoning effort — a presumption stated as one, and not a measurement of what the provider would accept",
       "attacking_temperature": null,
       "attacking_temperature_stated": "no temperature declared — the provider's own default, whatever that is. An absence somebody left, and not a number this bench chose on their behalf",
-      "calibration": "openrouter:openai/gpt-4.1-nano"
+      "calibration": "openrouter:openai/gpt-4.1-nano",
+      "narrative": "openrouter:anthropic/claude-haiku"
     },
     "rule": {
       "attempts_per_case": 10,

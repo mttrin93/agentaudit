@@ -228,12 +228,22 @@ def _how_the_run_was_made(body: Mapping[str, Any]) -> Section:
             "",
             _control(attestation["control_proved"]),
             "",
-            "### The three declared models",
+            "### The four declared models",
             "",
             f"- **{models['calibration']}** — the model the bench's own calibration "
             "equipment ran on, and so the model its gate citation was earned on.",
             f"- **{models['adjudicating']}** — the instrument that decided the judged "
             "families, and the one κ is measured on.",
+            # The fourth, and the reason section 3b is not an unattributed page: the
+            # instrument that wrote the prose is named beside the three that
+            # calibrate, decide and attack (ADR-0070 §5). Never κ's subject, and the
+            # line says so — κ is a figure about the adjudicator above it, and no
+            # figure anywhere in this document is read off this one.
+            f"- **{models['narrative']}** — the model the judge and the remediation "
+            "tool ran on, which is to say the model that wrote every sentence in "
+            "section 3b. It decides nothing: no rate, band, interval or "
+            "discrimination score reads a word it wrote, and it carries no "
+            "reliability figure of its own.",
             f"- **{models['attacking']}** — the adaptive layer's model, and the "
             "adaptive layer's only. It decides nothing that is scored.",
             f"  - Sampling: {models['attacking_temperature_stated']}.",
@@ -341,9 +351,16 @@ def _controls(declared: Mapping[str, Any]) -> Section:
     Statuses and case ids, and no count of either. A number in this section would be
     a measurement inside the declared half, and the first thing anyone would do with
     two of them is compare two targets on it.
+
+    **3a since ADR-0070**, because Annex IV point 3 now holds two sections: this one
+    is the join per *control*, and `_findings` is the same material per *failure* —
+    why each break happened and what to change. Two labelled sections under one point
+    is the shape point 5 already has, and it is the honest alternative to one section
+    carrying two reproducibility labels (`_layout.Section.part`).
     """
     return Section(
         point=3,
+        part="a",
         title="The controls this target declared, and what the attacks made of them",
         reproducibility=Reproducibility(declared["reproducibility"]),
         body=(

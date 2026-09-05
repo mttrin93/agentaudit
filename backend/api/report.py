@@ -77,8 +77,13 @@ UNDECLARED_MODELS = DeclaredModels(
     calibration=UNDECLARED_MODEL,
     adjudicating=UNDECLARED_MODEL,
     attacking=UNDECLARED_MODEL,
+    narrative=UNDECLARED_MODEL,
 )
-"""The three identifiers of a bench that declared none of them."""
+"""The four identifiers of a bench that declared none of them.
+
+A bench with no narrative model declared holds no narrator either, so its findings
+section reads *no narrative instrument was declared* — and the two absences agree
+because they come from the same undeclared string (ADR-0030, ADR-0070)."""
 
 
 @dataclass(frozen=True)

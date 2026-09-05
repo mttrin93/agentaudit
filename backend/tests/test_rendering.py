@@ -96,7 +96,8 @@ def test_the_rendering_follows_annex_iv_section_order_and_answers_every_point() 
     assert [section.number for section in ordered] == [
         "1",
         "2",
-        "3",
+        "3a",
+        "3b",
         "4",
         "5a",
         "5b",
@@ -118,7 +119,7 @@ def test_the_rendering_follows_annex_iv_section_order_and_answers_every_point() 
         )
 
 
-def test_every_section_states_its_own_reproducibility_and_three_read_the_payload() -> (
+def test_every_section_states_its_own_reproducibility_and_four_read_the_payload() -> (
     None
 ):
     # Stated on every section rather than in a footnote about one: a reader who meets
@@ -130,10 +131,16 @@ def test_every_section_states_its_own_reproducibility_and_three_read_the_payload
     text = render(payload)
 
     labels = {section.number: section.reproducibility for section in ordered}
-    assert labels["3"] == Reproducibility(body["declared"]["reproducibility"])
+    assert labels["3a"] == Reproducibility(body["declared"]["reproducibility"])
     assert labels["4"] == Reproducibility(body["measured"]["reproducibility"])
     assert labels["5b"] == Reproducibility(body["adaptive"]["reproducibility"])
     assert labels["5b"] is Reproducibility.NOT_REPRODUCIBLE
+
+    # And the second section under that label, which is the one ADR-0070 added: a
+    # model wrote the prose in it, so it is the class ADR-0017 already had a word for
+    # and no third evidentiary class was invented to carry it.
+    assert labels["3b"] == Reproducibility(body["findings"]["reproducibility"])
+    assert labels["3b"] is Reproducibility.NOT_REPRODUCIBLE
 
     # Two members and no third: a genuinely third evidentiary class would have to
     # extend the claim list rather than pick the nearer of two, and that is a decision
@@ -148,7 +155,7 @@ def test_every_section_states_its_own_reproducibility_and_three_read_the_payload
 
 # --- The golden digest: one document, pinned to the byte ---------------------
 
-GOLDEN_ONE_FAMILY = "38ad974fdc60562157703612b39cf5892abef3bae52e9f60ed864ec4ef1d4964"
+GOLDEN_ONE_FAMILY = "b1d5952f2ae1d11f06be35852814434c953b62ceaccc3beec05bf55e453f5819"
 """The sha256 of `_one_family()`'s rendering, written down.
 
 **A tripwire, and it is deliberately a strict one.** Every other assertion in this
@@ -301,6 +308,33 @@ an endpoint target under any configuration. **No figure moved and no figure arri
 a plant is a precondition of measurement and never an input to one (ADR-0006,
 ADR-0024), and what the block changes is how a reader should read a rate of zero and
 not what the rate is.
+
+Moved a fifteenth time, by #112, and this one is a **new section** rather than a block
+inside an existing one — the largest move on this list. Annex IV point 3 now holds two
+sections: 3a is the declared-and-defeated join it always was, and 3b is each failure
+the bench explained, with the judge's sentence and the remediation tool's beside it
+([ADR-0070](../../docs/adr/0070-a-signed-document-may-carry-a-remediation.md)). Two
+things moved every byte after the masthead: the contents list gained a row and the
+sentence naming which points hold two sections, and section 3 became 3a. Here the new
+section reads *no narrative instrument was declared*, because the fixture's result
+carries the `None` reading — which is the line this digest pins, and the honest one for
+a document produced without a judge. **No figure moved and no figure arrived**: the
+section carries prose about verdicts already recorded, under a *not reproducible* label
+of its own, and nothing above it reads a word of it (ADR-0006, ADR-0017).
+
+That label's own sentence moved in the same commit, and it is the second thing #112
+changed everywhere rather than in one section. `Reproducibility.NOT_REPRODUCIBLE` had
+one subject when the adaptive section was the only section carrying it, so its wording
+named *the attacker* and *a route it found*; section 3b has neither, and a shared label
+whose sentence describes one of its two subjects is a signed document making a false
+statement about the other. The shared sentence now says what the label means for any
+stochastic instrument, and each of the two sections names its own in its own body — so
+the adaptive section did not lose the sentence, it gained a line that owns it.
+
+And a third thing in the same ticket: section 2's model list is four models rather than
+three, because a document carrying a model's prose names the instrument that wrote it.
+That is the second of the two decisions ADR-0030 costed and left, and the heading moved
+with the list rather than being left saying *three* over four rows.
 """
 
 
@@ -926,7 +960,7 @@ def test_the_declared_shape_prints_beside_the_controls_and_never_as_a_finding() 
     )
     text = render(payload)
     rule = document(payload)["declared"]["rule_of_two"]
-    [controls] = [section for section in sections(payload) if section.number == "3"]
+    [controls] = [section for section in sections(payload) if section.number == "3a"]
 
     assert "### The Agents Rule of Two, as this target declares itself" in text
     assert f"- {rule['stated']}." in controls.body

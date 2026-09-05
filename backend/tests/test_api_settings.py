@@ -104,6 +104,7 @@ DECLARED = DeclaredModels(
     calibration="openrouter:openai/gpt-4.1-nano",
     adjudicating="openrouter:openai/gpt-4.1-mini",
     attacking="openrouter:anthropic/claude-haiku",
+    narrative="openrouter:openai/gpt-4.1-mini",
 )
 """Three identifiers a deployment declared, each one different from the others.
 

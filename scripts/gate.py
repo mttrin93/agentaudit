@@ -803,6 +803,13 @@ def declared_instruments(args: argparse.Namespace) -> DeclaredModels:
         calibration=args.model,
         adjudicating=args.adjudicator_model,
         attacking=args.attacker_model,
+        # One string for both narrative instruments, which is what
+        # `completion.narrator_for` builds them from (ADR-0030, ADR-0070). A gate run
+        # narrates nothing at all — a finding is about a target and this run measures
+        # the bench (ADR-0018) — so what this records is which instrument *would*
+        # have written the prose, and the gate document's findings section says
+        # plainly that none was asked.
+        narrative=args.adjudicator_model,
         attacking_temperature=temperature_for(
             args.attacker_model, DEFAULT_ATTACKER_TEMPERATURE
         ),

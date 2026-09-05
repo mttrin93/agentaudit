@@ -643,6 +643,10 @@ def _adaptive(adaptive: Mapping[str, Any]) -> Section:
             "whole of what a signature vouches for here: these bytes reached you "
             "unaltered, and re-running the layer would not reproduce them.",
             "",
+            "The stochastic instrument that label names is the attacker: re-run this "
+            "layer and it takes a different path. A route it found is evidence that "
+            "the route exists; a route it did not find is evidence of nothing.",
+            "",
             "Routes are described in prose and never as payload text: a route that "
             "beat this target is a working unpublished exploit, and this document is "
             "the one that leaves the building (ADR-0008).",

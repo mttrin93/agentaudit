@@ -1630,6 +1630,7 @@ def _declared_models() -> DeclaredModels:
         calibration="stub:obedient",
         adjudicating="the suite's stub",
         attacking="the scripted stand-in",
+        narrative="the suite's stub",
     )
 
 

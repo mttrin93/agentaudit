@@ -4649,6 +4649,13 @@ def deployed_models() -> tuple[DeclaredModels, Completion | None, AttackerComple
             calibration=calibration or UNDECLARED_MODEL,
             adjudicating=adjudicating,
             attacking=attacking,
+            # The same string the narrator is built from, and that is the point of
+            # reading it here rather than defaulting it: `completion.narrator_for`
+            # takes one configuration string for both narrative instruments
+            # (ADR-0030), so the record and the clients cannot name two different
+            # models — and the day a deployment declares them apart, this line is
+            # what moves (ADR-0070).
+            narrative=adjudicating,
             # Declared even when the model is not: the temperature a run was sampled
             # at is a condition of that run, and a bench that left it unstated would
             # be repeatable only by whoever knows what the provider defaults to.

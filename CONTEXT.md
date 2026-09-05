@@ -366,12 +366,29 @@ at nothing* and a **finding** per succeeded attempt, and it is none of those thr
 the instruments were declared, the target succeeded, and no finding survives. It
 carries no **finding** at all — findings are all of a target's successes or the
 stated absence of all of them — and it moves no **verdict** and no rate: the run
-finishes, every figure it measured stands, and the signed report is the report it
-would have signed had the judge answered
+finishes, every figure it measured stands, and the report is signed on exactly the
+terms it would have been signed on had the judge answered
 ([ADR-0050](./docs/adr/0050-a-run-whose-narrative-instruments-broke-is-measured-explained-nowhere-and-signable.md)).
-Not one of the report's absences: nothing in the artefact names it, and what it is an
-absence of is the run's explanation.
+Since [ADR-0070](./docs/adr/0070-a-signed-document-may-carry-a-remediation.md) the
+artefact **names it**: the findings section states which of the four readings holds,
+so a run whose instruments broke no longer signs the same bytes as one that declared
+none — which is this reading's whole purpose, arriving on the page. It is still not
+one of the report's five absences, because what it is an absence of is the run's
+explanation and not a family, a figure or a category.
 _Avoid_: no findings, none, empty, judge error, failed run, not measurable
+
+**Reported finding**:
+One **finding** as the **signed report** carries it: the **attributed cause**, the
+judge's one sentence on what went wrong, the remediation tool's one sentence on what
+to change, and the case ids of the precedents that informed the fix. It is the record
+the disclosure rule produced and never what the two instruments wrote — a sentence
+that reproduces the **case**'s own payload is replaced by a statement that it was
+withheld, and the finding keeps its case id, its family and its attributed cause
+([ADR-0070](./docs/adr/0070-a-signed-document-may-carry-a-remediation.md), ADR-0008).
+It carries no number, no severity and no confidence, and the section it sits in is
+labelled *not reproducible*: a model wrote both sentences, and no figure anywhere in
+the document reads a word of either.
+_Avoid_: remediation, recommendation, advisory, severity, root cause
 
 **Deterministic family / Judged family**:
 The two classes of family, separated by how a verdict is reached. Judged families carry a reliability figure and a wider stated limit.

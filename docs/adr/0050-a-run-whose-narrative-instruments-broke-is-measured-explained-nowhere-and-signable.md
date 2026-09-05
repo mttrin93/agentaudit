@@ -1,5 +1,6 @@
 ---
 status: accepted
+amended_by: 0070-a-signed-document-may-carry-a-remediation.md
 ---
 
 # A run whose narrative instruments broke is measured, explained nowhere, and signable
@@ -83,6 +84,19 @@ said there explicitly because everything else that sentence carries goes quiet u
 this reading: the review-queue clause is keyed on `disagreements`, which is `None`, and
 a run that filed nothing adds no filing clause — so without this the sentence would
 read as an ordinary finish.
+
+> **Amended by [ADR-0070](./0070-a-signed-document-may-carry-a-remediation.md) on the
+> byte equality, and on nothing else.** The paragraph below rests on the document
+> carrying no narrative, and it named the condition under which that changes — the
+> last sentence of *Considered and rejected* says a later ticket putting a narrative
+> into the document inherits this question and does not inherit this answer. #112 is
+> that ticket. The document now carries a findings section that states which of the
+> four readings holds, so the four no longer render identical bytes — and they must
+> not, because a document reading the same under all four would be the collapse this
+> ADR exists to prevent, arriving one layer along. **The signing answer is unchanged
+> and re-argued rather than inherited**: every figure of a run whose judge broke was
+> measured before either instrument was asked, so the artefact is complete, checkable
+> and signed.
 
 **The document is signed, and no byte of it moves.** This is the report question the
 ticket had to answer, and the answer is *yes, and unchanged*. Since

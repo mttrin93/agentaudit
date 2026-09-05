@@ -31,19 +31,26 @@ import pytest
 from backend.bench import payload as payload_module
 from backend.bench.adaptive.episode import AdaptiveEpisode, EpisodeOutcome
 from backend.bench.assembler import (
+    PROSE_QUOTED_THE_PAYLOAD,
     AdaptiveSection,
+    AttributedCause,
     ControlStatus,
     DeclaredSection,
     FamilyEntry,
+    FindingsReading,
+    FindingsSection,
     MeasuredSection,
     ReportedEpisode,
     ScannedControl,
     TargetResult,
+    WithheldProse,
+    reported_findings,
 )
 from backend.bench.capability import ReasoningEffort
 from backend.bench.contract import AgentCapability, DeclaredControl, Transcript
 from backend.bench.editions import AGENTIC_TOP_10_2026, LLM_TOP_10_2026
 from backend.bench.elective import ElectiveSelection
+from backend.bench.evaluator import Verdict
 from backend.bench.library import (
     Case,
     ElectiveFamily,
@@ -54,6 +61,7 @@ from backend.bench.library import (
     VerdictClass,
 )
 from backend.bench.measurability import NotMeasurable
+from backend.bench.narration import BrokenInstrument, NarrativeFailure
 from backend.bench.payload import (
     ARTEFACT,
     UNCITED_GATE,
@@ -75,6 +83,7 @@ from backend.bench.scanner import (
     NOTHING_DECLARED,
     RuleOfTwo,
     RuleOfTwoStanding,
+    Scan,
     Supervision,
 )
 from backend.bench.scorer import (
@@ -87,7 +96,15 @@ from backend.bench.scorer import (
 )
 from backend.bench.selection import EVERY_CONSTRUCTION, AttackLayer, AttackSelection
 from backend.graph.budget import Layer
-from backend.tests.conftest import SERIALISERS, imports_of, plain_breakdown
+from backend.graph.runstate import Attempt
+from backend.tests.conftest import (
+    A_FIX,
+    BENCH,
+    SERIALISERS,
+    a_narration,
+    imports_of,
+    plain_breakdown,
+)
 
 IDENTIFIERS = {
     Family.DATA_LEAKAGE: ExternalId(
@@ -228,6 +245,10 @@ def test_the_provenance_block_says_how_this_was_made_and_what_it_cost_per_layer(
         "calibration": "openrouter:openai/gpt-4.1-nano",
         "adjudicating": "openrouter:openai/gpt-4.1-mini",
         "attacking": "openrouter:openai/gpt-4.1-mini",
+        # The fourth, and the one ADR-0030 costed and left: the instrument that wrote
+        # the prose in the findings section. An unattributed sentence in a signed
+        # artefact is what this line exists to prevent (ADR-0070).
+        "narrative": "openrouter:anthropic/claude-haiku",
         # Beside the identifier and never folded into it, and the sentence beside
         # the value: an absent temperature is two different facts about a run and
         # the value alone cannot say which (#4, ADR-0025).
@@ -1156,30 +1177,206 @@ def test_no_payload_text_from_any_case_appears_anywhere_in_the_artefact(
     assert "data-leakage-001" in prose
 
 
-# --- No narrative reaches the document (ADR-0008, ADR-0030, ADR-0044) --------
+# --- The findings section (ADR-0070) -----------------------------------------
+
+
+def test_the_document_carries_every_failure_with_its_reason_its_fix_and_no_figure(
+    library: list[Case],
+) -> None:
+    """The section this ticket buys, and the three things it may not become.
+
+    Two sentences from two instruments per failure (ADR-0069), the cause each one is
+    read against (ADR-0068), and what informed the fix (ADR-0019). No figure of any
+    kind: a count of findings, a severity, or anything reaching across two of them
+    would be the composite ADR-0005 refused arriving through prose (D3, D12).
+    """
+    body = document(a_payload(result=explaining(library)))["findings"]
+
+    assert body["reading"] == FindingsReading.EXPLAINED.value
+    assert body["reproducibility"] == Reproducibility.NOT_REPRODUCIBLE.value
+    assert body["reproducibility_stated"] == Reproducibility.NOT_REPRODUCIBLE.stated()
+    assert body["instrument_failure"] is None
+
+    [finding] = body["findings"]
+    assert finding["case_id"] == "data-leakage-001"
+    assert finding["reason"] == "The reply carried the configured secret back out."
+    assert finding["fix"] == A_FIX
+    assert finding["attributed_cause"] == AttributedCause.NOT_DECLARED.value
+    assert finding["transform"] == Transform.PLAIN.value
+    assert finding["withheld"] == []
+    assert finding["informed_by"] == []
+
+    # And nothing numeric arrived with the prose. The judge writes a confidence about
+    # its own answer and it is deliberately not here: a number in a signed document
+    # is read as a measurement by everyone who did not write it.
+    assert not [
+        (path, value)
+        for path, value in figures({"findings": body})
+        if isinstance(value, int | float) and not isinstance(value, bool)
+    ]
+
+
+def test_the_four_readings_of_narrations_are_four_documents() -> None:
+    """The question ADR-0050 answered for a document with no narrative in it.
+
+    It signed all four on the footing that no byte moved between them, and said that a
+    ticket putting a narrative *into* the document inherits the question and not the
+    answer. This is that ticket, and the answer is that the four now differ: a section
+    reading the same under all four would put ADR-0050's own collapse — *nobody
+    declared an instrument* indistinguishable from *the instrument broke* — back into
+    the artefact one layer along.
+    """
+    broke = NarrativeFailure(
+        broken=BrokenInstrument.JUDGE_UNREADABLE,
+        detail="the model answered with prose and no labelled lines",
+        explained=1,
+        successes=3,
+    )
+    bodies = {
+        reading: document(
+            a_payload(
+                result=replace(a_result(), findings=FindingsSection(reported=reading))
+            )
+        )["findings"]
+        for reading in (None, (), broke)
+    }
+
+    assert [body["reading"] for body in bodies.values()] == [
+        FindingsReading.NO_NARRATIVE_INSTRUMENT_DECLARED.value,
+        FindingsReading.NOTHING_TO_EXPLAIN.value,
+        FindingsReading.INSTRUMENTS_BROKE.value,
+    ]
+    assert len({body["stated"] for body in bodies.values()}) == 3
+    assert bodies[broke]["instrument_failure"] == {
+        "broken": BrokenInstrument.JUDGE_UNREADABLE.value,
+        "detail": "the model answered with prose and no labelled lines",
+        "explained": 1,
+        "successes": 3,
+    }
+    # Every one of them carries the same label, because a model wrote the prose under
+    # whichever reading held — including the readings where it wrote none.
+    for body in bodies.values():
+        assert body["reproducibility"] == Reproducibility.NOT_REPRODUCIBLE.value
+
+
+def test_no_prose_that_reproduces_a_case_payload_reaches_the_document(
+    library: list[Case],
+) -> None:
+    """The disclosure answer, checked where it matters rather than where it is made.
+
+    `test_no_payload_text_from_any_case_appears_anywhere_in_the_artefact` already
+    walks this document's leaves for every committed payload, and it now walks a
+    section a model wrote. This is the same claim driven from the other end: a
+    remediation that quoted the payload is replaced by a statement that it was
+    withheld, and the finding keeps its case id, its family and its attributed cause
+    (ADR-0008 as amended, ADR-0070 §2).
+    """
+    case = next(one for one in library if one.id == "data-leakage-001")
+    body = document(a_payload(result=explaining(library, fix=case.payload[0])))
+
+    [finding] = body["findings"]["findings"]
+    assert finding["withheld"] == [WithheldProse.FIX.value]
+    assert finding["fix"] == PROSE_QUOTED_THE_PAYLOAD
+    assert finding["case_id"] == case.id
+    assert finding["reason"] == "The reply carried the configured secret back out."
+    prose = [value for _, value in figures(body) if isinstance(value, str)]
+    assert all(case.payload[0] not in value for value in prose)
+
+
+def explaining(library: list[Case], fix: str = A_FIX) -> TargetResult:
+    """The shared result, with one explained failure on it.
+
+    Public rather than private because `test_verify.py` builds a *published* artefact
+    from it, and the recipient's side of ADR-0070 has to be shown over the same result
+    the payload's own tests use — two builders would let one of them drift into
+    proving something about a document nobody signs.
+
+    Through `reported_findings` rather than by building a `ReportedFinding` by hand,
+    so that what this document carries is what the disclosure rule passed.
+    """
+    case = next(one for one in library if one.id == "data-leakage-001")
+    attempt = Attempt(
+        case_id=case.id,
+        family=case.family,
+        target_name="customer-agent",
+        index=0,
+        transcripts=(
+            Transcript(
+                url="https://customer-agent.invalid/messages",
+                sent={"message": "payload", "session_id": "s"},
+                status_code=200,
+                received={"reply": "reply"},
+            ),
+        ),
+        verdict=Verdict.SUCCEEDED,
+        verdict_class=case.verdict_class,
+        transform=case.transform,
+    )
+    return replace(
+        a_result(),
+        findings=reported_findings(
+            (a_narration(case_id=case.id, fix=fix),),
+            (attempt,),
+            [case],
+            Scan(declared=(DeclaredControl.INPUT_CHECK,)),
+        ),
+    )
+
+
+# --- Which serialiser may import which record (ADR-0008, ADR-0030, ADR-0070) --
 
 THE_JUDGE_SIDE = ("judge", "narration", "remediation", "finding")
-"""Words no import in a serialiser may carry.
+"""Words that name the judge's side of a run, in any of the shapes it travels under.
 
 Substrings and not exact names, because the records travel under several: a
-`Finding`, a `Narrative`, a `Narration` and a `Remediation` are four types in three
-modules and a check written against one of them would let the other three through.
+`Finding`, a `Narrative`, a `Narration`, a `Remediation` and a `ReportedFinding` are
+five types in four modules, and a check written against one of them would let the
+others through.
+
+**This list was once a prohibition over every serialiser and is now a division
+between them** (ADR-0070). It was written when the judge's prose was out of the
+signed artefact altogether, and it named the price of changing that: a disclosure
+answer under ADR-0008 and a fourth declared model. Both are paid, so the question
+stopped being *may any of these modules name a finding* and became *which one may* —
+and the answer is exactly one, for a reason that is about the renderer rather than
+about the judge.
+"""
+
+THE_SERIALISER_THAT_MAY = BENCH / "payload.py"
+"""The one module of `SERIALISERS` that may name a finding, and it is not a renderer.
+
+`payload.py` is where a result becomes bytes, so it is where a record turns into
+keys; the five rendering modules read `payload.document` and never the result, which
+is the property that makes the Markdown a *view* of the artefact rather than a second
+account of the run (`rendering/__init__.py`). A renderer that imported a
+`ReportedFinding` would be a renderer able to print a sentence a recipient cannot
+find in the payload they verified — and it would put the disclosure rule on the far
+side of the record that enforces it.
 """
 
 
-def test_no_narrative_or_remediation_reaches_the_document_or_its_view() -> None:
-    """The judge's prose is out of the signed artefact, and it is out by import.
+def test_only_the_module_that_makes_bytes_may_name_a_finding() -> None:
+    """The judge's prose is in the signed document, and it arrives by one import.
 
+    The wall inverted rather than deleted, which is the difference between a decision
+    and a deletion. What it asserted before —
     [ADR-0030](../../docs/adr/0030-the-judge-runs-over-the-scored-layers-successes.md)
-    left surfacing a narrative to a ticket of its own on two grounds — what a signed
-    document may say about a target's failure is ADR-0008's question, and a document
-    carrying one would have to declare the instrument that wrote it — and #52 spent
-    neither: PLAN §4's article column reaches this document off `labels.LABELS`,
-    which is a property of the family
-    ([ADR-0044](../../docs/adr/0044-a-familys-label-prints-beside-its-figures.md)).
+    left surfacing a narrative to a ticket of its own, on two grounds it priced and
+    did not spend — is now history, and
+    [ADR-0070](../../docs/adr/0070-a-signed-document-may-carry-a-remediation.md) spent
+    exactly those two: the disclosure answer of
+    [ADR-0008](../../docs/adr/0008-repo-disclosure-posture.md), and a fourth
+    `DeclaredModels` field naming the instrument that wrote the prose.
 
-    Asserted rather than reviewed, because the tempting version of #52 is the one
-    that carries a `Finding` in here — and it would be one import.
+    What survives unchanged is the reason the *renderers* may not: `render` reads the
+    serialised document and nothing else, so nothing can appear in the Markdown that a
+    recipient cannot find in the payload they verified — and the rule that keeps a
+    working payload out of a model's sentence lives on the record, at
+    `assembler.ReportedFinding.of`, one module further out again.
+
+    Asserted rather than reviewed, in both directions: the tempting version of the
+    next ticket is the one that reaches a `Narration` from a renderer, and it would be
+    one import.
     """
     for source in SERIALISERS:
         named = sorted(
@@ -1187,12 +1384,45 @@ def test_no_narrative_or_remediation_reaches_the_document_or_its_view() -> None:
             for name in imports_of(source)
             if any(word in name.lower() for word in THE_JUDGE_SIDE)
         )
+        if source == THE_SERIALISER_THAT_MAY:
+            assert named, (
+                "payload.py names no finding at all, so the findings section is "
+                "built from something other than the record the disclosure rule is "
+                "enforced on (ADR-0070)"
+            )
+            continue
         assert not named, (
-            f"{source.name} imports {named}. The judge's prose is not in the signed "
-            "document and the decision to keep it out is ADR-0030's, unspent by "
-            "#52: a narrative here would need a disclosure answer under ADR-0008 "
-            "and a fourth declared model to name the instrument that wrote it"
+            f"{source.name} imports {named}. A renderer reads `payload.document` and "
+            "never the result, so a finding reached from here is a sentence a "
+            "recipient cannot find in the payload they verified — and the disclosure "
+            "rule that sentence passed is on the record, not on this side of it "
+            "(ADR-0017, ADR-0070)"
         )
+
+
+def test_the_findings_the_document_carries_are_the_ones_the_record_passed() -> None:
+    """The other half, and the one an import cannot state.
+
+    `payload.py` may name a `ReportedFinding` and may not name a `Narration`, a
+    `Narrative` or a `Remediation`: the first is the record the disclosure rule
+    produced, and the other three are what two instruments wrote before it ran. A
+    serialiser reaching past the record to the instruments' own output would publish
+    prose the rule never saw, which is the one way the answer of ADR-0070 §2 could be
+    true of a type and false of a document.
+    """
+    unfiltered = sorted(
+        name
+        for name in imports_of(THE_SERIALISER_THAT_MAY)
+        if any(word in name.lower() for word in ("narration", "remediation"))
+        or name.endswith((".Narrative", ".Finding", "judge"))
+    )
+
+    assert not unfiltered, (
+        f"payload.py reaches {unfiltered}, which is what the instruments wrote and "
+        "not what the disclosure rule passed. The findings section is built from "
+        "`assembler.ReportedFinding`, which is the only record that has been checked "
+        "against the case payload it describes (ADR-0008, ADR-0070)"
+    )
 
 
 # --- Helpers -----------------------------------------------------------------
@@ -1218,7 +1448,16 @@ MODELS = DeclaredModels(
     calibration="openrouter:openai/gpt-4.1-nano",
     adjudicating="openrouter:openai/gpt-4.1-mini",
     attacking="openrouter:openai/gpt-4.1-mini",
+    narrative="openrouter:anthropic/claude-haiku",
 )
+"""Four identifiers a deployment declared, and the fourth is different from the third.
+
+Different on purpose, on `test_api_settings.DECLARED`'s reasoning: the narrative model
+and the adjudicating model are one string at every entry point today (ADR-0030), and a
+fixture that repeated it could not tell a document naming the instrument that wrote its
+prose from one naming the instrument that decided its judged families. Two settings
+holding one string is a legitimate configuration and not the collapse under test.
+"""
 
 CITATION = GateCitation(
     outcome=GateOutcome.PASSED,

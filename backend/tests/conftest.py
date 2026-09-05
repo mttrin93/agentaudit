@@ -988,16 +988,26 @@ SERIALISERS = (
     BENCH / "rendering" / "__init__.py",
     BENCH / "rendering" / "_measured.py",
     BENCH / "rendering" / "_declared.py",
+    BENCH / "rendering" / "_explained.py",
     BENCH / "rendering" / "_annexes.py",
     BENCH / "rendering" / "_layout.py",
 )
 """The modules that turn a result into bytes and into the document a human reads.
 
 Here rather than in one test file because two import walls are drawn over the same
-set — `test_payload.py` keeps the judge's prose out of the signed artefact, and
-`test_attribution.py` keeps an attributed cause out of it — and a second copy of the
-list would only have to be one module short, once, for a wall to stop covering a
-surface nobody noticed had split.
+set — `test_payload.py` decides which of them may name a finding, and
+`test_attribution.py` keeps an attributed cause out of everything that computes a
+figure — and a second copy of the list would only have to be one module short, once,
+for a wall to stop covering a surface nobody noticed had split.
+
+**The two walls no longer say the same thing about the same modules**, which is why
+the list is a list and not a rule. Since
+[ADR-0070](../../docs/adr/0070-a-signed-document-may-carry-a-remediation.md)
+`payload.py` may name a `ReportedFinding` — it is what turns one into keys — and the
+five rendering modules still may not, because `render` reads `payload.document` and
+never the result. A module added here is therefore a module both walls have an answer
+for, and adding one without deciding which side it is on is what this docstring exists
+to prevent.
 
 `assembler.py` is deliberately not on this list: it takes a `TargetRun`, which
 *holds* the narrations, so a direct-import check over it would assert nothing. What

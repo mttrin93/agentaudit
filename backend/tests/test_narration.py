@@ -31,7 +31,7 @@ from backend.api.runs import BenchConfig, BenchRuns, RunStatus
 from backend.bench.adaptive.budget import AdaptiveBudget
 from backend.bench.adaptive.episode import AdaptiveEpisode, EpisodeOutcome
 from backend.bench.adaptive.precedent import NO_PRECEDENT
-from backend.bench.assembler import assemble
+from backend.bench.assembler import FindingsReading, assemble
 from backend.bench.calibration import CalibrationResult, TargetRun, run_calibration
 from backend.bench.evaluator import Verdict
 from backend.bench.judge import (
@@ -51,9 +51,9 @@ from backend.bench.narration import (
     narrate,
     narrate_successes,
 )
-from backend.bench.payload import TargetPayload, canonical_bytes
+from backend.bench.payload import TargetPayload, canonical_bytes, document
 from backend.bench.remediation import RemediationFailed
-from backend.bench.rendering import digest, render
+from backend.bench.rendering import bound, digest, render
 from backend.bench.signing import SignedArtefact, generate
 from backend.bench.unfinished import (
     NOT_AN_ANSWER,
@@ -338,26 +338,26 @@ def test_a_target_that_succeeded_at_nothing_is_an_empty_queue_and_not_an_absent_
     assert held.judge.shown == []
 
 
-# --- The document says the same thing whether or not the judge ran -----------
+# --- The document says which of the four readings this run holds -------------
 
 
-def test_the_signed_artefact_is_byte_identical_whether_or_not_the_run_narrated(
+def test_the_article_column_is_the_same_whether_or_not_the_run_narrated(
     leakage_case: Case,
 ) -> None:
-    """No judged reading reaches the artefact, and the article column proves it.
+    """No judged reading reaches PLAN §4's central column, and two runs prove it.
 
-    #52 put PLAN §4's central column in the signed document, and the choice that
-    decides whether that column is trustworthy is *where it is read from*. Off a
-    `Finding` it would be full on a run that held a narrative instrument and blank
-    on one that did not; off `labels.LABELS` it is a property of the family and the
-    same in both
+    #52 put that column in the signed document, and the choice that decides whether
+    it is trustworthy is *where it is read from*. Off a `Finding` it would be full on
+    a run that held a narrative instrument and blank on one that did not; off
+    `labels.LABELS` it is a property of the family and the same in both
     ([ADR-0044](../../docs/adr/0044-a-familys-label-prints-beside-its-figures.md)).
 
-    Two runs against the same agent over the same case, one narrated and one not.
-    Both `narrations` readings that a run with successes can hold are exercised —
-    a tuple and `None` — and the canonical bytes and the rendering's digest are
-    equal, so nothing the judge produced reached either. `()` is the third reading
-    and is the run below.
+    **This test used to assert byte equality of the whole artefact, and since
+    [ADR-0070](../../docs/adr/0070-a-signed-document-may-carry-a-remediation.md) it
+    cannot**: the document now carries a findings section, so a narrated run and a
+    silent one differ — deliberately, and in exactly one section. What survives is
+    the claim it was written for, made over everything *except* that section, which is
+    the sharper form of it: a column that moved with the judge would show up here.
     """
     explained = narrated(leakage_case)
     assert explained.succeeded, (
@@ -378,7 +378,7 @@ def test_the_signed_artefact_is_byte_identical_whether_or_not_the_run_narrated(
         ).target_runs[0]
     assert silent.narrations is None
 
-    _same_document(narrating, silent, leakage_case)
+    _same_but_for_the_findings(narrating, silent, leakage_case)
 
 
 def test_the_document_of_a_target_that_succeeded_at_nothing_carries_the_column_too(
@@ -406,27 +406,31 @@ def test_the_document_of_a_target_that_succeeded_at_nothing_carries_the_column_t
         ).target_runs[0]
     assert silent.narrations is None
 
-    document = _same_document(nothing_to_explain, silent, leakage_case)
+    document = _same_but_for_the_findings(nothing_to_explain, silent, leakage_case)
 
     # And the column is there rather than merely equal on both sides: two equal
     # blanks would satisfy the comparison above and say nothing.
     assert "this family bears article 15 of the EU AI Act" in document
 
 
-def test_the_document_of_a_run_whose_narrative_instruments_broke_is_the_same_one(
+def test_the_four_readings_are_four_documents_and_every_one_of_them_is_signable(
     leakage_case: Case,
 ) -> None:
-    """The report question #102 had to answer, as bytes rather than as prose.
+    """The question ADR-0050 answered, re-answered now that a narrative is in here.
 
-    The fourth reading, against the same run made with no narrator at all. The
-    canonical bytes and the rendering's digest are equal, which is the whole of the
-    answer: a run whose judge broke signs the document a run with no judge signs,
-    every figure in it was measured before either instrument was asked, and the
-    article column is a property of the family (ADR-0044). So refusing to sign it
-    would withhold a complete and checkable artefact over an instrument no column
-    of it depends on, and signing it overstates nothing — the document makes no
-    claim about a finding under any of the four readings
-    ([ADR-0050](../../docs/adr/0050-a-run-whose-narrative-instruments-broke-is-measured-explained-nowhere-and-signable.md)).
+    [ADR-0050](../../docs/adr/0050-a-run-whose-narrative-instruments-broke-is-measured-explained-nowhere-and-signable.md)
+    signed a run whose judge broke on the footing that **no byte of the document
+    moved** between it and a run with no judge, and said in as many words: *if a later
+    ticket puts a narrative into the document, that ticket inherits this question and
+    does not inherit this answer.* This is that ticket
+    ([ADR-0070](../../docs/adr/0070-a-signed-document-may-carry-a-remediation.md)).
+
+    The bytes now differ, and they have to: a document that read the same under all
+    four readings would make *the instruments broke* indistinguishable from *nobody
+    declared one*, which is the collapse ADR-0050 exists to prevent, arriving one layer
+    along. And the answer to the signing question is unchanged and re-argued rather
+    than inherited: every figure in each of these documents was measured before either
+    instrument was asked, so all four are complete, checkable and signed.
     """
     with reference_target(name="trivial") as reference:
         [broken] = run_calibration(
@@ -453,31 +457,69 @@ def test_the_document_of_a_run_whose_narrative_instruments_broke_is_the_same_one
             adjudicator=ADJUDICATING,
         ).target_runs[0]
     assert silent.narrations is None
+    explained = narrated(leakage_case).result.target_runs[0]
+    nothing = narrated(leakage_case, name="hardened").result.target_runs[0]
 
-    document = _same_document(broken, silent, leakage_case)
+    readings = {
+        FindingsReading.INSTRUMENTS_BROKE: broken,
+        FindingsReading.NO_NARRATIVE_INSTRUMENT_DECLARED: silent,
+        FindingsReading.EXPLAINED: explained,
+        FindingsReading.NOTHING_TO_EXPLAIN: nothing,
+    }
+    documents = {
+        reading: TargetPayload(
+            result=assemble(run, [leakage_case]), provenance=a_provenance()
+        )
+        for reading, run in readings.items()
+    }
 
-    # And the column is present rather than merely equal on both sides, on the
-    # reasoning of the `()` test above: two equal blanks would satisfy the
-    # comparison and say nothing.
-    assert "this family bears article 15 of the EU AI Act" in document
+    # Four readings, four sections that say which one holds — and four different
+    # documents, because the section is inside the artefact.
+    for reading, payload in documents.items():
+        assert document(payload)["findings"]["reading"] == reading.value
+    assert len({canonical_bytes(one) for one in documents.values()}) == 4
+    assert len({digest(render(one)) for one in documents.values()}) == 4
+
+    # And every one of them renders, binds and signs. A run whose judge broke loses no
+    # figure — the rates, the intervals, the bands and the article column are all
+    # there — so withholding a signature would withhold a complete, fully checkable
+    # artefact over an instrument no figure in it depends on (ADR-0050, unchanged).
+    for payload in documents.values():
+        binding = bound(payload)
+        assert binding.payload.rendered_sha256 == digest(binding.markdown)
+        assert "this family bears article 15 of the EU AI Act" in binding.markdown
+
+    # The broken run's own figures reach the document rather than only its prose, so
+    # an operator reconciling a token bill reads them instead of parsing a sentence.
+    failure = document(documents[FindingsReading.INSTRUMENTS_BROKE])["findings"]
+    assert failure["instrument_failure"]["successes"] == broken.narrations.successes
 
 
-def _same_document(first: TargetRun, second: TargetRun, case: Case) -> str:
-    """The rendering these two runs share, or a failure naming what differs.
+def _same_but_for_the_findings(first: TargetRun, second: TargetRun, case: Case) -> str:
+    """The document these two runs share everywhere except section 3b.
 
-    Asserts over the canonical bytes *and* over the rendering's digest, because
-    those are the two things a signature covers (ADR-0017) and a difference could
-    hide in either: the payload is what is signed, and the document's digest is
-    what is bound into it.
+    Over the serialised document with the findings section removed, rather than over
+    the canonical bytes whole: since ADR-0070 those two runs *do* differ, in one
+    section and on purpose, and a comparison of the whole would now assert the
+    opposite of what this file is about. What it asserts instead is stronger than the
+    old equality was, because it names the exception rather than covering it — every
+    other key of the artefact, the article column included, is the same whether or not
+    a judge ran.
+
+    The rendering is returned rather than compared, since two renderings that differ by
+    one section differ by every byte after it; what the callers read out of it is a
+    line no reading of `narrations` may move.
     """
     documents = [
         TargetPayload(result=assemble(run, [case]), provenance=a_provenance())
         for run in (first, second)
     ]
-    assert canonical_bytes(documents[0]) == canonical_bytes(documents[1])
-    renderings = [render(one) for one in documents]
-    assert digest(renderings[0]) == digest(renderings[1])
-    return renderings[0]
+    bodies = [
+        {key: value for key, value in document(one).items() if key != "findings"}
+        for one in documents
+    ]
+    assert bodies[0] == bodies[1]
+    return render(documents[0])
 
 
 # --- Disagreements are logged and nothing resolves them ----------------------

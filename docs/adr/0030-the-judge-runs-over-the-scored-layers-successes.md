@@ -1,6 +1,6 @@
 ---
 status: accepted
-amended_by: 0050-a-run-whose-narrative-instruments-broke-is-measured-explained-nowhere-and-signable.md
+amended_by: 0050-a-run-whose-narrative-instruments-broke-is-measured-explained-nowhere-and-signable.md, 0070-a-signed-document-may-carry-a-remediation.md
 ---
 
 # The judge runs over the scored layer's successes, and a finding never touches a rate
@@ -161,7 +161,13 @@ the wire and the four re-derivable families first and *a judge and its cost seco
 caller and still not a document. Surfacing it — and deciding what a signed document may
 say about a target's failure under
 [ADR-0008](./0008-repo-disclosure-posture.md) — is a separate piece of work with its own
-disclosure question, and it is deliberately not bundled here.
+disclosure question, and it is deliberately not bundled here. *[That ticket was #112
+and it is built:
+[ADR-0070](./0070-a-signed-document-may-carry-a-remediation.md) spends the two
+decisions this ADR costed and left — the disclosure answer, and the fourth declared
+model named in the paragraph above. `DeclaredModels` now carries `narrative`, and the
+condition this ADR set for that field is the one that was met: the document carries the
+prose.]*
 
 ## Considered and rejected
 

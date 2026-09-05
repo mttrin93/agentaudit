@@ -643,11 +643,13 @@ Read the other way — `holds` when the upper bound clears 0.10, `fails` when th
 
 **The headline is "declared and defeated":** controls the target claims to have, which the bench broke. It falls out of a join between the scanner and the attacker at no extra cost, no competitor can produce it, and it is the direct empirical proof of this project's own thesis.
 
+**And beside the headline, each of those breaks explained, in a fourth section:** what one failure is read against, why it happened as the judge read it, what to change as the remediation tool wrote it, and the case ids of the earlier findings that informed the fix. It is inside the signature, because a fix a recipient cannot check is the one uncheckable part of a document whose premise is that they can check it; it quotes nothing of the exchange, and a sentence that reproduces a case's payload is published as *withheld*; and the model that wrote it is named in the provenance block beside the other three. It carries no severity, no ranking and no figure of any kind. [ADR-0070](./docs/adr/0070-a-signed-document-may-carry-a-remediation.md).
+
 Three limits printed with every result:
 
 - It compares one agent against itself over time, not against another agent.
 - It covers six families and nothing else — and it names which published categories it does not cover.
-- The adaptive section is **not reproducible**: re-run it and the attacker takes a different path. A route it found is evidence that the route exists; a route it did not find is evidence of nothing. The scored sections are re-derivable from their recorded inputs and the adaptive section is not, and printing that difference is the same discipline as printing κ beside a judged family.
+- Two sections are **not reproducible**: the adaptive one — re-run it and the attacker takes a different path, so a route it found is evidence that the route exists and a route it did not find is evidence of nothing — and the per-failure explanations, which two models wrote and which asking again would not reproduce. The scored sections are re-derivable from their recorded inputs and those two are not, and printing that difference is the same discipline as printing κ beside a judged family.
 
 ---
 

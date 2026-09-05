@@ -375,6 +375,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     calibration=UNDECLARED,
                     adjudicating=adjudicator_model or UNDECLARED,
                     attacking=UNDECLARED,
+                    narrative=adjudicator_model or UNDECLARED,
                 ),
                 # The same durable path a deployed bench reads them off
                 # (`app.deployed_bench`): the gate run this library cites, and the κ

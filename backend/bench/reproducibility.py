@@ -6,6 +6,16 @@ a caveat rather than a distinction. The gate decision is re-derivable from its
 recorded inputs; the adaptive layer is a stochastic search, recorded rather than
 re-derivable; and a run prints both sentences beside each other.
 
+**`NOT_REPRODUCIBLE` had one subject and now has two.** Its sentence used to name the
+adaptive attacker and its route, because the adaptive section was the only section
+that carried the label; since
+[ADR-0070](../../docs/adr/0070-a-signed-document-may-carry-a-remediation.md) the
+findings section carries it too, and there is no attacker and no route in that one. So
+the wording here says what the label means for any stochastic instrument, and each
+section says in its own body which instrument it means — a shared label whose sentence
+described one of its two subjects would be a signed document making a false statement
+about the other.
+
 It lives in its own module rather than in `assembler.py` so that the gate can say
 the same thing in the same words without importing a report — and, more to the
 point, without importing anything that can see an episode.
@@ -42,7 +52,8 @@ class Reproducibility(StrEnum):
                 )
             case Reproducibility.NOT_REPRODUCIBLE:
                 return (
-                    "not reproducible — re-run this layer and the attacker takes a "
-                    "different path. A route it found is evidence that the route "
-                    "exists; a route it did not find is evidence of nothing"
+                    "not reproducible — a stochastic instrument produced this "
+                    "section, so running it again would not produce it again. What "
+                    "is recorded here is evidence that it happened; what is absent "
+                    "from it is evidence of nothing"
                 )

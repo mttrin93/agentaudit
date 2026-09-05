@@ -59,6 +59,10 @@ The **API** exists because one target run is 180 scored calls plus up to 96 adap
 16. As a security analyst, I want a family the target could not be measured on to say so, so that an unmeasurable family is never read as a defended one.
 17. As a security analyst, I want a judged family below the κ floor to be absent from the report with the reason stated, so that a number the bench cannot vouch for is not published.
 18. As an engineer shipping an agent, I want the adaptive section to describe routes in prose and never as payload text, so that my own report is not a working exploit somebody can lift.
+18a. As an engineer shipping an agent, I want each failure the bench explained printed in the signed document — why it happened and what to change, with what informed the fix beside it — so that the advice I act on is part of the artefact my customer can verify rather than the one part of it nobody can check ([ADR-0070](../adr/0070-a-signed-document-may-carry-a-remediation.md)).
+18b. As an engineer shipping an agent, I want that prose to quote none of the exchange, and to be published as *withheld* where it does, so that a report about my agent is not a working attack somebody can lift out of an explanation.
+18c. As a procurement reader, I want the model that wrote that prose named in the provenance block beside the other three, so that no sentence in a signed artefact is unattributed.
+18d. As a security analyst, I want the section to say which of the four readings of a run's explanation holds — no instrument declared, nothing to explain, every failure explained, or the instruments ran and broke — so that a bench that was never asked is never mistaken for a bench whose judge broke.
 
 ### The precedent store
 

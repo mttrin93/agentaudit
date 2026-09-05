@@ -3931,6 +3931,14 @@ from a `finally` on the run. Read on 2026-09-05.
   constructs no `Attempt` and no `Transcript`, reaches no model, and lives in the module
   whose import graph `test_the_planting_module_names_no_counter_and_no_way_onto_the_wire`
   already walks. `PLANTING_CALLS` is still `0` and neither ceiling moved.
+- **The review found three things and each was answered.** Three ADR pointers in
+  `assembler.py` resolved to a filename that does not exist; what informed a fix was
+  worded twice, once on the record and once in the renderer, which is the drift
+  `Attribution.stated()` exists to prevent — it is now `informed_by_stated()` on the
+  record, carried in the payload and printed from it, so #113 has one sentence to
+  print rather than two to choose between; and a module constant and an enum member
+  both called `NOTHING_TO_EXPLAIN` are now named apart. None of the three changed a
+  figure.
 - **No variant was admitted, and none was proposed.** Admission needs a person at a tty
   (ADR-0052 §5), and nothing here asks for one.
 
@@ -4019,5 +4027,91 @@ on 2026-09-05.
   hardened target's refusal looks the same from here and that neither is called
   verified; and the clean zero's dependence on the waiver was unstated. None of the six
   changed a figure.
+- **The review found three things and each was answered.** Three ADR pointers in
+  `assembler.py` resolved to a filename that does not exist; what informed a fix was
+  worded twice, once on the record and once in the renderer, which is the drift
+  `Attribution.stated()` exists to prevent — it is now `informed_by_stated()` on the
+  record, carried in the payload and printed from it, so #113 has one sentence to
+  print rather than two to choose between; and a module constant and an enum member
+  both called `NOTHING_TO_EXPLAIN` are now named apart. None of the three changed a
+  figure.
+- **No variant was admitted, and none was proposed.** Admission needs a person at a tty
+  (ADR-0052 §5), and nothing here asks for one.
+
+### The signed document gained a section, and no figure moved (#112, 2026-09-05)
+
+[ADR-0070](./adr/0070-a-signed-document-may-carry-a-remediation.md). The bench has
+written a reason and a fix for every explained failure since ADR-0030 and discarded
+both; they are now in the artefact. What stood in the way was an import wall over every
+serialiser, which named its own two prices — a disclosure answer under ADR-0008 and a
+fourth declared model — and this ticket paid exactly those two and no third.
+
+- **`GOLDEN_ONE_FAMILY` moved to `b1d5952f2ae1`** — the fifteenth recorded move, and
+  the largest: a whole new section rather than a block inside one. Annex IV point 3 now
+  holds two sections, 3a the declared-and-defeated join and 3b each failure explained,
+  so the contents list gained a row, the sentence naming which points hold two sections
+  changed, and section 3 became 3a. It moved three times inside the branch and the
+  move-list records the reason for each: section 2's model list is four models rather
+  than three and its heading moved with the list, and the third is the shared
+  *not reproducible* label, whose sentence named the adaptive attacker and a route
+  because the adaptive section was its only subject. It has two now, and a shared label
+  whose sentence describes one of its two subjects is a signed document making a false
+  statement about the other — so the shared wording says what the label means for any
+  stochastic instrument, and each of the two sections names its own instrument in its
+  own body.
+- **`ARTEFACT_VERSION` did not move.** `findings` is an additive top-level key and
+  `narrative` an additive provenance key; a verifier reading the previous shape reads
+  every field it read before, checks the same signature and re-derives the same
+  arithmetic. The footing #43, #45, #47, #79, #86 and #87 set, and the cost ADR-0044
+  weighed when it rejected moving it to 2.
+- **The end-to-end check was run rather than asserted.** A signed artefact carrying one
+  explained failure was published to a directory and read back by
+  `uv run python -m scripts.verify`: all three results held — `signature_valid`,
+  `rendering_matches_its_digest`, and `arithmetic_agrees` over 39 recomputed figures —
+  and deleting the fix from the payload afterwards fails under `signature_invalid`,
+  which is the whole of the claim that the section is inside the signature and not a
+  new unprotected region (ADR-0017).
+- **The disclosure floor is a measurement and it is checked at both ends.**
+  `PAYLOAD_QUOTE_FLOOR = 40` characters, against the committed library: no committed
+  payload and no half of one survives the check, and no sentence written *about* a case
+  trips it. The high end is pinned by a literal of its own, because a bound written as
+  a multiple of the floor moves with the constant it exists to bound — and a floor of
+  4000 leaves the file green when the bound is a multiple and fails it when it is not,
+  which is how that was found.
+- **No rate, `D`, κ, interval, band, gate decision or gate citation moved, and the
+  library digest did not move.** `c515a89956cd`, eighteen records, no case record in
+  this diff. A finding is prose about a verdict already recorded; the import wall over
+  every module that computes a figure (`test_attribution.py`) is untouched, and
+  `ReportedFinding` admits no numeric type at all.
+- **A run whose narrative instruments broke no longer signs the same bytes as one that
+  declared none, and both are still signed.** ADR-0050 signed the fourth reading on the
+  footing that no byte moved between the four, and said that a ticket putting a
+  narrative into the document inherits the question and not the answer. It does: the
+  four readings are four documents, checked over the canonical bytes and the rendering
+  digest, and all four bind and sign — every figure in each was measured before either
+  instrument was asked.
+- **Ten guards were driven red for their own reasons.** The old import wall fired on
+  `payload.py` naming a `ReportedFinding`, which is the red the ticket asked to see
+  first; the inverted wall fires on a renderer reaching one, and on `payload.py`
+  reaching past the record to a `Narration`; switching the disclosure check off fails
+  the record test, the payload test and the published-artefact test on the withheld
+  list; collapsing the `()` reading into `None` fails the four-readings test on the
+  count of distinct sentences; dropping the fourth model from the provenance block
+  fails the provenance test; returning only the first narration fails the join test;
+  removing the `findings` key fails the renderer with a `KeyError` rather than
+  silently; rewording one sentence of section 3b's own prose fails the golden digest
+  test **on the digest** and not on a `KeyError`, which is the half of that drive the
+  ticket asked for by name; and pointing the provenance block's fourth line at the
+  adjudicating model fails the published-artefact test on the model it names — which
+  needed the fixture's fourth string to differ from its third, because until it did
+  that assertion held over a document naming the wrong instrument.
+- **The review found three things and each was answered.** Three ADR pointers in
+  `assembler.py` resolved to a filename that does not exist; what informed a fix was
+  worded twice, once on the record and once in the renderer, which is the drift
+  `Attribution.stated()` exists to prevent — it is now `informed_by_stated()` on the
+  record, carried in the payload and printed from it, so #113 has one sentence to
+  print rather than two to choose between; and a module constant and an enum member
+  both called `NOTHING_TO_EXPLAIN` are now named apart. None of the three changed a
+  figure.
 - **No variant was admitted, and none was proposed.** Admission needs a person at a tty
   (ADR-0052 §5), and nothing here asks for one.

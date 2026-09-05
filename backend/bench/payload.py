@@ -58,6 +58,15 @@ counts over them; episode transcripts and proposals are not serialised at all, o
 the prose description the adaptive section already holds. Case **ids** appear where
 a control was defeated, because an id is a pointer into the evidence and not a copy
 of it.
+
+**And since ADR-0070, prose two instruments wrote about this target's own failures**
+([ADR-0070](../../docs/adr/0070-a-signed-document-may-carry-a-remediation.md)) — why
+each one happened and what to change — under a *not reproducible* label of its own,
+with the model that wrote it named in the provenance block. The rule that keeps a
+payload out of that prose is enforced one module out, at
+`assembler.ReportedFinding.of`, which is the only place holding the case record a
+sentence has to be checked against; nothing here can admit prose that rule refused,
+because there is no route into this document that does not pass through that record.
 """
 
 import json
@@ -73,8 +82,10 @@ from backend.bench.assembler import (
     CoverageGap,
     DeclaredSection,
     FamilyEntry,
+    FindingsSection,
     MeasuredSection,
     ReportedEpisode,
+    ReportedFinding,
     ScannedControl,
     TargetResult,
 )
@@ -407,15 +418,26 @@ declare, and this one has something to declare and no way to declare it.
 
 @dataclass(frozen=True)
 class DeclaredModels:
-    """The three model identifiers a run was made under. Configuration, not results.
+    """The four model identifiers a run was made under. Configuration, not results.
 
-    The same three the gate document records, because they are the three settings
-    that decide what a run *is*: the model the bench's own calibration equipment ran
-    on, the model that adjudicates the two judged families, and the model the
-    adaptive attacker runs on. They are named as models and never as agents — no
-    reference agent is named in a target's report, because naming one invites the
-    comparison "your agent scored between the weak and the hardened reference",
-    which is a composite judgement wearing a comparison's clothes (ADR-0018).
+    The settings that decide what a run *is*: the model the bench's own calibration
+    equipment ran on, the model that adjudicates the two judged families, the model
+    the adaptive attacker runs on, and — since
+    [ADR-0070](../../docs/adr/0070-a-signed-document-may-carry-a-remediation.md) —
+    the model the narrative instruments ran on. They are named as models and never
+    as agents: no reference agent is named in a target's report, because naming one
+    invites the comparison "your agent scored between the weak and the hardened
+    reference", which is a composite judgement wearing a comparison's clothes
+    (ADR-0018).
+
+    **The fourth is the one ADR-0030 costed and did not spend.** It rejected a fourth
+    declared model on one ground — *the signed payload has no narrative or remediation
+    field, so a fourth declared input would be one no artefact names* — and named the
+    condition under which the answer changes: "the ticket that gives a narrative a
+    place in the document is the ticket that declares the instrument that wrote it".
+    The document now carries that prose, so the instrument is named beside the other
+    three. An unattributed sentence in a signed artefact is the one thing this
+    project's provenance rules exist to prevent.
     """
 
     calibration: str
@@ -430,6 +452,31 @@ class DeclaredModels:
     attacking: str
     """The adaptive layer's model, and the adaptive layer's only. It decides
     nothing that is scored (ADR-0010)."""
+
+    narrative: str
+    """The model the judge and the remediation tool ran on: the prose in the findings
+    section, attributed.
+
+    **One field for two instruments, and that is what the run actually has.**
+    `completion.narrator_for` builds both clients from one configuration string
+    (ADR-0030), so a record naming two would name a setting nobody chose, and a
+    document may not state one condition while holding another
+    (`reasoning_effort_stated`). The day a deployment declares the two apart is the
+    day this field splits, and that is a decision left rather than taken here — the
+    two `Completion` aliases are already declared apart so that it costs one field
+    and no argument.
+
+    **Required, with no default**, on `Provenance.selection`'s terms: a builder added
+    later has to state its answer rather than inherit one. What a default would say
+    here is *the adjudicating model*, which is true of every entry point today and
+    would be silently false the first time one of them moved — and the failure mode
+    is a document attributing a sentence to an instrument that did not write it.
+
+    Never κ's subject. κ is measured on `adjudicating` as the instrument that decides
+    the two judged families (ADR-0013); this names the instrument that wrote prose,
+    which no figure is read off and which carries no reliability figure of its own —
+    the narrative's evaluation is the gold-set run (ADR-0009, ADR-0030).
+    """
 
     attacking_temperature: float | None = None
     """The temperature that model was sampled at, or `None` for the provider's default.
@@ -746,6 +793,7 @@ def document(payload: TargetPayload) -> dict[str, Any]:
         "measured": _measured(payload.result.measured, payload.rule),
         "declared": _declared(payload.result.declared),
         "adaptive": _adaptive(payload.result.adaptive),
+        "findings": _findings(payload.result.findings),
         "coverage_gaps": [_gap(gap) for gap in payload.result.coverage_gaps],
         "elective": _elective(payload.result.elective),
         "untested_categories": [
@@ -979,14 +1027,20 @@ def _label(family: Family) -> dict[str, Any]:
 
     **PLAN §4's central column, in the artefact it was written for.** The article
     mapping was written before any code and had never been printed in a signed
-    document: it lived on `judge.Narrative`, and nothing under `payload.py` reads a
-    narrative —
+    document: it lived on `judge.Narrative`, and
     [ADR-0030](../../docs/adr/0030-the-judge-runs-over-the-scored-layers-successes.md)
     left surfacing one to its own ticket. It arrives here off `labels.LABELS`
     instead, so what a document says about a family's legal exposure does not depend
     on whether the run held a narrative instrument, on whether the target succeeded
     at anything, or on what a model wrote — which is the only shape in which a
     judged reading cannot reach a column a reader acts on (ADR-0004, ADR-0010).
+
+    **That ticket has since landed and this column did not move** (ADR-0070). The
+    document now carries the judge's prose, in `_findings`, under a *not reproducible*
+    label of its own — and this column is still read off the family's label, which is
+    why the four readings of `narrations` change that section and change no byte of any
+    family's article claim. A column that appeared only where an attack had landed
+    would be a legal claim a reader loses by having a good agent.
 
     **Keyed on `Family`, so an elective family has no route in.** `label_for` reads
     the table over the six and there is no argument here through which the tier's
@@ -1138,6 +1192,92 @@ def _episode(episode: ReportedEpisode) -> dict[str, Any]:
     }
 
 
+def _findings(section: FindingsSection) -> dict[str, Any]:
+    """Every failure explained, or which of the four absences holds (ADR-0070).
+
+    **The first prose in this artefact that a model wrote about the target's own
+    failure**, and the two things that bought it are spent where they are visible: the
+    disclosure rule is `assembler.ReportedFinding.of`'s, one module out, where the case
+    record is; the instrument that wrote the prose is named in the provenance block
+    beside the other three.
+
+    Marked *not reproducible*, off the shared enum and off the section itself. A model
+    wrote these sentences, so the label is the one ADR-0017 already has for that class,
+    and no third evidentiary class is invented for it — that would be a decision with
+    its own ADR and not a key added here (`rendering/__init__.py`).
+
+    **The reading travels as a name and not only as a sentence.** Four readings, and a
+    consumer telling them apart by matching prose stops telling them apart the day the
+    prose is reworded (ADR-0050).
+
+    **What is not here.** No count of findings per family, no total, and nothing that
+    reaches across two of them: a reader who wants to count these rows counts them, and
+    this document offers no figure built out of them (ADR-0005, D12). No confidence,
+    because a model's self-report about its own sentence is read as a measurement by
+    everyone who did not write it. And no transcript, no reply and no payload text,
+    which have nowhere here to arrive.
+    """
+    broken = section.broken
+    return {
+        "reproducibility": section.reproducibility.value,
+        "reproducibility_stated": section.reproducibility.stated(),
+        "reading": section.reading.value,
+        "stated": section.stated(),
+        "findings": [_finding(one) for one in section.findings],
+        # The fourth reading's own figures, so an operator reconciling a token bill
+        # reads them rather than parsing them back out of the sentence above.
+        "instrument_failure": (
+            None
+            if broken is None
+            else {
+                "broken": broken.broken.value,
+                "detail": broken.detail,
+                "explained": broken.explained,
+                "successes": broken.successes,
+            }
+        ),
+    }
+
+
+def _finding(reported: ReportedFinding) -> dict[str, Any]:
+    """One failure: what it is read against, why it failed, and what to change.
+
+    The two sentences are apart because two instruments wrote them and neither answers
+    the other's question (ADR-0069), and `withheld` says which of them the disclosure
+    rule replaced — countable rather than only legible, so a reader can ask how much of
+    a document was withheld without reading it.
+
+    `informed_by` carries the precedents' **case ids** and never their prose: a
+    precedent is a different target's failure and a different target's fix, and this
+    document is about one target (ADR-0011, ADR-0070 §2). The ids are what ADR-0019's
+    claim needs — a fix informed by a corpus, told apart from one derived from this
+    transcript alone.
+    """
+    attribution = reported.attribution
+    return {
+        "case_id": reported.case_id,
+        "family": str(reported.family),
+        "external_id": reported.external_id,
+        "exposure": reported.exposure.value,
+        "attributed_cause": attribution.reading.value,
+        "control_claiming": (
+            None if attribution.control is None else attribution.control.value
+        ),
+        "transform": attribution.transform.value,
+        "attributed_cause_stated": attribution.stated(),
+        "reason": reported.reason,
+        "fix": reported.fix,
+        "informed_by": list(reported.informed_by),
+        # The ids and the sentence about them, so section 3b and the report screen
+        # print one claim about one fix rather than two wordings of it — the rule
+        # `Attribution.stated()` already holds one record over (ADR-0068 §3).
+        "informed_by_stated": reported.informed_by_stated(),
+        "disagreement": reported.disagreement,
+        "withheld": [one.value for one in reported.withheld],
+        "stated": reported.stated(),
+    }
+
+
 def _gap(gap: CoverageGap) -> dict[str, str]:
     return {"category": gap.category, "reason": gap.reason, "stated": gap.stated()}
 
@@ -1210,6 +1350,10 @@ def _provenance(payload: TargetPayload) -> dict[str, Any]:
             "calibration": provenance.models.calibration,
             "adjudicating": provenance.models.adjudicating,
             "attacking": provenance.models.attacking,
+            # The instrument that wrote the prose in the findings section, beside the
+            # three that calibrate, decide and attack. A signed artefact carrying an
+            # unattributed sentence is what this line exists to prevent (ADR-0070).
+            "narrative": provenance.models.narrative,
             # Beside the identifier and never folded into it, and the sentence
             # beside the value: the value alone cannot say whether an absent
             # temperature was undeclared or unavailable (ADR-0025, #4).

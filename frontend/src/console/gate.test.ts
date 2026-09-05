@@ -30,9 +30,9 @@
  * boolean, or the one `null` that means *this app has not been told yet* — and
  * exactly one field is named for something that happens. The component's own half is
  * asserted over its source: the two writes it can make are a gate run's, it cannot
- * start a run or answer a run's interrupt, it has no form and no `fetch` of its own,
- * and every button on it is a `type="button"`. The route table's half of the same
- * claim is in `backend/tests/test_api_gate.py`.
+ * start a run or answer a run's interrupt, it has no `fetch` of its own, and the only
+ * button that presses on Enter is the one submit of the one form it draws. The route
+ * table's half of the same claim is in `backend/tests/test_api_gate.py`.
  *
  * **That the document is named and never parsed.** Every string in the view is
  * scanned for the figures only the gate run's own document holds — a measured `D`, a

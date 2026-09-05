@@ -64,8 +64,8 @@ export function TheAttestation({
           this one (ADR-0007). */}
       <form
         onSubmit={(event) => {
-          // Always: a form that reached the browser's own submit would reload the
-          // console and lose the statements made on it.
+          // Prevented for the reason `RegisterScreen`'s is: the browser's own submit
+          // would reload the console and take the declaration with it.
           event.preventDefault()
           if (!held) {
             forward()

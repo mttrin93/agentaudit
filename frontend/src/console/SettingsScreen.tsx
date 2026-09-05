@@ -348,9 +348,8 @@ function TheTuning({
       <form
         className="tuning"
         onSubmit={(event) => {
-          // Always: a form that reached the browser's own submit would reload the
-          // console, and what an operator would see is a screen that forgot the
-          // number they had just typed into it.
+          // Prevented for the reason `RegisterScreen`'s is: the browser's own submit
+          // would reload the console and take the declaration with it.
           event.preventDefault()
           sendNow()
         }}

@@ -15,6 +15,7 @@ to fail a working bench, and a lucky one must not pass a broken one.
 import ast
 import itertools
 import json
+from collections import Counter
 from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import fields, replace
 from pathlib import Path
@@ -76,6 +77,7 @@ from backend.tests.conftest import (
     adjudicating,
     all_plain,
     authored_library,
+    case_for,
     imports_of,
     served_references,
 )
@@ -453,24 +455,47 @@ def test_the_gate_result_carries_the_library_version_the_attempts_were_made_agai
     # comparable when they are not (spec story 27). Including an edited payload
     # under an unchanged id and an unchanged count, which is the edit a version
     # read off the file names would miss.
+    # The edited record is the pinned plain case rather than `library[0]`. Since
+    # `data-leakage-001-scripted_crescendo` was admitted the first record on disk is
+    # a four-turn script, and replacing its payload with one turn is refused by
+    # ADR-0054 before the version is ever read — so the test died on a `ValueError`
+    # about the fixture instead of measuring what it is about (#150).
     assert LibraryVersion.of(library[:-1]) != result.library
-    edited = [replace(library[0], payload=("the same case, asking differently",))]
-    assert LibraryVersion.of(edited + library[1:]) != result.library
+    plain = case_for(library, Family.DATA_LEAKAGE)
+    edited = [
+        replace(case, payload=("the same case, asking differently",))
+        if case is plain
+        else case
+        for case in library
+    ]
+    assert LibraryVersion.of(edited) != result.library
 
 
 def test_the_gate_decision_counts_no_episode_although_the_layer_ran(
     gate_run: CalibrationResult, library: list[Case]
 ) -> None:
     # The adaptive layer really ran in the same run, and not one turn of it reached
-    # a denominator: 540 attempts, and the episodes are somewhere else entirely.
+    # a denominator: 570 attempts, and the episodes are somewhere else entirely.
+    #
+    # A family's denominator is its own live case count times the attempts per case,
+    # and not three-times-ten for every family (ADR-0055). `3 * attempts_per_case`
+    # was the same statement while every family held three cases; admitting
+    # `data-leakage-001-scripted_crescendo` made `data_leakage` four live cases and
+    # `n = 40` where the other five stay at 30, which is the direction #66 argued for
+    # and the arithmetic this line now reads (#150).
     target_runs = gate_run.target_runs
     assert gate_run.run_state.episodes
 
     result = _gate(target_runs)
+    held = Counter(case.family for case in library)
 
     assert result.attempts == len(library) * DECLARED_RULE.attempts_per_case * 3
+    assert result.attempts == 570
     for outcome in result.decision.outcomes:
-        assert outcome.rates.trivial.attempts == 3 * DECLARED_RULE.attempts_per_case
+        assert outcome.rates.trivial.attempts == (
+            held[outcome.family] * DECLARED_RULE.attempts_per_case
+        )
+    assert held[Family.DATA_LEAKAGE] == 4
 
 
 def test_a_gate_run_with_both_judged_families_unfit_is_not_decided(
@@ -495,9 +520,21 @@ def test_a_gate_run_prints_every_rate_interval_and_score_behind_its_answer(
     # (spec story 47), and both reproducibility statements are printed beside it.
     stated = _gate(gate_run.target_runs).stated()
 
+    # Seven rows reading `hardened  ` over six families: one rate row each, and one
+    # more in the variant-mix block `data_leakage` now prints because it holds two
+    # constructions rather than one (ADR-0055, `gate.stated_variants`). That block
+    # appearing is the point — a reader who cannot see the mix cannot discount a rate
+    # that is partly about an escalation — so the count is written as the two things
+    # it counts rather than bumped to seven (#150).
+    mixed = [
+        outcome
+        for outcome in _gate(gate_run.target_runs).decision.outcomes
+        if len(outcome.rates.variants.hardened.counts) > 1
+    ]
     for family in Family:
         assert f"{family}:" in stated
-    assert stated.count("hardened  ") == len(Family)
+    assert stated.count("hardened  ") == len(Family) + len(mixed)
+    assert [outcome.family for outcome in mixed] == [Family.DATA_LEAKAGE]
     assert "D = 1.00" in stated
     assert "[0.917, 1.000]" in stated
     assert "re-derivable" in stated
@@ -834,7 +871,10 @@ def test_a_gate_run_is_written_to_a_document_that_survives_it(
     assert "adaptive-discovered" in written
     # The counts and the intervals, so the decision can be re-derived from the
     # document rather than from the terminal it scrolled past in.
-    assert "(0/30)" in written and "[0.917, 1.000]" in written
+    # `(0/40)` for data-leakage since its fourth live case was admitted; the
+    # other five families still read `(0/30)` (ADR-0055).
+    assert "(0/30)" in written and "(0/40)" in written
+    assert "[0.917, 1.000]" in written
     # And no payload, on either side of it (ADR-0008).
     for case in load_library(CASES_DIR):
         assert case.script not in written
@@ -938,7 +978,7 @@ def test_the_entry_point_writes_the_document_rather_than_only_being_able_to(
     assert "The scored layer, which decides the gate" in written
     assert "The adaptive layer, which decides nothing" in written
     assert "the decision rule as applied" in written
-    assert "540 attempts recorded" in written and "540 attempts recorded" in printed
+    assert "570 attempts recorded" in written and "570 attempts recorded" in printed
     assert "A_break" in written
     # And no payload reached it, on either side (ADR-0008).
     for case in load_library(CASES_DIR):

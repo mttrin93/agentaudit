@@ -18,9 +18,12 @@ import {
   ATTESTATION_STATEMENTS,
   NOT_MEASURABLE_WITHOUT_TOOL_CALLS,
   TOOL_TRACE_FAMILIES,
+  WALK_STEPS,
+  canLeave,
   echoRefusal,
   nothingDeclared,
   registrationRequest,
+  unmetConditions,
   withheldStatements,
   type Declarations,
 } from './declarations'
@@ -272,5 +275,73 @@ describe('a priced run', () => {
       price_per_call: null,
       currency: '',
     })
+  })
+})
+
+describe('what a step is still waiting for', () => {
+  it('names the statements and the name that hold the endpoint step', () => {
+    const nothing = nothingDeclared()
+
+    const unmet = unmetConditions('target', nothing)
+
+    expect(unmet).toEqual([
+      ...ATTESTATION_STATEMENTS.map((one) => `not attested: ${one.wording}`),
+      'an attestation has to record who made it',
+    ])
+  })
+
+  it('is empty on exactly the steps that may be left', () => {
+    // The pair is the invariant: a button disabled with nothing beside it is the
+    // dead end this exists to close, and a reason printed under an enabled button
+    // is a condition the walk does not actually hold.
+    for (const step of WALK_STEPS) {
+      expect(unmetConditions(step, nothingDeclared()).length > 0).toBe(
+        !canLeave(step, nothingDeclared()),
+      )
+      expect(unmetConditions(step, fullyDeclared()).length > 0).toBe(
+        !canLeave(step, fullyDeclared()),
+      )
+    }
+  })
+
+  it('says of the plant step that the value is unissued, or issued and unplanted', () => {
+    const unissued = { ...fullyDeclared(), nonce: '', nonce_planted: false }
+    const unplanted = { ...fullyDeclared(), nonce_planted: false }
+
+    expect(unmetConditions('plant', unissued).join(' ')).toContain(
+      'no nonce has been issued',
+    )
+    expect(unmetConditions('plant', unplanted).join(' ')).toContain(
+      'not declared planted',
+    )
+    expect(unmetConditions('plant', { ...unplanted, proof_waived: true })).toEqual([])
+  })
+
+  it('says of the tool step which of the two declarations is missing', () => {
+    const undeclared = { ...fullyDeclared(), exposes_tool_calls: null }
+    const listless = { ...fullyDeclared(), declared_tools: ['', '   '] }
+
+    expect(unmetConditions('tools', undeclared).join(' ')).toContain(
+      'tool-call visibility is not declared',
+    )
+    expect(unmetConditions('tools', listless).join(' ')).toContain(
+      'has to declare which tools it has',
+    )
+  })
+
+  it('is the sentence the registration guard would refuse with, and not a second wording', () => {
+    // The screen's reason and the guard's refusal are one string, so a condition
+    // reworded on the button cannot drift from the one that blocks the post. Held
+    // against `registrationRequest` rather than against a literal, because the
+    // wording either matches the guard or it does not.
+    const nothing = nothingDeclared()
+    const request = registrationRequest(nothing)
+    const refused = request.kind === 'blocked' ? request.missing : []
+
+    for (const step of WALK_STEPS) {
+      for (const condition of unmetConditions(step, nothing)) {
+        expect(refused).toContain(condition)
+      }
+    }
   })
 })

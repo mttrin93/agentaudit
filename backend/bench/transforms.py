@@ -443,7 +443,7 @@ def framing_for(transform: Transform, family: AnyFamily) -> str:
             f"{transform.value} has no framing for {family.value}, so no record of "
             f"that pairing is written. {_WHY_THIS_PAIRING_IS_ABSENT[transform]} "
             "Adding a pairing is a ticket that says what the framing strengthens "
-            "and what the reading costs against the plain payload (ADR-0074 §1)"
+            "and what the reading costs against the plain payload"
         )
     return held[family]
 
@@ -676,9 +676,12 @@ def _still_what_its_transform_makes(case: Case, base: Case) -> bool:
     """Whether that variant's committed payload is what its transform makes of its base.
 
     **A construction that cannot be performed is reported and never raised**, which is
-    the whole reason this is a separate function. `scripted_crescendo` refuses a base it
-    has no ladder for, and nothing stops a person hand-writing a record that claims the
-    transform over such a base — the record's own refusals ask only for more than one
+    the whole reason this is a separate function. There are now two ways to be one:
+    `scripted_crescendo` refuses a base it has no ladder for, and `framing_for` refuses
+    a family the transform has no framing for (ADR-0074 §2) — the second is what makes
+    a hand-written record of a pairing nobody argued arrive here as a mismatch instead
+    of as a failing suite. Nothing stops a person hand-writing a record that claims
+    either — the record's own refusals ask only for more than one
     turn and the retention precondition. Letting that refusal out of
     `mismatched_variants` would make the suite's library check *raise* where its job is
     to name the records to regenerate and leave the library readable (ADR-0052 §1). A

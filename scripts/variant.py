@@ -8,9 +8,9 @@
 **This is the only place a transform is applied** — once, here, with the result
 committed in the record's `payload`, whether it respells that payload or escalates
 over a ladder of turns (`transforms.derived_payload`, ADR-0054)
-([ADR-0052](../../docs/adr/0052-a-transform-is-a-committed-function-and-no-judged-family-gets-a-variant.md)
+([ADR-0052](../docs/adr/0052-a-transform-is-a-committed-function-and-no-judged-family-gets-a-variant.md)
 §1). Why a variant is a record at all is
-[ADR-0051](../../docs/adr/0051-a-variant-is-a-case-and-the-transform-is-a-function-it-names.md).
+[ADR-0051](../docs/adr/0051-a-variant-is-a-case-and-the-transform-is-a-function-it-names.md).
 The functions and their citations are
 `backend/bench/transforms.py`.
 
@@ -50,7 +50,7 @@ variant of it). The reasons are on the refusals below.
 construction: a framing is one prefix round a payload that passes through verbatim,
 so it is written per **family** against the mechanism that family tests, and a
 transform with no framing for the base's family composes nothing at all
-([ADR-0074](../../docs/adr/0074-a-framing-is-written-per-family-and-an-unframed-pairing-is-refused.md)).
+([ADR-0074](../docs/adr/0074-a-framing-is-written-per-family-and-an-unframed-pairing-is-refused.md)).
 That refusal is `transforms.framing_for`'s rather than one of the three below,
 because it is about the transform against the family and not about the base — and it
 arrives here as a `ValueError` `main` prints like every other way of getting a

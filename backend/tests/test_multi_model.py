@@ -793,7 +793,7 @@ def test_the_entry_point_re_runs_the_library_on_a_second_model_and_records_both(
     # Both runs, and the comparison between them.
     assert f"`{FIRST}`" in written and f"`{SECOND}`" in written
     assert "the multi-model validity check" in written
-    assert "570 attempts recorded" in written
+    assert "600 attempts recorded" in written
     assert written.count("gate run — the scored layer") == 2
     # Each run's own block says which model it was made on, on both sides of the
     # document: two unlabelled blocks are two runs a reader cannot tell apart.

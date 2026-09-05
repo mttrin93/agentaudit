@@ -475,14 +475,17 @@ def test_the_gate_decision_counts_no_episode_although_the_layer_ran(
     gate_run: CalibrationResult, library: list[Case]
 ) -> None:
     # The adaptive layer really ran in the same run, and not one turn of it reached
-    # a denominator: 570 attempts, and the episodes are somewhere else entirely.
+    # a denominator: 600 attempts, and the episodes are somewhere else entirely.
     #
     # A family's denominator is its own live case count times the attempts per case,
     # and not three-times-ten for every family (ADR-0055). `3 * attempts_per_case`
     # was the same statement while every family held three cases; admitting
     # `data-leakage-001-scripted_crescendo` made `data_leakage` four live cases and
-    # `n = 40` where the other five stay at 30, which is the direction #66 argued for
-    # and the arithmetic this line now reads (#150).
+    # `n = 40` where the other five stay at 30 (#150). Admitting
+    # `halt-defeat-001-scripted_crescendo` on 2026-09-05 does the same to a second
+    # family, so two families now read 40 and four read 30 — which is why the
+    # per-family assertion below is the one that carries the claim and the total is
+    # a consequence of it rather than a second statement.
     target_runs = gate_run.target_runs
     assert gate_run.run_state.episodes
 
@@ -490,12 +493,13 @@ def test_the_gate_decision_counts_no_episode_although_the_layer_ran(
     held = Counter(case.family for case in library)
 
     assert result.attempts == len(library) * DECLARED_RULE.attempts_per_case * 3
-    assert result.attempts == 570
+    assert result.attempts == 600
     for outcome in result.decision.outcomes:
         assert outcome.rates.trivial.attempts == (
             held[outcome.family] * DECLARED_RULE.attempts_per_case
         )
     assert held[Family.DATA_LEAKAGE] == 4
+    assert held[Family.HALT_DEFEAT] == 4
 
 
 def test_a_gate_run_with_both_judged_families_unfit_is_not_decided(
@@ -520,12 +524,14 @@ def test_a_gate_run_prints_every_rate_interval_and_score_behind_its_answer(
     # (spec story 47), and both reproducibility statements are printed beside it.
     stated = _gate(gate_run.target_runs).stated()
 
-    # Seven rows reading `hardened  ` over six families: one rate row each, and one
-    # more in the variant-mix block `data_leakage` now prints because it holds two
-    # constructions rather than one (ADR-0055, `gate.stated_variants`). That block
+    # Eight rows reading `hardened  ` over six families: one rate row each, and one
+    # more per family printing a variant-mix block, which is now two — `data_leakage`
+    # since #150 and `halt_defeat` since `halt-defeat-001-scripted_crescendo` was
+    # admitted on 2026-09-05 (ADR-0055, `gate.stated_variants`). Those blocks
     # appearing is the point — a reader who cannot see the mix cannot discount a rate
-    # that is partly about an escalation — so the count is written as the two things
-    # it counts rather than bumped to seven (#150).
+    # that is partly about an escalation — so the count stays written as the two
+    # things it counts rather than bumped to eight, and the membership assertion
+    # below is what would notice a third family arriving unannounced (#150).
     mixed = [
         outcome
         for outcome in _gate(gate_run.target_runs).decision.outcomes
@@ -534,7 +540,10 @@ def test_a_gate_run_prints_every_rate_interval_and_score_behind_its_answer(
     for family in Family:
         assert f"{family}:" in stated
     assert stated.count("hardened  ") == len(Family) + len(mixed)
-    assert [outcome.family for outcome in mixed] == [Family.DATA_LEAKAGE]
+    assert [outcome.family for outcome in mixed] == [
+        Family.DATA_LEAKAGE,
+        Family.HALT_DEFEAT,
+    ]
     assert "D = 1.00" in stated
     assert "[0.917, 1.000]" in stated
     assert "re-derivable" in stated
@@ -978,7 +987,7 @@ def test_the_entry_point_writes_the_document_rather_than_only_being_able_to(
     assert "The scored layer, which decides the gate" in written
     assert "The adaptive layer, which decides nothing" in written
     assert "the decision rule as applied" in written
-    assert "570 attempts recorded" in written and "570 attempts recorded" in printed
+    assert "600 attempts recorded" in written and "600 attempts recorded" in printed
     assert "A_break" in written
     # And no payload reached it, on either side (ADR-0008).
     for case in load_library(CASES_DIR):

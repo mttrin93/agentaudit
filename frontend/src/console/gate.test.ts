@@ -57,8 +57,9 @@ import hook from './useGateRun.ts?raw'
 /**
  * Every file the gate screen is made of, read as one text.
  *
- * The scan below asserts what this screen can and cannot *do* — two writes, no form,
- * no `fetch` of its own, every button a `type="button"`. That claim was written when
+ * The scan below asserts what this screen can and cannot *do* — two writes, no
+ * `fetch` of its own, and no button that presses anything this file did not hand it.
+ * That claim was written when
  * the screen was one file. #14 split it into a hook and five component files, and a
  * scan still pointed at `GateScreen.tsx` would have gone on passing while the
  * buttons and the writes it guards moved out from under it: the quiet way a
@@ -341,17 +342,33 @@ describe('the one control this screen adds, and no second one', () => {
       expect(component).toContain(write)
     }
     // Two writes and they are both a gate run's. It cannot start a run, cannot
-    // answer a run's interrupt, has no form to submit and no `fetch` of its own —
-    // every request it makes goes through the one module that types the wire.
-    for (const absent of ['startRun(', 'answerTheInterrupt(', '<form', 'method:', 'fetch(']) {
+    // answer a run's interrupt, and has no `fetch` of its own — every request it
+    // makes goes through the one module that types the wire.
+    for (const absent of ['startRun(', 'answerTheInterrupt(', 'method:', 'fetch(']) {
       expect(component).not.toContain(absent)
     }
-    // Every button is a `type="button"`. A submit button inside a form is a write
-    // this file did not decide to make.
+    // `<form` was on that list and is not any more, and what it was guarding is
+    // still guarded by the four above it and by the count below.
+    //
+    // The claim was that *a submit button inside a form is a write this file did not
+    // decide to make*, written when there was no form here and no `onSubmit` to
+    // read. The attestation walk has one now (#120): Enter in the two fields it
+    // draws does what its Continue does, which is the same callback the click
+    // already called and is handed in as a prop. The write is still `useGateRun`'s
+    // and still reached through the one module — a form that built a request would
+    // be caught by `method:` and `fetch(`, and one that started a run by
+    // `startRun(`.
+    //
+    // Every button is a `type="button"` except the submits, and there is exactly one
+    // submit per form: two buttons that press on Enter would be a screen where which
+    // one Enter presses is the browser's decision and not this file's.
     const buttons = component.match(/<button/g) ?? []
-    const typed = component.match(/type="button"/g) ?? []
+    const clicks = component.match(/type="button"/g) ?? []
+    const submits = component.match(/type="submit"/g) ?? []
+    const forms = component.match(/<form/g) ?? []
     expect(buttons.length).toBeGreaterThan(0)
-    expect(typed.length).toBe(buttons.length)
+    expect(clicks.length + submits.length).toBe(buttons.length)
+    expect(submits.length).toBe(forms.length)
   })
 })
 

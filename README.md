@@ -381,6 +381,7 @@ in it reaches AgentAudit, and the only place it uploads to is your own workflow 
     signing-key: ${{ secrets.AGENTAUDIT_SIGNING_KEY }}
     openrouter-api-key: ${{ secrets.OPENROUTER_API_KEY }}
     attestation: .github/agentaudit-attestation.md
+    bar: .github/agentaudit-bar.toml
     max-calls: "600"
 ```
 
@@ -388,7 +389,7 @@ The whole file, with every input and the comments that say why each one lives wh
 does, is [docs/examples/agentaudit-workflow.yml](./docs/examples/agentaudit-workflow.yml);
 the action itself is [action.yml](./action.yml) and the argument for it is
 [ADR-0066](./docs/adr/0066-the-action-is-a-composite-step-in-the-callers-own-repository.md).
-Four things are worth reading before you copy it.
+Five things are worth reading before you copy it.
 
 **Pin the tag, and read the library version when the numbers move.** The tag pins the
 bench, the bench pins the case library, and the library is what `LibraryVersion` records
@@ -420,6 +421,22 @@ before anything is sent, so pointing the bench somewhere else means editing that
 which is a reviewed diff too, and that is the point.
 [docs/examples/agentaudit-attestation.md](./docs/examples/agentaudit-attestation.md) is
 the example.
+
+**What makes the step red is a file in your repository, not a number in ours.** There
+is no overall score to threshold — nothing in a report reaches across two families
+([ADR-0005](./docs/adr/0005-no-composite-risk-score.md)) — so the bar is per family and
+it is a **band**: `.github/agentaudit-bar.toml`, named on the `bar:` input, saying for
+each of the six families the worst band that passes, or the reason that family is
+switched off. It is checked before anything is sent, and **a family it covers that this
+run has no band for fails the step** rather than passing quietly: a family the target
+could not answer, one withheld below the adjudicator's κ floor, one whose artefact was
+never planted and one nobody ran are all families nothing was measured about. A report
+whose gate citation is missing, superseded or stale is *not decided either way* and
+returns its own code — a bench that cannot discriminate is not a finding about your
+agent. The example is
+[docs/examples/agentaudit-bar.toml](./docs/examples/agentaudit-bar.toml) and the
+argument is
+[ADR-0067](./docs/adr/0067-the-bar-is-per-family-and-a-withdrawn-family-is-not-green.md).
 
 **What the step leaves behind** is the three files — `report.json`, `report.md`,
 `report.sig` — uploaded as a build artifact your recipient checks with

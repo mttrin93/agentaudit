@@ -201,17 +201,21 @@ def attestation_file(directory: Path, target: str) -> Path:
 
 
 def arguments(target: str, out: Path, attestation: Path, **declared: str) -> list[str]:
+    """The declared inputs as a command line, each flag joined to its own value.
+
+    `--flag=value` and not `--flag`, `value`, because one of the values here is a
+    `secrets.token_urlsafe` bearer token: roughly one in thirty begins with `-`, and
+    argparse reads that as the next option and reports the flag as missing its
+    argument. A test that fails on one run in thirty is a test nobody believes, and
+    the joined form is also what a shell script writes for a value it did not choose.
+    """
     return [
-        "--identity",
-        ACTOR,
-        "--attestation-file",
-        str(attestation),
-        "--out",
-        str(out),
+        f"--identity={ACTOR}",
+        f"--attestation-file={attestation}",
+        f"--out={out}",
         "--deterministic-only",
-        *(part for pair in declared.items() for part in pair),
-        "--url",
-        target,
+        *(f"{flag}={value}" for flag, value in declared.items()),
+        f"--url={target}",
     ]
 
 

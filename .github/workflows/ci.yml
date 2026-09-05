@@ -208,6 +208,12 @@ jobs:
           } >> "$GITHUB_ENV"
           rm "$RUNNER_TEMP/private"
 
+      # No `bar:` here, because the input defaults to `.github/agentaudit-bar.toml`
+      # and this repository commits one: the smoke run is decided against it exactly
+      # as a caller's run is decided against theirs, so a family that stops being
+      # measured in this job turns this job red until somebody says so in that file
+      # (ADR-0067). The bar is checked before the bench sends anything, and again
+      # over the signed payload after the upload.
       - name: Run the Action
         id: audit
         uses: ./

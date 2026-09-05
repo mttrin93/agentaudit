@@ -61,6 +61,18 @@ jobs:
           # refused. See `docs/examples/agentaudit-attestation.md`.
           attestation: .github/agentaudit-attestation.md
 
+          # **What makes this step red.** The worst band that passes, per family,
+          # in a file this repository reviews — there is no overall score to
+          # threshold (ADR-0005), and a bar living in the action would be a
+          # threshold nobody outside it can read (ADR-0003). It is checked before
+          # anything is sent, and a family it covers that nothing measured fails the
+          # step rather than passing quietly. See
+          # `docs/examples/agentaudit-bar.toml`. To run the bench and decide
+          # nothing, set it to `""` — deleting the line leaves the input's default
+          # in force, and a default pointing at a file you have not written is a
+          # step that goes red before it sends anything.
+          bar: .github/agentaudit-bar.toml
+
           # What this run may cost. At least one figure is required; an estimate
           # over the ceiling is declined and the step goes red, never trimmed to
           # fit. `max-spend` needs `price-per-call` — the bench never invents a

@@ -114,6 +114,20 @@ inputs:
     required: false
     default: .github/agentaudit-attestation.md
 
+  bar:
+    description: >-
+      Path in your repository to the committed bar: the worst band that passes for
+      each of the six families, or the reason a family is switched off, and how old
+      the bench's own gate run may be. **This is what makes the step red**, and it
+      is a file in your repository rather than a number in this one, because a bar
+      in a runner is a threshold nobody can read (ADR-0003, ADR-0067). It is checked
+      before anything is sent, so a bar that names five families fails the step
+      before it spends your inference budget. Leave it empty to run the bench and
+      decide nothing — the artefact is still written, signed and uploaded.
+      `.github/agentaudit-bar.toml` in the bench's own repository is the example.
+    required: false
+    default: .github/agentaudit-bar.toml
+
   # --- what bounds it -------------------------------------------------------------
   max-calls:
     description: >-
@@ -196,9 +210,8 @@ outputs:
   report-directory:
     description: >-
       Where `report.json`, `report.md` and `report.sig` were written. The seam a
-      later step reads — including the declared bar (#90), which reads the payload
-      below and decides whether this job is red. It is deliberately not decided
-      here: a bar in the runner is a threshold nobody can read (ADR-0003).
+      later step reads — the `bar` step below reads exactly this, and so can yours.
+      Written before the bench runs, so a non-zero exit still names it.
     value: ${{ steps.run.outputs.report-directory }}
   report-json:
     description: >-
@@ -242,6 +255,27 @@ runs:
       shell: bash
       working-directory: ${{ github.action_path }}
       run: uv sync --locked --no-dev
+
+    # **Before anything is sent, and before the caller's own install command runs.**
+    # A bar that names five of the six families is a mistake to catch while it has
+    # cost nothing: after the run it would be a step that spent an inference budget
+    # on a document nothing was compared against. This call decides nothing — it
+    # parses the file and stops — and `scripts/bar.py` exits 3 if the file is not a
+    # bar, which is the step's *refused before sending* answer (ADR-0067 §5).
+    - name: Check the declared bar
+      if: inputs.bar != ''
+      shell: bash
+      working-directory: ${{ github.action_path }}
+      env:
+        BAR: ${{ inputs.bar }}
+        WORKSPACE: ${{ github.workspace }}
+      run: |
+        set -euo pipefail
+        case "$BAR" in
+          /*) bar="$BAR" ;;
+          *) bar="$WORKSPACE/$BAR" ;;
+        esac
+        uv run --no-sync python -m scripts.bar --bar "$bar"
 
     # The one place a caller's own command runs, and it runs in their workspace under
     # their own workflow's authorship. It exists because a callback is *their* module:
@@ -386,3 +420,27 @@ runs:
         path: ${{ steps.run.outputs.report-directory }}
         retention-days: ${{ inputs.retention-days }}
         if-no-files-found: error
+
+    # **Last, and after the upload**: whatever this decides, the evidence it decided
+    # over is already attached to the run. It compares the signed payload against the
+    # caller's committed file and returns one of three codes — 0 passed, 1 a family
+    # below the band declared for it or not measured at all, 2 the instrument or the
+    # run did not stand and nothing was decided (ADR-0067). No `always()`: a bench
+    # step that already failed has said what happened in its own code, and a bar
+    # deciding over a run that was refused before sending would overwrite one answer
+    # with a vaguer one.
+    - name: Decide the step against the declared bar
+      if: inputs.bar != ''
+      shell: bash
+      working-directory: ${{ github.action_path }}
+      env:
+        BAR: ${{ inputs.bar }}
+        WORKSPACE: ${{ github.workspace }}
+        REPORT_DIR: ${{ steps.run.outputs.report-directory }}
+      run: |
+        set -euo pipefail
+        case "$BAR" in
+          /*) bar="$BAR" ;;
+          *) bar="$WORKSPACE/$BAR" ;;
+        esac
+        uv run --no-sync python -m scripts.bar --bar "$bar" --report "$REPORT_DIR"

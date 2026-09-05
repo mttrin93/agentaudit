@@ -781,6 +781,28 @@ The user's recorded statement that they are authorised to test the target, that 
 ([ADR-0065](./docs/adr/0065-a-ci-attestation-is-committed-prose-by-a-named-actor.md)). One record either way: the three statements, who made them, and the endpoint hash.
 _Avoid_: consent, agreement, terms, disclaimer
 
+**Declared bar**:
+The committed file in *somebody else's* repository that decides whether the AgentAudit
+step in their pipeline is red: per **family**, the worst **band** that passes. A bar and
+never a score — nothing in a report reaches across two families and there is no key at
+any depth that could (ADR-0005) — and in their repository rather than in this one,
+because a threshold in a runner is a threshold nobody can read (ADR-0003). Every one of
+the six families is named in it: held to a band, or switched off with the reason why. A
+family the bar covers and this run has **no band** for **fails the step** in the
+withdrawal's own sentence where the artefact carries one — **not measurable**, or a
+judged family **withheld** below the κ floor — and, where it carries none, saying so:
+a **declared gap** and a family whose cases were dropped before the run are absent from
+the payload entirely, so what the bar can say is that there is no band and no reason
+beside it. Either way it is red, because a check that iterated over the bands it found
+would pass over every one of them in silence. And a report whose **gate citation**
+is absent, superseded, stale by the age that file declares, or not a pass is **not
+decided either way**: a bench that cannot discriminate produces low rates against
+everything, and that is a fact about the instrument rather than a finding about the
+target (ADR-0018,
+[ADR-0067](./docs/adr/0067-the-bar-is-per-family-and-a-withdrawn-family-is-not-green.md)).
+Not the bar a **case** clears to enter the library, which is **admission**.
+_Avoid_: threshold, score, policy, gate, budget, SLA
+
 **Provenance block**:
 The part of a report recording who ran it, against what, under which attestation, with
 which library version. Not **provenance**, which is a fact about a **case**.

@@ -4237,3 +4237,95 @@ Action of [ADR-0066](./adr/0066-the-action-is-a-composite-step-in-the-callers-ow
   character. `failures.spec.ts` asserts both in a real browser.
 - **No rate, `D`, κ, interval, band, gate decision or gate citation moved.** The library
   digest is `c515a89956cd`, eighteen records, and no variant was admitted or proposed.
+
+### A patch goes to a throwaway checkout, and a post-patch attempt is not an `Attempt` (#115, 2026-09-05)
+
+The mechanism that would make a fix **proven** rather than suggested: patch a copy of the
+caller's checkout, re-serve the entrypoint out of it, re-attempt the one case that
+succeeded, and see whether the verdict flips.
+[ADR-0072](./adr/0072-a-post-patch-re-run-is-its-own-record.md) is the decision, and it is
+#115's half of the ADR epic #109 proposed jointly for #115 and #116 — the label
+vocabulary and the two surfaces are #116's and are deliberately not decided here.
+
+- **The original checkout is never written, and the invariant is a type.** `apply_patch`
+  takes a `Throwaway` rather than a `Path`, and a `Throwaway` whose root is not named for
+  a `proof-` workspace is refused at construction — so there is no signature through which
+  the caller's own checkout can be handed to the patch writer. Two tests hash every path
+  and every byte of the original before and after, one at the filesystem seam and one
+  through the whole loop, and ADR-0071 §5's read-only invariant is the one it does not
+  relax.
+- **No branch, stash or commit survives, because there is no repository in the copy.**
+  `.git` is not copied, which makes *never committed* a mechanism rather than a rule.
+  `__pycache__` is not copied either, and that one is correctness: a stale `.pyc` beside a
+  patched source is a file the interpreter may load *instead of* the patch, and a loop
+  that re-ran the unpatched module and reported the case fixed would be the worst answer
+  the mechanism could give. Both were driven red by emptying the ignore list.
+- **The copy is dropped from one `finally`, over eight endings** — a clean finish, a
+  refused patch, a patched module that would not load, a re-serve that never bound a port,
+  a target that outlived its retry policy, a raise after the re-attempt landed, a
+  cancellation (`BaseException`, so `finally` and not `except`), and a copy that failed
+  partway. #86's red drive repeated: moving the drop out of the `finally` and onto the end
+  of the happy path leaves the clean-finish test green and takes the other seven red. The
+  drop never raises — it runs while the exception that is the run's real answer is on its
+  way out — and a failed drop comes back as the operating system's own words.
+- **What a patch may be, refused five ways before the write.** A whole file and never a
+  diff, addressed at the file the **source anchor** points at; absolute paths and `..`
+  refused; containment decided on the **resolved** path, so a symlink inside the copy
+  pointing at a file outside it is outside it; a file that is not already there refused,
+  because a patch replaces and never creates; a non-regular file refused; and either side
+  over `MAX_PATCHED_FILE_BYTES` = 4 MiB refused. Each guard was removed on its own and the
+  test it holds went red for its own reason.
+- **And no model writes one.** `proving.py` and `throwaway.py` reach no `judge`,
+  `narration`, `remediation` or `adjudication`, held by an import-level test driven red by
+  adding the import. ADR-0071 §6 named this as the tempting version of the patching ticket;
+  a model writing code into a copy of somebody's repository and then executing it would be
+  a fourth instrument with no gold set to validate it, and #64's precedent applies
+  unamended.
+- **A post-patch attempt is not an `Attempt`, and the type check says so first.**
+  `PostPatchAttempt` carries no `verdict`, no `index`, no `verdict_class` and no
+  `transform` — the four fields that make an attempt countable — and answers with a closed
+  set of four outcomes instead. `RunState` gains no third list and `prove_patch` takes no
+  `RunState`. The issue's own named red is the shape of the test: mypy runs with
+  `warn_unused_ignores`, so `test_proving.py`'s `# type: ignore[arg-type]` on
+  `RunState.record` is accepted only *because* the call is a type error — widening that
+  signature turns `uv run mypy` red on that line rather than turning an assertion red,
+  which is confirmed. `PatchProof` refuses an `Attempt` at runtime as well, for a caller
+  who silenced the type checker.
+- **Its own counter.** `PatchProof.post_patch_calls` counts what the re-run put on the
+  wire and is not in `RunState.spent`; `Layer` still has exactly two members, because a
+  third would put this spend inside a ceiling declared for the scored suite and make it
+  addable to the other two (ADR-0007). The ceiling is the construction: one case, once.
+  It is counted as each exchange comes back rather than summed at the end, because a
+  re-run that fell over on its second turn still put its first turn on the wire — driven
+  red by summing at the end and re-running a script whose second turn raises.
+- **The copy is never on `sys.path`, and the cost of that is stated.** Only the patched
+  file is executed out of the copy, under a synthesised name that is unregistered again,
+  so no patched revision of anything can be found by anything importing its real dotted
+  name — this is the process holding the signing key. The consequence is that an
+  entrypoint using a **relative** import cannot be executed this way, which is
+  `NOT_RE_ATTEMPTED` and is held by a test with a real package in the checkout. The
+  exception behind any of the four `NOT_RE_ATTEMPTED` paths goes to `LOGGER` on the
+  runner that raised it, and so does a copy that survived its own drop — ADR-0059 §2's
+  answer for a callback that raises, and ADR-0063 §3's for a cleanup that failed.
+- **A flipped case is not a fixed family, said in three places.** In the type — one patch,
+  one re-attempt, no list, no `successes`, no `n`. In the prose — `stated()` says the claim
+  is about this one case and *deliberately not about its family*, that a family is thirty
+  attempts against every live case in it, and that re-running one is the operator's to ask
+  for. And in the import graph — `scorer.py`, `assembler.py`, `gate.py`, `bar.py`,
+  `calibration.py`, `runstate.py` and the serialisers are walked transitively and reach
+  neither module.
+- **A judged case is not re-decided.** A named outcome rather than a silent skip: an
+  adjudicator's agreement is measured over the scored layer against a gold set of that
+  layer's transcripts (ADR-0013), and a reader of a judged family's finding has to be able
+  to tell *not proven* from *not tried*.
+- **The fixture is a reference agent's own control and nothing else.** Epic #109's
+  constraint honoured: the suite's checkout holds a callback built out of
+  `controls.InputCheck`, the patch gives it the check, and the case flips — driven red by
+  making `apply_patch` not write. Nothing about a reference agent's patched re-run is
+  printed, reported or signed.
+- **Nothing is published, so nothing moved.** No payload key, no rendering, no screen
+  field, `ARTEFACT_VERSION` unchanged. **No rate, `D`, κ, interval, band, gate decision or
+  gate citation moved**, `GOLDEN_ONE_FAMILY` stays
+  `3ae88fadb9c1e2cdab6b28d0bd8b39959ea5b0b56f435f26cda2f6101c10026b` because no document
+  gained a character, and the library digest is `c515a89956cd`, eighteen records, with no
+  variant admitted or proposed.

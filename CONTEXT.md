@@ -829,6 +829,48 @@ read and never what the rate is
 ([ADR-0064](./docs/adr/0064-the-harness-reads-its-own-canary-back.md)).
 _Avoid_: confirmed, validated, tested, proved
 
+**Throwaway checkout**:
+The copy of the caller's own checkout a **patch** is written into, so that the bench
+can change a target's source without writing into somebody's repository:
+`proof-<id>`, derived once from the run id, reaching every operation as an argument
+and dropped **wholesale** however the run ends — a clean finish, a refused patch, a
+module that would not load, a target that never answered, a cancellation. The **run
+namespace**'s discipline applied to a working tree, and for the same reason: deleting
+what the bench remembers writing needs a manifest, and a manifest goes stale. It holds
+no `.git`, which is how *never committed* is a mechanism rather than a rule — there is
+no repository in the copy to make a branch, a stash or a commit in — and no
+`__pycache__`, so a stale `.pyc` cannot be loaded in place of the patch. The original
+checkout is **read and never written**: it is the **source anchor**'s checkout, and the
+only thing this adds to it is a copy
+([ADR-0072](./docs/adr/0072-a-post-patch-re-run-is-its-own-record.md), ADR-0071 §5).
+_Avoid_: workspace, sandbox, temp checkout, scratch, working copy
+
+**Patch**:
+What the bench would put in place of one file of a **throwaway checkout** — a *whole
+file*, never a diff, addressed at the file the **source anchor** points at and at no
+other. It **replaces and never creates**: a file the caller did not hand over is not
+part of what is being tested. It is the operator's own code and **no model writes
+one** — `proving.py` and `throwaway.py` reach no **instrument**, and a model writing
+code into a copy of somebody's repository and then executing it would be a fourth
+instrument with no gold set to validate it, which is #64's precedent unamended. Not
+the *fix*, which is the **remediation** tool's prose about what to change and stays
+prose (ADR-0069, ADR-0072).
+_Avoid_: diff, change, edit, hotfix, remediation
+
+**Post-patch attempt**:
+One **case** re-run against a **patched** revision of a target, and deliberately
+**not an attempt**: it is made against a different target revision, so counting it
+would put two revisions under one name and one denominator — ADR-0010's error in a new
+place. Its own record, its own outcome vocabulary and its own call counter; no
+`verdict`, no index and no signature anywhere that accepts both. What it licenses is a
+claim about **one case** — *this case no longer succeeds* — and never about the
+**family**: `n` is thirty attempts against every live case, a patch that defeats one
+payload while leaving the family open is overfitting to the test, and re-running the
+family is the operator's cost to choose
+([ADR-0072](./docs/adr/0072-a-post-patch-re-run-is-its-own-record.md), ADR-0003,
+ADR-0010).
+_Avoid_: attempt, retry, re-test, regression run, verification
+
 **Nonce**:
 The bench-issued value a user must plant in their target to prove they control it. Registration does not complete without its echo.
 _Avoid_: token, challenge, secret, key

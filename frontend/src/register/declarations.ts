@@ -236,6 +236,13 @@ const TOOLS_UNDECLARED =
  * deliberately absent, because they do not hold this step: they are refused at the
  * post by `registrationRequest`, which is where an operator meets them. This says
  * what *this button* is waiting for and never what the registration will want.
+ *
+ * **Every step is named, and none of them is the fall-through.** A `tools` branch
+ * reached by exhausting the other two is a branch a fourth step would silently land
+ * in — the walk would gain a screen and the screen would be held by the tool list’s
+ * conditions, and it would compile the whole way. The `never` below is what refuses
+ * that: a step added to `WALK_STEPS` and not to this function stops being a screen
+ * an operator meets and starts being a type error.
  */
 export function unmetConditions(step: Step, declarations: Declarations): string[] {
   if (step === 'target') {
@@ -261,13 +268,28 @@ export function unmetConditions(step: Step, declarations: Declarations): string[
     }
     return declarations.nonce_planted ? [] : [NONCE_UNPLANTED]
   }
-  if (declarations.exposes_tool_calls === null) {
-    return [TOOL_VISIBILITY_UNDECLARED]
+  if (step === 'tools') {
+    if (declarations.exposes_tool_calls === null) {
+      return [TOOL_VISIBILITY_UNDECLARED]
+    }
+    if (declarations.exposes_tool_calls && !declaredTools(declarations).length) {
+      return [TOOLS_UNDECLARED]
+    }
+    return []
   }
-  if (declarations.exposes_tool_calls && !declaredTools(declarations).length) {
-    return [TOOLS_UNDECLARED]
-  }
-  return []
+  return unheldStep(step)
+}
+
+/**
+ * A step of the walk that nothing above holds, of which there is not one.
+ *
+ * The parameter is `never`, so reaching this line is a compile error and not a call.
+ * The `throw` is what a value that got past the typechecker anyway would meet, and
+ * it names the step rather than being a bare `never`, because the one way here is a
+ * `WALK_STEPS` that grew.
+ */
+function unheldStep(step: never): never {
+  throw new Error(`no conditions are written for the ${String(step)} step`)
 }
 
 /**

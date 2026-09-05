@@ -156,6 +156,23 @@ const FIELDS = {
 } as const
 
 /**
+ * Which step draws which field, for the walk to be sent back to it.
+ *
+ * Beside `FIELDS` and `STEP_TITLES` rather than inside `stepShowing` below, for the
+ * reason they are up here: it is a table of names and not a computation, one row per
+ * step, and a `Record<Step, …>` will not compile the day a fourth step is added
+ * without saying where its fields are.
+ *
+ * `target` is empty and is the default — all but five of the fields are on it, and
+ * listing them would be a second copy of `FIELDS` to keep in step with the first.
+ */
+const STEP_DRAWING: Record<Step, readonly string[]> = {
+  tools: [FIELDS.declared_tools, FIELDS.exposes_tool_calls],
+  plant: [FIELDS.nonce, FIELDS.nonce_planted, FIELDS.echo_waived],
+  target: [],
+}
+
+/**
  * The step that draws a refused field, so the walk can go back to it.
  *
  * A message bound to an input two steps back is a message nobody reads: this walk
@@ -171,12 +188,7 @@ const FIELDS = {
  * the nonce on today.
  */
 function stepShowing(field: string): Step {
-  const on: Record<Step, readonly string[]> = {
-    tools: [FIELDS.declared_tools, FIELDS.exposes_tool_calls],
-    plant: [FIELDS.nonce, FIELDS.nonce_planted, FIELDS.echo_waived],
-    target: [],
-  }
-  return WALK_STEPS.find((step) => on[step].includes(field)) ?? 'target'
+  return WALK_STEPS.find((step) => STEP_DRAWING[step].includes(field)) ?? 'target'
 }
 
 /**

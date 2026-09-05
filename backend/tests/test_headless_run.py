@@ -617,8 +617,13 @@ def test_the_action_offers_the_two_narrowings_and_hands_them_over_by_environment
         assert text.count(interpolation) == 1, (
             f"{name} is interpolated somewhere other than its env binding"
         )
-    assert '--families "${families[@]}"' in text
     assert '--attempts-per-case "$ATTEMPTS"' in text
+    # `--families` takes one or more values, so it consumes every following word that
+    # is not an option token: its append has to be the last one, and a flag added
+    # after it would be handed to argparse as another family name.
+    appended = '--families "${families[@]}"'
+    assert appended in text
+    assert text.index(appended) > text.index("--artifact-name")
 
 
 def test_a_family_name_this_bench_does_not_hold_is_refused_before_anything_is_sent(

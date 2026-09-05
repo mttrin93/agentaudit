@@ -1191,6 +1191,34 @@ def test_a_family_the_caller_declared_away_is_its_own_block_on_the_page() -> Non
     assert "**0 of 30 attempts succeeded** — rate 0.00" in text
 
 
+def test_a_family_declared_away_carries_no_discovery_count() -> None:
+    """The one block whose rows do not pair a search with a suite, and it is arithmetic.
+
+    Every other family row carries what one adaptive attacker found beside what the
+    scored layer measured, because the join is the family and never the figure
+    (ADR-0056). A family here has no case left in the run, and
+    `adaptive/layer.objectives_for` picks each family's objective out of that same
+    pool — so no episode could have been opened against it, and a count that could
+    only ever print its own empty answer would suggest the search had been asked.
+    """
+    payload = a_payload(
+        result=a_result(
+            families=(Family.DATA_LEAKAGE,),
+            judged=(),
+            not_measurable={Family.HALT_DEFEAT: NotMeasurable.NO_TOOL_CALL_VISIBILITY},
+            not_run={Family.SCOPE_CREEP: DeclaredGap.FAMILY_SWITCHED_OFF},
+        )
+    )
+    text = render(payload)
+
+    [declared_away] = [line for line in text.splitlines() if "scope_creep" in line]
+    assert "Discoveries" not in declared_away
+    # And the neighbouring block still carries one, so this is the absence of a line
+    # rather than the removal of the pairing.
+    unmeasured = [line for line in text.splitlines() if "halt_defeat" in line]
+    assert any("Discoveries" in line for line in unmeasured)
+
+
 def test_a_run_that_narrowed_nothing_says_so_where_the_block_would_be() -> None:
     """The empty case is a sentence and not a missing heading.
 

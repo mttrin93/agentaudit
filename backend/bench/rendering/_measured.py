@@ -253,7 +253,7 @@ def _figures(
             "",
             "### Families this run did not attempt, and what its caller declared",
             "",
-            *_not_run(measured["not_run"], found),
+            *_not_run(measured["not_run"]),
             "",
             "### The elective families, requested and not",
             "",
@@ -519,9 +519,7 @@ def _not_measurable(
     )
 
 
-def _not_run(
-    declared_away: Sequence[Mapping[str, Any]], found: Mapping[str, Discoveries]
-) -> tuple[str, ...]:
+def _not_run(declared_away: Sequence[Mapping[str, Any]]) -> tuple[str, ...]:
     """The families this run's caller declared away, in the reason's own words.
 
     The **fourth** kind of nothing on this page and a block of its own, on the module
@@ -535,9 +533,18 @@ def _not_run(
     whether the gap is theirs to close — the same reason `_not_measurable` quotes its
     own record rather than summarising it (ADR-0004).
 
-    The empty answer is a sentence rather than a vanished heading, on `_elective`'s
-    terms: a run that narrowed nothing has to read differently from a report written
-    before this block existed.
+    **The one block on this page with no discovery count on its rows**, and the reason
+    is arithmetic rather than layout. Every other family row carries what the search
+    found beside what the suite measured, because the join is the family and never the
+    figure (ADR-0056); a family here has **no case left in the run at all**, and
+    `adaptive/layer.objectives_for` picks each family's objective out of that same
+    pool — so no episode was ever opened against it and the count could only print its
+    own empty answer. A line that can only say *none* says nothing, and printing one
+    would suggest the search had been asked.
+
+    The empty answer for the *block* is a sentence rather than a vanished heading, on
+    `_elective`'s terms: a run that narrowed nothing has to read differently from a
+    report written before this block existed.
     """
     return _listed(
         (
@@ -545,8 +552,7 @@ def _not_run(
             "not a reading about the target — no attempt was made, so there is "
             f"nothing to read. The family {one['label']['bears_stated']}, and "
             f"{one['label']['claims_stated']} — both hold whether or not this run "
-            "asked for it. Discoveries — what one adaptive attacker found here: "
-            f"{_found(found.get(str(one['family'])))}."
+            "asked for it."
             for one in declared_away
         ),
         "- None. Every family this library holds was asked for by this run, so none "

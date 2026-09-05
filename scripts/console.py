@@ -117,9 +117,11 @@ def instruments(model: str, usage: UsageLedger) -> tuple[Completion, Narrator]:
     for the *attacker* and for no other instrument, so an effort set here would be a
     declared input of a run the signed artefact has no field for — which is the
     defect #138 exists to close, one instrument over. It stays a library-level
-    setting, declared through `completion.ATTACKER_REASONING_EFFORT_ENV` where the
-    attacker's client is built beside the identifier its provenance names; the
-    argument is
+    setting of the *attacker*, declared through
+    `completion.ATTACKER_REASONING_EFFORT_ENV` and read where a deployed bench builds
+    that client beside the identifier its provenance names (`app.declared_instrument`)
+    — and a headless run builds no attacker client at all, so there is nothing for it
+    to configure either. The argument is
     [ADR-0075 §5](../docs/adr/0075-a-declared-gap-reaches-the-signed-artefact.md).
 
     Raises whatever the builders raise — `KeyError` or `ValueError` for a model

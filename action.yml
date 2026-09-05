@@ -398,16 +398,18 @@ runs:
         if [ -n "$ATTEMPTS" ]; then
           declared+=(--attempts-per-case "$ATTEMPTS")
         fi
-        # Last of the appended flags, because `--families` takes one or more values
-        # and would otherwise swallow whatever came after it. Split the way the tool
-        # list above is split, and the entrypoint refuses a name the bench does not
-        # hold rather than covering fewer families in silence.
+        if [ "$WRITE_SUMMARY" = "true" ]; then
+          declared+=(--summary "$GITHUB_STEP_SUMMARY" --artifact-name "$ARTIFACT_NAME")
+        fi
+        # **Last, and it has to stay last.** `--families` takes one or more values,
+        # so it consumes every following word that is not an option token: the
+        # entrypoint takes no positional arguments today, and appending one after
+        # this would hand it to argparse as a seventh family name. Split the way the
+        # tool list above is split, and a name the bench does not hold is refused
+        # before anything is sent rather than covering fewer families in silence.
         if [ -n "$FAMILIES" ]; then
           read -r -a families <<< "$FAMILIES"
           declared+=(--families "${families[@]}")
-        fi
-        if [ "$WRITE_SUMMARY" = "true" ]; then
-          declared+=(--summary "$GITHUB_STEP_SUMMARY" --artifact-name "$ARTIFACT_NAME")
         fi
 
         # Written before the run rather than after it, so a later step can name the

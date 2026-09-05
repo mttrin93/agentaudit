@@ -70,10 +70,11 @@ that a precondition the bench *checks* and a gap it is *told about* are two type
 to say so. One module for both would put the distinction inside the file that exists
 to draw it.
 
-### 3. The gaps arrive as an argument, required and not defaulted
+### 3. The gaps arrive as an argument, and it is required at the artefact's one door
 
-`payload_for` and `artefact_for` take them; `assemble` takes them; `RunPlan.gaps` is
-what the API path hands over and `scripts/bench.py` composes its own.
+`payload_for` and `artefact_for` take them, and they take them **required**;
+`assemble` takes them beside its eight other defaulted section inputs. `RunPlan.gaps`
+is what the API path hands over, and `scripts/bench.py` composes its own.
 
 **An argument rather than something read off the run.** A family whose cases were
 dropped before the first send made no attempt, so there is nothing on a `TargetRun`
@@ -81,10 +82,18 @@ to derive it from: the record it lives on is the run's *plan*. Deriving it insid
 `assemble` would mean that function reading a figure out of one section and into
 another, which is the property it does not have (ADR-0005).
 
-**Required**, on `DeclaredModels.narrative`'s terms: an entry point added later has to
-state its answer rather than inherit one. What a default would say is *this run
-narrowed nothing* — silently false for the whole of `scripts/bench.py`'s existence,
-which is exactly the hole this ADR closes.
+**Required at `payload_for`, on `DeclaredModels.narrative`'s terms**: an entry point
+added later has to state its answer rather than inherit one. What a default would say
+is *this run narrowed nothing* — silently false for the whole of `scripts/bench.py`'s
+existence, which is exactly the hole this ADR closes. That is the door every producer
+of an artefact goes through, and there is no route to a signed document that skips it.
+
+**And defaulted at `assemble`, deliberately.** Every one of that function's section
+inputs is defaulted with its own stated absence — no gate citation, no episode, no κ,
+no checkout — because it is also called directly, one section at a time, by tests
+asserting that section. A ninth required parameter there would buy nothing the door
+above does not already hold, and would make each of those call sites state an answer
+to a question it is not asking.
 
 ### 4. `scripts/bench.py` narrows through `plan_for`, and takes `--families` and `--attempts-per-case`
 
@@ -132,19 +141,25 @@ that the signed artefact has no field for — this ticket's defect, arriving thr
 same door one instrument over. Adding the field instead would be the report claiming a
 control over somebody's deployment that the bench does not have.
 
-**And the attacker's effort is already declared, at the level it belongs to.**
-`completion.declared_reasoning_effort` reads `AGENTAUDIT_ATTACKER_REASONING_EFFORT`,
-refuses a level this bench does not offer, and pairs the value with the identifier
+**And where the attacker's effort *is* a declared input, it is already declared at the
+level it belongs to.** `completion.declared_reasoning_effort` reads
+`AGENTAUDIT_ATTACKER_REASONING_EFFORT`, refuses a level this bench does not offer, and
+is read where the attacker's client is built beside the identifier
 `report.models.attacking` prints — in one call, so the instrument a run was made with
-and the model its provenance names cannot come apart (`app.declared_instrument`). A
-caller who wants a reasoning attacker sets that variable in their own workflow's `env:`
-block, where a reviewer reads it, and the artefact records what ran.
+and the model its provenance names cannot come apart (`app.declared_instrument`). That
+is a **deployed** bench: a variable of the process serving `POST /runs`, recorded in
+what that process signs.
 
-**A headless run has no reasoning attacker to configure today.** `scripts/bench.py`
-runs the adaptive layer on `SCRIPTED_ATTACKER`, the deterministic stand-in, and
-declares `attacking` as *not declared*. An action input naming the attacker's effort
-would name a setting for an instrument that entrypoint does not build — a workflow
-field that changes nothing and prints nowhere, which is worse than its absence.
+**A headless run has no reasoning attacker at all today, which is the third reason and
+the plainest.** `scripts/bench.py` runs the adaptive layer on `SCRIPTED_ATTACKER`, the
+deterministic stand-in, and declares `attacking` as *not declared*: it builds no
+attacker client, so it reads no effort and could record none. An action input naming
+the attacker's effort would name a setting for an instrument the entrypoint does not
+build — a workflow field that changes nothing and prints nowhere, which is worse than
+its absence. **Nor does setting the environment variable in a workflow do anything on
+this path**, and that is stated here rather than left to be discovered: the day this
+entrypoint builds a real attacker is the day it gains the seam and the field together,
+and it is not this ticket.
 
 So: it stays a library-level setting, this section is the written note ADR-0066 §6
 asked for, and `console.instruments` carries a one-line pointer here.
@@ -168,6 +183,19 @@ withdrawal in the two surfaces' words, which is what those two enumerations are 
   lists, which is a document whose narrowings were not recorded.
 - The rendered document changed, so `GOLDEN_ONE_FAMILY` moved in the same commit as
   the wording that moved it (ADR-0017).
+- **This is the one block on the page whose rows carry no discovery count.** Every
+  other family row pairs what the search found with what the suite measured, because
+  the join is the family and never the figure (ADR-0056); a family here has no case
+  left in the run, and `adaptive/layer.objectives_for` picks each family's objective
+  out of that same pool — so no episode could have been opened against it and the
+  count could only print its own empty answer. A line that can only say *none* says
+  nothing, and printing one would suggest the search had been asked.
+- **The new block is signed and not verified**, exactly as `not_measurable` and
+  `withheld` are: `verification.py` re-derives the wording of the rule and the cut
+  points and reads no absence. Making this one list the exception would leave a
+  verifier that checks one of four kinds of nothing, which is a worse statement about
+  the document than checking none. Whether every absence's `stated` should be
+  re-derived is its own ticket and its own argument.
 - `scripts/gate.py` takes no setting from any of this. `--attempts-per-case` is the
   entrypoint's and the gate stays on `DECLARED_RULE`, which is ADR-0025's line
   unmoved.
@@ -183,8 +211,9 @@ withdrawal in the two surfaces' words, which is what those two enumerations are 
   with no attempt is indistinguishable from one whose cases were all dropped, so the
   derivation would have to guess which of four reasons applied — a sentence invented
   by the assembler rather than recorded by the run.
-- **Defaulting the new argument to an empty mapping.** Convenient, and it would let a
-  fifth entry point reintroduce exactly this bug in silence.
+- **Defaulting the argument at `payload_for`.** Convenient, and it would let a fifth
+  entry point reintroduce exactly this bug in silence. §3 says where the requirement
+  lands and why `assemble` is not the same question.
 - **Leaving `DeclaredGap` in `backend/api/` and importing it from the assembler.**
   Acyclic today and backwards forever: the layering is the one thing a reader of this
   tree can rely on without reading it.

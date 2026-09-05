@@ -98,9 +98,11 @@ from backend.bench.capability import (
     accepts_temperature,
     capabilities_of,
 )
+from backend.bench.declared_gap import DeclaredGap
 from backend.bench.elective import ElectiveSelection
 from backend.bench.labels import FamilyLabel, bears_stated, claims_stated, label_for
 from backend.bench.library import ExternalId, Family, LibraryVersion
+from backend.bench.measurability import NotMeasurable
 from backend.bench.planting import (
     NOTHING_WAS_PLANTED,
     NOTHING_WAS_PLANTED_BY_THE_BENCH,
@@ -932,35 +934,54 @@ def _measured(section: MeasuredSection, rule: GateRule) -> dict[str, Any]:
             if entry.family not in barred_families
         ],
         "withheld": [_barred(entry, rule) for entry in barred],
-        "not_measurable": [
-            {
-                "family": family.value,
-                "reason": reason.value,
-                "stated": reason.stated(),
-                "label": _label(family),
-            }
-            for family, reason in sorted(
-                section.not_measurable.items(), key=lambda pair: pair[0].value
-            )
-        ],
-        # The fourth kind of nothing, in the same four keys as the third and for the
-        # same reader: the family, the machine-readable reason, the sentence that
-        # reason is written in, and the label the family bears whether or not
-        # anything was attempted against it (ADR-0044, ADR-0075). A separate list
-        # rather than more entries in `not_measurable`, because the two say different
-        # things about whose gap it is — one the bench detected, one it was told.
-        "not_run": [
-            {
-                "family": family.value,
-                "reason": gap.value,
-                "stated": gap.stated(),
-                "label": _label(family),
-            }
-            for family, gap in sorted(
-                section.not_run.items(), key=lambda pair: pair[0].value
-            )
-        ],
+        "not_measurable": _absences(section.not_measurable),
+        # The fourth kind of nothing, in its own list and in the same four keys: the
+        # two say different things about whose gap it is — one the bench detected, one
+        # it was told — and a reader owed a reason is owed the right one (ADR-0075).
+        # Two lists and one row builder: what may not be merged is the *lists*, and a
+        # second copy of the four keys would only have to drift once for one absence
+        # to be described differently from the other (ADR-0005 D12).
+        "not_run": _absences(section.not_run),
     }
+
+
+Absence = DeclaredGap | NotMeasurable
+"""The two reasons a family is named in this document without a figure beside it.
+
+A union and not a base class: the two are separate enumerations on purpose — one is a
+precondition this bench checked and could not meet, the other is a narrowing its
+caller declared — and what they share is the shape of a row in a report and nothing
+else (ADR-0075). The two other absences are not here: a withheld judged family has
+its own record with κ and a floor on it (`Withheld`), and an elective family nobody
+asked for is not keyed on the six at all (ADR-0035).
+"""
+
+
+def _absences(reasons: Mapping[Family, Absence]) -> list[dict[str, Any]]:
+    """One list of families named without a figure, each with the reason and its words.
+
+    The four keys every absence in this document has, for exactly one reader: the
+    family, the machine-readable reason, the sentence that reason is written in, and
+    the **label** the family bears whether or not anything was attempted against it
+    (ADR-0044). Sorted by family name, because a mapping has no order and a serialiser
+    that printed one would make two identical sections two different documents
+    (`canonical_bytes`, ADR-0016).
+
+    Typed on the two members rather than on either enum: `NotMeasurable` is what this
+    bench detected and `DeclaredGap` is what it was told
+    ([ADR-0075](../../docs/adr/0075-a-declared-gap-reaches-the-signed-artefact.md)),
+    the two lists they build stay separate, and what is shared is the shape of a row
+    and never a figure.
+    """
+    return [
+        {
+            "family": family.value,
+            "reason": reason.value,
+            "stated": reason.stated(),
+            "label": _label(family),
+        }
+        for family, reason in sorted(reasons.items(), key=lambda pair: pair[0].value)
+    ]
 
 
 def _barred(entry: FamilyEntry, rule: GateRule) -> dict[str, Any]:

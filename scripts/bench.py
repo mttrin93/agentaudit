@@ -210,7 +210,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         # family name or a denominator of zero costs nothing: both are refused
         # before the attestation is read and before anything is sent (ADR-0075).
         covered = declared_families(args.families)
-        rule = declared_rule(args.attempts_per_case)
+        rule = rule_measured_under(args.attempts_per_case)
     except (InvalidOperation, ValueError) as bad:
         print(f"The declared inputs do not describe a run: {bad}")
         return EXIT_WITHHELD
@@ -313,6 +313,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     # answered. Answering them twice would record a plant gap this entrypoint had
     # already recorded, in the words of the wrong surface, and against a family
     # name rather than against the `Case.requires` this bench reads (ADR-0061).
+    #
+    # `plan_for`'s judged branch is a no-op on the line above's terms and not a
+    # third answer: `deterministic_subset` already took the judged cases, so the
+    # plan finds none to drop and records none — which is what leaves the reason in
+    # `OperatorGap`'s words, where `print_target_run` needs it, and reaches the
+    # artefact through `_declared_gaps` below. What is left for this call to decide
+    # is the family switch and the construction switch, which nothing else here has.
     plan = plan_for(
         BenchConfig(cases=cases, rule=rule, adjudicator=adjudicator, families=covered),
         note_planted=True,
@@ -544,7 +551,7 @@ def declared_families(named: Sequence[str] | None) -> frozenset[Family]:
 
 
 def _declared_gaps(
-    withdrawn: dict[Family, OperatorGap], planned: Mapping[Family, DeclaredGap]
+    withdrawn_here: dict[Family, OperatorGap], planned: Mapping[Family, DeclaredGap]
 ) -> dict[Family, DeclaredGap]:
     """Every family this run did not attempt, in the words the artefact is written in.
 
@@ -555,24 +562,27 @@ def _declared_gaps(
     `DeclaredGap`. `OperatorGap.declared` is the translation and the argument for it
     ([ADR-0075](../docs/adr/0075-a-declared-gap-reaches-the-signed-artefact.md)).
 
-    **The earlier reason wins, and that is what the argument order says.** A family
-    withdrawn for want of a plant is gone from `cases` before `plan_for` sees it, so
-    the plan records nothing for it and there is nothing to lose; a family that is
-    both switched off and unplanted keeps the reason this run acted on first. Two
-    reasons for one absence would be a reader choosing.
+    **The two sources cannot name one family, and that is by construction rather than
+    by the merge.** Each narrowing removes the cases it withdrew, and each records
+    only families that still had one when it ran: `deterministic_subset` takes the
+    judged cases before `plan_for` sees them, so the plan finds no judged family to
+    call `NO_ADJUDICATOR`; `plan_for` drops a switched-off family's cases before
+    `withdrawn_for_want_of_a_plant` runs, so that pass finds nothing of it to withdraw.
+    The merge is therefore a union and never a precedence rule — a family with two
+    reasons beside it would be a reader choosing, and this is why there is never one.
     """
-    stated = {family: gap.declared() for family, gap in withdrawn.items()}
+    stated = {family: gap.declared() for family, gap in withdrawn_here.items()}
     return {**dict(planned), **stated}
 
 
-def declared_rule(attempts_per_case: int | None) -> GateRule:
+def rule_measured_under(attempts_per_case: int | None) -> GateRule:
     """The rule this run is measured under: the declared one, or a cheaper denominator.
 
     **The one number of `GateRule` a caller may set** (ADR-0025), and the second
     declared input of this entrypoint that moves a scored denominator — the first is
     `--families` above. Everything else in the record stays the declared rule, which
-    is what lets `scripts/verify.py` assert the rest against `DECLARED_RULE` and read
-    this one (ADR-0027).
+    is what lets `verification._declared_bar` assert the rest against `DECLARED_RULE`
+    and re-derive this one from the number the payload carries (ADR-0027).
 
     **No upper bound is checked here, and the ceiling is the reason.** The console
     offers the setting on a screen and bounds it to what that screen can show

@@ -24,6 +24,7 @@
 
 import type {
   AdaptiveProgress,
+  FieldRefusal,
   ApprovalBody,
   AttemptExchange,
   AttestationBody,
@@ -37,7 +38,6 @@ import {
   fetched,
   refusalIn,
   refusalRead,
-  type FieldRefusal,
 } from './http'
 
 

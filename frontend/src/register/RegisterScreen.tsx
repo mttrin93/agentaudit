@@ -43,6 +43,7 @@ import {
   notesToPlant,
   runStanding,
   startRun,
+  type FieldRefusal,
   type NoteToPlant,
   type NonceIssued,
   type StartOutcome,
@@ -52,25 +53,23 @@ import {
   A_DECLARATION_THE_BENCH_CANNOT_VERIFY,
   NOT_MEASURABLE_WITHOUT_TOOL_CALLS,
   TOOL_TRACE_FAMILIES,
-  declaredTools,
+  WALK_STEPS,
+  canLeave,
   echoRefusal,
   nothingDeclared,
   registrationRequest,
+  unmetConditions,
   type Declarations,
+  type Step,
 } from './declarations'
 import { rememberTheFigures, rememberWhoAttested } from '../run/interrupt'
 
-/**
- * The steps, in order, one per screen.
- *
- * Listed rather than generated, so that the flow's shape is readable here. The
- * three attestations share the one `attest` step and are generated from
- * `ATTESTATION_STATEMENTS` inside it, so a statement added to the record appears on
- * this walk without anything here being touched.
+/*
+ * The steps and the rule that decides when one may be left are in
+ * `declarations.ts`, beside the guard that refuses the registration in the same
+ * sentences. What is here is what each step is called and what it draws.
  */
-const STEPS = ['target', 'plant', 'tools'] as const
-
-type Step = (typeof STEPS)[number]
+const STEPS = WALK_STEPS
 
 /**
  * One short title a step, and the title is the whole of the header.
@@ -107,6 +106,97 @@ const STEP_TITLES: Record<Step, string> = {
 
 const PLANT_STEP = STEPS.indexOf('plant')
 
+/**
+ * Every input on this walk, named by the path the API would refuse it at.
+ *
+ * ADR-0076: the `id` of an input is the `loc` path a `422` carries for it, joined
+ * with dots and shortened nowhere — so `FIELDS.url` below is both the DOM name and
+ * the wire name, and a refusal reaching this screen finds its input by the string
+ * it arrived with. Listed in one place because these strings are a contract with
+ * `backend/api/app.py`'s models: a field renamed there is renamed here, and a
+ * refusal about a name nothing draws is drawn over the form instead of lost.
+ */
+/** Where the reasons the primary button is dead are written, for the button to cite. */
+const STILL_UNDECLARED = 'still-undeclared'
+
+const FIELDS = {
+  name: 'body.target.name',
+  url: 'body.target.url',
+  auth_token: 'body.target.auth_token',
+  agent_type: 'body.target.agent_type',
+  sends: 'body.target.sends',
+  declared_tools: 'body.target.declared_tools',
+  identity: 'body.attestation.identity',
+  price_per_call: 'body.cost.price_per_call',
+  currency: 'body.cost.currency',
+} as const
+
+/**
+ * The step that draws a refused field, so the walk can go back to it.
+ *
+ * A message bound to an input two steps back is a message nobody reads: this walk
+ * is one step at a time, so a `422` naming a field lands on a screen the operator
+ * is not on unless the walk returns to it. The default is the endpoint step because
+ * that is where all but three of the fields are, and a field this screen does not
+ * draw at all — `body.note_planted`, or a name the API grows and this file has not
+ * met — still sends the operator to the start of the walk with the bench's own
+ * sentence over it rather than nowhere.
+ */
+function stepShowing(field: string): Step {
+  if (field === FIELDS.declared_tools || field === 'body.target.exposes_tool_calls') {
+    return 'tools'
+  }
+  if (field.startsWith('body.nonce') || field === 'body.echo_waived') {
+    return 'plant'
+  }
+  return 'target'
+}
+
+/**
+ * The attributes an input carries while the API is refusing it, and nothing when
+ * it is not.
+ *
+ * `aria-invalid` is the state and `aria-describedby` is the sentence, which is the
+ * pair a screen reader announces on reaching the field — the whole of what #120
+ * asked for, since a page-level block leaves the reader to map a `loc` path onto a
+ * form by hand.
+ */
+function refusedAttributes(refusals: readonly FieldRefusal[], field: string) {
+  const refused = refusals.some((one) => one.field === field)
+  return refused
+    ? { id: field, 'aria-invalid': true, 'aria-describedby': saidAt(field) }
+    : { id: field }
+}
+
+/** The id of the sentence under a field, derived from the field's own name. */
+function saidAt(field: string): string {
+  return `${field}.refused`
+}
+
+/**
+ * What the API said about this field, under the field it said it about.
+ *
+ * Nothing at all where nothing was refused: an empty block reserved against a
+ * message that has not arrived is a form that looks like it is holding something.
+ */
+function Refused({
+  refusals,
+  field,
+}: {
+  refusals: readonly FieldRefusal[]
+  field: string
+}) {
+  const refused = refusals.find((one) => one.field === field)
+  if (refused === undefined) {
+    return null
+  }
+  return (
+    <span className="field-refused" id={saidAt(field)}>
+      {refused.msg}
+    </span>
+  )
+}
+
 /*
  * What a target that answers in text only costs, on the summary and not on the answer.
  *
@@ -127,6 +217,15 @@ export function RegisterScreen() {
   const [step, setStep] = useState(0)
   const [issued, setIssued] = useState<NonceIssued | null>(null)
   const [refusal, setRefusal] = useState('')
+  /**
+   * The fields the API named in its refusal, if it named any.
+   *
+   * Held beside the sentence rather than instead of it: a `422` that names a field
+   * still has a statement, and a refusal about the registration as a whole names no
+   * field at all. Cleared wherever the sentence is cleared, because a mark left on
+   * an input after the value under it changed is a mark about a body nobody posted.
+   */
+  const [refusedFields, setRefusedFields] = useState<readonly FieldRefusal[]>([])
   const [busy, setBusy] = useState(false)
   /**
    * The agent types the loaded library has cases for, to offer beside the field.
@@ -232,6 +331,7 @@ export function RegisterScreen() {
           return
         }
         const missingEcho = echoRefusal(standing)
+        setRefusedFields([])
         setRefusal(
           missingEcho ??
             `run ${standing.run_id} is ${standing.status} and did not stop at ` +
@@ -258,6 +358,7 @@ export function RegisterScreen() {
       setIssued(nonce)
       declare({ nonce: nonce.nonce, nonce_planted: false })
       setRefusal('')
+      setRefusedFields([])
     } catch (unusable: unknown) {
       setRefusal(`${unusable}`)
     }
@@ -309,10 +410,53 @@ export function RegisterScreen() {
     setIssued(null)
     declare({ nonce: '', nonce_planted: false })
     setRefusal(outcome.statement)
-    setStep(PLANT_STEP)
+    setRefusedFields(outcome.kind === 'refused' ? outcome.fields : [])
+    // Where the API named a field, the walk goes to the step that draws it and puts
+    // the keyboard on it, instead of to the plant step. Both are true of a refusal —
+    // the nonce is spent either way and the sentence above says so — but a message
+    // bound to an input the operator cannot see is the page-level block this
+    // replaced. Where no field was named there is nothing to go to, and the plant
+    // step is where the walk resumes.
+    const named = outcome.kind === 'refused' ? outcome.fields[0]?.field : undefined
+    if (named === undefined) {
+      setStep(PLANT_STEP)
+      return
+    }
+    setStep(STEPS.indexOf(stepShowing(named)))
+    // After the step it is on has been drawn. The input does not exist until then,
+    // and a focus call against a screen that has not rendered moves nothing.
+    setFocusOn(named)
   }
 
+  /**
+   * The field the keyboard is owed, once the step drawing it is on screen.
+   *
+   * A name rather than a boolean, so that a second refusal about a second field
+   * moves the focus again — and cleared by the effect that spends it, so that
+   * nothing steals the keyboard back on the next render.
+   */
+  const [focusOn, setFocusOn] = useState<string | null>(null)
+  useEffect(() => {
+    if (focusOn === null) {
+      return
+    }
+    document.getElementById(focusOn)?.focus()
+    setFocusOn(null)
+  }, [focusOn, setFocusOn])
+
   const current = STEPS[step]
+  const last = current === STEPS[STEPS.length - 1]
+  /**
+   * What is holding the primary button, in the words it will be refused in.
+   *
+   * The step's own conditions everywhere but the last step, where the button is the
+   * registration and is held by the whole guard rather than by this step.
+   */
+  const held = last
+    ? request.kind === 'blocked'
+      ? request.missing
+      : []
+    : unmetConditions(current, declarations)
   return (
     <main className="screen">
       {/*
@@ -341,102 +485,123 @@ export function RegisterScreen() {
         </section>
       ) : null}
 
-      {current === 'target' ? (
-        <>
-          <TargetStep
+      {/*
+        A form, so that Enter does what Enter does on a form.
+
+        There was none, and a walk of four fields where the primary button is the
+        only way forward is a walk a keyboard cannot finish without reaching for the
+        pointer. The button below is the form's submit and the step decides what
+        submitting means — the next step, or the registration — so implicit
+        submission is the same press by the same rule, including the rule that a
+        disabled primary submits nothing.
+      */}
+      <form
+        onSubmit={(event) => {
+          // Always, and before anything else: a form that reached the browser's own
+          // submit would reload the app and lose every declaration on it.
+          event.preventDefault()
+          if (last) {
+            void register()
+            return
+          }
+          if (canLeave(current, declarations)) {
+            setStep(step + 1)
+          }
+        }}
+      >
+        {current === 'target' ? (
+          <>
+            <TargetStep
+              declarations={declarations}
+              declare={declare}
+              kinds={kinds}
+              notes={notes}
+              refusals={refusedFields}
+              unpaired={unpaired}
+            />
+            {/* The three statements, at the foot of the screen that names the endpoint
+                they are about rather than on a page of their own. */}
+            <AttestationStep
+              declarations={declarations}
+              declare={declare}
+              refusals={refusedFields}
+            />
+          </>
+        ) : null}
+        {current === 'plant' ? (
+          <PlantStep
             declarations={declarations}
             declare={declare}
-            kinds={kinds}
-            notes={notes}
-            unpaired={unpaired}
+            issued={issued}
+            issue={issue}
+            busy={busy}
           />
-          {/* The three statements, at the foot of the screen that names the endpoint
-              they are about rather than on a page of their own. */}
-          <AttestationStep declarations={declarations} declare={declare} />
-        </>
-      ) : null}
-      {current === 'plant' ? (
-        <PlantStep
-          declarations={declarations}
-          declare={declare}
-          issued={issued}
-          issue={issue}
-          busy={busy}
-        />
-      ) : null}
-      {current === 'tools' ? (
-        <ToolVisibilityStep declarations={declarations} declare={declare} />
-      ) : null}
+        ) : null}
+        {current === 'tools' ? (
+          <ToolVisibilityStep
+            declarations={declarations}
+            declare={declare}
+            refusals={refusedFields}
+          />
+        ) : null}
 
-      <footer className="walk">
-        <button type="button" onClick={() => setStep(step - 1)} disabled={step === 0}>
-          Back
-        </button>
-        {current === STEPS[STEPS.length - 1] ? (
+        {/*
+          Why the button below is grey, immediately above the button.
+
+          It sits over the footer rather than under it, and it is the arrangement the
+          gate walk already uses (`GateAttestation.tsx`): the reader arrives at the
+          button, finds it dead, and the reason is the line their eye has just passed
+          rather than something below the fold or back up the form. `aria-describedby`
+          binds it to the button as well, because a screen reader in browse mode reads
+          a disabled control and would otherwise read *Continue, dimmed* and nothing
+          else.
+
+          On the last step the reasons are the registration guard's own, because that
+          is what disables the button there: the walk may be complete step by step and
+          still be missing a URL, and the operator is owed the field and not the step.
+        */}
+        {held.length ? (
+          <ul className="blocked" id={STILL_UNDECLARED}>
+            {held.map((one) => (
+              <li key={one}>{one}</li>
+            ))}
+          </ul>
+        ) : null}
+
+        <footer className="walk">
           <button
             type="button"
-            className="primary"
-            onClick={() => void register()}
-            disabled={busy || request.kind !== 'ready'}
+            onClick={() => setStep(step - 1)}
+            disabled={step === 0}
           >
-            {busy ? 'Registering…' : 'Register the target'}
+            Back
           </button>
-        ) : (
           <button
-            type="button"
+            type="submit"
             className="primary"
-            onClick={() => setStep(step + 1)}
-            disabled={!canLeave(current, declarations)}
+            disabled={busy || held.length > 0}
+            aria-describedby={held.length ? STILL_UNDECLARED : undefined}
           >
-            Continue
+            {last
+              ? busy
+                ? 'Registering…'
+                : 'Register the target'
+              : 'Continue'}
           </button>
-        )}
-      </footer>
+        </footer>
+      </form>
     </main>
   )
-}
-
-/**
- * Whether a step has been completed enough to leave.
- *
- * The attestation steps and the tool-visibility step hold the walk, because both
- * are declarations rather than form fields: a Continue button that stepped past an
- * unmade statement would make the statement optional in practice, whatever the
- * registration guard says about it later.
- */
-function canLeave(step: Step, declarations: Declarations): boolean {
-  if (step === 'plant') {
-    // Either the value is issued and declared planted, or the proof is waived and
-    // there is no value to wait for.
-    return (
-      (Boolean(declarations.nonce) && declarations.nonce_planted) ||
-      declarations.proof_waived
-    )
-  }
-  if (step === 'target') {
-    // The three statements are on this step now, and they hold it exactly as they
-    // held their own page: all three, and the name they are recorded against. A
-    // screen that let the walk past them would be a console asserting them itself,
-    // and `registrationRequest` still names the ones left unmade.
-    return (
-      ATTESTATION_STATEMENTS.every(
-        (statement) => declarations.attested[statement.field],
-      ) && Boolean(declarations.identity.trim())
-    )
-  }
-  if (step === 'tools') {
-    return (
-      declarations.exposes_tool_calls === false ||
-      (declarations.exposes_tool_calls === true &&
-        declaredTools(declarations).length > 0)
-    )
-  }
-  return true
 }
 
 interface StepProps {
   declarations: Declarations
   declare: (changed: Partial<Declarations>) => void
+}
+
+/** A step that draws fields the API can refuse, and what it refused about them. */
+interface RefusableProps extends StepProps {
+  refusals: readonly FieldRefusal[]
 }
 
 /**
@@ -468,26 +633,30 @@ function AgentType({
   declarations,
   declare,
   kinds,
-}: StepProps & { kinds: readonly string[] }) {
+  refusals,
+}: RefusableProps & { kinds: readonly string[] }) {
   if (kinds.length === 0) {
     return (
-      <label>
+      <label htmlFor={FIELDS.agent_type}>
         Agent type
         <input
+          {...refusedAttributes(refusals, FIELDS.agent_type)}
           value={declarations.agent_type}
           onChange={(event) => declare({ agent_type: event.target.value })}
           placeholder="what kind of agent this is"
         />
+        <Refused refusals={refusals} field={FIELDS.agent_type} />
       </label>
     )
   }
   return (
-    <label>
+    <label htmlFor={FIELDS.agent_type}>
       Agent type
       {/* No empty row over the kinds. The list is the kinds, one of them is chosen
           from the moment it arrives, and there is no state in which this field is
           showing a word the declaration does not hold. */}
       <select
+        {...refusedAttributes(refusals, FIELDS.agent_type)}
         value={declarations.agent_type}
         onChange={(event) => declare({ agent_type: event.target.value })}
       >
@@ -497,6 +666,7 @@ function AgentType({
           </option>
         ))}
       </select>
+      <Refused refusals={refusals} field={FIELDS.agent_type} />
     </label>
   )
 }
@@ -506,8 +676,9 @@ function TargetStep({
   declare,
   kinds,
   notes,
+  refusals,
   unpaired,
-}: StepProps & {
+}: RefusableProps & {
   kinds: readonly string[]
   notes: readonly NoteToPlant[]
   unpaired: readonly string[]
@@ -524,30 +695,36 @@ function TargetStep({
         no zero for one. It is not something an operator needs told before typing a URL.
       */}
       <p>The endpoint the bench will attack, and the price you pay per call on it.</p>
-      <label>
+      <label htmlFor={FIELDS.name}>
         Name
         <input
+          {...refusedAttributes(refusals, FIELDS.name)}
           value={declarations.name}
           onChange={(event) => declare({ name: event.target.value })}
           placeholder="the name the report will call this target"
         />
+        <Refused refusals={refusals} field={FIELDS.name} />
       </label>
-      <label>
+      <label htmlFor={FIELDS.url}>
         URL
         <input
+          {...refusedAttributes(refusals, FIELDS.url)}
           value={declarations.url}
           onChange={(event) => declare({ url: event.target.value })}
           placeholder="https://staging.example/agent"
         />
+        <Refused refusals={refusals} field={FIELDS.url} />
       </label>
-      <label>
+      <label htmlFor={FIELDS.auth_token}>
         Bearer token
         <input
+          {...refusedAttributes(refusals, FIELDS.auth_token)}
           type="password"
           value={declarations.auth_token}
           onChange={(event) => declare({ auth_token: event.target.value })}
           placeholder="the credential your endpoint expects, if it expects one"
         />
+        <Refused refusals={refusals} field={FIELDS.auth_token} />
         {/*
           The one field on this step that said nothing about itself, which is the one
           field that is somebody's secret. What it is for is not guessable from its
@@ -562,15 +739,22 @@ function TargetStep({
           Leave it empty if yours needs no credential.
         </span>
       </label>
-      <AgentType declarations={declarations} declare={declare} kinds={kinds} />
-      <label>
+      <AgentType
+        declarations={declarations}
+        declare={declare}
+        kinds={kinds}
+        refusals={refusals}
+      />
+      <label htmlFor={FIELDS.sends}>
         Sends per message
         <input
+          {...refusedAttributes(refusals, FIELDS.sends)}
           type="number"
           min={1}
           value={declarations.sends}
           onChange={(event) => declare({ sends: Number(event.target.value) })}
         />
+        <Refused refusals={refusals} field={FIELDS.sends} />
         {/* Without the rest: that the enforced ceiling is built from this figure
             rather than from a constant, and that a send is not an attempt. Both are
             true and both are enforced — `sends` is what the ceiling is computed from,
@@ -580,20 +764,24 @@ function TargetStep({
           How many times one message may go on the wire to this endpoint.
         </span>
       </label>
-      <label>
+      <label htmlFor={FIELDS.price_per_call}>
         Price per call
         <input
+          {...refusedAttributes(refusals, FIELDS.price_per_call)}
           value={declarations.price_per_call}
           onChange={(event) => declare({ price_per_call: event.target.value })}
           placeholder="leave empty for a run you have not priced"
         />
+        <Refused refusals={refusals} field={FIELDS.price_per_call} />
       </label>
-      <label>
+      <label htmlFor={FIELDS.currency}>
         Currency
         <input
+          {...refusedAttributes(refusals, FIELDS.currency)}
           value={declarations.currency}
           onChange={(event) => declare({ currency: event.target.value })}
         />
+        <Refused refusals={refusals} field={FIELDS.currency} />
         {/* Without the reason. That an amount in a currency the bench chose is a
             figure the operator did not state is the argument for the field existing,
             and the field exists. */}
@@ -835,16 +1023,18 @@ function WaiveTheProof({
  * rather than beside one of them, since it is recorded against all three and a field
  * sitting under the first would read as belonging to the first.
  */
-function AttestationStep({ declarations, declare }: StepProps) {
+function AttestationStep({ declarations, declare, refusals }: RefusableProps) {
   return (
     <section>
-      <label>
+      <label htmlFor={FIELDS.identity}>
         Who is attesting
         <input
+          {...refusedAttributes(refusals, FIELDS.identity)}
           value={declarations.identity}
           onChange={(event) => declare({ identity: event.target.value })}
           placeholder="recorded against every one of the three statements"
         />
+        <Refused refusals={refusals} field={FIELDS.identity} />
       </label>
       <ol className="attestations">
         {ATTESTATION_STATEMENTS.map((statement) => (
@@ -872,7 +1062,7 @@ function AttestationStep({ declarations, declare }: StepProps) {
   )
 }
 
-function ToolVisibilityStep({ declarations, declare }: StepProps) {
+function ToolVisibilityStep({ declarations, declare, refusals }: RefusableProps) {
   return (
     <section>
       <p>{NOT_MEASURABLE_WITHOUT_TOOL_CALLS}</p>
@@ -911,9 +1101,10 @@ function ToolVisibilityStep({ declarations, declare }: StepProps) {
         ) : null}
       </fieldset>
       {declarations.exposes_tool_calls === true ? (
-        <label>
+        <label htmlFor={FIELDS.declared_tools}>
           The tools this target has, one per line
           <textarea
+            {...refusedAttributes(refusals, FIELDS.declared_tools)}
             rows={6}
             value={declarations.declared_tools.join('\n')}
             onChange={(event) =>
@@ -921,6 +1112,7 @@ function ToolVisibilityStep({ declarations, declare }: StepProps) {
             }
             placeholder={'send_email\nlookup_order\nissue_refund'}
           />
+          <Refused refusals={refusals} field={FIELDS.declared_tools} />
           <span className="aside">{A_DECLARATION_THE_BENCH_CANNOT_VERIFY}</span>
         </label>
       ) : null}

@@ -21,6 +21,20 @@
  */
 
 /**
+ * One thing the API refused, and the field it refused it at.
+ *
+ * `field` is the `loc` path joined with dots and edited on the way in no other way
+ * — `body.cost.price_per_call` and not `price_per_call` — because that string is
+ * also the `id` of the input the screen marks invalid (ADR-0076). A path that was
+ * shortened here would be a name the DOM and the wire agree on only until somebody
+ * changed the shortening rule.
+ */
+export interface FieldRefusal {
+  field: string
+  msg: string
+}
+
+/**
  * The three statements, one field each, beside who made them.
  *
  * Three booleans rather than one `i_agree`, because the record has to show *what*

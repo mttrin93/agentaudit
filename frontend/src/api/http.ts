@@ -13,24 +13,12 @@
  * an empty string would be a screen with nothing to tell the operator to do next.
  */
 
+import type { FieldRefusal } from './contracts'
+
 export const REFUSED_WITHOUT_A_REASON =
   'the bench refused this registration and returned no reason with it. Nothing ' +
   'was sent to the target. Plant the value the bench issues next and register ' +
   'again.'
-
-/**
- * One thing the API refused, and the field it refused it at.
- *
- * `field` is the `loc` path joined with dots and edited on the way in no other way
- * — `body.cost.price_per_call` and not `price_per_call` — because that string is
- * also the `id` of the input the screen marks invalid (ADR-0076). A path that was
- * shortened here would be a name the DOM and the wire agree on only until somebody
- * changed the shortening rule.
- */
-export interface FieldRefusal {
-  field: string
-  msg: string
-}
 
 /** A refusal read whole: the sentence for the page, the fields for the fields. */
 export interface Refusal {

@@ -8,10 +8,10 @@ reader will act on is printed here, beside the counts it came from.
 
 **Nothing here reaches across two families** (ADR-0005, D12). No count of families,
 no rate over a run, and every *figure* is a figure the payload already carries. The
-same rule is why `_withheld`, `_not_measurable`, `_elective` and `_not_tested` are
-four functions rather than one — a family absent for four different reasons is four
-different statements, and a single "not tested" list would be this module deciding
-they are the same thing.
+same rule is why `_withheld`, `_not_measurable`, `_not_run`, `_elective` and
+`_not_tested` are five functions rather than one — a family absent for five different
+reasons is five different statements, and a single "not tested" list would be this
+module deciding they are the same thing.
 
 **One number is counted here rather than read, and it is not a figure**: the count of
 episodes a family's row carries beside its rate. Every reported episode already names
@@ -250,6 +250,10 @@ def _figures(
             "### Families this target could not be measured on",
             "",
             *_not_measurable(measured["not_measurable"], found),
+            "",
+            "### Families this run did not attempt, and what its caller declared",
+            "",
+            *_not_run(measured["not_run"], found),
             "",
             "### The elective families, requested and not",
             "",
@@ -512,6 +516,41 @@ def _not_measurable(
         ),
         "- None. Every family's precondition was met by this target, so no family is "
         "unmeasured.",
+    )
+
+
+def _not_run(
+    declared_away: Sequence[Mapping[str, Any]], found: Mapping[str, Discoveries]
+) -> tuple[str, ...]:
+    """The families this run's caller declared away, in the reason's own words.
+
+    The **fourth** kind of nothing on this page and a block of its own, on the module
+    header's own rule: a family absent because the bench could not read it and one
+    absent because its caller switched it off are two statements, and one list holding
+    both would be this module deciding they are the same
+    ([ADR-0075](../../../docs/adr/0075-a-declared-gap-reaches-the-signed-artefact.md)).
+
+    **The gap is the caller's and the sentence says so.** `DeclaredGap.stated` opens
+    with *not run* and names what was not provided, which is what tells a reader
+    whether the gap is theirs to close — the same reason `_not_measurable` quotes its
+    own record rather than summarising it (ADR-0004).
+
+    The empty answer is a sentence rather than a vanished heading, on `_elective`'s
+    terms: a run that narrowed nothing has to read differently from a report written
+    before this block existed.
+    """
+    return _listed(
+        (
+            f"- **{one['family']}**: {one['stated']}. This is not a rate of zero and "
+            "not a reading about the target — no attempt was made, so there is "
+            f"nothing to read. The family {one['label']['bears_stated']}, and "
+            f"{one['label']['claims_stated']} — both hold whether or not this run "
+            "asked for it. Discoveries — what one adaptive attacker found here: "
+            f"{_found(found.get(str(one['family'])))}."
+            for one in declared_away
+        ),
+        "- None. Every family this library holds was asked for by this run, so none "
+        "of them is absent here for something its caller declared.",
     )
 
 

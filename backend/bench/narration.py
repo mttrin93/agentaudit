@@ -21,10 +21,14 @@ off the attempt by `Finding.of`, which is the one-way dependency ADR-0004 requir
 
 **The two instruments are a pair, and the pair is the caller's declaration.** A
 `Narrator` holds both because a finding with a narrative and no fix is a finding
-that is true and unactionable, which is the thing `judge.py` and `remediation.py`
-each say they exist to prevent. The two fields are annotated with the two aliases
-those modules declare *apart*, so a deployment may point them at separate models
-without either of them moving the other (`remediation.Completion`).
+that is true and unactionable — and since
+[ADR-0069](../../docs/adr/0069-the-judge-writes-why-it-failed-the-remediation-tool-writes-what-to-change.md)
+that is load-bearing rather than ergonomic: the judge answers *why it failed* and
+writes no fix at all, so the second half of that guarantee is made by
+`remediation.py` alone and a caller supplying one instrument without the other
+would produce findings nothing could act on. The two fields are annotated with
+the two aliases those modules declare *apart*, so a deployment may point them at
+separate models without either of them moving the other (`remediation.Completion`).
 
 **An instrument that answers with something that is not a narrative ends the
 narrative pass and not the run.** `JudgeFailed`, `RemediationFailed` and
@@ -85,17 +89,26 @@ class Narrator:
     """
 
     assess: Assess
-    """The judge, which writes the narrative and structurally cannot return a
-    verdict (`judge.assess_finding`, ADR-0004)."""
+    """The judge, which writes *why it failed* and structurally cannot return a
+    verdict or a fix (`judge.assess_finding`, ADR-0004, ADR-0069)."""
 
     remediate: Remediate
-    """The remediation tool, which is the one instrument allowed to hold the
-    precedent store (`remediation.suggest_remediation`, ADR-0004)."""
+    """The remediation tool, which writes *what to change* and is the one
+    instrument allowed to hold the precedent store
+    (`remediation.suggest_remediation`, ADR-0004, ADR-0069)."""
 
 
 @dataclass(frozen=True)
 class Narration:
-    """One succeeded attempt explained: the finding, and the fix written for it.
+    """One succeeded attempt explained: why it failed, and what to change.
+
+    **Two records answering two questions, and neither answers the other's.** The
+    finding says why it failed and carries no fix; the remediation says what to
+    change and is the only answer to that a reader is handed
+    ([ADR-0069](../../docs/adr/0069-the-judge-writes-why-it-failed-the-remediation-tool-writes-what-to-change.md)).
+    Before that decision both instruments wrote a fix and nothing said which one an
+    engineer applied — and the judge's was always the unprecedented one, so the
+    layout of a page would have defeated ADR-0019's claim about the store.
 
     Two records side by side rather than one, and that is a constraint rather
     than a preference: `Finding` cannot carry a `Remediation`, because judge.py
@@ -105,7 +118,9 @@ class Narration:
 
     The finding is the record CONTEXT.md defines; `remediation` is the fix the
     tool wrote for it, carrying the precedents that were in front of the model
-    (`Remediation.informed_by`).
+    (`Remediation.informed_by`). It is also the unit `filing.file_precedent`
+    files, because a precedent is a failure *and* its fix and no single
+    instrument's output is both.
     """
 
     finding: Finding
@@ -290,6 +305,9 @@ def narrate(
     channel that did not exist when ADR-0004 was written.
     """
     narrative = assess_finding(JudgeBrief.about(attempt, case), narrator.assess)
+    # The judge has returned before the store appears, and it returned no fix:
+    # what it wrote is why this failed, and what to change is written below with
+    # the precedent for this family in front of it (ADR-0069).
     finding = Finding.of(attempt, narrative)
     return Narration(
         finding=finding,

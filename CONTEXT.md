@@ -340,7 +340,7 @@ is the opposite of a coverage claim.
 _Avoid_: using it for **not measurable**, deselected, disabled, opted out, n/a
 
 **Finding**:
-A verdict plus its narrative — reason, articles, external identifier, remediation, exposure type. Produced by the scored layer only; the adaptive layer produces an **adaptive finding**, which is a different thing and is named differently on purpose.
+A verdict plus its narrative — reason, articles, external identifier, exposure type. It says **why it failed** and carries no fix: what to change is written by `suggest_remediation`, one instrument along, and the two are joined on a **narration** ([ADR-0069](./docs/adr/0069-the-judge-writes-why-it-failed-the-remediation-tool-writes-what-to-change.md)). Produced by the scored layer only; the adaptive layer produces an **adaptive finding**, which is a different thing and is named differently on purpose.
 _Avoid_: issue, vulnerability, defect, alert
 
 **Attributed cause**:
@@ -661,7 +661,7 @@ A typed annotation a user attaches to a finding. Never changes a measured rate.
 _Avoid_: correction, dispute, appeal, exception
 
 **Precedent**:
-A past finding or remediation pattern retrievable to inform a new one.
+A past finding or remediation pattern retrievable to inform a new one. The fix it carries is the one `suggest_remediation` wrote, never the judge's, because the judge writes no fix ([ADR-0069](./docs/adr/0069-the-judge-writes-why-it-failed-the-remediation-tool-writes-what-to-change.md)).
 _Avoid_: history, memory, knowledge, prior
 
 ### Trust mechanics

@@ -6,6 +6,12 @@ the next run retrieves). The decision this module implements — what is filed, 
 is withheld, and *when* in a run the write happens — is
 [ADR-0031](../../docs/adr/0031-a-run-files-its-deterministic-findings-after-it-has-read-them.md).
 
+**A `Narration` is the unit, because a precedent is a failure and its fix.** The
+judge writes why it failed and the remediation tool writes what to change
+([ADR-0069](../../docs/adr/0069-the-judge-writes-why-it-failed-the-remediation-tool-writes-what-to-change.md)),
+so no single instrument's output is a precedent — the pair is. `Filing.judged`
+still carries findings, because a withheld record is one nothing was filed for.
+
 **Selection, never a caught exception.** `file_precedent` reads
 `Finding.verdict_class` — copied off the attempt, so it cannot be inferred wrongly
 from a family name — and the findings it did not file travel back on
@@ -29,6 +35,7 @@ from dataclasses import dataclass
 from backend.bench.adaptive.precedent import DurablePrecedents, Precedent
 from backend.bench.judge import Finding
 from backend.bench.library import VerdictClass
+from backend.bench.narration import Narration
 
 
 @dataclass(frozen=True)
@@ -75,8 +82,11 @@ class Filing:
     """
 
 
-def file_precedent(findings: Iterable[Finding], store: DurablePrecedents) -> Filing:
+def file_precedent(narrations: Iterable[Narration], store: DurablePrecedents) -> Filing:
     """File this run's deterministic findings, and report the ones withheld.
+
+    **A `Narration` and not a `Finding`**, for the reason the module docstring
+    above gives: findings alone would leave nothing to file but the judge's reason.
 
     `store` is annotated `DurablePrecedents` and deliberately not `PrecedentStore`:
     the read-only protocol promises no `record`, so the write handle exists in
@@ -88,11 +98,12 @@ def file_precedent(findings: Iterable[Finding], store: DurablePrecedents) -> Fil
     filed: list[Precedent] = []
     judged: list[Finding] = []
     keys: set[str] = set()
-    for finding in _one_per_case(findings):
+    for narration in _one_per_case(narrations):
+        finding = narration.finding
         if finding.verdict_class is not VerdictClass.DETERMINISTIC:
             judged.append(finding)
             continue
-        entry = store.record(finding)
+        entry = store.record(finding, narration.remediation.fix)
         # Reported once, because `Precedent.key` is a digest of the record and two
         # targets that failed one case identically are one row rather than two
         # (`Precedent.key`). Writing it twice is idempotent; *listing* it twice
@@ -103,8 +114,8 @@ def file_precedent(findings: Iterable[Finding], store: DurablePrecedents) -> Fil
     return Filing(filed=tuple(filed), judged=tuple(judged))
 
 
-def _one_per_case(findings: Iterable[Finding]) -> Iterator[Finding]:
-    """The first finding of each case against each target, in the order it was made.
+def _one_per_case(narrations: Iterable[Narration]) -> Iterator[Narration]:
+    """The first narration of each case against each target, in the order it was made.
 
     **The unit of a precedent is a failure mode, and the case is its identity.** A
     case is attempted ten times against a target (#4), so a target that fails one
@@ -129,9 +140,10 @@ def _one_per_case(findings: Iterable[Finding]) -> Iterator[Finding]:
     lookup orders by recency (`RETRIEVAL_LIMIT`).
     """
     seen: set[tuple[str, str]] = set()
-    for finding in findings:
+    for narration in narrations:
+        finding = narration.finding
         identity = (finding.target_name, finding.case_id)
         if identity in seen:
             continue
         seen.add(identity)
-        yield finding
+        yield narration

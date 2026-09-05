@@ -1,8 +1,16 @@
 ---
 status: accepted
+amended_by: 0069-the-judge-writes-why-it-failed-the-remediation-tool-writes-what-to-change.md
 ---
 
 # A run files its deterministic findings, and it files them after it has read them
+
+> **Amended by [ADR-0069](./0069-the-judge-writes-why-it-failed-the-remediation-tool-writes-what-to-change.md) on
+> the unit filed, and on nothing else.** `file_precedent` takes `Narration`s rather
+> than `Finding`s, and `Precedent.of` takes the fix as an argument, because a
+> precedent is a failure *and* its fix and since that decision no single
+> instrument writes both. *When* a run files, *what* it withholds, and the
+> one-per-case unit are unchanged.
 
 [ADR-0019](./0019-long-term-memory-that-does-not-survive-a-restart-is-not-long-term.md)
 built a store that outlives the process and said what the store is for: "precedent's

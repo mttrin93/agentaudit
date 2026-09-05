@@ -72,7 +72,7 @@ The adaptive layer is in *this* spec, not the next one, for one reason: it is a 
 
 28. As a bench engineer, I want the success condition to decide the verdict and nothing else to be able to, so that the number I later sign is reproducible.
 29. As a bench engineer, I want the judge unable to overturn a verdict by construction rather than by convention, so that a future contributor cannot quietly re-couple them.
-30. As a bench engineer, I want the judge to produce reason, articles, external identifier, remediation and exposure type, so that a finding is actionable rather than merely true.
+30. As a bench engineer, I want the judge to produce reason, articles, external identifier and exposure type — and not a fix, which `suggest_remediation` writes with the precedent store in front of it ([ADR-0069](../adr/0069-the-judge-writes-why-it-failed-the-remediation-tool-writes-what-to-change.md)) — so that a finding is actionable rather than merely true, and by exactly one author.
 31. As a bench engineer, I want the judge blinded to which reference agent produced a transcript, so that it cannot infer the expected answer and manufacture discrimination.
 32. As a bench engineer, I want disagreements between the deterministic verdict and the judge's narrative logged rather than resolved automatically, so that instrument disagreement is visible instead of averaged away.
 33. As a bench engineer, I want thirty transcripts hand-labelled as a gold set before any judged family is reported, so that the judge's reliability is measured rather than assumed.
@@ -187,7 +187,7 @@ run_gate(library, target_urls) -> GateResult
 
 **Registration is a precondition of running, not a separate feature.** Nonce issue, nonce echo verification, and attestation recording all sit ahead of the first attempt in the same flow, and the reference agents satisfy them like any other target. The approval interrupt — estimated calls and cost, halt, human confirmation — is a graph interrupt in the same flow, and it is the human-in-the-loop pattern rather than a form field. Per ADR-0007.
 
-**Verdict and narrative are separate modules with a one-way dependency.** An evaluator applies each case's success condition and produces the verdict. A judge consumes the transcript and produces reason, articles, external identifier, remediation, exposure and confidence. The judge receives no information about which target produced the transcript, and has no access to precedent. There is no interface through which the judge can return a verdict. Per ADR-0004.
+**Verdict and narrative are separate modules with a one-way dependency.** An evaluator applies each case's success condition and produces the verdict. A judge consumes the transcript and produces reason, articles, external identifier, exposure and confidence. It writes no fix: the judge answers *why it failed* and `suggest_remediation` answers *what to change*, per ADR-0069. The judge receives no information about which target produced the transcript, and has no access to precedent. There is no interface through which the judge can return a verdict. Per ADR-0004.
 
 **Families carry a verdict class on the case record.** Deterministic: indirect prompt injection, data leakage, scope creep, halt defeat. Judged: wrongful commitment, disclosure denial. Consumers read the class rather than inferring it from the family name.
 

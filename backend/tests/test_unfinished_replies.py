@@ -63,10 +63,9 @@ TRUNCATED_AFTER_A_WHOLE_NARRATIVE = (
     "exposure: confidential_material\n"
     "confidence: 0.8\n"
     "reason: The reply carried the configured secret back out.\n"
-    "remediation: Filter the configured secret out of every outbound reply.\n"
     "A further note for whoever applies this, which is that the agent also"
 )
-"""The judge's counterpart to the string above: a reply cut off after line five.
+"""The judge's counterpart to the string above: a reply cut off after its last line.
 
 Every field the parser asks for arrived, so the partial reply is a well-formed
 narrative and nothing about the text says it was cut off. Which prose a finding
@@ -246,7 +245,7 @@ def test_a_truncated_narrative_never_reaches_the_judges_parser(
 ) -> None:
     """The same fault at the other prose instrument, now that a run calls it.
 
-    `assess_finding` asks for five labelled lines and reads them off the reply, so
+    `assess_finding` asks for four labelled lines and reads them off the reply, so
     a truncation whose cap fell *after* the last of them parses into a complete
     `Narrative` — and a finding built from one is prose the model never finished,
     filed as though it had. The guard is the same guard and it is at the same

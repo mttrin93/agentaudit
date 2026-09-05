@@ -645,8 +645,8 @@ def test_no_adjudicator_narrative_precedent_or_remediation_is_emitted(
             family=Family(leakage_case.family),
             case_id=leakage_case.id,
             reason=A_PRECEDENT_REASON,
-            remediation=A_PRECEDENT_REMEDIATION,
-        )
+        ),
+        A_PRECEDENT_REMEDIATION,
     )
 
     with recording() as exporter, reference_target() as reference:

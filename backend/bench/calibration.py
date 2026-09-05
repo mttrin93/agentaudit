@@ -949,16 +949,17 @@ def run_calibration(
         # `suggest_remediation` has run for every target and the adaptive layer's
         # `retrieve_precedent` has answered every episode, so the store every
         # instrument saw is the store as it stood when the run began. Filing per
-        # target instead would make target *n*'s findings precedent for target
+        # target instead would make target *n*'s narrations precedent for target
         # *n+1*'s fix, which is a corpus that depends on the order targets were
         # run in — and would put this run's scored findings in front of this run's
         # own attacker, whose `A_break` is then a reading about the attacker plus
         # its own run's hint (ADR-0031, ADR-0019, `seed_precedent.py`).
         filing = file_precedent(
             [
-                finding
+                narration
                 for completed in target_runs
-                for finding in completed.findings or ()
+                if _explained(completed.narrations)
+                for narration in completed.narrations
             ],
             precedent,
         )

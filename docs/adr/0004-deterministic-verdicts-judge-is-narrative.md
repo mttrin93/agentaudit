@@ -1,8 +1,18 @@
 ---
 status: accepted
+amended_by: 0069-the-judge-writes-why-it-failed-the-remediation-tool-writes-what-to-change.md
 ---
 
 # Deterministic success conditions are authoritative; the judge is narrative only
+
+> **Amended by [ADR-0069](./0069-the-judge-writes-why-it-failed-the-remediation-tool-writes-what-to-change.md) on
+> the fix, and on nothing else.** Two sentences below list a **fix** among the
+> narrative fields the judge produces. It no longer produces one: the judge writes
+> *why it failed* and `suggest_remediation` writes *what to change*, because the
+> judge is blinded and holds no store, so its fix was always the unprecedented one.
+> Everything else here stands and is strengthened by that — the blinding, the
+> authority of the success condition, the one privilege this ADR gives the
+> remediation tool, and the logged disagreement.
 
 The design carried two verdict mechanisms with no precedence rule: a per-case `success_condition` ("what proves the attack worked") and an LLM judge that gives "verdict, reason, article, fix, exposure type, confidence". Every number downstream — discrimination, monotonicity, retirement, family bands, the signature — inherited that ambiguity. The decisive argument is reproducibility. A signature proves the bytes are unaltered; it cannot make an LLM verdict re-derivable across model versions. **A signature over a non-reproducible measurement certifies that we held the number, not that the number is right** — and for a report whose entire pitch is checkability after three forwards, that is the load-bearing crack. The decay chart has the same problem: comparing judge outputs across months is not a comparison of agents.
 

@@ -46,7 +46,7 @@ from backend.tests.conftest import (
     ADJUDICATING,
     BENCH_ATTESTATION,
     CONFIRMING,
-    a_finding,
+    a_narration,
     reference_target,
     served_references,
 )
@@ -86,7 +86,7 @@ def test_a_deterministic_finding_is_filed_and_is_readable_back(
     interface `suggest_remediation` and `retrieve_precedent` both read through, so
     a write only this test could see would not be a write either of them reaches.
     """
-    filing = file_precedent([a_finding()], store)
+    filing = file_precedent([a_narration()], store)
 
     assert [entry.case_id for entry in filing.filed] == ["data-leakage-001"]
     assert [entry.failure for entry in store.for_family(Family.DATA_LEAKAGE)] == [
@@ -106,13 +106,13 @@ def test_a_judged_finding_is_withheld_and_the_run_says_so(
     here, on `verdict_class`, which is copied off the attempt and is never inferred
     from a family name.
     """
-    judged = a_finding(
+    judged = a_narration(
         family=Family.WRONGFUL_COMMITMENT,
         verdict_class=VerdictClass.JUDGED,
         case_id="wrongful-commitment-001",
     )
 
-    filing = file_precedent([a_finding(), judged], store)
+    filing = file_precedent([a_narration(), judged], store)
 
     assert [entry.case_id for entry in filing.filed] == ["data-leakage-001"]
     assert [held.case_id for held in filing.judged] == ["wrongful-commitment-001"]
@@ -137,8 +137,8 @@ def test_ten_successes_of_one_case_against_one_target_file_one_precedent(
     """
     filing = file_precedent(
         [
-            a_finding(reason="It read the secret out on the first ask."),
-            a_finding(reason="It read the secret out when asked to migrate."),
+            a_narration(reason="It read the secret out on the first ask."),
+            a_narration(reason="It read the secret out when asked to migrate."),
         ],
         store,
     )
@@ -163,8 +163,8 @@ def test_two_targets_failing_one_case_file_two_precedents(
     """
     filing = file_precedent(
         [
-            a_finding(target_name="one-bot", reason="It read the secret out."),
-            a_finding(target_name="another-bot", reason="It leaked from a page."),
+            a_narration(target_name="one-bot", reason="It read the secret out."),
+            a_narration(target_name="another-bot", reason="It leaked from a page."),
         ],
         store,
     )
@@ -224,6 +224,30 @@ def test_the_second_run_is_shown_what_the_first_one_filed(leakage_case: Case) ->
     # it found something new, and never multiplies one route into copies of itself
     # (`Precedent.key`, #38).
     assert len(DURABLE_PRECEDENT.for_family(Family(leakage_case.family))) == 1
+
+
+def test_the_fix_a_run_files_is_the_one_its_remediation_tool_wrote(
+    leakage_case: Case,
+) -> None:
+    """ADR-0069 all the way through a run, at the seam it changed.
+
+    `file_precedent` used to take findings, and a finding used to carry the
+    judge's fix — so what the corpus accumulated was the half written from one
+    transcript by the instrument that may hold no store, and `Remediation.fix` was
+    computed and dropped. The unit filed is now a `Narration`, which is the only
+    record that holds both halves (`narration.py`).
+    """
+    run = narrated(leakage_case)
+    [filed] = run.result.filing.filed
+    written = {narration.remediation.fix for narration in _narrations(run)}
+
+    assert filed.remediation in written, (
+        f"the corpus recorded {filed.remediation!r}, which no remediation tool in "
+        "this run wrote (ADR-0069)"
+    )
+    assert filed.failure in {
+        narration.finding.narrative.reason for narration in _narrations(run)
+    }
 
 
 def _narrations(run: Narrated) -> tuple[Narration, ...]:

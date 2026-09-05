@@ -154,7 +154,16 @@ class Precedent:
 
     remediation: str
     """The fix that was written for it, prose. Read by `suggest_remediation` and
-    never returned to the attacker, which is shown `failure` alone."""
+    never returned to the attacker, which is shown `failure` alone.
+
+    **The fix `suggest_remediation` wrote, and not one the judge wrote**, since
+    ADR-0069 — before it this field held `Narrative.remediation`, so the corpus
+    ADR-0019 claims value for was filled with fixes written from a single
+    transcript by the instrument that may hold no store, and the fix its own
+    reader wrote was discarded. It arrives as a parameter on `Precedent.of` rather
+    than off the finding, because a `Precedent` that imported a `Remediation`
+    would close the cycle `remediation.py` -> this module already opens.
+    """
 
     case_id: str
     external_id: str
@@ -166,14 +175,20 @@ class Precedent:
     """
 
     @classmethod
-    def of(cls, finding: Finding) -> Precedent:
-        """One finding as precedent, or a refusal if its verdict was judged."""
+    def of(cls, finding: Finding, fix: str) -> Precedent:
+        """One finding and the fix written for it, or a refusal if it was judged.
+
+        Two arguments since ADR-0069, and the second one is the decision: the
+        finding says *why it failed* and carries no fix at all, so what is filed
+        has to be handed in by a caller holding both halves — which is
+        `filing.file_precedent`, over a `Narration`.
+        """
         if finding.verdict_class is not VerdictClass.DETERMINISTIC:
             raise JudgedPrecedent(finding)
         return cls(
             family=finding.family,
             failure=finding.narrative.reason,
-            remediation=finding.narrative.remediation,
+            remediation=fix,
             case_id=finding.case_id,
             external_id=finding.narrative.external_id.identifier,
         )
@@ -283,9 +298,9 @@ class DurablePrecedents:
         """
         return cls(store=PrecedentDatabase(path))
 
-    def record(self, finding: Finding) -> Precedent:
-        """File one deterministic finding, and refuse a judged one."""
-        entry = Precedent.of(finding)
+    def record(self, finding: Finding, fix: str) -> Precedent:
+        """File one deterministic finding with its fix, and refuse a judged one."""
+        entry = Precedent.of(finding, fix)
         self.store.put(self.namespace, entry.key, entry.stored())
         return entry
 

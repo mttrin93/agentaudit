@@ -23,7 +23,7 @@ from backend.bench.adaptive.precedent import (
 )
 from backend.bench.adaptive.tools import retrieve_precedent
 from backend.bench.library import Family, VerdictClass
-from backend.tests.conftest import a_finding, a_target
+from backend.tests.conftest import A_FIX, a_finding, a_target
 from scripts.seed_precedent import SEEDS, cleared, held, main, seeded
 from scripts.seed_precedent import __doc__ as SEED_DOC
 
@@ -94,7 +94,7 @@ def test_clearing_removes_the_seeds_and_leaves_a_recorded_finding_alone() -> Non
     durable = DurablePrecedents(store=store)
     finding = a_finding(family=Family.DATA_LEAKAGE)
     assert finding.verdict_class is VerdictClass.DETERMINISTIC
-    recorded = durable.record(finding)
+    recorded = durable.record(finding, A_FIX)
     seeded(store)
 
     remaining = cleared(store)

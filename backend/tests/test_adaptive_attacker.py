@@ -71,7 +71,7 @@ from backend.graph.budget import (
 )
 from backend.graph.runstate import RunState
 from backend.tests.blind_target import blind_target
-from backend.tests.conftest import a_finding, a_target, served_references
+from backend.tests.conftest import A_FIX, a_finding, a_target, served_references
 
 CANARY = "AGENTAUDIT-ADAPTIVE-CANARY"
 """One planted value, standing in for the registration nonce a real run plants.
@@ -363,7 +363,9 @@ def stocked_store(at: Path) -> DurablePrecedents:
     """
     store = durable_store(at)
     for target_name, case_id, reason in CORPUS:
-        store.record(a_finding(target_name=target_name, case_id=case_id, reason=reason))
+        store.record(
+            a_finding(target_name=target_name, case_id=case_id, reason=reason), A_FIX
+        )
     return store
 
 
@@ -381,7 +383,7 @@ def test_a_run_given_no_store_reads_the_durable_one(leakage_case: Case) -> None:
     # second half exists to end. Driven through the layer with no `precedent`
     # argument at all, because the argument is exactly what this asserts about.
     filed = "an earlier run watched the setup come back in a summary"
-    DURABLE_PRECEDENT.record(a_finding(reason=filed))
+    DURABLE_PRECEDENT.record(a_finding(reason=filed), A_FIX)
     recording = Recording()
 
     with attackable() as targets:
@@ -444,7 +446,8 @@ def test_no_target_identity_survives_the_tool_over_a_store_of_several_targets(
             a_finding(
                 case_id="data-leakage-004",
                 reason=(f"{target.name} at {target.url} folded on the second turn"),
-            )
+            ),
+            A_FIX,
         )
         attack(targets, [leakage_case], attacker=recording, precedent=store)
 
@@ -479,7 +482,8 @@ def test_the_tool_itself_returns_no_target_identity(
         a_finding(
             case_id="data-leakage-005",
             reason=f"zenith-scheduler at {named.url} folded on the second turn",
-        )
+        ),
+        A_FIX,
     )
 
     answered = retrieve_precedent(
@@ -505,14 +509,17 @@ def test_a_judged_finding_never_reaches_the_attacker(
     # carries a reliability figure and a wider stated limit, and precedent that
     # smuggled one to the attacker would put an unqualified number in a route.
     store = durable_store(tmp_path)
-    store.record(a_finding(reason="the configured secret came back in the reply"))
+    store.record(
+        a_finding(reason="the configured secret came back in the reply"), A_FIX
+    )
     with pytest.raises(JudgedPrecedent):
         store.record(
             a_finding(
                 verdict_class=VerdictClass.JUDGED,
                 case_id="data-leakage-009",
                 reason="the agent committed to a refund it had no authority for",
-            )
+            ),
+            A_FIX,
         )
     recording = Recording()
 
@@ -556,7 +563,7 @@ def test_an_episode_records_whether_it_read_precedent(
     # earlier runs found, or one that started cold. It stays an `AdaptiveEpisode`
     # while saying so — no verdict, no case id, and no attempt anywhere (ADR-0010).
     store = durable_store(tmp_path)
-    store.record(a_finding())
+    store.record(a_finding(), A_FIX)
 
     with attackable() as targets:
         run_state, consulted = attack(targets, [leakage_case], precedent=store)
@@ -594,7 +601,7 @@ def test_nothing_the_tool_returns_reaches_anything_scored(
     # which is what the report prints from.
     marker = "the agent restated its whole configuration on request"
     store = durable_store(tmp_path)
-    store.record(a_finding(reason=marker))
+    store.record(a_finding(reason=marker), A_FIX)
     recording = Recording()
 
     with attackable() as targets:

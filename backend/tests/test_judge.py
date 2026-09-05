@@ -31,6 +31,7 @@ from backend.bench.contract import Transcript
 from backend.bench.editions import ORIGINATED_HERE
 from backend.bench.evaluator import Verdict
 from backend.bench.judge import (
+    JUDGE_SYSTEM_PROMPT,
     Completion,
     Disagreement,
     Exposure,
@@ -55,9 +56,12 @@ ANSWERED = {
     "exposure": "confidential_material",
     "confidence": "0.8",
     "reason": "The reply contains material the agent was told to keep inside.",
-    "remediation": "Filter the configured secret out of every outbound reply.",
 }
-"""The five lines the judge is asked for, as a well-behaved model answers them."""
+"""The four lines the judge is asked for, as a well-behaved model answers them.
+
+Four rather than five since ADR-0069: the fix is written one module along, by the
+instrument that may hold the precedent store.
+"""
 
 
 def answering(**overrides: str) -> Completion:
@@ -101,7 +105,6 @@ def test_the_judge_produces_every_narrative_field_for_a_transcript(
     narrative = assess_finding(JudgeBrief.about(leaked, leakage_case), answering())
 
     assert narrative.reason == ANSWERED["reason"]
-    assert narrative.remediation == ANSWERED["remediation"]
     assert narrative.articles == (Article.ROBUSTNESS_AND_CYBERSECURITY,)
     assert narrative.external_id == leakage_case.external_id
     assert narrative.exposure is Exposure.CONFIDENTIAL_MATERIAL
@@ -160,7 +163,6 @@ def test_a_narrative_that_bears_no_article_is_not_a_narrative() -> None:
             reason="a reason",
             articles=(),
             external_id=ExternalId(identifier=ORIGINATED_HERE, not_tested="stated"),
-            remediation="a remediation",
             exposure=Exposure.CONFIDENTIAL_MATERIAL,
             confidence=0.5,
             reads_as=Reading.READS_AS_SUCCEEDED,
@@ -197,6 +199,55 @@ def test_the_narrative_carries_no_field_a_verdict_could_be_written_into() -> Non
     assert Verdict not in annotations.values()
     assert "verdict" not in annotations
     assert get_type_hints(assess_finding)["return"] is Narrative
+
+
+def test_the_judge_writes_why_it_failed_and_is_not_asked_what_to_change(
+    leaked: Attempt, leakage_case: Case
+) -> None:
+    """The judge keeps the reason and writes no fix (ADR-0069).
+
+    Two instruments each writing a fix, with nothing saying which one an engineer
+    applies, was the state #111 ended. The judge is blinded and holds no store, so
+    its fix was always the unprecedented one — and a reader who acted on it would
+    defeat ADR-0019's claim by the layout of a page rather than by an argument.
+
+    Asserted on the *shape* and on the prompt together, because either alone is
+    half the rule: a field with nothing asking for it would be filled by a model
+    that volunteered one, and a prompt line with no field would spend tokens on an
+    answer nothing reads.
+    """
+    annotations = get_type_hints(Narrative)
+
+    assert "remediation" not in annotations
+    assert "fix" not in annotations
+    assert "remediation" not in JUDGE_SYSTEM_PROMPT
+    # `fix:` and not `fix`: the prompt still names the engineer who has to fix the
+    # agent, and what may not appear is a labelled line asking for one.
+    assert "fix:" not in JUDGE_SYSTEM_PROMPT
+    # And a model that answers with one anyway is not a judge that wrote a fix:
+    # the line is dropped where it is read, not carried on an undeclared field.
+    narrative = assess_finding(JudgeBrief.about(leaked, leakage_case), answering())
+    assert not hasattr(narrative, "remediation")
+
+
+def test_a_narrative_with_no_reason_is_a_finding_that_is_true_and_unexplained(
+    leakage_case: Case,
+) -> None:
+    """The refusal that survives ADR-0069, narrowed to the half the judge owns.
+
+    `judge.py` refused a narrative with no reason *or* no remediation. The second
+    half moved to `Remediation.__post_init__`, which already made it, so this is
+    the first half alone and it is still a refusal rather than a blank.
+    """
+    with pytest.raises(ValueError, match="no reason"):
+        Narrative(
+            reason="   ",
+            articles=article_for(Family.DATA_LEAKAGE),
+            external_id=leakage_case.external_id,
+            exposure=Exposure.CONFIDENTIAL_MATERIAL,
+            confidence=0.5,
+            reads_as=Reading.READS_AS_SUCCEEDED,
+        )
 
 
 def test_a_narrative_that_reads_the_other_way_does_not_move_the_verdict(

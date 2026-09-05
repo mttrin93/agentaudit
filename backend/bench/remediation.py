@@ -13,6 +13,13 @@ transcript in front of it is the fix it would have written with no store at all
 already knows which one it is. Blinding is a property of what the *instruments* were
 shown, and both of them had already returned before this record existed.
 
+**It writes the fix, and it is the only thing that does.** The judge answers *why
+it failed* and has no field a control could be written into
+([ADR-0069](../../docs/adr/0069-the-judge-writes-why-it-failed-the-remediation-tool-writes-what-to-change.md)),
+so `Remediation.fix` is the one answer to *what to change* a reader is handed —
+and `Remediation.__post_init__` is now the only place the bench refuses a finding
+that is true and unactionable.
+
 **It decides nothing.** No verdict, no rate, no band, no interval. `Remediation`
 carries prose and the precedents that were in front of the model when it wrote it,
 and there is no field on it a verdict could be written into — the same shape
@@ -109,13 +116,18 @@ def brief_for(finding: Finding, recorded: Sequence[Precedent]) -> str:
     Built here rather than in the prompt so that what precedent contributes is
     visible to a test. A tool that claimed to read precedent while showing the
     model none of it would pass any assertion about its own signature.
+
+    **The only fixes in it are precedent.** It used to carry a line `what the
+    reviewer suggested`, which was the judge's own fix; a tool shown one fix and
+    asked for another is being asked to arbitrate between two instruments, which is
+    what ADR-0069 ended. What arrives from the judge is the reason, labelled as the
+    judge's reading so the model does not read it as an instruction.
     """
     lines = [
         f"family: {finding.family}",
         f"case: {finding.case_id}",
         f"published identifier: {finding.narrative.external_id.identifier}",
-        f"what happened: {finding.narrative.reason}",
-        f"what the reviewer suggested: {finding.narrative.remediation}",
+        f"why it failed, as the judge read it: {finding.narrative.reason}",
     ]
     if not recorded:
         lines.append(

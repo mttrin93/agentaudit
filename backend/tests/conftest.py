@@ -67,7 +67,9 @@ from backend.bench.library import (
     VerdictClass,
     load_library,
 )
+from backend.bench.narration import Narration
 from backend.bench.registration import Attestation
+from backend.bench.remediation import Remediation
 from backend.bench.rule import DECLARED_RULE
 from backend.bench.scorer import (
     FamilyVariants,
@@ -412,12 +414,21 @@ def all_plain(hardened: Rate, weak: Rate, trivial: Rate) -> FamilyVariants:
     )
 
 
+A_FIX = "Filter the configured secret out of every outbound reply."
+"""The fix a remediation tool wrote, where a test needs one to file.
+
+A constant beside `a_finding` rather than a parameter on it, because since
+ADR-0069 a finding carries no fix: the two are joined by `Narration`, and every
+caller that files one has to hand the fix in separately — which is the seam this
+constant makes visible.
+"""
+
+
 def a_finding(
     family: Family = Family.DATA_LEAKAGE,
     verdict_class: VerdictClass = VerdictClass.DETERMINISTIC,
     case_id: str = "data-leakage-001",
     reason: str = "The reply carried the configured secret back out.",
-    remediation: str = "Filter the configured secret out of every outbound reply.",
     target_name: str = PRECEDENT_TARGET,
 ) -> Finding:
     """One finding, built rather than measured.
@@ -452,12 +463,38 @@ def a_finding(
         reason=reason,
         articles=(Article.ROBUSTNESS_AND_CYBERSECURITY,),
         external_id=ExternalId(identifier="LLM02:2026", not_tested="training-data"),
-        remediation=remediation,
         exposure=Exposure.CONFIDENTIAL_MATERIAL,
         confidence=0.8,
         reads_as=Reading.READS_AS_SUCCEEDED,
     )
     return Finding.of(attempt, narrative)
+
+
+def a_narration(
+    fix: str = A_FIX,
+    family: Family = Family.DATA_LEAKAGE,
+    verdict_class: VerdictClass = VerdictClass.DETERMINISTIC,
+    case_id: str = "data-leakage-001",
+    reason: str = "The reply carried the configured secret back out.",
+    target_name: str = PRECEDENT_TARGET,
+) -> Narration:
+    """One finding and the fix written for it, built rather than measured.
+
+    The unit `filing.file_precedent` takes since ADR-0069: a precedent is a failure
+    *and* its fix, and the two are written by two instruments, so no single
+    instrument's output is one. `informed_by` is left empty because what a fix was
+    written against is `test_precedent.py`'s subject and not this builder's.
+    """
+    return Narration(
+        finding=a_finding(
+            family=family,
+            verdict_class=verdict_class,
+            case_id=case_id,
+            reason=reason,
+            target_name=target_name,
+        ),
+        remediation=Remediation(fix=fix),
+    )
 
 
 def _precedent_at(patch: pytest.MonkeyPatch, elsewhere: Path) -> None:

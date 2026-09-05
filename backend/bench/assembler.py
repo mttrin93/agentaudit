@@ -40,6 +40,17 @@ judged family whose κ misses the declared floor — or that has no κ at all �
 `unfit_to_report`, and that marking is derived rather than set, so a renderer cannot
 publish the rate by neglecting to ask.
 
+**One thing here is per failure rather than per section.** `Attribution` is the
+declared-and-defeated join read from the other end — given one failure, what is it to
+be read against — and it is derived from the case record and the scan rather than
+written by a model, which is why it needs no reliability figure and is not a fourth
+instrument
+([ADR-0068](../../docs/adr/0068-an-attributed-cause-is-derived-from-the-case-record-and-the-scan.md)).
+It is in this module because the scan is, and deliberately not in `judge.py`, which
+holds no scan and must not gain one. It reaches none of the three sections above and
+no key of the payload: printing it is #112's and #113's, and the signed document has a
+price to pay first.
+
 **What is deliberately not here.** `D` arrives as `None` until a gate run has read
 the family (`gate.py`), and never as 0.0 — the same soft-zero refusal
 `measurability.py` makes about a rate.
@@ -55,9 +66,11 @@ from backend.bench.contract import DeclaredControl
 from backend.bench.elective import NOTHING_REQUESTED, ElectiveSelection
 from backend.bench.evaluator import Verdict
 from backend.bench.library import (
+    AnyFamily,
     Case,
     ExternalId,
     Family,
+    Transform,
     VerdictClass,
     one_of_the_six,
 )
@@ -73,6 +86,7 @@ from backend.bench.scanner import (
     NOTHING_DECLARED,
     RuleOfTwo,
     Scan,
+    control_claiming,
     family_claimed_by,
     scan,
 )
@@ -199,6 +213,160 @@ class ScannedControl:
                 return (
                     f"{claim}: untested — this run held no deterministic case for "
                     "the family it claims, so the declaration stands unexamined"
+                )
+
+
+class AttributedCause(StrEnum):
+    """What one failure is read against: the declaration state of its family.
+
+    Three members, no free text and no fourth
+    ([ADR-0068](../../docs/adr/0068-an-attributed-cause-is-derived-from-the-case-record-and-the-scan.md)).
+    Naming the *control* would be close to relabelling the family — `family_claimed_by`
+    is 1:1 over the four — so what these members say is whether the operator claimed a
+    defence for this failure at all, which is a different sentence to an engineer and a
+    very different one to a procurement reader.
+
+    **No severity and no ordering.** D3 and D12: there is nothing here to rank, sum or
+    threshold, which is the property `Band` has and for the same reason (ADR-0005).
+    """
+
+    DECLARED_AND_DEFEATED = "declared_and_defeated"
+    """A control claims this family, the operator declared it, and the bench broke it.
+
+    The strongest of the three and the one the headline join already prints per
+    control; here it is per failure, so a reader holding one finding gets to it
+    without inverting `ScannedControl.broken_by` by hand.
+    """
+
+    NOT_DECLARED = "not_declared"
+    """A control claims this family and the operator declared none of it.
+
+    Still not a finding *against* the target: the family was measured either way and
+    nothing is subtracted for silence. ADR-0005's rejected score deducted points here,
+    which is what made declaring more controls profitable.
+    """
+
+    NO_CONTROL_CLAIMS_THIS_FAMILY = "no_control_claims_this_family"
+    """No control in the checklist claims this family, so there is nothing to read.
+
+    The honest answer for **five of the nine** families — the two judged ones and the
+    three elective ones — and the reason this enumeration has three members rather than
+    two. Read as `NOT_DECLARED` it would report an absence nobody could have declared,
+    which is ADR-0005's defect arriving through a finding (ADR-0068 §3).
+    """
+
+
+@dataclass(frozen=True)
+class Attribution:
+    """One failure and what gave way, derived from the case record and the scan.
+
+    **Here and not in `judge.py`**: it is derived from the scan, and `judge.py` holds
+    no scan and must not gain one — a `JudgeBrief` carrying what the operator declared
+    is the blinding channel of ADR-0004 reopened by a new route. It is derived rather
+    than written by a model because a model that wrote it would be a fourth instrument
+    upstream of a reader, and #64's precedent would then apply without amendment: its
+    agreement would have to be measured before it printed
+    ([ADR-0068](../../docs/adr/0068-an-attributed-cause-is-derived-from-the-case-record-and-the-scan.md)).
+
+    **No number, and no field one could arrive in.** This is prose about one verdict:
+    no rate, band, interval or `D` may read it, and an override annotates one of those
+    without moving it (D13, ADR-0006). The prohibition is structural — every field
+    below is a name off a closed set or an id — and `test_attribution.py` holds both
+    halves, the field list and an import wall over every module that computes a figure.
+
+    **Nothing here prints yet.** It reaches no section of `TargetResult` and no key of
+    the payload; the signed document has a disclosure answer and a fourth declared
+    model to pay for first (#112), and the report screen waits on that (#113).
+    """
+
+    case_id: str
+    """The case whose attempt succeeded. A pointer into the evidence, not a copy."""
+
+    family: AnyFamily
+    """The family that case belongs to, in either tier.
+
+    `AnyFamily` because an elective family's case is an ordinary case (ADR-0035), and
+    an attribution is not a container the gate is decided over — no narrowing is owed
+    here, and one would only exclude three of the five families whose reading is
+    `NO_CONTROL_CLAIMS_THIS_FAMILY`.
+    """
+
+    reading: AttributedCause
+    transform: Transform
+    """Which technique got in — the construction the case performs on its payload.
+
+    The first thing this record says that the family name does not already say
+    (ADR-0051, ADR-0068 §4). Required and read off `Case.transform` rather than
+    optional: `PLAIN` is a member rather than a silence, so there is nothing for a
+    `None` here to mean and a nullable field would be a kind of nothing invented for a
+    value that always exists (`payload.py`).
+    """
+
+    control: DeclaredControl | None = None
+    """The control that claims this family, or `None` where no control claims it.
+
+    `None` on exactly the third reading, and the refusals below hold the pairing in
+    both directions: the two readings that are statements *about* a control may not be
+    written without one, and the reading that says no control claims this family may
+    not name one.
+    """
+
+    def __post_init__(self) -> None:
+        claims = control_claiming(self.family)
+        if self.reading is AttributedCause.NO_CONTROL_CLAIMS_THIS_FAMILY:
+            if self.control is not None:
+                raise ValueError(
+                    f"{self.case_id} claims no control and names one "
+                    f"({self.control}). The third reading is the answer for the two "
+                    "judged families and the three elective ones, and a control "
+                    "written beside it would file a failure under a defence the "
+                    "checklist does not hold for that family"
+                )
+        elif self.control is None:
+            raise ValueError(
+                f"{self.case_id} reads as {self.reading} and names no control. Both "
+                "of those readings are statements about a declared control, so one "
+                "without a control is a sentence no reader can check against the scan"
+            )
+        elif self.control is not claims:
+            raise ValueError(
+                f"{self.case_id} is a {self.family} failure attributed to "
+                f"{self.control}, which does not claim that family. The join is "
+                "`family_claimed_by` in both directions, and an attribution filed "
+                "under another control would report one declaration defeated by a "
+                "verdict about a different one"
+            )
+
+    def stated(self) -> str:
+        """The sentence a report prints for this failure.
+
+        On the record rather than in a renderer, in the pattern
+        `NotMeasurable.stated()` and `ScannedControl.stated()` already set: the
+        sentence is a property of the reading, so two surfaces printing the same
+        attribution cannot print two different claims about it (#113 is the second
+        surface, and it computes nothing the payload does not carry).
+        """
+        got_in = f"{self.case_id} got in — {self.transform.stated()}"
+        match self.reading:
+            case AttributedCause.DECLARED_AND_DEFEATED:
+                return (
+                    f"{self.family}: the operator declared {self.control}, which "
+                    f"claims this family, and {got_in}. A declared control the bench "
+                    "broke is the strongest reading here, and it is re-derivable "
+                    "from the case record and the registration"
+                )
+            case AttributedCause.NOT_DECLARED:
+                return (
+                    f"{self.family}: the checklist holds a control for this family "
+                    f"and the operator claimed none, and {got_in}. The absence is "
+                    "not itself a finding — the family was measured either way and "
+                    "nothing is subtracted for silence (ADR-0005)"
+                )
+            case AttributedCause.NO_CONTROL_CLAIMS_THIS_FAMILY:
+                return (
+                    f"{self.family}: no control in the checklist claims this family, "
+                    f"so there is no declaration to read this failure against, and "
+                    f"{got_in}"
                 )
 
 
@@ -722,6 +890,69 @@ def declared_and_defeated(
 
     return tuple(
         _scanned(control, attempted, broke, reasons) for control in scanned.declared
+    )
+
+
+def attributed_cause(attempt: Attempt, case: Case, scanned: Scan) -> Attribution:
+    """What gave way in one failure, derived and not judged (ADR-0068 §1).
+
+    The declared-and-defeated join read from the other end. `declared_and_defeated`
+    above answers *which of this target's claims did the bench break*, per control;
+    this answers *what is this one failure to be read against*, per case — and a reader
+    holding a finding could not get from it to the control it belongs to without
+    inverting `ScannedControl.broken_by` by hand.
+
+    **Three records in and no instrument**, which is why the reading needs no κ. There
+    is no parameter here through which a model could supply it — the argument
+    `Finding.of` makes about a verdict — so making this judged means changing this
+    signature, which is the signal ADR-0010 asks an implementer to stop at.
+
+    `attempt` and `case`, in `JudgeBrief.about`'s order and with its two refusals, for
+    the same reason it has them: an attribution written against the wrong record would
+    name a transform the attempt never sent, and one written against a **resisted**
+    attempt would print `DECLARED_AND_DEFEATED` — *the bench broke this control* — over
+    an attempt that broke nothing. The verdict is read off the attempt and never
+    computed here, so this stays a join over verdicts and never over rates (ADR-0006).
+
+    The `isinstance` is the annotation arriving at runtime, so ADR-0010's wall is
+    closed by a test as well as by a type check: an `AdaptiveEpisode` is what an
+    episode leaves behind, and it is not an `Attempt`.
+    """
+    if not isinstance(attempt, Attempt):
+        raise TypeError(
+            f"an attributed cause is a reading of one scored attempt, and was "
+            f"offered a {type(attempt).__name__}. The adaptive layer produces no "
+            "finding and nothing here may widen to accept one (ADR-0010)"
+        )
+    if attempt.case_id != case.id:
+        raise ValueError(
+            f"attempt {attempt.case_id!r} was attributed against case {case.id!r}. "
+            "The reading names a transform and a family off the record, so one "
+            "joined to the wrong record is a sentence about a case nobody ran"
+        )
+    if attempt.verdict is not Verdict.SUCCEEDED:
+        raise ValueError(
+            f"{case.id} did not succeed against {attempt.target_name}, so there is "
+            "no failure here to attribute a cause to. `declared_and_defeated` is "
+            "the reading for a control nothing got past"
+        )
+    control = control_claiming(case.family)
+    if control is None:
+        return Attribution(
+            case_id=case.id,
+            family=case.family,
+            reading=AttributedCause.NO_CONTROL_CLAIMS_THIS_FAMILY,
+            transform=case.transform,
+        )
+    declared = control in scanned.declared
+    return Attribution(
+        case_id=case.id,
+        family=case.family,
+        reading=AttributedCause.DECLARED_AND_DEFEATED
+        if declared
+        else AttributedCause.NOT_DECLARED,
+        transform=case.transform,
+        control=control,
     )
 
 

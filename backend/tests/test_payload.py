@@ -87,7 +87,7 @@ from backend.bench.scorer import (
 )
 from backend.bench.selection import EVERY_CONSTRUCTION, AttackLayer, AttackSelection
 from backend.graph.budget import Layer
-from backend.tests.conftest import imports_of, plain_breakdown
+from backend.tests.conftest import SERIALISERS, imports_of, plain_breakdown
 
 IDENTIFIERS = {
     Family.DATA_LEAKAGE: ExternalId(
@@ -1157,24 +1157,6 @@ def test_no_payload_text_from_any_case_appears_anywhere_in_the_artefact(
 
 
 # --- No narrative reaches the document (ADR-0008, ADR-0030, ADR-0044) --------
-
-BENCH = Path(__file__).resolve().parents[1] / "bench"
-
-SERIALISERS = (
-    BENCH / "payload.py",
-    BENCH / "rendering" / "__init__.py",
-    BENCH / "rendering" / "_measured.py",
-    BENCH / "rendering" / "_declared.py",
-    BENCH / "rendering" / "_annexes.py",
-    BENCH / "rendering" / "_layout.py",
-)
-"""The modules that turn a result into bytes and into the document a human reads.
-
-`assembler.py` is deliberately not on this list: it takes a `TargetRun`, which
-*holds* the narrations, so a direct-import check over it would assert nothing. What
-holds the line there is behaviour rather than an import — `test_narration.py`
-asserts that a run's narration state does not change a byte of either artefact.
-"""
 
 THE_JUDGE_SIDE = ("judge", "narration", "remediation", "finding")
 """Words no import in a serialiser may carry.

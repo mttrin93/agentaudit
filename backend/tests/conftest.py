@@ -944,6 +944,32 @@ def reachable_from(source: Path) -> set[str]:
     return names
 
 
+BENCH = REPOSITORY / "backend" / "bench"
+
+SERIALISERS = (
+    BENCH / "payload.py",
+    BENCH / "rendering" / "__init__.py",
+    BENCH / "rendering" / "_measured.py",
+    BENCH / "rendering" / "_declared.py",
+    BENCH / "rendering" / "_annexes.py",
+    BENCH / "rendering" / "_layout.py",
+)
+"""The modules that turn a result into bytes and into the document a human reads.
+
+Here rather than in one test file because two import walls are drawn over the same
+set — `test_payload.py` keeps the judge's prose out of the signed artefact, and
+`test_attribution.py` keeps an attributed cause out of it — and a second copy of the
+list would only have to be one module short, once, for a wall to stop covering a
+surface nobody noticed had split.
+
+`assembler.py` is deliberately not on this list: it takes a `TargetRun`, which
+*holds* the narrations, so a direct-import check over it would assert nothing. What
+holds the line there is behaviour rather than an import — `test_narration.py`
+asserts that a run's narration state does not change a byte of either artefact — and,
+for the attribution, the field list of the record itself.
+"""
+
+
 def imports_of(source: Path) -> Iterator[str]:
     """Every module and name the given module imports, dotted.
 

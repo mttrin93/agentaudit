@@ -36,7 +36,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 
 from backend.bench.contract import AgentCapability, DeclaredControl, TargetConfig
-from backend.bench.library import Family
+from backend.bench.library import AnyFamily, Family
 
 CONTROL_CHECKLIST: tuple[DeclaredControl, ...] = tuple(DeclaredControl)
 """The controls the scan asks about, in the order a report prints them.
@@ -65,6 +65,28 @@ def family_claimed_by(control: DeclaredControl) -> Family:
             return Family.DATA_LEAKAGE
         case DeclaredControl.STOP_CONTROL:
             return Family.HALT_DEFEAT
+
+
+def control_claiming(family: AnyFamily) -> DeclaredControl | None:
+    """The control that claims this family, or `None` where no control claims it.
+
+    `family_claimed_by` above read the other way, and **derived from it** by walking
+    the checklist rather than written out as a second table: the drift between two
+    tables would be silent, and a fifth control claims its family in both directions
+    the moment the mapping above gains an arm.
+
+    **`None` is a real answer and not a lookup miss** — it is what the two judged
+    families and the three elective ones get, because the checklist holds four
+    controls and each claims a deterministic family. Why that answer needs a name of
+    its own rather than being read as *the operator declared none*, and where the
+    name lives, is
+    [ADR-0068](../../docs/adr/0068-an-attributed-cause-is-derived-from-the-case-record-and-the-scan.md)
+    §3.
+    """
+    for control in CONTROL_CHECKLIST:
+        if family_claimed_by(control) is family:
+            return control
+    return None
 
 
 class Supervision(StrEnum):

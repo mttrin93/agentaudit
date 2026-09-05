@@ -343,6 +343,20 @@ _Avoid_: using it for **not measurable**, deselected, disabled, opted out, n/a
 A verdict plus its narrative — reason, articles, external identifier, remediation, exposure type. Produced by the scored layer only; the adaptive layer produces an **adaptive finding**, which is a different thing and is named differently on purpose.
 _Avoid_: issue, vulnerability, defect, alert
 
+**Attributed cause**:
+What one failure is read against, **derived** from the case record and the **scan** and
+never written by a model. Three readings and no fourth: the operator declared a
+**declared control** claiming this **family** and the bench broke it; a control claims
+this family and the operator declared none; or no control claims this family at all —
+which is the honest answer for five of the nine, the two judged families and the three
+elective ones, and is never reported as the second. It carries **which technique got
+in** — the case's **transform** — and no number of any kind: it is prose about one
+**verdict**, so no rate, band, interval or `D` reads it. Derived rather than judged
+because a model that wrote it would be a fourth **instrument** upstream of a reader, and
+would then have to be measured before it printed anything
+([ADR-0068](./docs/adr/0068-an-attributed-cause-is-derived-from-the-case-record-and-the-scan.md)).
+_Avoid_: root cause, reason, severity, diagnosis, why
+
 **Narrative failure**:
 The outcome of a run whose two **narrative instruments** ran and failed — the judge
 answered with something that is not a narrative, the remediation tool's answer could

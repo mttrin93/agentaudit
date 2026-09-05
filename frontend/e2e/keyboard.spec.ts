@@ -1,14 +1,20 @@
 /**
- * The register walk driven by the keyboard, and a refusal driven onto a field.
+ * The forms driven by the keyboard, and a refusal driven onto a field.
  *
- * **A third spec beside the walkthrough, because these three claims are about the
- * form and not about a run.** `walkthrough.spec.ts` drives the whole path once with
- * the pointer and proves the joins; what is asserted here is the surface underneath
- * it — that Enter advances a step, that a dead primary button says what it is
- * waiting for, and that a `422` naming a field reaches that field. None of the three
- * is observable in node: `npm test` runs with no DOM by the spec's own choice, so a
- * unit test can hold the sentence and the field name and nothing can hold the
- * rendering of either.
+ * **A third spec beside the walkthrough, because these claims are about the form and
+ * not about a run.** `walkthrough.spec.ts` drives the whole path once with the
+ * pointer and proves the joins; what is asserted here is the surface underneath it —
+ * that Enter advances a step, that a dead primary button says what it is waiting for,
+ * that a `422` naming a field reaches that field, and that Enter in the settings
+ * screen's number boxes sends. None of the four is observable in node: `npm test`
+ * runs with no DOM by the spec's own choice, so a unit test can hold the sentence and
+ * the field name and nothing can hold the rendering of either.
+ *
+ * **The fourth is here rather than beside the other settings tests for exactly that
+ * reason.** `settings.test.ts` reads the component's source and can say the form has
+ * a submit handler; whether the browser ever *runs* it is a question about implicit
+ * submission and the number of fields that block it, and only a browser answers it.
+ * It was answering *no* until #120, on the one screen the handler was written for.
  *
  * **No run is started and nothing is sent to anybody's endpoint.** The first two
  * tests never leave the first step. The third completes the walk against the real
@@ -138,4 +144,28 @@ test('a 422 naming a field marks that field and says why under it', async ({ pag
   // And the bench's own sentence is still over the form: a refusal names a field or
   // it does not, and either way it says what happened to the registration.
   await expect(page.locator('section.refusal')).toContainText(REFUSED_MSG)
+})
+
+test('Enter in one of the settings screen’s number boxes sends what it now reads', async ({
+  page,
+}) => {
+  await page.goto('/#/settings')
+  // The three whole numbers, and it is the *three* that make this a test rather than
+  // a formality: a form with no submit control implicitly submits only when exactly
+  // one field blocks implicit submission, and a `type="number"` is such a field. So
+  // the handler this form has been given cannot fire on the screen it is on unless
+  // the form also has a default button.
+  const numbers = page.locator('form.tuning input[type="number"]')
+  await expect(numbers.first()).toBeVisible()
+  expect(await numbers.count()).toBeGreaterThan(1)
+
+  // Nothing is typed, so no settling timer is pending and the only thing that can
+  // send is the keypress. A test that changed a value first would pass on the 400ms
+  // debounce and prove nothing about Enter.
+  const sent = page.waitForRequest(
+    (request) =>
+      request.method() === 'PUT' && request.url().includes('/bench/settings'),
+  )
+  await numbers.first().press('Enter')
+  await sent
 })

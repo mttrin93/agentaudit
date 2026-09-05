@@ -727,16 +727,27 @@ describe('nothing on this screen changes a setting', () => {
     // guards is the shape of the call and not what the screen looks like. Six since
     // #5 added the reasoning effort; this list said five until #57 counted it.
     const call = component.slice(component.indexOf('await tuneBench({'))
-    // No button: these are the settings the *next* run starts with, and that run has
-    // its own attestation and its own halt in front of its own estimate (ADR-0007).
-    // Nothing on this screen spends anything, so there is nothing here to confirm.
-    expect(component).not.toContain('<button')
+    // No button an operator can press: these are the settings the *next* run starts
+    // with, and that run has its own attestation and its own halt in front of its own
+    // estimate (ADR-0007). Nothing on this screen spends anything, so there is
+    // nothing here to confirm.
+    //
+    // The one `<button>` on the file is `hidden`, and the ban is worded to admit
+    // exactly that and nothing wider. It is the form's default button and it exists
+    // because implicit submission needs one where more than one field blocks the
+    // keypress — three number boxes do (#120) — so without it Enter would reach the
+    // handler on no screen at all. `hidden` keeps it out of the tab order and out of
+    // the accessibility tree: it is a keystroke and not a control, which is why the
+    // claim above survives it. A `<button` here without `hidden` is the confirm step
+    // this screen must not grow.
+    const buttons = component.match(/<button[^>]*>/g) ?? []
+    expect(buttons).toEqual(['<button type="submit" hidden>'])
     // `onSubmit` was banned beside it and is not any more, and the claim the ban was
     // making is the one above: no confirm step. The handler this screen has now is
     // not one — it sends the same six settings the settled timer would have sent,
     // 400ms earlier, because a form of number boxes where Enter does nothing is a
     // form a keyboard cannot finish (#120). What would be a confirm step is a
-    // control to press, and the line above still says there is none.
+    // control to press, and the lines above still say there is none.
     // And the send is still the one call, on change and on Enter alike: `tuneBench`
     // is reached from `send` and from nowhere else.
     expect(component.match(/tuneBench\(/g) ?? []).toHaveLength(1)

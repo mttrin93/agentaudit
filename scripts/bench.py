@@ -39,9 +39,18 @@ Exit codes are the console's, so a workflow step reads the same numbers a termin
 run returns. **No rate decides one of them.** A run that completed returns 0 whatever
 its figures say — what makes a step red on a declared bar is #90, and putting it here
 would make the bar a property of the runner rather than a threshold anybody can read
-(ADR-0003). The one non-zero code a completed run can return is the probe's own
-`EXIT_NOT_REGISTERED`, which is not a result either: it says the target never echoed
-the value planted in it, so nothing was measured at all.
+(ADR-0003). Two non-zero codes a completed run can return are not results either:
+the probe's own `EXIT_NOT_REGISTERED`, which says the target never echoed the value
+planted in it, so nothing was measured at all; and `EXIT_DISCLOSED`, which says the
+page this run was asked to write carried something a CI log may not (ADR-0008) and
+so was not written. Neither is a figure about the target.
+
+**`--summary` is the CI half's other half.** `scripts/summary.py` builds the page a
+step leaves on a run: the signed rendering itself, the families nothing was planted
+for, and where the three files went — and it refuses a page carrying payload text or
+a secret, because a job log is world-readable on a public repository and outlives
+the artefact's retention window
+([ADR-0066](../docs/adr/0066-the-action-is-a-composite-step-in-the-callers-own-repository.md)).
 """
 
 from __future__ import annotations
@@ -103,6 +112,16 @@ from scripts.probe_target import (
     deterministic_subset,
     print_target_run,
 )
+from scripts.summary import Disclosed, job_summary, write_summary
+
+EXIT_DISCLOSED = 6
+"""Exit code when the job summary carried something a CI log may not (ADR-0008).
+
+**Not a rate deciding an exit code**, which is the invariant this entrypoint keeps
+(ADR-0065 §4): the run completed, the three files are on disk and signed, and what
+failed is the publication of a page. A red step is the only way a control that fails
+closed can say so, and a page nobody wrote is the recoverable half of the pair.
+"""
 
 EXIT_NO_KEY = 5
 """Exit code when the bench holds no signing key. Nothing was sent.
@@ -110,6 +129,17 @@ EXIT_NO_KEY = 5
 Its own code and not `EXIT_WITHHELD`, because the two are different things for the
 person reading a red step: one is a run somebody refused and the other is a workflow
 missing a secret. Both stop before the first send.
+"""
+
+URL_ENV = "AGENTAUDIT_TARGET_URL"
+"""Where the target's endpoint comes from when no flag carries one.
+
+Beside `NONCE_ENV` and `console.TOKEN_ENV` and for the second half of their reason:
+`/proc/<pid>/cmdline` is world-readable, so a URL on a command line is a URL every
+other process on the machine can read. A staging endpoint that answers jailbreak
+payloads is the same kind of value as the credential for it, which is why the
+artefact carries only its hash (`registration.endpoint_hash`) — and why the Action
+hands it over this way (ADR-0066 §2).
 """
 
 NONCE_ENV = "AGENTAUDIT_TARGET_NONCE"
@@ -156,6 +186,16 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"The declared inputs do not describe a run: {bad}")
         return EXIT_WITHHELD
 
+    if (args.url is None) == (args.callback is None):
+        # Exactly one target, and the attestation names exactly one. Two is a run
+        # whose subject depends on which resolution rule the reader assumed, and
+        # zero is not a run.
+        print(
+            "This run has no target, or two. Pass exactly one of --url (or "
+            f"{URL_ENV}) and --callback: the committed attestation names one target "
+            "and authorises a run against that one."
+        )
+        return EXIT_WITHHELD
     reference = args.url if args.url is not None else args.callback
     if args.callback is not None and args.nonce is not None:
         # Refused here rather than met as `CanaryFromTwoPlaces` inside the run: a
@@ -222,12 +262,18 @@ def main(argv: Sequence[str] | None = None) -> int:
     except NotAdmitted as unearned:
         print(f"The library holds a case that did not earn its place:\n{unearned}")
         return EXIT_WITHHELD
+    # The whole library, held past every narrowing below, because the disclosure
+    # guard reads it: a case this run withdrew is still a case whose turns may not
+    # appear on a world-readable page (`scripts/summary.py`).
+    library = list(cases)
     gaps: dict[Family, OperatorGap] = {}
     if args.deterministic_only:
         # The same subset `scripts/probe_target.py` takes, through the same function:
         # which cases a run without an adjudicator sends is one decision, and two
         # copies of it would be two libraries called by one flag's name.
         cases, gaps = deterministic_subset(cases)
+
+    withdrawn: dict[AnyFamily, OperatorGap] = {}
 
     with ExitStack() as serving:
         try:
@@ -263,6 +309,13 @@ def main(argv: Sequence[str] | None = None) -> int:
                 if isinstance(family, Family)
             }
         )
+        # Every family that was not attempted, elective ones included, for the page
+        # a step writes: the rendering carries `not_measurable` and `withheld` and
+        # has no line for a family whose cases were dropped before the run.
+        # Rebuilt rather than `update(gaps)`: a `Mapping` key is invariant here, so
+        # the six-family dict is not a `dict[AnyFamily, ...]` to the typechecker.
+        withdrawn.update({family: gap for family, gap in gaps.items()})
+        withdrawn.update(unplanted)
 
         try:
             result = run_calibration(
@@ -337,6 +390,30 @@ def main(argv: Sequence[str] | None = None) -> int:
         Path(args.out),
         key,
     )
+    if args.summary is not None:
+        try:
+            write_summary(
+                Path(args.summary),
+                job_summary(
+                    published.rendering_path.read_text(encoding="utf-8"),
+                    artifact=args.artifact_name,
+                    out=args.out,
+                    withdrawn=withdrawn,
+                ),
+                cases=library,
+                # The two the caller handed in and the one they planted. Refused on
+                # the page on top of whatever masking their runner does for a value
+                # that came out of a secret store, because the masking is theirs and
+                # this is ours.
+                secrets=[
+                    secret for secret in (args.url, args.token, args.nonce) if secret
+                ],
+            )
+        except Disclosed as leaked:
+            print(f"\n{leaked}")
+            print("The three files are written and signed. Only the page was refused.")
+            return EXIT_DISCLOSED
+
     print(
         f"\nThree files written, under the names a recipient reads out of a "
         f"directory:\n  {published.payload_path}\n  {published.rendering_path}\n"
@@ -482,9 +559,20 @@ def _target(
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
-    where = parser.add_mutually_exclusive_group(required=True)
-    where.add_argument("--url", default=None, help="the target's messages endpoint")
-    where.add_argument(
+    # Not an `add_mutually_exclusive_group`, because one of the two has an
+    # environment fallback and argparse's exclusion sees only what was typed: a
+    # `AGENTAUDIT_TARGET_URL` left over from another job would then decide which of
+    # two things a run attacked. The check is in `main`, where both are resolved.
+    parser.add_argument(
+        "--url",
+        default=os.environ.get(URL_ENV) or None,
+        help=(
+            "the target's messages endpoint. Belongs in the caller's secret store "
+            f"and reaches this run through {URL_ENV} rather than a command line "
+            "wherever that is possible"
+        ),
+    )
+    parser.add_argument(
         "--callback",
         default=None,
         help=(
@@ -547,6 +635,21 @@ def _parser() -> argparse.ArgumentParser:
             "and a family attacking content that is not there comes back 0.00 "
             "(ADR-0024). A callback that implements the hook needs no declaration"
         ),
+    )
+    parser.add_argument(
+        "--summary",
+        default=None,
+        help=(
+            "a file to append the run's page to — `$GITHUB_STEP_SUMMARY` in a "
+            "workflow. The signed rendering, the families nothing was planted for, "
+            "and where the artefact is; refused if it carries payload text or a "
+            "secret (ADR-0008)"
+        ),
+    )
+    parser.add_argument(
+        "--artifact-name",
+        default="agentaudit-report",
+        help="what the page calls the upload the three files were attached to",
     )
     parser.add_argument("--exposes-tool-calls", action="store_true")
     parser.add_argument("--declared-tools", nargs="*", default=[])

@@ -28,7 +28,7 @@ from backend.tests import headless_agent
 from backend.tests.conftest import BENCH_ATTESTATION, a_target, some_cases
 from backend.tests.headless_agent import RecordingAgent
 from scripts import bench, verify
-from scripts.console import EXIT_DECLINED, EXIT_WITHHELD
+from scripts.console import EXIT_DECLINED, EXIT_WITHHELD, TOKEN_ENV
 from scripts.probe_target import OperatorGap
 
 ACTOR = "octocat"
@@ -570,3 +570,91 @@ def test_a_served_callback_answers_for_its_own_plantings_and_is_left_alone(
 
     assert kept == [leakage_case]
     assert gaps == {}
+
+
+def test_the_endpoint_may_arrive_in_the_environment_rather_than_on_the_command_line(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Where the bearer token already comes from, and for the second half of its
+    reason.
+
+    `/proc/<pid>/cmdline` is world-readable, so every other process on the machine
+    can read a command line. A staging URL that answers jailbreak payloads is the
+    same kind of value as the credential for it — `registration.endpoint_hash` exists
+    because it may not go into a document that travels — and the Action passes both
+    through the environment for that reason (ADR-0066 §2).
+    """
+    key = generate()
+    monkeypatch.setenv(SIGNING_KEY_VARIABLE, encoded_private(key))
+    monkeypatch.setenv(bench.URL_ENV, ENDPOINT)
+    monkeypatch.delenv(TOKEN_ENV, raising=False)
+
+    code = bench.main(
+        [
+            "--identity",
+            ACTOR,
+            "--attestation-file",
+            str(attestation_file(tmp_path, ENDPOINT)),
+            "--out",
+            str(tmp_path / "out"),
+            "--max-calls",
+            "10",
+        ]
+    )
+
+    assert code == EXIT_WITHHELD
+    # It got as far as the token check, which is the first thing downstream of
+    # knowing which URL this run is against.
+    assert ENDPOINT in capsys.readouterr().out
+
+
+def test_a_run_with_no_target_at_all_is_refused_and_nothing_is_sent(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv(SIGNING_KEY_VARIABLE, encoded_private(generate()))
+    monkeypatch.delenv(bench.URL_ENV, raising=False)
+
+    code = bench.main(
+        [
+            "--identity",
+            ACTOR,
+            "--attestation-file",
+            str(attestation_file(tmp_path, ENDPOINT)),
+            "--out",
+            str(tmp_path / "out"),
+            "--max-calls",
+            "10",
+        ]
+    )
+
+    assert code == EXIT_WITHHELD
+
+
+def test_an_endpoint_in_the_environment_does_not_silently_outrank_a_callback(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Two targets is not one target, however the second one arrived.
+
+    An environment variable left over from another job would otherwise decide which
+    of two things this run attacked, and the attestation names exactly one.
+    """
+    monkeypatch.setenv(SIGNING_KEY_VARIABLE, encoded_private(generate()))
+    monkeypatch.setenv(bench.URL_ENV, ENDPOINT)
+    reference = "backend.tests.headless_agent:PLAIN"
+
+    code = bench.main(
+        [
+            "--identity",
+            ACTOR,
+            "--attestation-file",
+            str(attestation_file(tmp_path, reference)),
+            "--out",
+            str(tmp_path / "out"),
+            "--max-calls",
+            "10",
+            "--callback",
+            reference,
+        ]
+    )
+
+    assert code == EXIT_WITHHELD

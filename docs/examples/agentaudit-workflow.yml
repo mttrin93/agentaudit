@@ -1,0 +1,83 @@
+# The step, in a caller's own repository. Copy this to
+# `.github/workflows/agentaudit.yml`, put the attestation beside it, and change the
+# two secrets.
+#
+# The decisions this file is shaped by are
+# [ADR-0066](../adr/0066-the-action-is-a-composite-step-in-the-callers-own-repository.md).
+name: AgentAudit
+
+# **Never `push` on every branch.** The adjudicator runs on your key and the target
+# runs on your inference budget — the third statement of the attestation you made —
+# so a bench on every commit spends money on every commit. On demand, and on a pull
+# request somebody labelled: two deliberate acts.
+on:
+  workflow_dispatch:
+  pull_request:
+    types: [labeled]
+
+# Least privilege, and it is enough: the step reads your checkout and uploads to your
+# own workflow run. Nothing it does needs a write scope, and `upload-artifact` uses
+# the runner's own token rather than this one.
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    if: github.event_name == 'workflow_dispatch' || github.event.label.name == 'audit'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      # **Pinned to a tag.** The tag pins the bench, which pins the case library,
+      # which is what the artefact's `LibraryVersion` records. On `@main` you get a
+      # different library next month and a report that says so in a field nobody
+      # reads — so pin, and read the library version in the artefact when the
+      # numbers move.
+      - name: AgentAudit
+        uses: TuringCollegeSubmissions/mrinal-AE.CAP.AFA.1.1@v1
+        with:
+          # Your staging target. Both from secrets: a URL that answers jailbreak
+          # payloads and a bearer token are neither of them things to commit.
+          endpoint: ${{ secrets.AGENTAUDIT_ENDPOINT }}
+          token: ${{ secrets.AGENTAUDIT_TARGET_TOKEN }}
+
+          # ...or your agent as a Python object instead of a deployed endpoint, in
+          # which case delete the two lines above. Not a secret: it is a path in
+          # this repository, and it belongs where a reviewer sees it.
+          #
+          # callback: myproject.agent:answer
+          # callback-install: uv pip install -e .
+
+          # What you declare about the target, in this file, because these are the
+          # run's declared inputs and the report records them.
+          name: support-assistant
+          agent-type: assistant
+          exposes-tool-calls: "true"
+          declared-tools: search_documents send_email
+
+          # The three statements, written out in a file somebody reviewed, naming
+          # the target above on a `target:` line. A run against any other target is
+          # refused. See `docs/examples/agentaudit-attestation.md`.
+          attestation: .github/agentaudit-attestation.md
+
+          # What this run may cost. At least one figure is required; an estimate
+          # over the ceiling is declined and the step goes red, never trimmed to
+          # fit. `max-spend` needs `price-per-call` — the bench never invents a
+          # price.
+          max-calls: "600"
+          max-spend: "2.50"
+          price-per-call: "0.004"
+
+          # Your provider key, for the instrument that decides the two judged
+          # families. Drop it and set `deterministic-only: "true"` for a run that
+          # reaches no provider and costs nothing.
+          openrouter-api-key: ${{ secrets.OPENROUTER_API_KEY }}
+
+          # No key, no boot. Generate the pair with `scripts.keygen`, commit the
+          # public half where your recipients can read its history, and put the
+          # private half here and nowhere else.
+          signing-key: ${{ secrets.AGENTAUDIT_SIGNING_KEY }}
+
+          artifact-name: agentaudit-report
+          retention-days: "30"

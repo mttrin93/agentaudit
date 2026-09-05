@@ -145,3 +145,90 @@ jobs:
       - name: Walkthrough
         run: npm run e2e
         working-directory: frontend
+
+  # The Action, run against a reference agent served inside the runner. Its own job
+  # for `walkthrough`'s reason: it is the only one that installs this repository the
+  # way a stranger's workflow installs it — `uses: ./`, the composite's own
+  # `uv sync --locked --no-dev` into `github.action_path`, and the entrypoint reached
+  # through the argument-building in `action.yml` rather than through a test that
+  # calls `bench.main` with a list. A bug in that shell is invisible to `check`.
+  #
+  # **What it spends: nothing.** `deterministic-only`, so no adjudicating model is
+  # built, no provider is reached and the target is a Python object in this
+  # repository (`backend/tests/headless_agent.py`) served on a loopback port the run
+  # bound. There is no endpoint, no secret and no network destination in this job.
+  #
+  # **It is the disclosure test.** `scripts/summary.py` refuses a page carrying a
+  # whole turn of a live case or a secret the run was handed, and the step exits 6
+  # when it does — so a green run here is the assertion that the page this action
+  # publishes carries neither, made over the real library and the real rendering
+  # rather than over a fixture (ADR-0008, ADR-0066).
+  action:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v10.0.1
+        with:
+          enable-cache: true
+
+      - name: Install the project
+        run: uv sync --locked --no-dev
+
+      # Generated here and thrown away with the runner. Masked before it can reach a
+      # line of the log, and written to the environment rather than to an input in
+      # this file, because a signing key in a workflow file is a signing key in the
+      # git history — which is the whole of why `signing-key` is documented as a
+      # secret (ADR-0020).
+      - name: A throwaway signing key
+        run: |
+          uv run --no-sync python - > "$RUNNER_TEMP/private" <<'PY'
+          import os
+          from pathlib import Path
+
+          from backend.bench.signing import encoded_private, generate, public_pem
+
+          key = generate()
+          Path(os.environ["RUNNER_TEMP"], "smoke.pub").write_bytes(
+              public_pem(key.public_key())
+          )
+          print(encoded_private(key))
+          PY
+          KEY="$(cat "$RUNNER_TEMP/private")"
+          echo "::add-mask::$KEY"
+          # The heredoc form, not `NAME=value`: a stray second line of stdout would
+          # otherwise be parsed as a second variable, and the failure that produces
+          # is a confusing one two steps later.
+          {
+            echo "AGENTAUDIT_SIGNING_KEY<<AGENTAUDIT_KEY_EOF"
+            echo "$KEY"
+            echo "AGENTAUDIT_KEY_EOF"
+          } >> "$GITHUB_ENV"
+          rm "$RUNNER_TEMP/private"
+
+      - name: Run the Action
+        id: audit
+        uses: ./
+        with:
+          callback: backend.tests.headless_agent:AGENT
+          signing-key: ${{ env.AGENTAUDIT_SIGNING_KEY }}
+          deterministic-only: "true"
+          max-calls: "100000"
+          artifact-name: agentaudit-smoke-report
+          retention-days: "1"
+
+      # The three files are the verifier's contract, and this is the recipient's own
+      # script over exactly what the step uploaded: the signature over those bytes,
+      # the rendering hashing to the digest inside the payload, and the arithmetic
+      # re-derived from the counts. Asserting that three filenames exist would be
+      # asserting the easy half.
+      - name: Verify what the Action signed
+        env:
+          # Through the environment and not into the script's text, which is the
+          # rule `action.yml` keeps for its own inputs.
+          REPORT_DIR: ${{ steps.audit.outputs.report-directory }}
+        run: |
+          uv run --no-sync python -m scripts.verify "$REPORT_DIR" \
+            --pubkey "$RUNNER_TEMP/smoke.pub"

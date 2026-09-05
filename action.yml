@@ -1,0 +1,388 @@
+# The bench as one step in somebody else's pipeline.
+#
+# A **composite** action, which is the four lines this repository's own CI already
+# runs plus the entrypoint #88 built. Why a composite and not the other two kinds, and
+# every security property this file is the implementation of, are
+# docs/adr/0066-the-action-is-a-composite-step-in-the-callers-own-repository.md.
+#
+# The consequence here is the shape of the steps below: **it runs in the caller's
+# repository, on the caller's runner, against the caller's staging target, with the
+# caller's keys and the caller's inference budget.** Nothing in this file reaches
+# AgentAudit — no telemetry, no callback home, and the one network destination is an
+# upload to the caller's own workflow run. Every third-party action is pinned by
+# commit, every input reaches a shell through the environment, and the three secrets
+# are masked before any other step runs.
+name: AgentAudit
+description: >-
+  Run the AgentAudit adversarial bench against your own agent, in your own
+  repository, and leave the signed report behind as a build artifact.
+author: AgentAudit
+
+branding:
+  icon: shield
+  color: purple
+
+inputs:
+  # --- where the target is: one of these two, never both -------------------------
+  endpoint:
+    description: >-
+      Your staging agent's messages endpoint. Pass it from a repository secret: a
+      URL that answers jailbreak payloads is not a thing to write into a workflow
+      file, and this action masks it in the log before it runs anything.
+    required: false
+    default: ""
+  token:
+    description: >-
+      The bearer token for that endpoint. A secret, always — a bearer token in a
+      workflow file is a bearer token in the git history.
+    required: false
+    default: ""
+  callback:
+    description: >-
+      Your agent as a Python object instead, written `package.module:attribute` and
+      resolved against your own checkout. The bench serves it on loopback inside the
+      runner and attacks it over the same contract a URL is attacked over, so there
+      is no endpoint to stand up in CI (ADR-0059). Not a secret: it is a path in
+      your repository, and it belongs in the file where a reviewer sees it.
+    required: false
+    default: ""
+  callback-install:
+    description: >-
+      A command run in your workspace, with the bench's own virtualenv active,
+      before the run — for a callback whose imports are your project's rather than
+      the bench's. Typically `uv pip install -e .`. Empty by default, because a
+      callback with no third-party imports needs nothing. **It is your command in
+      the bench's environment**, so it can change what the pinned tag installed: what
+      the tag still pins is the bench and its case library, and what it no longer
+      pins is everything your command touched.
+    required: false
+    default: ""
+
+  # --- what you declare about it, in the file, where it is reviewed ---------------
+  name:
+    description: The name this target is recorded under in the report.
+    required: false
+    default: target
+  agent-type:
+    description: >-
+      What kind of agent this is. Decides which of the library's cases apply to it
+      at all; a case not written for this type is not sent and is in no denominator.
+    required: false
+    default: assistant
+  exposes-tool-calls:
+    description: >-
+      Whether the target returns a trace of the tools it called. Requires
+      `declared-tools`: scope creep is read against that list, and against an empty
+      one every call your agent makes would score as a finding.
+    required: false
+    default: "false"
+  declared-tools:
+    description: The tools this target has, space-separated.
+    required: false
+    default: ""
+  note-planted:
+    description: >-
+      Declare that the third-party note the indirect-injection cases carry is filed
+      in content this target retrieves. Without it that family is withdrawn rather
+      than sent, because a family attacking content that is not there comes back
+      0.00 and a signed zero reads as a defence (ADR-0024).
+    required: false
+    default: "false"
+  nonce:
+    description: >-
+      A registration nonce you already planted in the target's configuration. A
+      secret. Without one an unattended run against a URL waives its proof of
+      control and the artefact says so; a served callback plants its own and must
+      not be given this.
+    required: false
+    default: ""
+
+  # --- what authorises the run ----------------------------------------------------
+  identity:
+    description: >-
+      Who is making the attestation. `github.actor` by default, which is who GitHub
+      says ran the workflow — an authenticated identity, and the stronger of the two
+      on the one field a liability record turns on (ADR-0065).
+    required: false
+    default: ${{ github.actor }}
+  attestation:
+    description: >-
+      Path in your repository to the committed attestation: the three statements
+      written out in full, and a `target:` line naming what they are made against. A
+      run against any other target is refused. `docs/examples/agentaudit-attestation.md`
+      in the bench's own repository is the example.
+    required: false
+    default: .github/agentaudit-attestation.md
+
+  # --- what bounds it -------------------------------------------------------------
+  max-calls:
+    description: >-
+      The most calls this run may be permitted to make. Declarable with `max-spend`,
+      instead of it, or both — at least one is required, because a ceiling with no
+      figure in it is a yes with extra steps.
+    required: false
+    default: ""
+  max-spend:
+    description: >-
+      The most this run may be permitted to cost. Compared against the run's *hard*
+      ceiling — every message retried to its transport limit — and an estimate over
+      it is declined rather than trimmed to fit.
+    required: false
+    default: ""
+  price-per-call:
+    description: >-
+      What one call costs you. Required by `max-spend`: the bench never invents a
+      price, so a money ceiling on an unpriced run fails closed.
+    required: false
+    default: ""
+  currency:
+    description: The currency the two figures above are in.
+    required: false
+    default: USD
+
+  # --- the instruments, which run on your key -------------------------------------
+  adjudicator-model:
+    description: >-
+      The model that decides the two judged families. Leave `deterministic-only`
+      false and this unset to take the bench's default.
+    required: false
+    default: ""
+  deterministic-only:
+    description: >-
+      Run only the cases a success condition decides, with no adjudicating model.
+      The two judged families are then reported as not attempted rather than at
+      zero. This is the setting that makes a run free.
+    required: false
+    default: "false"
+  openrouter-api-key:
+    description: >-
+      Your provider key, for the adjudicator and the narrator. A secret. Not needed
+      when `deterministic-only` is true, and never needed for the target, which runs
+      on your own inference budget wherever it lives.
+    required: false
+    default: ""
+
+  # --- the key the report is signed with ------------------------------------------
+  signing-key:
+    description: >-
+      The Ed25519 private half, base64, as `scripts.keygen` prints it. A secret, and
+      required: no key, no boot. It is read before the attestation is even parsed,
+      so a workflow missing it fails before the first send rather than after the
+      suite has spent your budget on a document it then refuses (ADR-0020).
+    required: true
+
+  # --- what the step leaves behind ------------------------------------------------
+  artifact-name:
+    description: The name the three files are uploaded to this run under.
+    required: false
+    default: agentaudit-report
+  retention-days:
+    description: >-
+      How long the upload is kept. The report outlives it only where you save it:
+      the job summary is permanent and the artifact is not, which is one more reason
+      no payload text goes into either.
+    required: false
+    default: "30"
+  upload:
+    description: Whether to upload the three files as a build artifact.
+    required: false
+    default: "true"
+  summary:
+    description: Whether to write the run's page onto the job summary.
+    required: false
+    default: "true"
+
+outputs:
+  report-directory:
+    description: >-
+      Where `report.json`, `report.md` and `report.sig` were written. The seam a
+      later step reads — including the declared bar (#90), which reads the payload
+      below and decides whether this job is red. It is deliberately not decided
+      here: a bar in the runner is a threshold nobody can read (ADR-0003).
+    value: ${{ steps.run.outputs.report-directory }}
+  report-json:
+    description: >-
+      The path of the signed payload, for a step that reads a figure out of it.
+    value: ${{ steps.run.outputs.report-directory }}/report.json
+
+runs:
+  using: composite
+  steps:
+    # Before anything runs, and before anything could print one. `add-mask` is the
+    # runner's own redaction and it applies to every later line of this job — the
+    # entrypoint prints the target's URL beside its name, and a caller who passed the
+    # endpoint from somewhere other than a secret would otherwise publish it. The
+    # bench hashes the endpoint in the artefact for the same reason
+    # (`registration.endpoint_hash`); this is the log's half of that.
+    - name: Mask the secrets this step was handed
+      shell: bash
+      env:
+        ENDPOINT: ${{ inputs.endpoint }}
+        TOKEN: ${{ inputs.token }}
+        NONCE: ${{ inputs.nonce }}
+      run: |
+        for secret in "$ENDPOINT" "$TOKEN" "$NONCE"; do
+          if [ -n "$secret" ]; then echo "::add-mask::$secret"; fi
+        done
+
+    # Pinned to a commit and not to a tag: a tag is a pointer somebody else can move,
+    # and every action in this file runs with the caller's secrets in its
+    # environment. The release each SHA belongs to is named beside it so a reader can
+    # check it against the upstream tag. astral-sh/setup-uv v10.0.1.
+    - name: Install uv
+      uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d
+      with:
+        enable-cache: true
+
+    # In the action's own checkout and never the caller's: `github.action_path` is
+    # where this repository was placed, and the caller's workspace is their project.
+    # The lockfile decides the versions, so the bench a tag installs is the bench that
+    # tag was tested as. `--no-dev` because a run needs none of mypy, pytest or ruff.
+    - name: Install the bench
+      shell: bash
+      working-directory: ${{ github.action_path }}
+      run: uv sync --locked --no-dev
+
+    # The one place a caller's own command runs, and it runs in their workspace under
+    # their own workflow's authorship. It exists because a callback is *their* module:
+    # a function that imports their project needs their project installed, and into
+    # this virtualenv rather than a second one, because there is one interpreter that
+    # will import it.
+    - name: Install the callback's own dependencies
+      if: inputs.callback-install != ''
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      env:
+        # Both, so either style of command lands in the same interpreter: `uv pip`
+        # reads the first, and uv's project commands read the second.
+        VIRTUAL_ENV: ${{ github.action_path }}/.venv
+        UV_PROJECT_ENVIRONMENT: ${{ github.action_path }}/.venv
+        INSTALL: ${{ inputs.callback-install }}
+      run: bash -euo pipefail -c "$INSTALL"
+
+    # **Every input reaches this script through the environment and not through the
+    # script's text.** A `${{ inputs.x }}` interpolated into a `run:` body is the
+    # value pasted into a shell before bash sees it, so a semicolon in an input is a
+    # second command — and this step holds the caller's signing key and their
+    # provider key. The endpoint and the token stay out of argv for the neighbouring
+    # reason: `/proc/<pid>/cmdline` is world-readable, and every other process on the
+    # runner can read a command line.
+    - name: Run the bench
+      id: run
+      shell: bash
+      working-directory: ${{ github.action_path }}
+      env:
+        AGENTAUDIT_SIGNING_KEY: ${{ inputs.signing-key }}
+        AGENTAUDIT_TARGET_TOKEN: ${{ inputs.token }}
+        AGENTAUDIT_TARGET_NONCE: ${{ inputs.nonce }}
+        AGENTAUDIT_TARGET_URL: ${{ inputs.endpoint }}
+        OPENROUTER_API_KEY: ${{ inputs.openrouter-api-key }}
+        CALLBACK: ${{ inputs.callback }}
+        IDENTITY: ${{ inputs.identity }}
+        WORKSPACE: ${{ github.workspace }}
+        ATTESTATION: ${{ inputs.attestation }}
+        TARGET_NAME: ${{ inputs.name }}
+        AGENT_TYPE: ${{ inputs.agent-type }}
+        CURRENCY: ${{ inputs.currency }}
+        MAX_CALLS: ${{ inputs.max-calls }}
+        MAX_SPEND: ${{ inputs.max-spend }}
+        PRICE_PER_CALL: ${{ inputs.price-per-call }}
+        ADJUDICATOR_MODEL: ${{ inputs.adjudicator-model }}
+        DECLARED_TOOLS: ${{ inputs.declared-tools }}
+        EXPOSES_TOOL_CALLS: ${{ inputs.exposes-tool-calls }}
+        NOTE_PLANTED: ${{ inputs.note-planted }}
+        DETERMINISTIC_ONLY: ${{ inputs.deterministic-only }}
+        WRITE_SUMMARY: ${{ inputs.summary }}
+        ARTIFACT_NAME: ${{ inputs.artifact-name }}
+        # The callback is imported by dotted name and the module is the caller's, in
+        # the caller's checkout. Nothing else is added to the path.
+        PYTHONPATH: ${{ github.workspace }}
+        REPORT_DIR: ${{ runner.temp }}/agentaudit-report
+      run: |
+        set -euo pipefail
+
+        # Resolved against the caller's checkout, because that is where a committed
+        # attestation lives — and left alone if they gave an absolute path.
+        case "$ATTESTATION" in
+          /*) attestation="$ATTESTATION" ;;
+          *) attestation="$WORKSPACE/$ATTESTATION" ;;
+        esac
+
+        # `if` and not `&&`, deliberately: under `set -e` a `test && append` whose
+        # test is false is a failing statement, so an unset optional input would end
+        # the step rather than be left out of the command.
+        # No `--url` here: the entrypoint reads `AGENTAUDIT_TARGET_URL` above, which
+        # is where the token and the nonce already come from and for the same second
+        # reason — `/proc/<pid>/cmdline` is world-readable, and every other process
+        # on the runner can read a command line.
+        declared=()
+        if [ -n "$CALLBACK" ]; then declared+=(--callback "$CALLBACK"); fi
+        if [ -n "$MAX_CALLS" ]; then declared+=(--max-calls "$MAX_CALLS"); fi
+        if [ -n "$MAX_SPEND" ]; then declared+=(--max-spend "$MAX_SPEND"); fi
+        if [ -n "$PRICE_PER_CALL" ]; then
+          declared+=(--price-per-call "$PRICE_PER_CALL")
+        fi
+        if [ -n "$ADJUDICATOR_MODEL" ]; then
+          declared+=(--adjudicator-model "$ADJUDICATOR_MODEL")
+        fi
+        if [ "$EXPOSES_TOOL_CALLS" = "true" ]; then
+          declared+=(--exposes-tool-calls)
+        fi
+        if [ "$NOTE_PLANTED" = "true" ]; then declared+=(--note-planted); fi
+        if [ "$DETERMINISTIC_ONLY" = "true" ]; then
+          declared+=(--deterministic-only)
+        fi
+        if [ -n "$DECLARED_TOOLS" ]; then
+          read -r -a tools <<< "$DECLARED_TOOLS"
+          declared+=(--declared-tools "${tools[@]}")
+        fi
+        if [ "$WRITE_SUMMARY" = "true" ]; then
+          declared+=(--summary "$GITHUB_STEP_SUMMARY" --artifact-name "$ARTIFACT_NAME")
+        fi
+
+        # Written before the run rather than after it, so a later step can name the
+        # directory even when the bench exits non-zero: a run declined on its ceiling
+        # and a run whose page was refused both leave a step that has to say where
+        # something, or nothing, was written.
+        echo "report-directory=$REPORT_DIR" >> "$GITHUB_OUTPUT"
+
+        uv run --no-sync python -m scripts.bench \
+          --identity "$IDENTITY" \
+          --attestation-file "$attestation" \
+          --out "$REPORT_DIR" \
+          --name "$TARGET_NAME" \
+          --agent-type "$AGENT_TYPE" \
+          --currency "$CURRENCY" \
+          "${declared[@]}"
+
+    # `always()`, because a red run is still evidence and the three files are written
+    # and signed before any exit code above is decided. A step that uploaded only on
+    # success would throw away the artefact of exactly the run somebody needs to
+    # read. `hashFiles` is no use for the guard — it only sees the workspace — so the
+    # existence check is a step of its own.
+    - name: Look for the three files
+      id: written
+      if: always()
+      shell: bash
+      env:
+        # The directory the step above named, rather than a second spelling of it:
+        # two would be one edit away from an upload that silently finds nothing.
+        REPORT_DIR: ${{ steps.run.outputs.report-directory }}
+      run: |
+        if [ -n "$REPORT_DIR" ] && [ -f "$REPORT_DIR/report.json" ]; then
+          echo "found=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "found=false" >> "$GITHUB_OUTPUT"
+        fi
+
+    # Pinned to a commit for the reason setup-uv is. actions/upload-artifact v7.0.1.
+    # It uploads to the caller's own workflow run and nowhere else; there is no
+    # network destination in this file that the caller does not own.
+    - name: Upload the signed report
+      if: always() && inputs.upload == 'true' && steps.written.outputs.found == 'true'
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      with:
+        name: ${{ inputs.artifact-name }}
+        path: ${{ steps.run.outputs.report-directory }}
+        retention-days: ${{ inputs.retention-days }}
+        if-no-files-found: error

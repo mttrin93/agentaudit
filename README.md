@@ -367,6 +367,67 @@ One warning worth repeating: `attempts_per_case` is the denominator of every
 rate. The declared value is 10. A run at a lower number is honest, but it is not
 a gate result and nothing may compare it to one.
 
+## In your own pipeline
+
+The bench is also **one step you drop into your own repository's CI**. It runs on your
+runner, against your staging target, with your keys and your inference budget: nothing
+in it reaches AgentAudit, and the only place it uploads to is your own workflow run.
+
+```yaml
+- uses: TuringCollegeSubmissions/mrinal-AE.CAP.AFA.1.1@v1
+  with:
+    endpoint: ${{ secrets.AGENTAUDIT_ENDPOINT }}
+    token: ${{ secrets.AGENTAUDIT_TARGET_TOKEN }}
+    signing-key: ${{ secrets.AGENTAUDIT_SIGNING_KEY }}
+    openrouter-api-key: ${{ secrets.OPENROUTER_API_KEY }}
+    attestation: .github/agentaudit-attestation.md
+    max-calls: "600"
+```
+
+The whole file, with every input and the comments that say why each one lives where it
+does, is [docs/examples/agentaudit-workflow.yml](./docs/examples/agentaudit-workflow.yml);
+the action itself is [action.yml](./action.yml) and the argument for it is
+[ADR-0066](./docs/adr/0066-the-action-is-a-composite-step-in-the-callers-own-repository.md).
+Four things are worth reading before you copy it.
+
+**Pin the tag, and read the library version when the numbers move.** The tag pins the
+bench, the bench pins the case library, and the library is what `LibraryVersion` records
+in every artefact. A caller on `@main` gets a different library next month and a report
+that says so in a field nobody reads — so when a rate shifts, check the library version
+in the artefact before you conclude anything about your agent.
+
+**Do not trigger it on `push`.** The adjudicator runs on your key and your agent runs on
+your inference budget, which is the third statement of the attestation you made. A bench
+on every commit spends money on every commit. `workflow_dispatch`, or `pull_request` on
+a label: two deliberate acts. `deterministic-only: "true"` is the setting that makes a
+run free — no adjudicating model is built, no provider is reached, and the two judged
+families are reported as not attempted rather than at zero.
+
+**Three inputs are secrets and one of them is required.** The endpoint and the bearer
+token, because a live URL that answers jailbreak payloads and a credential for it are
+neither of them things to commit; and the signing key, because a bench with no key
+refuses to start rather than measuring your agent and then having no document to hand
+over. The action masks all of them in the log before it runs anything, and the report
+carries the endpoint only as a hash. If your agent is a Python object rather than a
+deployed endpoint, `callback: package.module:attribute` skips the endpoint entirely —
+the bench serves your function on a loopback port inside the runner and attacks it over
+the same contract.
+
+**The attestation is a committed file, and it names the target.** The three statements
+written out in full, reviewed in a pull request, made under the identity GitHub
+authenticated for the run. A run against a target the file does not name is refused
+before anything is sent, so pointing the bench somewhere else means editing that file —
+which is a reviewed diff too, and that is the point.
+[docs/examples/agentaudit-attestation.md](./docs/examples/agentaudit-attestation.md) is
+the example.
+
+**What the step leaves behind** is the three files — `report.json`, `report.md`,
+`report.sig` — uploaded as a build artifact your recipient checks with
+`scripts/verify.py`, and a job summary carrying the signed rendering itself. No payload
+text goes into either, and that is checked rather than trusted: a page carrying a whole
+turn of a live case, or a secret the run was handed, is refused and the step goes red
+with the artefact still written.
+
 ## Optional tasks
 
 **Done (4 medium, 2 hard, plus 2 easy).**

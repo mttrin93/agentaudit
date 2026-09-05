@@ -55,11 +55,7 @@ from dotenv import load_dotenv
 from backend.bench.adjudication import Completion
 from backend.bench.admission import NotAdmitted, admitted_library
 from backend.bench.calibration import TargetRun, run_calibration
-from backend.bench.completion import (
-    DEFAULT_ADJUDICATOR_MODEL,
-    completion_for,
-    narrator_for,
-)
+from backend.bench.completion import DEFAULT_ADJUDICATOR_MODEL
 from backend.bench.contract import TargetConfig
 from backend.bench.library import Case, Family, VerdictClass, one_of_the_six
 from backend.bench.narration import Narrator
@@ -75,6 +71,7 @@ from scripts.console import (
     TOKEN_ENV,
     attest,
     excerpt,
+    instruments,
     interactive_planter,
     note_is_planted,
     price,
@@ -107,6 +104,7 @@ class OperatorGap(StrEnum):
     """
 
     NOTE_NOT_PLANTED = "note_not_planted"
+    NONCE_NOT_PLANTED = "nonce_not_planted"
     PLANTING_UNVERIFIED = "planting_unverified"
     NO_STOP_POSITION_RECORDED = "no_stop_position_recorded"
     ADJUDICATOR_NOT_SUPPLIED = "adjudicator_not_supplied"
@@ -120,6 +118,14 @@ class OperatorGap(StrEnum):
                     "in content this target can retrieve. The case would have sent "
                     "a message asking for a note that is not there, and a target "
                     "that cannot find it resists by having nothing to obey"
+                )
+            case OperatorGap.NONCE_NOT_PLANTED:
+                return (
+                    "not run — nothing planted the registration nonce in this "
+                    "target's configuration, and that value is this family's "
+                    "canary: one planted value, two roles (ADR-0007). The cases "
+                    "would have gone after a string that is nowhere in the target, "
+                    "and every attempt would have come back resisted"
                 )
             case OperatorGap.PLANTING_UNVERIFIED:
                 return (
@@ -254,18 +260,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         adjudicator_model = spec
         try:
-            # Before the attestation: a run that reached its first judged attempt
-            # before discovering it had no instrument would already have spent the
-            # operator's budget on attempts nothing can score.
-            adjudicator = completion_for(spec, usage=ledger.for_layer(Layer.SCORED))
-            # And the pair that explains what the four deterministic families
-            # find, off the same declared string and into the same layer
-            # (ADR-0030). Behind the same flag as the adjudicator, because the
-            # docstring's promise about `--deterministic-only` is precisely *the
-            # wire and the four re-derivable families first, a judge and its cost
-            # second* — a probe that narrated without one would need a credential
-            # this flag exists to do without.
-            narrator = narrator_for(spec, ledger.for_layer(Layer.SCORED))
+            # The adjudicator and the narrator the declared string buys, built in one
+            # place because two scripts build them (`console.instruments`). Behind
+            # this flag rather than always, because the docstring's promise about
+            # `--deterministic-only` is precisely *the wire and the four re-derivable
+            # families first, a judge and its cost second* — a probe that narrated
+            # without one would need a credential this flag exists to do without.
+            adjudicator, narrator = instruments(spec, ledger)
         except (KeyError, ValueError) as unusable:
             print(
                 f"No usable adjudicating model: {unusable}. Pass a working "

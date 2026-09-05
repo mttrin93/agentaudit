@@ -1,8 +1,9 @@
 """The terminal side of a run: what is asked, how it is asked, and how a rate prints.
 
 Held in one place because there is more than one script that reaches a target —
-`calibrate.py` runs the reference agents, `probe_target.py` runs somebody's own —
-and the consent mechanism must not exist twice. Two copies of the attestation is
+`calibrate.py` runs the reference agents, `probe_target.py` runs somebody's own, and
+`bench.py` runs one with nobody in front of it — and the consent mechanism must not
+exist twice. Two copies of the attestation is
 two places for a `--yes` to appear in, and ADR-0007 is explicit that a consent
 mechanism with a flag to skip it is a convenience feature after all.
 
@@ -28,12 +29,14 @@ from decimal import Decimal
 from backend.bench.adaptive.budget import DECLARED_ADAPTIVE_BUDGET, AdaptiveBudget
 from backend.bench.adaptive.discrimination import NoFamiliesInScope, measure
 from backend.bench.adaptive.episode import AdaptiveEpisode
+from backend.bench.adjudication import Completion
 from backend.bench.admission import library_provenance, outcome_for
 from backend.bench.calibration import CalibrationResult, PlantNonce, TargetRun
+from backend.bench.completion import completion_for, narrator_for
 from backend.bench.contract import TargetConfig
 from backend.bench.labels import articles_stated
 from backend.bench.library import Case, Family, bar_for, trigger_counts
-from backend.bench.narration import NarrativeFailure
+from backend.bench.narration import NarrativeFailure, Narrator
 from backend.bench.nonce import NONCE_PREFIX
 from backend.bench.registration import ECHO_PROBE, Attestation
 from backend.bench.retirement import (
@@ -44,8 +47,9 @@ from backend.bench.retirement import (
 )
 from backend.bench.rule import DECLARED_RULE, GateRule
 from backend.bench.scorer import Rate
+from backend.bench.usage import UsageLedger
 from backend.graph.approval import Approval, Approve
-from backend.graph.budget import BudgetPayload, CallPrice
+from backend.graph.budget import BudgetPayload, CallPrice, Layer
 from backend.observability import TracedRun, install, trace_config, tracing
 
 TOKEN_ENV = "AGENTAUDIT_TARGET_TOKEN"
@@ -96,6 +100,29 @@ def traced_run(
         adjudicator_model=adjudicator_model,
         attacker_model=attacker_model,
         reference_model=reference_model,
+    )
+
+
+def instruments(model: str, usage: UsageLedger) -> tuple[Completion, Narrator]:
+    """The pair a run's declared adjudicating model buys, built off one string.
+
+    Two instruments and one declaration, so the judge that decides the two judged
+    families and the narrator that explains what the four deterministic ones found
+    are the same model and report into the same layer (ADR-0030). Held here for the
+    reason the attestation is: more than one script builds them, and a pair built in
+    two places is a pair that can be built two ways.
+
+    Raises whatever the builders raise — `KeyError` or `ValueError` for a model
+    string that names nothing this bench can construct — because each caller says
+    something different about what to do without one, and the sentence a probe prints
+    is not the sentence a workflow step prints. What both do with it is refuse
+    *before* the attestation: a run that met a missing instrument at its first judged
+    attempt would already have spent the operator's budget on attempts nothing can
+    score.
+    """
+    return (
+        completion_for(model, usage=usage.for_layer(Layer.SCORED)),
+        narrator_for(model, usage.for_layer(Layer.SCORED)),
     )
 
 

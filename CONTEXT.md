@@ -777,7 +777,8 @@ The bench-issued value a user must plant in their target to prove they control i
 _Avoid_: token, challenge, secret, key
 
 **Attestation**:
-The user's recorded statement that they are authorised to test the target, that it is not production, and that they accept the cost and policy consequences.
+The user's recorded statement that they are authorised to test the target, that it is not production, and that they accept the cost and policy consequences. Made at a terminal by answering three questions, or — for a run nobody is sitting in front of — **committed** as prose in the caller's own repository, naming the target it authorises and made by an authenticated identity
+([ADR-0065](./docs/adr/0065-a-ci-attestation-is-committed-prose-by-a-named-actor.md)). One record either way: the three statements, who made them, and the endpoint hash.
 _Avoid_: consent, agreement, terms, disclaimer
 
 **Provenance block**:

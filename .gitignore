@@ -69,3 +69,11 @@ node_modules/
 # directory rather than a file name because ChromaDB writes a SQLite database and a
 # per-collection directory beside it.
 /corpus/
+
+# Working notes — a scratch directory beside the repository rather than in it.
+# The batch that admitted the first variant left its argument paragraphs, its fact
+# sheet and the admitted record itself here while the record was held out of
+# `backend/cases/` (#73, #150). None of it is an input to a run or to a test: an
+# admitted case's home is `backend/cases/` and nowhere else, and a note about why a
+# variant was proposed belongs in the issue that proposed it.
+/notes/

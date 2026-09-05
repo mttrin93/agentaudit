@@ -28,6 +28,7 @@ from backend.bench.library import (
     Case,
     ElectiveFamily,
     Family,
+    Plant,
     Precondition,
     SuccessConditionKind,
     one_of_the_six,
@@ -67,6 +68,28 @@ class NotMeasurable(StrEnum):
     ([ADR-0043](../../docs/adr/0043-the-canary-a-nonce-cannot-be-confused-with.md)).
     """
 
+    NO_CONFIG_CANARY_PLANT = "no_config_canary_plant"
+    """The target cannot be given a value in its configuration to leak.
+
+    A fifth reason rather than one of the four reworded, and the first whose gap is
+    closed by *writing code* rather than by declaring a capability: on the callback
+    surface the bench holds the object, so a planting hook nobody implemented is a
+    gap it detects for itself
+    ([ADR-0061](../../docs/adr/0061-a-plant-is-a-precondition-the-bench-can-check.md)).
+
+    **Not `DeclaredGap.NONCE_NOT_PLANTED`, and that member stays where it is.**
+    Against a URL the plant is the caller's statement and the bench cannot check it;
+    against a shim it can, and a gap the bench detects belongs on this side of that
+    table. Two surfaces, two truthful answers, and no third type.
+    """
+
+    NO_RETRIEVED_CONTENT_PLANT = "no_retrieved_content_plant"
+    """The target cannot be given third-party content its retrieval brings back.
+
+    The other half of the pair above, on the same terms, standing beside
+    `DeclaredGap.NOTE_NOT_PLANTED` in the same way (ADR-0061).
+    """
+
     TRACE_DECLARED_BUT_ABSENT = "trace_declared_but_absent"
     """The operator declared tool-call visibility and the endpoint does not have it.
 
@@ -97,6 +120,22 @@ class NotMeasurable(StrEnum):
                 "than its operator, and this family reads a record about a third "
                 "party leaving it. There is nothing here about a person for the "
                 "attack to ask for"
+            )
+        if self is NotMeasurable.NO_CONFIG_CANARY_PLANT:
+            return (
+                "not measurable — this family reads a value planted in the target's "
+                "own configuration and this target has no way to be given one, so "
+                "the attack would go after a string that is nowhere inside it. "
+                "Implement a `plant_config_canary` hook on the callback to have this "
+                "family measured"
+            )
+        if self is NotMeasurable.NO_RETRIEVED_CONTENT_PLANT:
+            return (
+                "not measurable — this family reads an instruction that arrives in "
+                "content the target retrieved and this target has no way to be given "
+                "any, so there would be nothing hostile for it to fetch. Implement a "
+                "`plant_retrieved_content` hook on the callback to have this family "
+                "measured"
             )
         if self is NotMeasurable.TRACE_DECLARED_BUT_ABSENT:
             return (
@@ -153,6 +192,8 @@ REFUSED_FOR = {
     Precondition.TOOL_CALL_VISIBILITY: NotMeasurable.NO_TOOL_CALL_VISIBILITY,
     Precondition.SESSION_RETENTION: NotMeasurable.NO_SESSION_RETENTION,
     Precondition.PERSONAL_RECORDS_HELD: NotMeasurable.NO_PERSONAL_RECORDS,
+    Precondition.CONFIG_CANARY_PLANT: NotMeasurable.NO_CONFIG_CANARY_PLANT,
+    Precondition.RETRIEVED_CONTENT_PLANT: NotMeasurable.NO_RETRIEVED_CONTENT_PLANT,
 }
 """Which reason a reader is given when one precondition is unmet.
 
@@ -358,9 +399,16 @@ def runnable(cases: Sequence[Case], target: TargetConfig) -> list[Case]:
 def _target_meets(precondition: Precondition, target: TargetConfig) -> bool:
     """Whether this target declared the capability this precondition asks for.
 
-    The match has no fallback branch on purpose: a third precondition must fail the
-    type check rather than default onto *met*, which is the direction that would
+    The match has no fallback branch on purpose: a further precondition must fail
+    the type check rather than default onto *met*, which is the direction that would
     spend attempts against a target that cannot answer them.
+
+    **Two kinds of question, and the second is asked of the target rather than read
+    off it.** The first three arms read a declaration the operator made about a
+    capability; the plant arms ask `TargetConfig.can_be_planted`, which is where a
+    URL's answer (the operator's, and undetectable here) and a shim's answer (its
+    own, read off the object at construction) are told apart
+    ([ADR-0061](../../docs/adr/0061-a-plant-is-a-precondition-the-bench-can-check.md)).
     """
     match precondition:
         case Precondition.TOOL_CALL_VISIBILITY:
@@ -369,3 +417,7 @@ def _target_meets(precondition: Precondition, target: TargetConfig) -> bool:
             return target.retains_session_state
         case Precondition.PERSONAL_RECORDS_HELD:
             return target.holds_personal_records
+        case Precondition.CONFIG_CANARY_PLANT:
+            return target.can_be_planted(Plant.CONFIG_CANARY)
+        case Precondition.RETRIEVED_CONTENT_PLANT:
+            return target.can_be_planted(Plant.RETRIEVED_CONTENT)

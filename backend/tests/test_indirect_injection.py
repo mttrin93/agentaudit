@@ -39,6 +39,7 @@ from backend.bench.library import (
     DiscoveredBy,
     ExternalId,
     Family,
+    Precondition,
     SuccessCondition,
     SuccessConditionKind,
     Transform,
@@ -98,7 +99,9 @@ def an_injection_case(payload: str, case_id: str, key: str = "supplier") -> Case
         planted_artefact=some_planted_content(key, "NOTE-PROCESSED-", "44120"),
         verdict_class=VerdictClass.DETERMINISTIC,
         applies_to=("assistant",),
-        requires=(),
+        # The content above has to be put where the target's retrieval finds it
+        # before the attack turn, and the record is what asks for that (ADR-0061).
+        requires=(Precondition.RETRIEVED_CONTENT_PLANT,),
         added_on=date(2026, 8, 18),
         trigger=Trigger.NEW_AGENT_TYPE,
         discovered_by=DiscoveredBy.AUTHORED,

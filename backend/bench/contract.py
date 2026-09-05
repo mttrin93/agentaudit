@@ -51,6 +51,8 @@ from typing import Any
 
 import httpx
 
+from backend.bench.library import Plant
+
 DEFAULT_TIMEOUT = 60.0
 """How long one send waits for a target's reply. The outer wait of the chain.
 
@@ -513,6 +515,46 @@ class TargetConfig:
     **unsupervised** third property that the rule warns about, so a scan that read the
     three without this one would report a shape the rule does not object to.
     """
+
+    plants: frozenset[Plant] | None = None
+    """Which plantings this target can be given, or `None` for a target that is asked.
+
+    Three states, and the third is the whole of why this is not a `bool` per planting.
+    A member present is *this planting can be performed on this target*; a member
+    absent from a set is *it cannot*, which withdraws the families that need it as
+    `NotMeasurable`; and `None` is **this target does not answer for its own
+    plantings** — the caller's declaration does, through `plan_for` and
+    `DeclaredGap.NOTE_NOT_PLANTED` / `NONCE_NOT_PLANTED`, exactly where those two have
+    always been.
+
+    That split is two surfaces giving two truthful answers rather than one answer with
+    an exception. Against a URL somebody deployed the bench cannot see inside the
+    content store, so a planting is the operator's statement and a gap nothing here
+    detects; against a target this bench served itself from a user's own Python
+    object it holds that object, so a planting hook nobody implemented is read off it
+    before anything is sent
+    ([ADR-0061](../../docs/adr/0061-a-plant-is-a-precondition-the-bench-can-check.md)).
+    The module ADR-0061 names is the one place this field is ever filled in, and it
+    fills it in from the object it serves rather than from a parameter — which is why
+    the field is data like every other here, and nothing in this module knows how it
+    came to be set.
+
+    Like every declaration on this record it decides whether a family is *attempted*
+    and never what an attempt measures — ADR-0006, and ADR-0024's own wording: this is
+    a precondition of measurement, not an input to one.
+    """
+
+    def can_be_planted(self, plant: Plant) -> bool:
+        """Whether this planting can be put in place before an attempt is spent.
+
+        The one question `measurability._target_meets` asks of a target about a
+        planting, so that neither surface's answer is spelled out at the call site.
+        A target that does not answer for itself answers yes here and is withdrawn —
+        or not — by the caller's own declaration instead; reading `None` as *no* would
+        withdraw both plant-dependent families from every endpoint target in the
+        world, which is not a fact about any of them.
+        """
+        return self.plants is None or plant in self.plants
 
 
 @dataclass(frozen=True)

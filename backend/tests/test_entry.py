@@ -66,6 +66,7 @@ from backend.bench.library import (
     ExternalId,
     Family,
     LibraryVersion,
+    Precondition,
     SuccessCondition,
     SuccessConditionKind,
     Transform,
@@ -151,7 +152,9 @@ def an_admitted_case(
         ),
         verdict_class=VerdictClass.DETERMINISTIC,
         applies_to=("assistant",),
-        requires=(),
+        # The content above has to be planted where the target's retrieval finds it,
+        # and the record is what asks the target for that planting (ADR-0061).
+        requires=(Precondition.RETRIEVED_CONTENT_PLANT,),
         added_on=PROPOSED_ON,
         trigger=Trigger.TARGET_PASSED_EVERYTHING,
         discovered_by=DiscoveredBy.ADAPTIVE,

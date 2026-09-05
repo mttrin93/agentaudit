@@ -90,7 +90,9 @@ def a_retaining_case(case_id: str = "memory-poisoning-000") -> Case:
     """A case that cannot be answered by a target which keeps no session state."""
     return replace(
         unlisted_case(payload="a message", case_id=case_id),
-        requires=(Precondition.SESSION_RETENTION,),
+        # The config-canary plant comes from the base case's own success condition,
+        # which reads the nonce: a record needing a planting declares it (ADR-0061).
+        requires=(Precondition.SESSION_RETENTION, Precondition.CONFIG_CANARY_PLANT),
     )
 
 
@@ -139,7 +141,10 @@ def a_persistence_case(
     """A case whose verdict is about a turn the planting content is gone from."""
     return replace(
         unlisted_case(payload=payload, case_id="memory-poisoning-000"),
-        requires=(Precondition.SESSION_RETENTION,),
+        requires=(
+            Precondition.SESSION_RETENTION,
+            Precondition.RETRIEVED_CONTENT_PLANT,
+        ),
         planting=planting,
         success_condition=SuccessCondition(
             kind=SuccessConditionKind.RETAINED_INSTRUCTION_EXECUTED,
@@ -447,7 +452,10 @@ def test_every_case_states_that_a_same_turn_injection_is_not_what_it_tests() -> 
     for case in elective_library():
         assert case.external_id.identifier == "ASI06:2026"
         assert "same-turn" in case.external_id.not_tested
-        assert case.requires == (Precondition.SESSION_RETENTION,)
+        assert case.requires == (
+            Precondition.SESSION_RETENTION,
+            Precondition.RETRIEVED_CONTENT_PLANT,
+        )
         assert case.turns == 2
 
 
@@ -781,7 +789,13 @@ def test_a_case_needing_two_capabilities_names_the_same_one_whichever_way_round(
 
     reasons = {
         not_measurable_families(
-            [replace(a_retaining_case(), requires=order)], blind_and_forgetful
+            [
+                replace(
+                    a_retaining_case(),
+                    requires=(*order, Precondition.CONFIG_CANARY_PLANT),
+                )
+            ],
+            blind_and_forgetful,
         )[Family.DATA_LEAKAGE]
         for order in (needs_both, tuple(reversed(needs_both)))
     }

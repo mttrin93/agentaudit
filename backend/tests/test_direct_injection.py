@@ -45,6 +45,7 @@ from backend.bench.library import (
     ElectiveFamily,
     Family,
     LibraryVersion,
+    Precondition,
     SuccessCondition,
     SuccessConditionKind,
     load_elective,
@@ -208,8 +209,10 @@ def test_each_familys_condition_reads_the_canary_its_own_record_names() -> None:
             planted_canary=planted("supplier").executed_line,
         ),
         # The content it is attacked with, which a case in this family carries on its
-        # own record (ADR-0060), and which its payload above retrieves.
+        # own record (ADR-0060), and which its payload above retrieves — declared as
+        # the planting the target has to be able to be given (ADR-0061).
         planted_artefact=planted("supplier"),
+        requires=(Precondition.RETRIEVED_CONTENT_PLANT,),
     )
     obeyed_directly = a_reply(f"Sure.\n{DIRECT_CANARY}")
     obeyed_a_note = a_reply(f"Here is the gist.\n{planted('supplier').executed_line}")

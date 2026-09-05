@@ -3749,3 +3749,54 @@ agents' source, and the canary is the block's two halves joined and derived
   imports the reference agents' source any more. Nothing about disclosure changed:
   both halves were already committed and the route already served the bodies
   (ADR-0008 as amended, and ADR-0060's own section).
+
+### A plant became a precondition, and a missing hook withdraws its family (#84, 2026-09-05)
+
+**This section records a vocabulary change, a library digest that moved, and no
+figure that did.** A **plant** — the act of putting an artefact where a family needs
+it before its attack turn — is now a `Precondition` a case declares and the bench
+checks, rather than a sentence the caller wrote
+([ADR-0061](./adr/0061-a-plant-is-a-precondition-the-bench-can-check.md)). Read on
+2026-09-05.
+
+- **Nothing about a URL target changed, and that is half the decision.** An endpoint's
+  `TargetConfig.plants` is `None`, `can_be_planted` answers yes to every planting for
+  it, every case in the library is still measurable against one, and `plan_for` still
+  withdraws the two families on `note_planted` / `nonce_planted` with
+  `DeclaredGap.NOTE_NOT_PLANTED` and `NONCE_NOT_PLANTED`. `OperatorGap` is untouched.
+  A gap the bench cannot detect is still a declared gap, and a gap it *can* — a served
+  function with no planting hook — is now `NotMeasurable`.
+- **No rate, `D`, κ, interval, band, gate decision or gate citation moved.** A plant
+  decides whether a family is *attempted*, never what an attempt measures (ADR-0006,
+  ADR-0024). No payload, criterion, canary or note body changed, and every
+  `[[history]]` and `[admission]` block in the library still stands.
+- **The library digest moved and no case was written.** From `81ff91682cfc` to
+  `c515a89956cd`, on #65's, #72's and #83's precedent: nine records each gained one
+  entry in `requires` — three data-leakage records asking for the config-canary plant,
+  three indirect-injection and three memory-poisoning records asking for the
+  retrieved-content plant. **The count of eighteen is what says no case was written.**
+  `test_the_library_version_did_not_move` is the designed tripwire and is updated with
+  the reason rather than loosened. `GOLDEN_ONE_FAMILY` did not move: no rendered
+  document changed.
+- **Every guard was driven red on its own, and each failed for its own reason.**
+  Seven of them. `_target_meets` made to answer *met* for the config-canary
+  precondition — the issue's own prescribed drive — fails
+  `test_a_shim_with_no_config_canary_hook_does_not_measure_data_leakage` on a missing
+  key for `data_leakage`, not on an import error and not on a κ test. `declared_plants`
+  made to answer `frozenset(Plant)` fails the two withdrawal tests and the reading test.
+  `can_be_planted` made to read `None` as *cannot* fails only
+  `test_a_url_target_answers_for_no_planting_and_keeps_its_declared_gaps`, which is the
+  test that the endpoint surface did not move. The record refusal disabled fails both
+  directions of the record test and nothing else. `hook_name` made to spell
+  `plant_the_*` fails the protocol test and the reading. A tenth entry in one record's
+  `requires` fails the exactness test over the committed library. A second route added
+  to the served app fails `test_no_planting_hook_is_reachable_over_the_wire`. And
+  `_PLANT_HAS_A_PRECONDITION` was checked by renaming a `Precondition` member: the
+  module stops at import, which is what it is there for.
+- **The review found three things and each was repaired.** A test comment that
+  described the record refusal as running both ways when it runs one; a `@dataclass`
+  decorator the new fixture class had taken from the one below it; and this ADR and
+  this file citing different precedents for the same digest move. None of the three
+  changed a figure.
+- **No variant was admitted, and none was proposed.** Admission needs a person at a
+  tty (ADR-0052 §5), and nothing here asks for one.

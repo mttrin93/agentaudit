@@ -658,7 +658,11 @@ def test_a_route_re_proposed_under_another_precondition_is_not_answered_from_mem
         a_route(leakage_case),
         case=replace(
             a_route(leakage_case).case,
-            requires=(Precondition.TOOL_CALL_VISIBILITY,),
+            requires=(
+                Precondition.TOOL_CALL_VISIBILITY,
+                # Kept from the case itself, which reads the planted nonce.
+                Precondition.CONFIG_CANARY_PLANT,
+            ),
         ),
     )
 

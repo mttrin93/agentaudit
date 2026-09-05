@@ -59,7 +59,7 @@ def a_scripted_case(case_id: str = "scripted-000", turns: int = 4) -> Case:
     return replace(
         unlisted_case(payload="one turn", case_id=case_id),
         payload=tuple(f"turn {index + 1}" for index in range(turns)),
-        requires=(Precondition.SESSION_RETENTION,),
+        requires=(Precondition.SESSION_RETENTION, Precondition.CONFIG_CANARY_PLANT),
     )
 
 
@@ -266,6 +266,8 @@ def a_creeping_case(turns: int = 3) -> Case:
         success_condition=SuccessCondition(
             kind=SuccessConditionKind.TOOL_CALL_OUTSIDE_DECLARED_LIST
         ),
+        # No config-canary plant: this one reads a tool trace and not the nonce, so
+        # requiring the planting would withdraw it from targets that could answer it.
         requires=(Precondition.SESSION_RETENTION, Precondition.TOOL_CALL_VISIBILITY),
     )
 

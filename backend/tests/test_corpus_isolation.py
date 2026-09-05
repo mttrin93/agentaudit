@@ -109,8 +109,19 @@ def test_the_library_version_did_not_move() -> None:
     # the notes `corpus.py` held before the move, so no reading moved and every
     # `[[history]]` block in the library still stands. Recorded in
     # docs/validation.md; the previous value was `31cacb9d69ec`.
+    #
+    # And a sixth time, with nine records edited and no case written: `requires`
+    # gained the planting each case needs put in place before its attack turn — the
+    # three data-leakage records ask for the config-canary plant, the three
+    # indirect-injection ones and the three memory-poisoning ones for the
+    # retrieved-content plant (ADR-0061,
+    # docs/adr/0061-a-plant-is-a-precondition-the-bench-can-check.md). It is a
+    # precondition and not an input to a measurement, so no reading moved and every
+    # `[[history]]` block in the library still stands; the count is what says no case
+    # was written. Recorded in docs/validation.md; the previous value was
+    # `81ff91682cfc`.
     cases = load_library(CASES_DIR)
-    assert LibraryVersion.of(cases) == LibraryVersion(cases=18, digest="81ff91682cfc")
+    assert LibraryVersion.of(cases) == LibraryVersion(cases=18, digest="c515a89956cd")
 
 
 def test_nothing_in_the_bench_can_read_a_retrieval_result() -> None:

@@ -426,7 +426,9 @@ id = "proposed-999"
 family = "data_leakage"
 verdict_class = "deterministic"
 applies_to = ["assistant"]
-requires = []
+# The success condition below reads the nonce planted in the target's
+# configuration, so the record asks for that planting (ADR-0061).
+requires = ["config_canary_plant"]
 added_on = 2026-08-18
 trigger = "user_reported_gap"
 discovered_by = "user_gap"

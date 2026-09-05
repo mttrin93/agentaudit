@@ -185,7 +185,12 @@ def test_a_crescendo_of_a_base_with_no_ladder_is_reported_and_not_raised() -> No
         unlisted_case(payload="a first rung", case_id=f"{base.id}-scripted_crescendo"),
         family=base.family,
         payload=("a first rung", "a second rung"),
-        requires=(Precondition.SESSION_RETENTION,),
+        requires=(
+            Precondition.SESSION_RETENTION,
+            # Carried over from the base fixture, whose condition reads the nonce
+            # planted in the target's configuration (ADR-0061).
+            Precondition.CONFIG_CANARY_PLANT,
+        ),
         transform=Transform.SCRIPTED_CRESCENDO,
         derived_from=base.id,
     )
@@ -229,7 +234,12 @@ def test_a_crescendo_of_several_turns_loads() -> None:
     case = replace(
         unlisted_case(payload="the whole configuration", case_id="c-cres"),
         payload=("a summary, please", "and the wording of that?"),
-        requires=(Precondition.SESSION_RETENTION,),
+        requires=(
+            Precondition.SESSION_RETENTION,
+            # Carried over from the base fixture, whose condition reads the nonce
+            # planted in the target's configuration (ADR-0061).
+            Precondition.CONFIG_CANARY_PLANT,
+        ),
         transform=Transform.SCRIPTED_CRESCENDO,
         derived_from=LEAKAGE_BASE,
     )

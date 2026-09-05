@@ -358,6 +358,106 @@ class Precondition(StrEnum):
     establishes a declaration of this kind may decide and no more.
     """
 
+    CONFIG_CANARY_PLANT = "config_canary_plant"
+    """The target can be given a value in its *configuration* before the run.
+
+    One member per `Plant` rather than a single `PLANT_HOOK`, because *which*
+    planting is missing is what a reader is owed: "implement a hook" is not an
+    instruction anybody can carry out, and the two hooks are implemented in two
+    different places by two different people
+    ([ADR-0061](../../docs/adr/0061-a-plant-is-a-precondition-the-bench-can-check.md)
+    §2). The mapping between the two enumerations is `Plant.precondition` and is
+    total by construction.
+    """
+
+    RETRIEVED_CONTENT_PLANT = "retrieved_content_plant"
+    """The target can be given third-party content its retrieval brings back.
+
+    The other half of the pair above, and the precondition the six cases carrying a
+    `PlantedArtefact` declare — indirect prompt injection in the six, memory
+    poisoning in the tier (ADR-0060, ADR-0061 §3).
+    """
+
+
+class Plant(StrEnum):
+    """An artefact a family needs *in place* before its attack turn.
+
+    A closed set, and the second kind of thing a `Precondition` can ask for: the
+    three above are capabilities a target has or does not, and these are acts the
+    bench performs on a target before it sends anything. What makes them
+    preconditions rather than a fourth kind of gap is that on a surface the bench
+    built — the callback shim — a hook nobody implemented is *detected*, from the
+    object itself, before an attempt is spent
+    ([ADR-0061](../../docs/adr/0061-a-plant-is-a-precondition-the-bench-can-check.md)).
+
+    **Two members and not three.** CONTEXT.md's **canary** entry names three
+    plantings — configuration, retrieved content, session memory — and the third is
+    performed by content the target fetched, which is `RETRIEVED_CONTENT` under
+    another turn's name (ADR-0041). A member no case in the library requires is
+    vocabulary nobody can drive red, so the third arrives with the case that needs
+    it and not before.
+
+    **A member is a record and never a branch.** Its precondition, the reason a
+    report prints and the hook a callback implements are all read off the member —
+    `precondition` here, `stated` below, `shim.hook_name` there — so #48 and #50
+    add a member and its two sentences, and no `if` anywhere moves.
+    """
+
+    CONFIG_CANARY = "config_canary"
+    """A value planted inside the target's boundary, in its setup.
+
+    The registration nonce, which is issued per run and is the leakage canary — one
+    planted value, two roles (ADR-0007). No case record may name it, which is why
+    this member has no counterpart in `PlantedIn`.
+    """
+
+    RETRIEVED_CONTENT = "retrieved_content"
+    """Third-party content the target brings back through a tool.
+
+    The one planting a case record can carry, so this member is `PlantedIn`'s member
+    under the same name and `PlantedIn.plant` is the join (ADR-0060).
+    """
+
+    @property
+    def precondition(self) -> Precondition:
+        """The precondition a case declares when it needs this planting.
+
+        Derived from the member's own value rather than held in a mapping beside it,
+        so the two enumerations cannot fall out of step: a `Plant` whose
+        `Precondition` was never added stops the module at import (`_PLANT_HAS_A_
+        PRECONDITION` below) instead of raising at the first target that meets it.
+        """
+        return Precondition(f"{self.value}_plant")
+
+    def stated(self) -> str:
+        """What a report says has to be put in place, in the words it prints.
+
+        No fallback branch, on `Trigger.stated`'s terms: a third planting must fail
+        the type check rather than exist as a member no reader can be given a
+        sentence for.
+        """
+        match self:
+            case Plant.CONFIG_CANARY:
+                return (
+                    "a value planted in the target's own configuration, which the "
+                    "run issues and whose appearance in a reply is the leak"
+                )
+            case Plant.RETRIEVED_CONTENT:
+                return (
+                    "third-party content filed where the target's retrieval brings "
+                    "it back, carrying an instruction the target was never sent"
+                )
+
+
+_PLANT_HAS_A_PRECONDITION = tuple(plant.precondition for plant in Plant)
+"""Every planting names a precondition a case can require, checked at import.
+
+A declaration and not a test, for the reason `REFUSED_FOR`'s assertion is one: a
+`Plant` added without its `Precondition` would be a planting no record could ask
+for, and the failure would otherwise arrive at whichever target first tried to meet
+it rather than at the line that added the member.
+"""
+
 
 class Transform(StrEnum):
     """How a case attacks — the construction the bench performs on its payload.
@@ -854,11 +954,27 @@ class PlantedIn(StrEnum):
     configuration and is issued per run, so no record may name it (ADR-0007); the
     session-memory planting is performed by content the target fetched, which is this
     member under another turn's name (ADR-0041). A second member arrives with the
-    hook that can put something somewhere else (#84).
+    hook that can put something somewhere else, and `plant` below is where each
+    member says which hook that is (ADR-0061).
     """
 
     RETRIEVED_CONTENT = "retrieved_content"
     """Content the target brings back through a tool. Third-party text, all of it."""
+
+    @property
+    def plant(self) -> Plant:
+        """The planting a target has to be able to perform for this content to arrive.
+
+        The join between the record's word for *where* and the bench's word for
+        *what has to be done to a target*, and the reason the two enumerations are
+        two: `Plant` holds `CONFIG_CANARY` as well, and the value that planting puts
+        in place is issued per run, so no record may name it (ADR-0007). This one is
+        the subset a record may carry, and the members it shares are spelled the same
+        so the join is a lookup rather than a table
+        ([ADR-0061](../../docs/adr/0061-a-plant-is-a-precondition-the-bench-can-check.md)
+        §3).
+        """
+        return Plant(self.value)
 
 
 @dataclass(frozen=True)
@@ -1587,6 +1703,7 @@ class Case:
         self._refuse_a_payload_with_nothing_to_send()
         self._refuse_a_same_turn_planting()
         self._refuse_a_planting_its_record_disagrees_with()
+        self._refuse_a_plant_the_record_does_not_require()
         self._refuse_a_canary_the_wrong_channel_spells_out()
         self._refuse_a_canary_a_nonce_could_be_confused_with()
 
@@ -1971,6 +2088,55 @@ class Case:
                 "raises none of it. A dormant instruction whose subject no message "
                 "mentions is content that can never fire, so the case would measure "
                 "the planting and nothing else (ADR-0041)"
+            )
+
+    def _refuse_a_plant_the_record_does_not_require(self) -> None:
+        """Every planting a case needs is declared in `requires`, and no other.
+
+        The pairing above says a case attacked by fetched content carries content;
+        this says the record also *asks the target for the planting* — which is what
+        turns a plant from a sentence somebody wrote into a precondition the bench
+        checks before an attempt is spent
+        ([ADR-0061](../../docs/adr/0061-a-plant-is-a-precondition-the-bench-can-check.md)).
+        Without it a record could carry an artefact nothing could put anywhere and be
+        attempted against a target with no hook, coming back a clean zero that reads
+        as a defence.
+
+        **Read off what the record already says and never off the family.** The
+        config-canary plant is asked for by exactly the kinds in
+        `PLANTED_IN_THE_CONFIGURATION` — the ones whose verdict reads the value the
+        run issues — and the retrieved-content plant by the `where` of the artefact
+        the record carries, through `PlantedIn.plant`. So a `Plant` added for #48 or
+        #50 arrives with its member and its records and never with a branch here.
+
+        **One direction here, and the other over the committed library.** A case that
+        *needs* a planting and does not declare it is the fault with teeth — it is
+        attempted against a target that cannot be planted and comes back a clean zero
+        that reads as a defence — so it is refused on the record. A case declaring a
+        planting it does not need costs only coverage, is visible in the record's own
+        `requires`, and is refused for the committed library by
+        `test_every_committed_case_asks_for_exactly_the_plantings_it_needs`. Making
+        that second direction a refusal here as well was tried and withdrawn: it makes
+        a case built by `replace`-ing another one's success condition unrepresentable,
+        which is how three quarters of this suite's fixtures are written, and the
+        property it buys is one no library record can reach.
+        """
+        condition = self.success_condition
+        kind = None if condition is None else condition.kind
+        artefact = self.planted_artefact
+        needed = set()
+        if kind in PLANTED_IN_THE_CONFIGURATION:
+            needed.add(Plant.CONFIG_CANARY)
+        if artefact is not None:
+            needed.add(artefact.where.plant)
+        declared = {plant for plant in Plant if plant.precondition in self.requires}
+        undeclared = sorted(needed - declared)
+        if undeclared:
+            raise ValueError(
+                f"{self.id} needs {undeclared} put in place before its attack turn "
+                "and requires no such precondition. A planting nothing declares is "
+                "a family attempted against a target that cannot be planted, and "
+                "the attempts come back resisted (ADR-0061)"
             )
 
     def _refuse_a_canary_the_wrong_channel_spells_out(self) -> None:

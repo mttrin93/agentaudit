@@ -48,6 +48,7 @@ from backend.bench.library import (
     ExternalId,
     Family,
     LibraryVersion,
+    Precondition,
     SuccessCondition,
     SuccessConditionKind,
     Transform,
@@ -84,7 +85,9 @@ def a_case(**changed: object) -> Case:
         ),
         "verdict_class": VerdictClass.DETERMINISTIC,
         "applies_to": ("assistant", "document"),
-        "requires": (),
+        # The nonce this case reads has to be planted in the target's configuration
+        # before the attempt, and the record is what asks for it (ADR-0061).
+        "requires": (Precondition.CONFIG_CANARY_PLANT,),
         "added_on": date(2026, 9, 4),
         "trigger": Trigger.NEW_TECHNIQUE_PUBLISHED,
         "discovered_by": DiscoveredBy.AUTHORED,

@@ -305,11 +305,20 @@ alongside a rate and a refused registration, never a rate of zero. Reached only
 by a precondition unmet before any attempt is spent, which today means a target
 that does not expose its tool calls, one that does not carry a session from one
 turn into the next
-([ADR-0041](./docs/adr/0041-the-persistence-canary-is-read-over-two-turns.md)), or one
+([ADR-0041](./docs/adr/0041-the-persistence-canary-is-read-over-two-turns.md)), one
 that holds no records about anybody other than its operator
-([ADR-0043](./docs/adr/0043-the-canary-a-nonce-cannot-be-confused-with.md)). A
+([ADR-0043](./docs/adr/0043-the-canary-a-nonce-cannot-be-confused-with.md)), or one
+that cannot be given a **plant** a family needs put in place before its attack turn
+([ADR-0061](./docs/adr/0061-a-plant-is-a-precondition-the-bench-can-check.md)). A
 target the bench never measured must stay distinguishable from one that resisted
 everything.
+
+The last of those is the one that is **not** always this word. A plant is only *not
+measurable* where the bench can see the gap, which is a target it served itself from
+a user's own function; against a URL the bench cannot see inside a content store, so
+an unplanted family there is a **declared gap** — the caller's statement, undetected
+here. The two are told apart by whose gap it is and whether the bench detects it, and
+never by which family is missing.
 _Avoid_: not applicable, skipped, unknown, n/a, zero
 
 **Not requested**:
@@ -686,8 +695,24 @@ instruction out; the joined value is derived and is written nowhere
 ([ADR-0060](./docs/adr/0060-a-planted-artefact-is-part-of-the-case-record.md)). Not a
 **canary** and not a **payload**: the canary is what executing it produces, the payload
 is what the bench sends, and this is what somebody else put where the target would find
-it. The *act* of putting it there is #84's word and is not this one.
+it. The *act* of putting it there is a **plant** and is not this one.
 _Avoid_: note, document, poisoned note, fixture, content
+
+**Plant**:
+The *act* of putting an artefact where a family needs it before that family's attack
+turn — and, as a closed set, which acts those are: into the target's
+**configuration**, or into **content the target fetches**. A **precondition** and
+never a turn: it is performed before the run, no **attempt** is recorded for one, and
+there is no route by which planting could arrive as a message
+([ADR-0061](./docs/adr/0061-a-plant-is-a-precondition-the-bench-can-check.md)). A
+target that can be planted is one the bench can put the artefact into: a function
+this bench served says so by implementing the hook, and a URL says so through its
+operator, which is why the same missing plant is **not measurable** on one surface
+and a **declared gap** on the other. The third planting the **canary** entry names —
+session memory — is this one under another turn's name, performed by content the
+target fetched. Distinct from the **planted artefact**, which is the content itself,
+and from the **canary**, which is what carrying its instruction out produces.
+_Avoid_: seed, setup, fixture, injection, priming
 
 **Nonce**:
 The bench-issued value a user must plant in their target to prove they control it. Registration does not complete without its echo.

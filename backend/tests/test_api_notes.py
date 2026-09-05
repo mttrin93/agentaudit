@@ -32,7 +32,13 @@ from fastapi.testclient import TestClient
 
 from backend.api.app import BENCH_NOTES_ROUTE, create_app
 from backend.api.runs import BenchConfig
-from backend.bench.library import Case, Family, SuccessCondition, SuccessConditionKind
+from backend.bench.library import (
+    Case,
+    Family,
+    Precondition,
+    SuccessCondition,
+    SuccessConditionKind,
+)
 from backend.tests.conftest import retired_case
 
 
@@ -112,6 +118,9 @@ def test_a_case_this_bench_holds_no_content_for_is_named_rather_than_dropped(
         first,
         success_condition=SuccessCondition(kind=SuccessConditionKind.CANARY_IN_REPLY),
         planted_artefact=None,
+        # The condition now reads the nonce, so the planting the record asks for is
+        # the configuration one and no longer the content one (ADR-0061).
+        requires=(Precondition.CONFIG_CANARY_PLANT,),
     )
     client = TestClient(create_app(BenchConfig(cases=[plants_nothing, *rest])))
 

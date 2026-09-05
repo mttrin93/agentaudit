@@ -38,6 +38,7 @@ from backend.bench.rule import DECLARED_RULE
 from backend.bench.shim import (
     CALLBACK_FAILED_STATUS,
     CALLBACK_RAISED,
+    TextCallback,
     Turn,
     exposes_tool_calls_of,
     serve_callback,
@@ -136,7 +137,14 @@ def test_a_callback_that_raises_twice_costs_sends_and_not_attempts(
         state.failed = 0
         return state.nonce
 
-    with serve_callback(flaky, name="flaky", retry=IMPATIENT) as target:
+    # Wrapped so the target declares the config-canary planting hook, which is what
+    # data leakage now requires of a served target: a callback with no hook has that
+    # family withdrawn as `NotMeasurable` and there would be no rate below to read
+    # (ADR-0061). The hook is not what plants here — `_calibrate` still does that, as
+    # a human would — and nothing in the bench calls one yet (#85).
+    with serve_callback(
+        PlantsItsConfig(flaky), name="flaky", retry=IMPATIENT
+    ) as target:
         result = _calibrate(target, leakage_case, state)
 
     [target_run] = result.target_runs
@@ -357,6 +365,27 @@ def test_a_shim_target_is_unreachable_once_its_server_is_gone() -> None:
 
     assert raised.value.failure is TargetFailure.UNREACHABLE
     assert requests == ["s-0"]
+
+
+class PlantsItsConfig:
+    """A text callback that also says it can be given a value in its configuration.
+
+    The shape a user's agent has when it is a class rather than a function, and the
+    only way a served target declares `Plant.CONFIG_CANARY`: `declared_plants` reads
+    the hook off the object, so a plain function declares none
+    (ADR-0061). It stands in front of a function here rather than being written as
+    one, because a plain function cannot carry a method.
+    """
+
+    def __init__(self, answer: TextCallback) -> None:
+        self._answer = answer
+        self.planted: str | None = None
+
+    def __call__(self, message: str, session_id: str) -> str:
+        return self._answer(message, session_id)
+
+    def plant_config_canary(self, canary: str) -> None:
+        self.planted = canary
 
 
 @dataclass

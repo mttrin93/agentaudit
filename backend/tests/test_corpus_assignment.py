@@ -64,8 +64,23 @@ def every_case() -> list[Case]:
     before this instrument existed, and it is the only reference in this repository
     that a second reader wrote. Everything else available to #64 — a hand reading of
     retrieved candidates included — was read by whoever wrote the table.
+
+    **Base records only, which is what keeps twenty-seven at twenty-seven.** A
+    variant is a second construction of a case already counted here: its `family` is
+    its base's, carried across by `derived_from` rather than judged again, so it is
+    not a twenty-eighth second-reader judgement and admitting one must not move a κ
+    this file pins to four decimal places and docs/validation.md prints. Adding
+    `data-leakage-001-scripted_crescendo` to the population moved the perfect-
+    instrument reading from 0.3077 to 0.3280 and the held-out count from 21 to 22 —
+    a figure changing because the reference grew, not because the instrument did
+    (#150). The measured κ is a property of the table against these twenty-seven, on
+    CLAUDE.md's case 4.
     """
-    return load_library(CASES_DIR) + load_elective(CASES_DIR, ElectiveFamily)
+    return [
+        case
+        for case in load_library(CASES_DIR) + load_elective(CASES_DIR, ElectiveFamily)
+        if case.derived_from is None
+    ]
 
 
 def test_a_conversational_fragment_is_refused_rather_than_labelled() -> None:

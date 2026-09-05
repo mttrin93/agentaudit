@@ -87,7 +87,6 @@ from backend.api.report import ReportConfig
 from backend.api.runs import BenchConfig, BenchRuns, RunStatus
 from backend.bench.adaptive.budget import AdaptiveBudget
 from backend.bench.cited import CITED_GATE_RUN, Replaced, cite, the_citation
-from backend.bench.contract import TargetConfig
 from backend.bench.gate_record import RecordedGateRun
 from backend.bench.lease import LEASE_FILE, LibraryBusy, take_the_library
 from backend.bench.library import CaseStatus, Family, load_library
@@ -99,10 +98,13 @@ from backend.graph.approval import Approval
 from backend.graph.budget import Layer
 from backend.targets.reference.hardened import HARDENED
 from backend.targets.reference.model import ModelConfig, measures_the_field
-from backend.targets.reference.operator import namespace_dropper, nonce_planter
+from backend.targets.reference.operator import (
+    described_agents,
+    namespace_dropper,
+    nonce_planter,
+)
 from backend.targets.reference.server import ReferenceConfig, create_reference_app
 from backend.targets.reference.serving import serve
-from backend.targets.reference.tools import DECLARED_TOOL_NAMES
 from backend.targets.reference.trivial import TRIVIAL
 from backend.targets.reference.weak import WEAK
 from backend.tests.conftest import (
@@ -183,7 +185,18 @@ def watched_agents(ledger: Ledger) -> Iterator[ServedAgents]:
     The substitutable half of the equipment seam, and the reason it is a seam: a test
     that has to look at a gate run *while it is happening* needs to stop it somewhere
     in particular, and counting messages at the endpoint is the only clock both ends
-    agree on. Everything else here is what `shipped_agents` builds.
+    agree on. Everything else here is what `shipped_agents` builds — through
+    `described_agents` and not through a hand-written `TargetConfig`, which is the
+    only way that sentence stays true.
+
+    It had stopped being true. These three were described here with
+    `exposes_tool_calls` and the declared tool list and nothing else, while
+    `described_agents` also declares session retention and the personal records it
+    holds. Nothing noticed while every case sent one turn; admitting
+    `data-leakage-001-scripted_crescendo` made the drift a missing reading, because a
+    scripted escalation against a target that forgets the previous turn is refused
+    before its first attempt (ADR-0053, ADR-0004) — so a gate run here left one
+    record of nineteen with no `D` and the fault was in the fixture (#150).
     """
     model = ModelConfig.parse("stub:obedient")
     app: FastAPI = create_reference_app(
@@ -197,15 +210,7 @@ def watched_agents(ledger: Ledger) -> Iterator[ServedAgents]:
             # the field while serving a fixture (ADR-0022).
             measured_the_field=measures_the_field(model),
             targets=tuple(
-                TargetConfig(
-                    name=agent.name,
-                    url=f"{base_url}/reference/{agent.name}/messages",
-                    auth_token=AUTH_TOKEN,
-                    agent_type="assistant",
-                    exposes_tool_calls=True,
-                    declared_tools=DECLARED_TOOL_NAMES,
-                )
-                for agent in (TRIVIAL, WEAK, HARDENED)
+                described_agents(base_url, AUTH_TOKEN, (TRIVIAL, WEAK, HARDENED))
             ),
             plant=nonce_planter(base_url),
             drop=namespace_dropper(base_url),
@@ -459,6 +464,15 @@ def test_the_estimate_is_two_figures_against_two_ceilings_and_no_third(
     reported against their own enforced ceilings with **no third figure anywhere** —
     asserted over the field names, so that a sum has nowhere to live, and over the
     text, so that a sum has not been written into a sentence.
+
+    **Calls and not attempts, which is a difference a scripted case makes real.** An
+    attempt against a plain case is one call; an attempt against a scripted
+    escalation is one call per rung, because the ladder is one attempt and several
+    turns (ADR-0053, ADR-0054). Multiplying the case count was the same arithmetic
+    while every record sent one turn, and it stopped being so when
+    `data-leakage-001-scripted_crescendo` was admitted at four (#150) — the estimate
+    was right and the test's own multiplication was wrong, which is the direction
+    that would have had an operator agree to a ceiling under what the run spends.
     """
     library = a_library(tmp_path)
     cases = [case for case in load_library(library) if case.status is CaseStatus.ACTIVE]
@@ -471,7 +485,13 @@ def test_the_estimate_is_two_figures_against_two_ceilings_and_no_third(
 
         scored = estimate["scored"]
         adaptive = estimate["adaptive"]
-        assert scored["attempt_calls"] == 3 * (len(cases) * 10 + 1)
+        assert scored["attempt_calls"] == 3 * (
+            sum(case.turns for case in cases) * 10 + 1
+        )
+        assert sum(case.turns for case in cases) > len(cases), (
+            "no scripted case in the library, so this arithmetic is the old one "
+            "spelled differently and the turn count is untested"
+        )
         assert scored["kind"] == "exact"
         assert adaptive["turn_calls"] == 3 * (SMALL_ADAPTIVE.turn_ceiling), (
             "the adaptive figure is the layer's own ceiling, per agent"

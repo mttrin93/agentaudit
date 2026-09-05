@@ -640,7 +640,11 @@ Six of the seven are a pure function in `backend/bench/transforms.py`, applied w
 **variant**'s record is written and never on the wire; the five that copy a published
 technique carry the address it was published at, and `plain` copies nothing from anybody
 ([ADR-0052](./docs/adr/0052-a-transform-is-a-committed-function-and-no-judged-family-gets-a-variant.md));
-the seventh escalates over turns and waits for a payload that is a sequence.
+the seventh escalates over turns and waits for a payload that is a sequence. The words a
+transform adds are a **framing**, and a framing is written per **family** against the
+mechanism that family tests — so a transform with no framing for a family composes
+nothing, rather than framing one family's mechanism in another's words
+([ADR-0074](./docs/adr/0074-a-framing-is-written-per-family-and-an-unframed-pairing-is-refused.md)).
 _Avoid_: technique, strategy, enhancement, encoding, wrapper, mutation
 
 **Attack selection**:

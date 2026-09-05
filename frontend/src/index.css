@@ -2101,6 +2101,70 @@ code {
   white-space: pre-wrap;
 }
 
+/* Each failure the bench explained, one card per family, in one column.
+ *
+ * One column and not the two the scored cards sit in: what is inside a card here is
+ * prose in two sentences from two instruments, and prose set in a half-width column
+ * beside another column of prose is a page nobody reads. The scored cards are figures
+ * and figures pair. */
+.findings {
+  display: grid;
+  gap: 1rem;
+  margin: 1.5rem 0;
+}
+
+/* Collapsed to begin with: n = 30 per family, so a flat list is unreadable at exactly
+ * the moment it matters most. The marker is the whole of the affordance — no count
+ * beside the name, because a count of the blocks inside is a figure this document
+ * deliberately does not carry (ADR-0005, D12). */
+.findings details.family > summary {
+  cursor: pointer;
+  list-style-position: outside;
+}
+
+.findings details.family > summary h3 {
+  display: inline;
+  margin: 0;
+}
+
+/* One failure inside the card, separated by space rather than by a rule: a rule
+ * between blocks reads as rows of a table, and a table wants a total row. */
+.findings .finding {
+  margin-top: 1.2rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--line);
+}
+
+/* The case id as the key it is — the pointer into the evidence, and what a reader
+ * greps for in the signed report — rather than as a title over a section. The same
+ * treatment `details.plant h4` gives a note's own name. */
+.findings .finding h4 {
+  margin: 0 0 0.3rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+/* The question each sentence answers, over the sentence, at the size of the card's
+ * quiet text: two instruments wrote them and neither answers the other's question, so
+ * the heading is what tells them apart (ADR-0069). Weight and never a tint — a
+ * warning colour over *what went wrong* would be a severity this bench does not
+ * measure. */
+.findings .finding .ordinal {
+  margin: 0.9rem 0 0.1rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--quiet);
+}
+
+.findings .finding > p {
+  margin: 0.2rem 0;
+}
+
+.findings .finding .aside {
+  margin-top: 0.6rem;
+}
+
 /* The scored layer's exchanges, as the same cards the rest of this page is in: one
  * per family, and no rule under them. A stacked pair with a line beneath it is a
  * table waiting for a total, and the total of two families' successes is a figure

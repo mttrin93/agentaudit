@@ -227,6 +227,120 @@ export interface CoverageGap {
   stated: string
 }
 
+/**
+ * One failure as the signed document reports it (ADR-0070 §2a).
+ *
+ * **Every field is a string, a name off a closed set, or an id**, and that is the
+ * type-level half of what keeps this section out of the arithmetic: there is no
+ * numeric property here for a later edit to lift off and read against a rate, and no
+ * field a severity could arrive in (D3, D12, ADR-0005, ADR-0006).
+ *
+ * **What is not here has nowhere here to arrive.** No payload text, no reply, no tool
+ * trace, no precedent prose and no `Narrative.confidence`: the disclosure answer is
+ * made at `assembler.ReportedFinding.of`, one record before the wire, and what the
+ * screen may show is what survived it. A sentence that reproduced the case's own
+ * payload arrives as a statement that it was withheld, with `withheld` naming which of
+ * the two it was — and the finding keeps its case id, its family and its attributed
+ * cause, because those are the three facts a reader can check against the record
+ * (ADR-0008 as amended, ADR-0070 §2b and §2c).
+ */
+export interface ReportedFinding {
+  case_id: string
+  family: string
+  /** The published identifier this case tests one case within (ADR-0002). */
+  external_id: string
+  /** What a reader of this finding is exposed to, off the judge's closed set. */
+  exposure: string
+  /** The declaration state this failure is read against, off a closed set of three. */
+  attributed_cause: string
+  /** The control that claims this family, or `null` where none does (ADR-0068). */
+  control_claiming: string | null
+  transform: string
+  /**
+   * The attributed cause as a whole sentence, `Attribution.stated()`.
+   *
+   * Carried and never rebuilt from the three fields above, on `bears_stated`'s own
+   * terms: a screen that assembled the sentence would be a second copy of a reading
+   * the signed document already states, and two copies of one claim are two claims
+   * once one of them is edited (ADR-0068 §3).
+   */
+  attributed_cause_stated: string
+  /** Why it failed, in the judge's own sentence — or that it was withheld. */
+  reason: string
+  /** What to change, in the remediation tool's own sentence — or the same statement. */
+  fix: string
+  /**
+   * The case ids of the precedents that informed the fix, and never their prose.
+   *
+   * A precedent's own failure and fix belong to a *different target*, and this is a
+   * document about one target (ADR-0011, ADR-0070 §2b). The ids are what ADR-0019's
+   * claim needs — a fix drawn from a corpus, told apart from one derived from this
+   * transcript alone — and the empty array is the truthful answer on run one.
+   */
+  informed_by: string[]
+  /**
+   * That same fact as the one sentence a reader is shown, `informed_by_stated`.
+   *
+   * On the record rather than on a surface, which was #112's own review finding: the
+   * report screen and the document's section 3b print one claim about one fix, so
+   * neither of them may word it. A screen that turned the array above into a sentence
+   * would be the second wording (ADR-0019, ADR-0070).
+   */
+  informed_by_stated: string
+  /** What the two instruments made of this transcript, stated on every finding. */
+  disagreement: string
+  /** Which of the two sentences the disclosure rule replaced, and usually neither. */
+  withheld: string[]
+  /** The whole failure in one line, for a surface that wants one. */
+  stated: string
+}
+
+/**
+ * The fourth reading's own figures: what broke, and how far the instruments got.
+ *
+ * Typed because it is on the wire and because the counts are the point of it — an
+ * operator reconciling a token bill reads `explained` and `successes` rather than
+ * parsing them back out of the sentence beside them (ADR-0050, ADR-0070 §4). They are
+ * counts of narrations attempted, not of attempts: nothing above reads them, and there
+ * is no rate here for them to be a numerator of.
+ */
+export interface InstrumentFailure {
+  /** Which named failure ended the narrative pass, off a closed set of three. */
+  broken: string
+  /** What the failure said, verbatim, naming the model and the provider's stop reason. */
+  detail: string
+  explained: number
+  successes: number
+}
+
+/**
+ * Every failure the bench explained, or which of the four absences this run holds.
+ *
+ * **`reading` is a name off a closed set and `stated` is the sentence**, and both
+ * travel because a consumer that told the four apart by matching prose would stop
+ * telling them apart the day the prose was reworded (ADR-0050, ADR-0070 §4). The
+ * report screen computes nothing the payload does not carry, so the payload carries
+ * the reading rather than leaving the screen to infer one from an empty list.
+ *
+ * *Not reproducible*, always: a model wrote these sentences and re-running the
+ * instruments would not reproduce them. It is the label ADR-0017 already has for that
+ * class and no third one was invented for prose that was checked.
+ *
+ * There is no count of findings here, per family or in total, and no field one could
+ * arrive in — a reader who wants to count these blocks counts them (ADR-0005, D12).
+ */
+export interface FindingsSection {
+  reproducibility: string
+  reproducibility_stated: string
+  /** Which of the four readings holds, as a name a consumer can match. */
+  reading: string
+  stated: string
+  findings: ReportedFinding[]
+  /** The fourth reading's figures, and `null` under the other three. */
+  instrument_failure: InstrumentFailure | null
+}
+
+
 /** How this artefact was made — and nothing about what it found. */
 export interface ReportProvenance {
   target: string
@@ -294,6 +408,15 @@ export interface TargetReport {
   target: string
   measured: MeasuredSection
   declared: DeclaredSection
+  /**
+   * Every failure explained, or the stated absence of all of them (ADR-0070).
+   *
+   * Inside the signature and beside the figures rather than served from an endpoint of
+   * its own: a findings block a recipient cannot check would be the one uncheckable
+   * part of a checkable document, which is the shape of the self-graded claim this
+   * project exists to displace (ADR-0001, ADR-0017, ADR-0070 §1).
+   */
+  findings: FindingsSection
   adaptive: AdaptiveSection
   coverage_gaps: CoverageGap[]
   provenance: ReportProvenance

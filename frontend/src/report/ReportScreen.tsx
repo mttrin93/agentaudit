@@ -21,6 +21,14 @@
  * figure that was always going to read *not recorded*, next to numbers that are
  * about the target.
  *
+ * **Each failure is on this page, and it did not used to be.** Under the scored
+ * cards: a card says a family's rate, and the blocks under it say what one break in it
+ * was read against, what went wrong, what to change, and what informed the fix. Every
+ * sentence is the signed payload's own — the section is inside the signature, and this
+ * screen writes not one word into it (ADR-0070, `report.ts`). Grouped by family and
+ * collapsed, with no count on a summary line, no severity word and no ordering that
+ * stands in for one (D3, D12).
+ *
  * **The adaptive layer is read per family too**, because that is the question the
  * section answers — what the search proposed against each family, over how many
  * turns, and whether it broke it. Grouped and never joined: a turn is not an
@@ -86,7 +94,9 @@ import {
   type ExchangesReading,
   type FamilyBreakReading,
   type FamilyExchangeReading,
+  type FamilyFindingsReading,
   type FamilyRow,
+  type FindingsView,
   type LabelReading,
   type ReportView,
   type RouteReading,
@@ -309,6 +319,8 @@ function TheReport({
         </div>
       </section>
 
+      <TheFailures findings={view.findings} />
+
       {attempts ? <TheExchanges exchanges={exchangesReading(attempts)} /> : null}
 
       <section>
@@ -349,6 +361,122 @@ function TheReport({
         </ul>
       </section>
     </>
+  )
+}
+
+/**
+ * Each failure the bench explained, and the fix written for it.
+ *
+ * **The section this screen did not have.** It showed rates, intervals, bands, labels
+ * and the coverage limits, and it showed no failure — so an engineer looking at their
+ * own run learnt how often their agent broke and never once why. What is drawn here is
+ * the same material section 3b of the signed document carries, read from the payload
+ * this page already holds (ADR-0070).
+ *
+ * **Nothing on it is computed.** Every sentence is the artefact's own, printed as it
+ * stands; `report.ts` holds that as an identity against the payload, which for this
+ * section is also the disclosure answer — what may be shown is what
+ * `assembler.ReportedFinding.of` passed, and the payload text, the reply, the tool
+ * trace, the precedents' own prose and the judge's confidence are withheld one record
+ * before the wire (ADR-0008 as amended, ADR-0070 §2).
+ *
+ * **Grouped by family and collapsed by default**, which is the one layout decision
+ * here: `n = 30` per family means a flat list is unreadable at exactly the moment it
+ * matters most. The summary is the family name and nothing else — a count beside it
+ * would be a figure this document deliberately does not carry, and there is no
+ * ordering of one block against another, no severity word and no tint that stands for
+ * one (D3, D12, ADR-0005). Every reviewer UI this borrows from has a severity scale
+ * and promptfoo's is the one already refused on the record (#109).
+ *
+ * **It says which of the four readings holds, under all four.** A section that read
+ * the same whether the instruments broke or were never declared would put ADR-0050's
+ * own collapse back on the page, one layer along from where ADR-0070 §4 removed it.
+ */
+function TheFailures({ findings }: { findings: FindingsView }) {
+  return (
+    <section>
+      <h2>Each failure the bench explained, and the fix written for it</h2>
+      {/* Which of the four readings this run holds, as the name the payload carries
+          and not only as the sentence under it. A reader telling the four apart by
+          prose alone stops telling them apart the day the prose is reworded, which is
+          why the artefact carries a name off a closed set at all (ADR-0070 §4) — and
+          a reading this app has no shape for reaches the page as itself. */}
+      <p className="kind">{findings.reading}</p>
+      {/* Who wrote these sentences, above them and not in a legend: a fact carried
+          somewhere else is a fact a screenshot loses. */}
+      <p className="consequence">{findings.label}</p>
+      <p className="aside">{findings.stated}</p>
+      {findings.kind === 'explained' ? (
+        <div className="findings">
+          {findings.families.map((family) => (
+            <TheFamilyFailures family={family} key={family.family} />
+          ))}
+        </div>
+      ) : null}
+      {findings.kind === 'broken' && findings.broke ? (
+        /* The fourth reading's own two counts, drawn as the record carries them so an
+           operator reconciling a token bill reads figures rather than parsing the
+           sentence above. They are narrations against successes there was something to
+           explain in, and no rate on this page is either one's denominator. Absent
+           where the payload carries none, and the sentence above still says the
+           instruments broke: what went missing is the figures, not the reading. */
+        <div className="family absent">
+          <p className="at">{findings.broke.broken}</p>
+          <p className="aside">{findings.broke.got}</p>
+          <p className="kind">{findings.broke.detail}</p>
+        </div>
+      ) : null}
+    </section>
+  )
+}
+
+/**
+ * One family's failures, collapsed under its name.
+ *
+ * Open with a click and closed to begin with, because the question a reader arrives
+ * with is which family broke and the second question is which case in it. The summary
+ * carries the family name alone: what would otherwise go beside it is a count of the
+ * blocks inside, and the document carries no such figure for this screen to print.
+ */
+function TheFamilyFailures({ family }: { family: FamilyFindingsReading }) {
+  return (
+    <details className="family failures">
+      <summary>
+        <h3>{readFamily(family.family)}</h3>
+      </summary>
+      {family.findings.map((finding) => (
+        <article className="finding" key={finding.caseId}>
+          <h4>{finding.caseId}</h4>
+          <p className="kind">
+            {finding.identifier} — {finding.exposure}
+          </p>
+          {/* What this break is read against, in the record's own sentence: whether a
+              control claiming this family was declared, and whether it was broken.
+              Never rebuilt from the three fields under it (ADR-0068 §3). */}
+          <p className="label">{finding.attributedCause}</p>
+          {/* Two sentences from two instruments, each under the question it answers,
+              because neither answers the other's (ADR-0069). The heading is *what went
+              wrong* and not *why it failed*: there is no sentence anywhere in a target
+              report in which the target fails anything (ADR-0018). */}
+          <p className="ordinal">what went wrong</p>
+          <p>{finding.whatWentWrong}</p>
+          <p className="ordinal">what to change</p>
+          <p>{finding.whatToChange}</p>
+          {/* And what informed it, which is the whole point of drawing it here: a
+              reader has to be able to tell a fix derived from their own transcript
+              from one derived from a corpus, and on run one *nothing informed this* is
+              a stated absence rather than blank space (ADR-0019). */}
+          <p className="aside">{finding.informedBy}</p>
+          {/* Empty except where the disclosure rule replaced a sentence, which the
+              sentence standing in its place already says: this is the countable half
+              beside it, in the payload's own names (ADR-0070 §2c). */}
+          {finding.withheld ? (
+            <p className="aside">withheld — {finding.withheld}</p>
+          ) : null}
+          <p className="aside">{finding.disagreement}</p>
+        </article>
+      ))}
+    </details>
   )
 }
 

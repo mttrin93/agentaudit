@@ -4115,3 +4115,66 @@ fourth declared model — and this ticket paid exactly those two and no third.
   figure.
 - **No variant was admitted, and none was proposed.** Admission needs a person at a tty
   (ADR-0052 §5), and nothing here asks for one.
+
+### The report screen shows the failure, the fix, and what informed it (#113, 2026-09-05)
+
+The other half of ADR-0070's section, on the surface an engineer actually looks at. The
+screen showed rates, intervals, bands, labels and coverage limits and **no failure at
+all**, so a reader of their own run learnt how often their agent broke and never why.
+No ADR: every decision this needed was spent by
+[ADR-0070](./adr/0070-a-signed-document-may-carry-a-remediation.md), and what is drawn
+is the section that ADR put in the payload.
+
+- **The screen writes not one word of its own into a block, and it is asserted as an
+  identity rather than by a forbidden-word list.** Every string a block draws is
+  somewhere in the payload's own findings section, character for character. That is the
+  rule `api/report.ts` was already held to for figures — *nothing here computes a
+  figure* — applied to prose, and for this section it is also the disclosure answer:
+  what may be drawn is what `assembler.ReportedFinding.of` passed, so the payload text,
+  the reply, the tool trace, the precedents' own prose and `Narrative.confidence` are
+  withheld one record before the wire and have nowhere on the screen to arrive. Driven
+  red twice — a sentence composed in TypeScript, and a count of precedents on a block.
+- **What informed a fix is printed and never worded here.** `informed_by_stated` is
+  carried whole, which is #112's own review finding arriving where it was aimed: the
+  screen and section 3b print one claim about one fix rather than two wordings of it.
+  A fix written against no precedent says so as a stated absence rather than as blank
+  space, which is ADR-0019's claim about the store made checkable by a reader.
+- **The four readings of `narrations` are three shapes, chosen off the payload's own
+  `reading` and never off an empty list.** ADR-0070 §4 put the reading on the wire as a
+  name for exactly this consumer; a screen that inferred it would draw a run whose judge
+  broke before it explained anything as a run nobody asked. The broken reading carries
+  the pass's own two counts, already worded, so no numeric property exists on the
+  reading for a later edit to read against a rate.
+- **No severity, no ordering and no count.** The families and the blocks arrive in the
+  payload's order; the collapsed summary carries the family name alone, because a count
+  of the blocks inside is a figure the document deliberately does not carry (D3, D12,
+  ADR-0005). Every value under the reading is a string, asserted over the whole shape
+  rather than field by field.
+- **The served fixture was regenerated, and it is now the whole of what `TargetReport`
+  declares.** #112 left `findings` deliberately out of it and said so in its header;
+  it is in, produced by `payload.document` over a result built from `test_payload.py`'s
+  own helpers, and it carries the three branches the screen cannot invent — a fix
+  written against no precedent, one written against two, and a sentence the disclosure
+  rule withheld with the finding kept beside it. One stale string moved with it:
+  the declared rule's own `stated` line, which had drifted from the serialiser's
+  wording and is now the serialiser's again.
+- **A second browser spec covers the reading the walkthrough cannot reach.** The blocks
+  need a document two models wrote, and the walk's bench declares no models — so
+  `failures.spec.ts` serves the frozen artefact over the two routes the screen fetches
+  and asserts the blocks in a real browser. It is a render assertion and nothing more,
+  and it is the ticket's own named red: deleting the line that prints what informed a
+  fix fails it on *a failure with no informing precedent still says so on the screen*,
+  which is a render failure and not a compile error. It reaches the artefact through
+  the dev server rather than by importing across the two TypeScript projects, because
+  that import makes every relative import in `src/api` fail for want of a file
+  extension — configuration bought by a test.
+- **The walkthrough asserts the reading its own bench produces.** The harness deletes
+  every model variable before the factory runs, so that bench declares no narrative
+  instrument, wrote no sentence, and the section says so rather than being absent —
+  which is the difference ADR-0050 spent two paragraphs on, checked in a browser
+  against a document that walk signed. It reads the reading's own **name** off the page
+  beside the sentence, because a page that told the four apart by prose alone would stop
+  telling them apart the day the prose was reworded.
+- **No rate, `D`, κ, interval, band, gate decision or gate citation moved, and no byte
+  of the backend changed.** The library digest is `c515a89956cd`, eighteen records, and
+  no variant was admitted or proposed.

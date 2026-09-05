@@ -29,13 +29,13 @@
  * `vitest` covers the logic behind the screens — the guard rules, the body that goes
  * on the wire, and what the app makes of a refusal — and none of that needs a DOM,
  * so there is still no jsdom environment: it would be a dependency bought so that a
- * test could assert on markup nobody reads. What changed with #19 is that there is
- * now one test that reads the markup a person reads, and it drives a real browser
+ * test could assert on markup nobody reads. What changed with #19 is that there are
+ * now tests that read the markup a person reads, and they drive a real browser
  * rather than a simulated one: `playwright.config.ts`, `frontend/e2e/`, and
  * `npm run e2e`. It is a separate runner with a separate config because it needs two
  * servers and a browser download, and `include` below keeps the two apart by
  * construction: the `src` tree's `.test.ts` files are vitest's, and the `.spec.ts`
- * under `e2e/` is Playwright's.
+ * files under `e2e/` are Playwright's.
  *
  * **The dev server below is what that walkthrough serves the app with**, and the
  * proxy is why. A previewed build would answer nothing under `/runs`: the six

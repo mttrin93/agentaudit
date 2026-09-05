@@ -1,7 +1,15 @@
 /**
- * The one browser walkthrough: what starts, in what order, and why it is not retried.
+ * The browser specs: what starts, in what order, and why they are not retried.
  *
- * Two servers and one test. `harness.py` serves the bench's own API and one set of
+ * Two servers and two specs, and only the first of them is a walkthrough.
+ * `walkthrough.spec.ts` drives a real run end to end; `failures.spec.ts` is a render
+ * assertion over a served artefact, and it exists because the walkthrough cannot reach
+ * the reading it covers — that bench declares no models, so its document says no
+ * narrative instrument was declared, and the section with blocks in it needs a document
+ * two models wrote. Neither spec starts a run the other could see, and the second
+ * intercepts the two routes it reads rather than asking the bench for anything.
+ *
+ * `harness.py` serves the bench's own API and one set of
  * reference agents on a stub model, in an environment with no trace sink and no model
  * declared; `vite` serves the app and proxies the bench's six prefixes to that API, so
  * the app under test fetches the same same-origin paths it fetches in a deployment
@@ -23,8 +31,8 @@
  * **One worker.** The bench refuses to change its declared inputs while a run is in
  * flight (`PUT /bench/settings/*` answers `409`), which is ADR-0007 working: two
  * walkthroughs against one bench would fight over the settings the estimate was built
- * from. The single test does not need parallelism and a second one would not be
- * allowed it.
+ * from. So the specs run one after another, and a second *walkthrough* would not be
+ * allowed parallelism however many specs sit beside it.
  */
 
 import { defineConfig } from '@playwright/test'

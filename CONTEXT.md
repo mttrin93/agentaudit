@@ -387,7 +387,10 @@ withheld, and the finding keeps its case id, its family and its attributed cause
 ([ADR-0070](./docs/adr/0070-a-signed-document-may-carry-a-remediation.md), ADR-0008).
 It carries no number, no severity and no confidence, and the section it sits in is
 labelled *not reproducible*: a model wrote both sentences, and no figure anywhere in
-the document reads a word of either.
+the document reads a word of either. It is what the **report screen** draws as well:
+every sentence in a block there is this record's own, character for character, and
+the screen's own words are the heading over the section and the label saying a model
+wrote it (#113).
 _Avoid_: remediation, recommendation, advisory, severity, root cause
 
 **Deterministic family / Judged family**:

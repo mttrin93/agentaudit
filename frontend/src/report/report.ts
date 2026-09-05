@@ -57,6 +57,7 @@
 import type {
   AdaptiveSection,
   FamilyEntry,
+  FindingsSection,
   FamilyLabel,
   FamilyRun,
   MeasuredSection,
@@ -529,21 +530,38 @@ function readOutcome(outcome: string): string {
   return OUTCOMES_IN_PLAIN_WORDS[outcome] ?? outcome
 }
 
+/**
+ * The group one family's rows go under, opened on first appearance.
+ *
+ * One writer for both sections that group by family, because the rule they share is
+ * the load-bearing part and not the loop: **a family appears where the payload first
+ * names it, and the groups are never sorted.** An ordering by what an episode found or
+ * by what a failure was is a rank across families, and a rank is the composite
+ * ADR-0005 refuses arriving as a layout decision. Two copies of that rule are two
+ * rules the day one of them gains a `sort`.
+ */
+function under<Group extends { family: string }>(
+  groups: Group[],
+  family: string,
+  open: () => Group,
+): Group {
+  let found = groups.find((one) => one.family === family)
+  if (found === undefined) {
+    found = open()
+    groups.push(found)
+  }
+  return found
+}
+
 export function adaptiveReading(adaptive: AdaptiveSection): AdaptiveReading {
   const broken = new Set(adaptive.families_broken)
   const families: AdaptiveFamilyReading[] = []
   for (const episode of adaptive.episodes) {
-    // First appearance in the payload's order, and never sorted by what an episode
-    // found: an ordering by outcome is a rank, and this layer is not scored.
-    let reading = families.find((one) => one.family === episode.family)
-    if (reading === undefined) {
-      reading = {
-        family: episode.family,
-        broke: broken.has(episode.family),
-        episodes: [],
-      }
-      families.push(reading)
-    }
+    const reading = under(families, episode.family, () => ({
+      family: episode.family,
+      broke: broken.has(episode.family),
+      episodes: [],
+    }))
     const line = {
       outcome: readOutcome(episode.outcome),
       turns: `${episode.turns} ${episode.turns === 1 ? 'turn' : 'turns'}`,
@@ -564,6 +582,243 @@ export function adaptiveReading(adaptive: AdaptiveSection): AdaptiveReading {
     families,
   }
 }
+
+/**
+ * One failure as the block prints it: what it is read against, why, and what to change.
+ *
+ * **Nine strings and no number**, which is the type-level half of what keeps this
+ * section out of the arithmetic — the property `DiscoveriesReading` has and for the
+ * same reason. There is no confidence here and no field one could arrive in: a number
+ * a model wrote about its own sentence is read as a measurement by everyone who did
+ * not write it, and the payload withholds it (ADR-0005, ADR-0070 §2b).
+ *
+ * **And no severity, no ordering and nothing derived from another block.** D3 and D12,
+ * named here because every reviewer UI this borrows from has a severity scale and
+ * promptfoo's is the one already refused on the record (#109). A word chosen client-
+ * side would be exactly that scale, arriving one field at a time.
+ *
+ * Two sentences apart rather than one paragraph, because two instruments wrote them
+ * and neither answers the other's question: the judge writes *what went wrong* and the
+ * remediation tool writes *what to change* (ADR-0069). A finding whose prose the
+ * disclosure rule replaced carries the statement that it was withheld in the field the
+ * sentence would have been in, and `withheld` names which one — the finding is kept,
+ * because its case id, its family and its attributed cause are the three facts a
+ * reader can check against the record (ADR-0070 §2c).
+ */
+export interface FindingReading {
+  caseId: string
+  /** `Attribution.stated()` whole, and never rebuilt from the fields under it. */
+  attributedCause: string
+  /** The published identifier this case tests one case within (ADR-0002). */
+  identifier: string
+  /** What a reader of this finding is exposed to, off the judge's closed set. */
+  exposure: string
+  whatWentWrong: string
+  whatToChange: string
+  /**
+   * What this fix was written against, in the record's own sentence.
+   *
+   * The point of drawing it at all: a reader handed remediation advice has to be able
+   * to tell advice derived from their own transcript from advice derived from a
+   * corpus, which is the precedent store's claim about itself — and on run one the
+   * honest answer is that nothing informed it, which is a stated absence and not blank
+   * space (ADR-0019). Carried whole and never worded here: the sentence lives on
+   * `ReportedFinding` precisely so this screen and the document's section 3b cannot
+   * print two claims about one fix, and the case ids it names are inside it.
+   */
+  informedBy: string
+  /** What the two instruments made of this transcript, stated on every finding. */
+  disagreement: string
+  /** Which sentences the disclosure rule replaced, in the payload's own names. */
+  withheld: string
+}
+
+/**
+ * One family's failures, under the family they were found in.
+ *
+ * Grouped because that is the question a reader arrives at this section with, and the
+ * scored cards and the adaptive section above are read the same way. **No count on
+ * this record and nowhere for one**: thirty attempts a family means a flat list is
+ * unreadable at the moment it matters most, so the blocks collapse under the family
+ * name — and a summary line that said how many were in there would be a figure the
+ * document deliberately does not carry (ADR-0005, D12).
+ */
+export interface FamilyFindingsReading {
+  family: string
+  findings: FindingReading[]
+}
+
+/**
+ * A narrative pass that ran and broke, in the words the block prints.
+ *
+ * **Three strings and nothing arithmetical**, on `DiscoveriesReading`'s own terms: the
+ * two counts arrive already worded, so there is no numeric property here for a later
+ * edit to lift off and read against a rate. They are counts of narrations attempted
+ * against successes there were to explain, and nothing above this section is a
+ * denominator for either of them (ADR-0006, ADR-0050).
+ */
+export interface BrokenInstrumentReading {
+  /** Which named failure ended the pass, off the record's own closed set. */
+  broken: string
+  /** What the failure said, verbatim: the model, and the provider's stop reason. */
+  detail: string
+  /** How far the instruments got, as one line an operator reads against a bill. */
+  got: string
+}
+
+/**
+ * Every failure explained, or which of the four absences this run holds.
+ *
+ * **Three shapes for four readings, and the reading is carried whole beside them.**
+ * `explained` has blocks, `broken` has the pass's own counts and no blocks, and the
+ * two absences have neither — three members rather than one record with empty fields,
+ * for the reason `FamilyAnswer` is a union: a reading with no findings has nowhere to
+ * put one, and *the instruments broke* must stay distinguishable from *nobody declared
+ * one* (ADR-0050, ADR-0070 §4).
+ *
+ * **The shape is chosen off `reading` and never off an empty list.** The payload
+ * carries the reading as a name off a closed set precisely so a consumer does not have
+ * to infer it, and a screen that inferred it would report a run whose judge broke
+ * before it explained anything as a run nobody asked. A reading this app has no shape
+ * for prints its own name and the payload's sentence and draws no block, on
+ * `readOutcome`'s terms — a fifth reading added upstream reaches the screen as itself.
+ */
+export type FindingsView =
+  | {
+      kind: 'explained'
+      reading: string
+      label: string
+      stated: string
+      families: FamilyFindingsReading[]
+    }
+  | {
+      kind: 'broken'
+      reading: string
+      label: string
+      stated: string
+      /**
+       * The pass's own counts, or `null` from a payload that carries none.
+       *
+       * Nullable so the shape stays a function of `reading` alone: a document whose
+       * figures went missing has lost its figures and not its reading, and drawing it
+       * as one of the two absences would be ADR-0050's collapse arriving through the
+       * back door. The sentence above says what happened either way.
+       */
+      broke: BrokenInstrumentReading | null
+    }
+  | { kind: 'none'; reading: string; label: string; stated: string }
+
+/**
+ * What this section is, printed with it wherever it is read.
+ *
+ * The load-bearing sentence of the section rather than decoration, and the same
+ * discipline `NOT_PART_OF_THE_ARTEFACT` carries one section below: every figure above
+ * this one was measured by success conditions and an adjudicator, and these two
+ * sentences were written by two models about transcripts that had already been
+ * decided. It is the label ADR-0017 already has for that class and no third
+ * evidentiary class was invented for prose that was checked (ADR-0070 §3).
+ *
+ * **Written here rather than borrowed from the payload, exactly as
+ * `AdaptiveReading.label` is and for the same reason.** The artefact's own
+ * `reproducibility_stated` is shared between this section and the adaptive one since
+ * #112, so it names neither subject — and a label that says *a stochastic instrument
+ * produced this* over two models writing about recorded transcripts tells a reader
+ * less than the sentence it replaced. The payload's wording is still in `report.json`
+ * and in the `report.md` a recipient reads, which is where it travels.
+ */
+export const A_MODEL_WROTE_THESE_SENTENCES =
+  'not reproducible — two models wrote these sentences, and asking them again about ' +
+  'the same recorded transcripts would produce different ones. No verdict, rate, ' +
+  'interval or band above was measured from a word of it'
+
+/**
+ * The two readings this module has a shape of its own for, as the payload names them.
+ *
+ * Exported so a test names them rather than repeating the literals, and so a rename
+ * upstream fails in one place. The other two readings have no constant here on
+ * purpose: every reading that is not one of these two is drawn the same way — its own
+ * name and the payload's sentence, and no block — so naming them would be naming a
+ * branch that does not exist, and the fallback would stop covering a fifth reading
+ * added upstream (`readOutcome`).
+ */
+export const EXPLAINED = 'explained'
+export const INSTRUMENTS_BROKE = 'instruments_broke'
+
+/**
+ * The findings section read into what the blocks draw, and into nothing else.
+ *
+ * **Every string on the result is a string the payload carries.** Not one sentence is
+ * assembled here: the attributed cause, the two instruments' sentences, what informed
+ * the fix and the reading itself are the artefact's own wording, printed as it stands
+ * — which is the rule this module is already held to for figures (ADR-0005, D12), and
+ * which for prose is also the disclosure answer, because what may be shown is what
+ * `assembler.ReportedFinding.of` passed and nothing this app could add to it
+ * (ADR-0008, ADR-0070 §2).
+ *
+ * **Grouped by family, in the payload's order, and counted nowhere.** Grouping is the
+ * question a reader arrives with — *what broke in this family* — and it is the same
+ * grouping the adaptive section above uses. There is no count of blocks on a family
+ * and no field one could arrive in: the document deliberately carries no such figure,
+ * a reader who wants one counts the blocks, and a per-family count printed on a
+ * summary line would be a figure this screen invented (ADR-0005, D12).
+ *
+ * **No ordering that implies a rank.** The families arrive in the order the findings
+ * were written and the findings within one in the order they were narrated. Sorting
+ * by exposure, by attributed cause or by anything else would be a severity scale
+ * arriving as a layout decision, which is the one thing #109 names as out of scope
+ * because every reviewer UI this borrows from has one (D3, D12).
+ */
+export function findingsReading(section: FindingsSection): FindingsView {
+  const said = {
+    reading: section.reading,
+    // On the reading rather than in the markup, on `AdaptiveReading.label`'s terms: a
+    // shape that could be drawn without it is a shape somebody draws without it.
+    label: A_MODEL_WROTE_THESE_SENTENCES,
+    stated: section.stated,
+  }
+  if (section.reading === INSTRUMENTS_BROKE) {
+    const broke = section.instrument_failure
+    return {
+      ...said,
+      kind: 'broken',
+      broke: broke === null ? null : {
+        broken: broke.broken,
+        detail: broke.detail,
+        // The record's own two counts, side by side and added to nothing — the shape
+        // `goldSetCounts` prints a κ's counts in, for the same reason: a figure a
+        // reader has to extract from prose is a figure that drifts (ADR-0050).
+        got:
+          `${broke.explained} of ${broke.successes} success` +
+          `${broke.successes === 1 ? '' : 'es'} had been explained`,
+      },
+    }
+  }
+  if (section.reading !== EXPLAINED) {
+    return { ...said, kind: 'none' }
+  }
+  const families: FamilyFindingsReading[] = []
+  for (const finding of section.findings) {
+    under(families, finding.family, () => ({
+      family: finding.family,
+      findings: [],
+    })).findings.push({
+      caseId: finding.case_id,
+      attributedCause: finding.attributed_cause_stated,
+      identifier: finding.external_id,
+      exposure: finding.exposure,
+      whatWentWrong: finding.reason,
+      whatToChange: finding.fix,
+      informedBy: finding.informed_by_stated,
+      disagreement: finding.disagreement,
+      // The payload's own names for the sentences it replaced, joined and never
+      // reworded: the sentence standing where a withheld one was already says what
+      // happened, and this is the countable half beside it (ADR-0070 §2c).
+      withheld: finding.withheld.join(', '),
+    })
+  }
+  return { ...said, kind: 'explained', families }
+}
+
 
 /**
  * What the route block says about itself, printed with it wherever it is read.
@@ -945,6 +1200,17 @@ export interface ReportView {
    * types that share no number (ADR-0056).
    */
   rows: FamilyRow[]
+  /**
+   * Every failure explained, or which of the four absences this run holds.
+   *
+   * On this view rather than fetched beside it, because it is in the same signed
+   * payload the rates are: a findings block served from an endpoint of its own would
+   * be the one part of a checkable document a recipient could not check (ADR-0070 §1).
+   * It joins to nothing above it — the blocks are prose about verdicts that were
+   * decided before either instrument was asked, and no rate, band, interval or `D`
+   * reads a word of them (D13, ADR-0006).
+   */
+  findings: FindingsView
   adaptive: AdaptiveReading
 }
 
@@ -960,6 +1226,7 @@ export function reportView(report: TargetReport): ReportView {
   return {
     target: report.target,
     rows: familyRows(report.measured, report.adaptive),
+    findings: findingsReading(report.findings),
     adaptive: adaptiveReading(report.adaptive),
   }
 }

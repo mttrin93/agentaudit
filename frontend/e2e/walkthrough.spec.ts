@@ -273,6 +273,23 @@ test('an operator registers a target, is blocked, confirms, and reads the report
   // `labels.LABELS` into the payload, printed in the Markdown, and drawn here beside
   // the family name rather than instead of it (#52, ADR-0044).
   await expect(family.getByText('bears article 15 of the EU AI Act')).toBeVisible()
+  // The failures section, under the reading this walk actually produces. The harness
+  // deletes every model variable before the factory runs, so this bench declares no
+  // narrative instrument and wrote no sentence about anything — and the section says
+  // exactly that rather than being absent, which is the difference ADR-0050 spent two
+  // paragraphs on and ADR-0070 §4 carried into the document. A screen that drew
+  // nothing here would be indistinguishable from a run whose judge broke.
+  const failures = page.locator('section').filter({
+    has: page.getByRole('heading', { level: 2, name: /^Each failure the bench/ }),
+  })
+  await expect(failures).toHaveCount(1)
+  await expect(failures.getByText('no_narrative_instrument_declared')).toBeVisible()
+  await expect(failures.getByText('not reproducible')).toBeVisible()
+  await expect(
+    failures.getByText('no narrative instrument was declared for this run'),
+  ).toBeVisible()
+  await expect(failures.locator('details.family')).toHaveCount(0)
+
   // The three files a recipient verifies, under the names `scripts/verify.py` reads.
   for (const file of ['report.json', 'report.md', 'report.sig']) {
     await expect(page.getByRole('link', { name: file })).toBeVisible()

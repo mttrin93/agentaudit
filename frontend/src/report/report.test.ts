@@ -32,19 +32,24 @@
 import { describe, expect, it } from 'vitest'
 
 import type {
+  InstrumentFailure,
   RunExchanges,
   RunProbes,
   TargetReport,
   Verification,
 } from '../api/bench'
 import {
+  A_MODEL_WROTE_THESE_SENTENCES,
   BAND_IN_A_TARGET_REPORT,
+  EXPLAINED,
+  INSTRUMENTS_BROKE,
   NOT_PART_OF_THE_ARTEFACT,
   attemptCounts,
   exchangesReading,
   NO_DENOMINATOR,
   familyAnswers,
   familyRows,
+  findingsReading,
   reportView,
   routeReading,
   verificationReading,
@@ -608,6 +613,190 @@ describe('what the search found, beside what was measured', () => {
         (answer) => answer.family === 'data_leakage',
       )[0],
     )
+  })
+})
+
+describe('the failures the bench explained', () => {
+  it('says what informed each fix, in the payload’s own sentence and never a second one', () => {
+    // ADR-0019's claim about the precedent store, on the surface an engineer actually
+    // looks at: a reader has to be able to tell a fix derived from their own
+    // transcript from one derived from a corpus. On run one the honest answer is that
+    // nothing informed it, and it renders as a stated absence rather than as blank
+    // space. The sentence is `informed_by_stated`, carried whole — #112 put it on the
+    // record precisely so this screen and the document's section 3b cannot print two
+    // claims about one fix, so a screen that worded it from the ids would be the
+    // second wording (ADR-0070).
+    const explained = findingsReading(SERVED.findings)
+    if (explained.kind !== 'explained') {
+      throw new Error('the fixture explains its failures')
+    }
+    const [leakage] = explained.families
+
+    const [alone, reused] = leakage.findings
+    expect(alone.caseId).toBe('data-leakage-001')
+    expect(alone.informedBy).toContain('written against no precedent')
+    expect(reused.caseId).toBe('data-leakage-003')
+    expect(reused.informedBy).toContain('data-leakage-001, data-leakage-002')
+    expect(reused.informedBy).toContain('written down before')
+
+    // And both sentences are the payload's, to the character.
+    const [first, second] = SERVED.findings.findings
+    expect(alone.informedBy).toBe(first.informed_by_stated)
+    expect(reused.informedBy).toBe(second.informed_by_stated)
+  })
+
+  it('writes not one word of its own into a block, so nothing withheld can reach one', () => {
+    // The rule `api/report.ts` is already held to, applied to prose: *nothing here
+    // computes a figure*, and no sentence is assembled in TypeScript either. For this
+    // section that rule is also the disclosure answer — what may be drawn is what
+    // `assembler.ReportedFinding.of` passed, and the payload text, the reply, the tool
+    // trace, the precedents' own prose and `Narrative.confidence` are all withheld
+    // one record before the wire (ADR-0008 as amended, ADR-0070 §2). A screen that
+    // added a word could only add one of two things: something the payload does not
+    // carry, or a second wording of something it does.
+    //
+    // Asserted as an identity rather than by hunting for forbidden words: every string
+    // a block draws is somewhere in the payload's own findings section, character for
+    // character. The one line this module composes is on the *broken* reading, and it
+    // is two numbers the record carries put side by side — the test above pins it.
+    const view = findingsReading(SERVED.findings)
+    if (view.kind !== 'explained') {
+      throw new Error('the fixture explains its failures')
+    }
+    const carried = JSON.stringify(SERVED.findings)
+
+    for (const family of view.families) {
+      expect(carried).toContain(JSON.stringify(family.family).slice(1, -1))
+      for (const block of family.findings) {
+        for (const [field, said] of Object.entries(block)) {
+          expect(typeof said).toBe('string')
+          if (said === '') {
+            continue
+          }
+          expect(
+            carried.includes(JSON.stringify(said).slice(1, -1)),
+            `${field} is not the payload’s own wording`,
+          ).toBe(true)
+        }
+      }
+    }
+
+    // And no block, and no family, carries a count of anything. The document offers no
+    // figure built out of these blocks, so neither does this — a reader who wants to
+    // count them counts them (ADR-0005, D12).
+    const named = keysIn(view).filter((key) =>
+      FORBIDDEN_IN_A_KEY.some((word) => key.toLowerCase().includes(word)),
+    )
+    expect(named).toEqual([])
+    // Not one value anywhere under this reading is a number, which is the same
+    // prohibition stated over the whole shape rather than field by field: there is
+    // nothing here a later edit could lift off and add to a rate (ADR-0006, D13).
+    expect(leavesIn(view).filter((leaf) => typeof leaf !== 'string')).toEqual([])
+  })
+
+  it('says a model wrote it, on every shape and not only where there are blocks', () => {
+    // The first section of this screen under a *not reproducible* label that is not the
+    // adaptive one, and the label carries on the reading rather than in the markup for
+    // the reason the adaptive section's does: a shape that could be drawn without it
+    // is a shape somebody draws without it. It says so under all four readings too —
+    // a run whose judge broke wrote no sentence, and the label is about the section
+    // rather than about how much of it arrived (ADR-0017, ADR-0070 §4).
+    const under = (reading: string) =>
+      findingsReading({ ...SERVED.findings, reading, findings: [] })
+
+    for (const reading of [
+      'explained',
+      'nothing_to_explain',
+      'no_narrative_instrument_declared',
+      'instruments_broke',
+    ]) {
+      expect(under(reading).label).toBe(A_MODEL_WROTE_THESE_SENTENCES)
+    }
+    expect(A_MODEL_WROTE_THESE_SENTENCES).toContain('not reproducible')
+  })
+
+  it('is part of the one view, and no family’s figures move when a block is read', () => {
+    // The section is on the same view as the rates rather than fetched beside them,
+    // because it is in the same signed payload: a findings block a recipient could not
+    // check would be the one uncheckable part of a checkable document (ADR-0070 §1).
+    // And it joins to nothing — the structural assertion above already drops a family
+    // and compares everything that is not a row, which now includes these blocks.
+    const view = reportView(SERVED)
+
+    expect(view.findings.kind).toBe('explained')
+    expect(view.findings.reading).toBe(SERVED.findings.reading)
+    expect(view.findings.stated).toBe(SERVED.findings.stated)
+    expect(view.findings).toEqual(findingsReading(SERVED.findings))
+  })
+
+  it('draws the four readings of narrations as four things, and the fourth carries its counts', () => {
+    // ADR-0050's collapse, one layer along. *Nobody declared an instrument*, *the
+    // target succeeded at nothing*, *here is every failure* and *the instruments ran
+    // and broke* are four facts, and a screen that read the same under all four would
+    // put back exactly the confusion ADR-0070 §4 spent a section preventing. The
+    // reading is taken off the payload's own closed set and never inferred from an
+    // empty list — a consumer that told them apart by matching prose would stop the
+    // day the prose was reworded.
+    const under = (reading: string, broke: InstrumentFailure | null = null) =>
+      findingsReading({
+        ...SERVED.findings,
+        reading,
+        stated: `the run reads ${reading}`,
+        findings: reading === 'explained' ? SERVED.findings.findings : [],
+        instrument_failure: broke,
+      })
+
+    expect(under(EXPLAINED).kind).toBe('explained')
+    expect(under('nothing_to_explain').kind).toBe('none')
+    expect(under('no_narrative_instrument_declared').kind).toBe('none')
+
+    // The fourth, and the reason it is its own shape: the counts are the figure an
+    // operator reconciles a token bill against, so they are read off the record
+    // rather than parsed back out of the sentence beside them (ADR-0050).
+    const broken = under(INSTRUMENTS_BROKE, {
+      broken: 'judge_unreadable',
+      detail: 'the model answered with prose and no labelled lines',
+      explained: 1,
+      successes: 3,
+    })
+
+    expect(broken.kind).toBe('broken')
+    if (broken.kind !== 'broken' || broken.broke === null) {
+      throw new Error('the fourth reading carries the counts it was handed')
+    }
+    expect(broken.broke.broken).toBe('judge_unreadable')
+    expect(broken.broke.detail).toBe(
+      'the model answered with prose and no labelled lines',
+    )
+    expect(broken.broke.got).toBe('1 of 3 successes had been explained')
+    // Every value on it is a string, so the two counts arrive already worded and
+    // there is no numeric property for a later edit to read against a rate.
+    expect(Object.values(broken.broke).map((said) => typeof said)).toEqual([
+      'string',
+      'string',
+      'string',
+    ])
+
+    // And a broken reading that carries no counts is still a broken reading. The
+    // shape is chosen off the name and off nothing else — a payload whose figures
+    // went missing has lost its figures, not its reading, and drawing it as one of
+    // the two absences would be the collapse this test exists to prevent arriving
+    // through the back door (ADR-0050, ADR-0070 §4).
+    const figuresless = under(INSTRUMENTS_BROKE)
+    expect(figuresless.kind).toBe('broken')
+    if (figuresless.kind !== 'broken') {
+      throw new Error('the fourth reading is its own shape')
+    }
+    expect(figuresless.broke).toBeNull()
+
+    // And each of the four says which one it is, in the payload's own sentence.
+    for (const reading of [
+      'explained',
+      'nothing_to_explain',
+      'no_narrative_instrument_declared',
+    ]) {
+      expect(under(reading).stated).toBe(`the run reads ${reading}`)
+    }
   })
 })
 
@@ -1203,6 +1392,23 @@ function numbersIn(view: unknown): number[] {
   return [...JSON.stringify(view).matchAll(/\d+(?:\.\d+)?/g)].map((found) =>
     Number(found[0]),
   )
+}
+
+/**
+ * Every leaf anywhere in the view, with its type intact.
+ *
+ * Unlike `numbersIn`, which reads digits out of prose and is looked at with
+ * `not.toContain`: this says what a *value* is, so a section asserted to hold no
+ * figure is asserted over the shape rather than one field at a time.
+ */
+function leavesIn(node: unknown): unknown[] {
+  if (Array.isArray(node)) {
+    return node.flatMap(leavesIn)
+  }
+  if (node && typeof node === 'object') {
+    return Object.values(node).flatMap(leavesIn)
+  }
+  return [node]
 }
 
 /** Every string anywhere in the view. */

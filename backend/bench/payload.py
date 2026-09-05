@@ -902,6 +902,12 @@ its absence readable rather than silent.
 def _measured(section: MeasuredSection, rule: GateRule) -> dict[str, Any]:
     """What the fixed suite measured: counts per family, and what is not published.
 
+    Four lists and never one, because a family absent from the figures is absent for
+    one of four reasons and a reader owed a reason is owed the right one: a judged
+    rate barred below the κ floor, a precondition this target could not meet, and —
+    since [ADR-0075](../../docs/adr/0075-a-declared-gap-reaches-the-signed-artefact.md)
+    — a family this run's caller declared away before anything was sent.
+
     The unfit judged families are **absent** from `judged` and present in
     `withheld`, so a consumer that reads the figures cannot reach a rate ADR-0015
     says must not be published, however carelessly it reads them. Which families
@@ -935,6 +941,23 @@ def _measured(section: MeasuredSection, rule: GateRule) -> dict[str, Any]:
             }
             for family, reason in sorted(
                 section.not_measurable.items(), key=lambda pair: pair[0].value
+            )
+        ],
+        # The fourth kind of nothing, in the same four keys as the third and for the
+        # same reader: the family, the machine-readable reason, the sentence that
+        # reason is written in, and the label the family bears whether or not
+        # anything was attempted against it (ADR-0044, ADR-0075). A separate list
+        # rather than more entries in `not_measurable`, because the two say different
+        # things about whose gap it is — one the bench detected, one it was told.
+        "not_run": [
+            {
+                "family": family.value,
+                "reason": gap.value,
+                "stated": gap.stated(),
+                "label": _label(family),
+            }
+            for family, gap in sorted(
+                section.not_run.items(), key=lambda pair: pair[0].value
             )
         ],
     }

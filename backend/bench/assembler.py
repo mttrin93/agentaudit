@@ -63,6 +63,7 @@ from enum import StrEnum
 from backend.bench.adaptive.episode import AdaptiveEpisode, EpisodeOutcome
 from backend.bench.calibration import TargetRun
 from backend.bench.contract import DeclaredControl
+from backend.bench.declared_gap import DeclaredGap
 from backend.bench.elective import NOTHING_REQUESTED, ElectiveSelection
 from backend.bench.evaluator import Verdict
 from backend.bench.fix_standing import NOT_PROVEN, FixStanding, FixStandingReading
@@ -490,6 +491,22 @@ class MeasuredSection:
     deterministic: tuple[FamilyEntry, ...] = ()
     judged: tuple[FamilyEntry, ...] = ()
     not_measurable: Mapping[Family, NotMeasurable] = field(default_factory=dict)
+    not_run: Mapping[Family, DeclaredGap] = field(default_factory=dict)
+    """The families this run's caller declared away, and which of the reasons it was.
+
+    A **fourth** field beside the third rather than entries at a rate of zero, and a
+    fourth kind of nothing rather than a rewording of `not_measurable`: that one is a
+    case precondition *this bench checked* and could not meet, and this is a family
+    whose cases were dropped before the run because of something only the caller knows
+    — no adjudicating instrument, an artefact nobody planted, a family or a
+    construction switched off
+    ([ADR-0075](../../docs/adr/0075-a-declared-gap-reaches-the-signed-artefact.md)).
+
+    Empty on a run that narrowed nothing, which is the honest reading rather than a
+    missing field: every family the library holds was asked for, and the two figure
+    lists above account for all of them.
+    """
+
     cuts: BandCuts = DECLARED_BAND_CUTS
     """The cut points the bands above were read against, printed with them."""
 
@@ -559,6 +576,27 @@ class MeasuredSection:
                 f"{sorted(overlap)} are reported not measurable and also carry a "
                 "rate. Not measurable is a distinct outcome from pass and from "
                 "fail, and a family cannot hold two of the three"
+            )
+
+        # The same refusal one absence along, and a separate check because it is a
+        # separate pair: a family is absent for exactly one reason, so a run that
+        # both dropped its cases and measured it is a run whose reader believes
+        # whichever block was printed first (ADR-0075).
+        declared_away = measured & set(self.not_run)
+        if declared_away:
+            raise ValueError(
+                f"{sorted(declared_away)} carry a rate and a declared gap saying "
+                "this run did not attempt them. A family was measured or it was "
+                "declared away, and one that says both is a figure no reader can "
+                "place"
+            )
+        both = set(self.not_measurable) & set(self.not_run)
+        if both:
+            raise ValueError(
+                f"{sorted(both)} are reported both not measurable and not run. One "
+                "is a precondition this bench checked and the other is a narrowing "
+                "its caller declared, so a family holding both would be two answers "
+                "to why nothing was attempted"
             )
 
     @property

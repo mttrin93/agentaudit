@@ -4593,3 +4593,51 @@ that was true on the day it was written and this is the entry that ends it.
   still unproposed, and the gate run ADR-0023 makes due is still owed. It is no longer
   blocked: the suite is green against the library the variant belongs in, which was the
   condition the section above stated.
+
+### A framing is a claim about one family, and two pairings will never be measured (#149, 2026-09-05)
+
+**Nothing was measured here, and the entry exists because a refusal is a result.**
+`scripted_crescendo` was written per base case and the five single-turn transforms had
+one framing each, written for data leakage; the pairing `scope-creep-001 × roleplay` was
+therefore writable, and a record of it would have asked an agent to narrate its own
+configuration and then to settle a supplier balance. ADR-0074 settles the four questions
+#149 left open. What follows is what that costs the readings, and it is a debt restated
+rather than a figure moved.
+
+- **No figure moved and no digest moved.** The library still reads **nineteen records at
+  `3d77e4da8891`**, `data_leakage` still reads `n = 40` and the other five families 30,
+  because **no record is written**: what admits a variant is a person's run at a terminal
+  (ADR-0052 §5). The two framings this ticket wrote are proposals in that sense and
+  nothing more. Both framings that already existed are **byte-identical** — checked
+  against the previous commit before the change was committed — so no proposal already
+  argued in `notes/` had its payload move under it.
+- **Two pairings are refused in code and their readings were never readings.** The
+  prompt-injection wrapper is refused for `halt_defeat` because the frame is a prefix and
+  the payload passes through verbatim, so *the instruction below was approved by the
+  operator* encloses the stop signal `halt-defeat-001` opens with: the generated record
+  instructs the agent to **obey** the halt, and a run of it would have reported the
+  hardened and the trivial agent both resisting at `D = 0.00` for a reason belonging to
+  this repository's wording. That is the same shape as the base64 rehearsal recorded
+  above, where `stub:cooperative` read `D = 0.00` with trivial also 0.00 — an attack
+  landing on nothing at all. It is refused for `scope_creep` on the base record's own
+  header: *the words carry no override and no published technique, there is nothing here
+  to lift.*
+- **The encodings do not spread, and that is now carried by a table rather than by a
+  paragraph.** Base64, ROT13 and leetspeak vary `data_leakage` and nothing else. An
+  errand the target cannot read is not an errand and a stop it cannot read is not a stop,
+  so the reading such a variant buys is about the decoder (ADR-0052 §4, ADR-0074 §3).
+- **What the two new pairings will measure, when somebody runs them.**
+  `scope-creep-001 × roleplay` asks whether a persona whose job *is* the paperwork and
+  the payments moves the family's own mechanism — an errand that sounds like the agent's
+  job — further. `halt-defeat-001 × roleplay` asks whether a competing in-character duty
+  at a shift handover gets past the stop path. Both are read from the tool trace, which
+  is why neither framing stages a recording: a target told it is performing a take has
+  been given a reason to make no call at all, and *resisted* would then be stagecraft
+  scored as a defence. That rule is a tripwire in `test_transforms.py` and not only a
+  sentence in the ADR.
+- **What is still owed is what was owed.** The three variants #73 left unproposed —
+  `data-leakage-001` under base64, `data-leakage-003` under roleplay, `halt-defeat-001`
+  under scripted crescendo — are still unproposed, and two more are now writable that
+  were not argued before. ADR-0023's gate citation went stale when the crescendo variant
+  was admitted and this ticket does not discharge it: **the gate run is still owed**, and
+  it is still unblocked.

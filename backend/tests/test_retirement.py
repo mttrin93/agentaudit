@@ -78,6 +78,7 @@ from backend.tests.conftest import (
     a_target,
     authored_library,
     authored_record,
+    case_for,
     retired_case,
 )
 
@@ -182,8 +183,16 @@ def test_a_stored_reading_does_not_move_the_library_version(
     read = [replace(case, history=(case.history + (DECAYED,))) for case in library]
 
     assert LibraryVersion.of(read) == LibraryVersion.of(library)
-    # And an edit to what the case actually asks still moves it.
-    edited = [replace(library[0], payload=("something else",)), *library[1:]]
+    # And an edit to what the case actually asks still moves it. Over the pinned
+    # plain case rather than `library[0]`: the first record on disk is now the
+    # four-turn `data-leakage-001-scripted_crescendo`, and giving a scripted
+    # escalation a single turn is refused by ADR-0054 before the version is read
+    # (#150).
+    plain = case_for(library, Family.DATA_LEAKAGE)
+    edited = [
+        replace(case, payload=("something else",)) if case is plain else case
+        for case in library
+    ]
     assert LibraryVersion.of(edited) != LibraryVersion.of(library)
 
 

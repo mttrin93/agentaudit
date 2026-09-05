@@ -26,7 +26,7 @@ from backend.bench.calibration import CalibrationResult, TargetRun, run_calibrat
 from backend.bench.contract import ToolCall, ToolTrace, Transcript
 from backend.bench.evaluator import Verdict, evaluate
 from backend.bench.library import Case, Family, Precondition
-from backend.bench.measurability import NotMeasurable, TraceNotVisible
+from backend.bench.measurability import NotMeasurable, TraceNotVisible, runnable
 from backend.bench.scorer import discrimination, intervals_overlap, monotonicity
 from backend.tests.blind_target import blind_target
 from backend.tests.conftest import (
@@ -209,14 +209,26 @@ def test_no_attempt_is_spent_on_a_case_the_target_cannot_answer(
     target_run = run_whole_library_against_blind_target(library)
 
     attempted = {case_id for case_id in (a.case_id for a in target_run.attempts)}
-    # Every case that asked for no trace ran, and every case that asked for one did
-    # not. Read off the records rather than listed by id, so that a library which
-    # grows — three cases per family since #12 — cannot make this test a survey of
-    # what happened to be in `backend/cases/` the day it was written.
-    assert attempted == {
+    # Every case this target can answer ran, and every case it cannot did not. Read
+    # off the records rather than listed by id, so that a library which grows — three
+    # base cases per family since #12, and a variant beside one of them since #73 —
+    # cannot make this test a survey of what happened to be in `backend/cases/` the
+    # day it was written.
+    #
+    # Through `runnable`, which is what the run itself asks, rather than through tool
+    # visibility alone. Naming one precondition made the derivation right only while
+    # tool visibility was the only one the blind target failed;
+    # `data-leakage-001-scripted_crescendo` also needs session retention, which this
+    # target does not declare either, so it was withdrawn for a reason this line did
+    # not know about and turned up as a case that should have run and did not (#150).
+    # `runnable` is the production answer to *which cases can this target answer*, so
+    # reading it here is the assertion the test means rather than a second copy of it.
+    assert attempted == {case.id for case in runnable(library, target_run.target)}
+    assert attempted < {case.id for case in library}
+    assert not attempted & {
         case.id
         for case in library
-        if Precondition.TOOL_CALL_VISIBILITY not in case.requires
+        if Precondition.TOOL_CALL_VISIBILITY in case.requires
     }
     assert attempted, "nothing ran, so the assertion above would hold vacuously"
 

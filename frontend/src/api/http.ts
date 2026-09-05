@@ -13,18 +13,12 @@
  * an empty string would be a screen with nothing to tell the operator to do next.
  */
 
-import type { FieldRefusal } from './contracts'
+import type { Refusal } from './contracts'
 
 export const REFUSED_WITHOUT_A_REASON =
   'the bench refused this registration and returned no reason with it. Nothing ' +
   'was sent to the target. Plant the value the bench issues next and register ' +
   'again.'
-
-/** A refusal read whole: the sentence for the page, the fields for the fields. */
-export interface Refusal {
-  statement: string
-  fields: FieldRefusal[]
-}
 
 /**
  * The refusal the bench sent, read once and read both ways.

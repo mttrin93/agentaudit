@@ -35,6 +35,19 @@ export interface FieldRefusal {
 }
 
 /**
+ * A refusal read whole: the sentence for the page, the fields for the fields.
+ *
+ * Both, and never one or the other. A `422` that names a field still has a sentence
+ * about the registration, and a refusal about the registration names no field at
+ * all — so a screen holding these apart is a screen that can show one refusal's
+ * sentence beside the previous one's marks. `fields` is empty and never absent.
+ */
+export interface Refusal {
+  statement: string
+  fields: FieldRefusal[]
+}
+
+/**
  * The three statements, one field each, beside who made them.
  *
  * Three booleans rather than one `i_agree`, because the record has to show *what*

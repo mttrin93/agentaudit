@@ -71,7 +71,7 @@ def test_a_variant_carries_the_transforms_output_and_the_transforms_citation() -
     assert variant.id == f"{base.id}-base64"
     assert variant.derived_from == base.id
     assert variant.transform is Transform.BASE64
-    assert variant.payload == applied(Transform.BASE64, base.payload)
+    assert variant.payload == applied(Transform.BASE64, base.payload, base.family)
     assert variant.citation == CITATIONS[Transform.BASE64]
 
 

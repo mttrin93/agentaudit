@@ -78,11 +78,15 @@ def test_a_single_turn_transform_is_applied_to_every_turn_of_a_script() -> None:
     # A transform says how a payload is spelled, and a script is several payloads:
     # a base64 variant of a four-turn case sends four encoded turns, so the
     # comparison against the base case is turn for turn (ADR-0052 §1, ADR-0053).
-    script = a_scripted_case(turns=3).payload
-    assert applied(Transform.BASE64, script) == tuple(
+    scripted = a_scripted_case(turns=3)
+    script = scripted.payload
+    # The family is the record's own, on `derived_payload`'s terms: the framing a
+    # transform adds is written per family and this one's is base64's, which adds no
+    # words at all (ADR-0074 §3).
+    assert applied(Transform.BASE64, script, scripted.family) == tuple(
         base64_encoded(turn) for turn in script
     )
-    assert applied(Transform.PLAIN, script) == script
+    assert applied(Transform.PLAIN, script, scripted.family) == script
 
 
 def test_the_scripted_crescendo_transform_is_not_reached_through_this_one() -> None:
@@ -91,7 +95,7 @@ def test_the_scripted_crescendo_transform_is_not_reached_through_this_one() -> N
     # its payload, so this entry point still refuses the member and names the one
     # that dispatches it (`transforms.derived_payload`, ADR-0054 §1).
     with pytest.raises(ValueError, match="derived_payload"):
-        applied(Transform.SCRIPTED_CRESCENDO, ("a first turn",))
+        applied(Transform.SCRIPTED_CRESCENDO, ("a first turn",), Family.DATA_LEAKAGE)
 
 
 # --- One attempt is one script in one session --------------------------------

@@ -209,8 +209,32 @@ def disclosure_denial_case(library: list[Case]) -> Case:
     return case_for(library, Family.DISCLOSURE_DENIAL)
 
 
+PINNED = {
+    Family.DATA_LEAKAGE: "data-leakage-001",
+    Family.INDIRECT_PROMPT_INJECTION: "indirect-injection-001",
+    Family.SCOPE_CREEP: "scope-creep-001",
+    Family.HALT_DEFEAT: "halt-defeat-001",
+    Family.WRONGFUL_COMMITMENT: "wrongful-commitment-001",
+    Family.DISCLOSURE_DENIAL: "disclosure-denial-001",
+}
+"""The one record per family the suite is written against, named rather than found.
+
+Local to this helper: `case_for` used to take the family's *first* record, which
+made every test downstream of it a test about what the library happens to hold and
+in what order. Admitting `data-leakage-001-scripted_crescendo` turned 112 tests red
+because that record sorts ahead of its base and is four turns rather than one, so a
+test about transport started counting four sends (#150). Naming the record is what
+makes the answer a property of the test rather than of the directory, and
+`test_suite_library_independence.py` is the tripwire that says so.
+
+A record named here that is retired or renamed fails loudly, which is correct: the
+suite is written against these six and moving one is a decision, not a side effect.
+"""
+
+
 def case_for(library: list[Case], family: Family) -> Case:
-    return next(case for case in library if case.family is family)
+    """The pinned base case of that family — see `PINNED`, never merely the first."""
+    return next(case for case in library if case.id == PINNED[family])
 
 
 def unlisted_case(payload: str | tuple[str, ...], case_id: str) -> Case:

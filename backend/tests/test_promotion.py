@@ -30,7 +30,7 @@ from backend.bench.library import (
     Family,
     bar_for,
 )
-from backend.tests.conftest import a_target, retired_case
+from backend.tests.conftest import a_target, retired_case, some_cases
 
 FIRST_MODEL = "openrouter:openai/gpt-4.1-nano"
 SECOND_MODEL = "openrouter:google/gemini-2.0-flash-001"
@@ -210,16 +210,20 @@ def test_a_cross_model_case_cannot_record_an_admission_on_one_model(
 # --- What the library's provenance says about the drift ----------------------
 
 
-def test_the_adaptive_fraction_of_the_live_library_is_computed(
-    library: list[Case],
-) -> None:
+def test_the_adaptive_fraction_of_the_live_library_is_computed() -> None:
     # ADR-0012 asks for this on every gate run, so that a library filling with
     # routes fitted to these three agents arrives as a series rather than as a
     # surprise. Today it starts from zero, which is a count and not an absence.
-    provenance = library_provenance(library)
+    #
+    # Over a library this test builds rather than the committed one. What is under
+    # test is the census and the sentence it prints, and both are the same whatever
+    # `backend/cases/` holds; reading the real library only bought a literal that
+    # had to be edited whenever a case was written, which #150 is the bill for.
+    built = some_cases(18)
+    provenance = library_provenance(built)
     stated = provenance.stated()
 
-    assert provenance.live_total == len(library)
+    assert provenance.live_total == 18
     assert provenance.adaptive_fraction() == 0.0
     assert "provenance of the live library: authored 18, adaptive 0" in stated
     assert "0.00 adaptive-discovered" in stated

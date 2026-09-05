@@ -521,8 +521,14 @@ def test_the_tiers_cases_load_only_for_a_run_that_asked_for_them() -> None:
             case.id for case in load_elective(CASES_DIR, (other,))
         }
 
+    # Read as "no elective record is in the six" rather than as a count of the six.
+    # What this line is about is `load_library` not recursing into `elective/`, and a
+    # literal here only made a case being written to the mandatory tier a failure in
+    # a test about the elective one (#150). The count of records is pinned once, by
+    # `test_the_library_version_did_not_move`.
     mandatory = load_library(CASES_DIR)
-    assert len(mandatory) == 18
+    assert mandatory
+    assert {case.family for case in mandatory} <= set(Family)
     assert not {case.id for case in mandatory} & {case.id for case in asked}
 
 
@@ -549,9 +555,12 @@ def test_the_six_state_the_boundary_back(library: list[Case]) -> None:
     # leakage" and "data leakage" do not nest, but a record naming only the family it
     # belongs to is exactly the check a bare name would pass, and this is the fourth
     # place on this branch where two family names sit in one sentence.
+    # Over every data-leakage record and not only over three of them: a variant is
+    # printed in the coverage section beside its base and owes the same sentence, so
+    # the loop is the assertion and the literal was only a count of the day (#150).
     leakage = [one for one in library if one.family is Family.DATA_LEAKAGE]
 
-    assert len(leakage) == 3
+    assert len([one for one in leakage if one.derived_from is None]) == 3
     for case in leakage:
         prose = " ".join(case.external_id.not_tested.split())
         assert "elective family PII leakage" in prose, case.id

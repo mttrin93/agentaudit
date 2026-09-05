@@ -120,8 +120,22 @@ def test_the_library_version_did_not_move() -> None:
     # `[[history]]` block in the library still stands; the count is what says no case
     # was written. Recorded in docs/validation.md; the previous value was
     # `81ff91682cfc`.
+    #
+    # And a seventh time, and for the first time because **a case was written**. Every
+    # previous entry above says "the count is what says no case was written"; this one
+    # says the opposite, which is the sentence this tripwire existed to be able to say.
+    # `data-leakage-001-scripted_crescendo` cleared ADR-0003's bar on 2026-09-05 —
+    # `D = 1.00`, disjoint intervals, on `openrouter:openai/gpt-4.1-nano` — and is the
+    # first variant ever admitted (#73). Nineteen records, eighteen base and one
+    # derived. Every `[[history]]` block in the library still stands, because the
+    # readings on the eighteen were made against payloads none of which moved; what
+    # moves is `data_leakage`'s denominator, from `n = 30` to `n = 40`, because the
+    # family now runs four live cases at ten attempts each and the pooled rate carries
+    # a two-entry breakdown rather than a one-entry one (ADR-0055). Recorded in
+    # docs/validation.md; the previous value was `c515a89956cd`.
     cases = load_library(CASES_DIR)
-    assert LibraryVersion.of(cases) == LibraryVersion(cases=18, digest="c515a89956cd")
+    assert LibraryVersion.of(cases) == LibraryVersion(cases=19, digest="3d77e4da8891")
+    assert len([case for case in cases if case.derived_from is not None]) == 1
 
 
 def test_nothing_in_the_bench_can_read_a_retrieval_result() -> None:

@@ -4527,3 +4527,69 @@ committed; the reason is below and is filed as **#150**.
 - **The gate is owed twice over.** ADR-0023's mechanism came due the moment a variant
   cleared its bar, and it cannot be discharged while the suite is red against the library
   that variant belongs in.
+
+### The library holds nineteen records, and the suite no longer counts them (#150, 2026-09-05)
+
+**This section records a debt paid and a digest moved; the measurement it rests on is
+#73's, above, and nothing here re-measures anything.**
+`data-leakage-001-scripted_crescendo` is in `backend/cases/`. The library reads
+**nineteen records at `3d77e4da8891`**, eighteen base and one derived, and
+`data_leakage` reads **`n = 40`** where the other five families stay at 30. The
+section above says the library is still `c515a89956cd` and the record is not in it;
+that was true on the day it was written and this is the entry that ends it.
+
+- **The 112 failures were 94 of debt and 18 of tripwire, and the ratio was the finding.**
+  Restoring the record turned 112 tests red across 37 files. Eighteen of those are one
+  machine's documented mounted-library noise and fail identically on clean `main`; the
+  suite now fails those eighteen and nothing else, which is the same set, so the reading
+  is *no test outside the entitled set changed its answer*. The debt was not ninety
+  edits. **Seventy-three of the 94 came through one helper** — `conftest.case_for` took
+  the family's *first* record, and `data-leakage-001-scripted_crescendo` sorts ahead of
+  its own base (`-` before `.`) and sends four turns rather than one. So a test about
+  transport counted four sends, a test about a namespace on every exit path picked up a
+  case that could not be planted, and twenty-four API tests ran a script where they had
+  written a message. Naming the six records the suite is written against fixed all of
+  them in one edit, and `test_suite_library_independence.py` is the tripwire that was
+  missing — the family fixtures are plain, single-turn and underived whatever the
+  directory holds.
+- **Twenty-one failures were the library counted in a file that is not about the
+  library**, and each is now written as what it means. `LIBRARY_SIZE` in
+  `test_admission.py` reads over the *base* cases, where "three per family" is a claim
+  about layout; `test_entry.py` asserts one more in that family and none anywhere else,
+  against the count it started from; `test_pii_leakage.py` asserts no elective record is
+  in the six rather than that the six are eighteen. **The count of records is the digest
+  tripwire's alone.** Six files had been pinning it a second time, which is what made
+  writing a case a failure in six places that had nothing to say about it.
+- **The κ readings did not move, because the reference population did not.**
+  `test_corpus_assignment.py`'s twenty-seven records are the *base* records. A variant
+  carries its base's `family` across by `derived_from` rather than being judged again, so
+  it is not a twenty-eighth second-reader judgement. Counting it would have moved the
+  perfect-instrument reading from **0.3077 to 0.3280** and the held-out population from
+  21 to 22 — a pinned figure changing because the reference grew and not because the
+  instrument did. The measured κ of **0.0664** and the conclusion `FIT_TO_PROPOSE = False`
+  stand unchanged and are the same figures #64 recorded.
+- **The variant mix prints, for the first time non-vacuously.** ADR-0055's
+  `stated_variants` suppresses the block where a family holds one construction, which was
+  every family until today. `data_leakage` now prints `plain 30/30, scripted_crescendo
+  10/10` per agent beside its rate, and a gate run over the library records **570
+  attempts** rather than 540. `test_variant.py`'s *the library is plain* — which this
+  document called "vacuously true until the first variant lands and non-vacuous the
+  moment one does" — is replaced by the statement that survives admission: a base case is
+  plain and names no origin, a derived one is not plain and names a base that is present,
+  is in its own family, and is not itself derived. That is strictly more than the line it
+  replaces.
+- **Two real faults were behind the noise, and neither was about counting.** A cost
+  estimate multiplied live cases by attempts per case, which is calls only while every
+  record sends one turn; an attempt against a scripted escalation is one call per rung
+  (ADR-0053), so the ceiling an operator agrees to was **663 calls where the test
+  computed 573**. The estimate was right and the test's arithmetic was wrong, in the
+  direction that under-quotes a run. And `watched_agents` in `test_api_gate_runs.py` had
+  hand-written a `TargetConfig` that drifted from `described_agents`, omitting session
+  retention; nothing noticed while every case sent one turn, and with a scripted case in
+  the library a gate run left one record of nineteen with no `D`. **Both were found by
+  admitting a variant and running the suite**, which is how #73 was found too.
+- **What is still owed.** The three remaining variants — `data-leakage-001` under base64,
+  `data-leakage-003` under roleplay, `halt-defeat-001` under scripted crescendo — are
+  still unproposed, and the gate run ADR-0023 makes due is still owed. It is no longer
+  blocked: the suite is green against the library the variant belongs in, which was the
+  condition the section above stated.

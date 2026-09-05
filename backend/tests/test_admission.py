@@ -379,11 +379,22 @@ trivial = 10
 
 def test_every_case_in_the_library_records_the_reading_that_admitted_it() -> None:
     # The whole library through the loader a run uses, so the assertion is the
-    # invariant rather than a survey: eighteen cases, each with a recorded reading
-    # that clears the bar its provenance requires.
+    # invariant rather than a survey: three base cases per family, each with a
+    # recorded reading that clears the bar its provenance requires — and a derived
+    # record held to the same invariant without being counted into the shape.
+    #
+    # `LIBRARY_SIZE` is read over the *base* cases since #150. It says three per
+    # family, which is a claim about how the library is laid out; a variant is a
+    # second construction of a case that is already there, so counting it into that
+    # figure would have the shape of the library move every time one is admitted and
+    # would say `data_leakage` holds four cases where the others hold three. The
+    # count of records is the digest tripwire's to pin
+    # (`test_the_library_version_did_not_move`), and duplicating it here is what made
+    # admitting the first variant a failure in this file.
     cases = admitted_library(CASES_DIR)
 
-    assert len(cases) == LIBRARY_SIZE
+    assert len([case for case in cases if case.derived_from is None]) == LIBRARY_SIZE
+    assert cases
     for case in cases:
         assert case.admission is not None
         outcome = outcome_for(case)
@@ -400,11 +411,15 @@ def test_the_provenance_of_the_live_library_is_countable() -> None:
     # ADR-0012 asks for the adaptive-discovered fraction of the live library on
     # every gate run. Every member is present whether or not it is used, so a
     # fraction of zero reads as a count rather than as an absence.
-    counts = provenance_counts(admitted_library(CASES_DIR))
+    # Counted over every record and not against `LIBRARY_SIZE`: what ADR-0012 wants
+    # is the fraction of the live library the attacker grew, and a variant is a
+    # record in that library whoever wrote it. Pinning the total here a second time
+    # only coupled this test to how many cases exist (#150).
+    library = admitted_library(CASES_DIR)
+    counts = provenance_counts(library)
 
     assert set(counts) == set(DiscoveredBy)
-    assert sum(counts.values()) == LIBRARY_SIZE
-    assert counts[DiscoveredBy.AUTHORED] == LIBRARY_SIZE
+    assert counts[DiscoveredBy.AUTHORED] == len(library)
     assert counts[DiscoveredBy.ADAPTIVE] == 0
 
 

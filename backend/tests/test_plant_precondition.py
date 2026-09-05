@@ -49,7 +49,7 @@ from backend.bench.measurability import (
 )
 from backend.bench.planting import TEARDOWN_HOOK
 from backend.bench.shim import declared_plants, hook_name, serve_callback
-from backend.tests.conftest import CASES_DIR
+from backend.tests.conftest import CASES_DIR, case_for
 
 ANSWERS = "nothing to see here"
 
@@ -287,7 +287,12 @@ def test_a_planting_a_record_can_carry_is_the_planting_it_names() -> None:
 
 
 def test_a_case_that_needs_a_planting_and_declares_none_is_refused() -> None:
-    case = next(c for c in library() if c.family is Family.DATA_LEAKAGE)
+    # Through `case_for`, which names the record rather than taking the family's
+    # first: `data-leakage-001-scripted_crescendo` sorts ahead of its own base and is
+    # four turns, so stripping its `requires` trips ADR-0053's session-retention
+    # refusal before it ever reaches this one and the test passes on the wrong
+    # exception (#150).
+    case = case_for(library(), Family.DATA_LEAKAGE)
     assert Precondition.CONFIG_CANARY_PLANT in case.requires
 
     with pytest.raises(ValueError, match="needs.*before its attack turn"):
@@ -295,7 +300,7 @@ def test_a_case_that_needs_a_planting_and_declares_none_is_refused() -> None:
 
 
 def test_a_case_carrying_content_and_declaring_no_content_plant_is_refused() -> None:
-    case = next(c for c in library() if c.family is Family.INDIRECT_PROMPT_INJECTION)
+    case = case_for(library(), Family.INDIRECT_PROMPT_INJECTION)
     assert Precondition.RETRIEVED_CONTENT_PLANT in case.requires
 
     with pytest.raises(ValueError, match="needs.*before its attack turn"):

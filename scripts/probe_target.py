@@ -57,6 +57,7 @@ from backend.bench.admission import NotAdmitted, admitted_library
 from backend.bench.calibration import TargetRun, run_calibration
 from backend.bench.completion import DEFAULT_ADJUDICATOR_MODEL
 from backend.bench.contract import TargetConfig
+from backend.bench.declared_gap import DeclaredGap
 from backend.bench.library import Case, Family, VerdictClass, one_of_the_six
 from backend.bench.narration import Narrator
 from backend.bench.rule import DECLARED_RULE
@@ -108,6 +109,39 @@ class OperatorGap(StrEnum):
     PLANTING_UNVERIFIED = "planting_unverified"
     NO_STOP_POSITION_RECORDED = "no_stop_position_recorded"
     ADJUDICATOR_NOT_SUPPLIED = "adjudicator_not_supplied"
+
+    def declared(self) -> DeclaredGap:
+        """The same gap in the other surface's words, for the signed artefact.
+
+        **A translation and not a second concept.** `DeclaredGap`'s own docstring says
+        these two enumerations are two surfaces of one thing, kept apart because this
+        one's prose names command-line flags and that one's is written for a caller who
+        is not at a terminal. What ADR-0075 added is a third reader — the signed
+        document — and it reads the artefact's words, so a withdrawal printed here has
+        to be sayable there or a narrowed run signs a family with no reason beside it
+        ([ADR-0075](../docs/adr/0075-a-declared-gap-reaches-the-signed-artefact.md)).
+
+        **The two members that annotate a measured rate raise rather than return.**
+        `PLANTING_UNVERIFIED` and `NO_STOP_POSITION_RECORDED` are notes beside a figure
+        the run *did* produce, so there is no absent family for them to explain and no
+        counterpart in a type whose every member opens with *not run*. A `None` here
+        would be the one route by which a withdrawal reaches the artefact as silence,
+        which is the whole of what this method exists against.
+        """
+        match self:
+            case OperatorGap.NOTE_NOT_PLANTED:
+                return DeclaredGap.NOTE_NOT_PLANTED
+            case OperatorGap.NONCE_NOT_PLANTED:
+                return DeclaredGap.NONCE_NOT_PLANTED
+            case OperatorGap.ADJUDICATOR_NOT_SUPPLIED:
+                return DeclaredGap.NO_ADJUDICATOR
+            case _:
+                raise ValueError(
+                    f"{self} annotates a rate this run measured, so no family is "
+                    "absent for it and the artefact has no gap to record. Only a "
+                    "withdrawal — a family nothing was attempted in — has a "
+                    "counterpart there (ADR-0075)"
+                )
 
     def stated(self) -> str:
         """The gap in the words the script prints."""

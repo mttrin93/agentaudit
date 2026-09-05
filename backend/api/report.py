@@ -47,6 +47,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import (
 
 from backend.bench.assembler import assemble, reported_episodes
 from backend.bench.calibration import CalibrationResult
+from backend.bench.declared_gap import DeclaredGap
 from backend.bench.fix_standing import FixStanding
 from backend.bench.library import Case, Family
 from backend.bench.payload import (
@@ -225,6 +226,7 @@ def payload_for(
     rule: GateRule,
     config: ReportConfig,
     selection: AttackSelection,
+    gaps: Mapping[Family, DeclaredGap],
 ) -> TargetPayload:
     """The unsigned, unbound payload for one completed run.
 
@@ -233,6 +235,14 @@ def payload_for(
     structural form of *no composite score* (ADR-0005). The provenance block is the
     only place the two meet, and not one of its fields is a measurement of the
     target.
+
+    `gaps` are the families this run's caller declared away — `RunPlan.gaps`, which
+    is the one thing about a run's shape that is not on its result. **Required and
+    not defaulted**, on `DeclaredModels.narrative`'s terms: an entry point added
+    later has to state its answer rather than inherit one, and what a default would
+    say is *this run narrowed nothing*, which was silently false for the whole of
+    `scripts/bench.py`'s existence and is the hole ADR-0075 closes. An empty mapping
+    is the statement that nothing was narrowed, and it is said out loud.
     """
     [target_run] = result.target_runs
     state = result.run_state
@@ -257,6 +267,10 @@ def payload_for(
             # anything. Empty on this route, always: the bench cannot restart
             # somebody else's server (ADR-0073 §2).
             standings=config.standings,
+            # The plan's own gaps, passed through and not re-derived: this function
+            # reads no figure out of one section and into another, and a narrowing
+            # recomputed here would be a second answer to which families ran.
+            not_run=gaps,
         ),
         provenance=Provenance(
             # Read off the record that authorised the run rather than off the
@@ -338,6 +352,7 @@ def artefact_for(
     rule: GateRule,
     config: ReportConfig,
     selection: AttackSelection,
+    gaps: Mapping[Family, DeclaredGap],
 ) -> SignedArtefact | Unsigned:
     """The signed artefact for one completed run, or the reason there is none.
 
@@ -347,7 +362,7 @@ def artefact_for(
     key = config.signing_key
     if key is None:
         return Unsigned()
-    return signed(payload_for(result, cases, rule, config, selection), key)
+    return signed(payload_for(result, cases, rule, config, selection, gaps), key)
 
 
 VERIFY_SCRIPT = "uv run python -m scripts.verify"

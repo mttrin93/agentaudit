@@ -59,27 +59,30 @@ import argparse
 import importlib
 import os
 import sys
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from contextlib import ExitStack
+from dataclasses import replace
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
 from dotenv import load_dotenv
 
 from backend.api.report import ReportConfig, payload_for
+from backend.api.run_config import BenchConfig, plan_for
 from backend.bench.adjudication import Completion
 from backend.bench.admission import NotAdmitted, admitted_library
 from backend.bench.calibration import TargetRun, run_calibration
 from backend.bench.cited import the_citation, the_reliability
 from backend.bench.completion import DEFAULT_ADJUDICATOR_MODEL
 from backend.bench.contract import TargetConfig
+from backend.bench.declared_gap import DeclaredGap
 from backend.bench.evaluator import Verdict
 from backend.bench.fix_standing import FixStanding
 from backend.bench.library import AnyFamily, Case, Family, Plant, Precondition
 from backend.bench.narration import Narrator
 from backend.bench.payload import DeclaredModels
 from backend.bench.proving import prove_patch, standing_for
-from backend.bench.rule import DECLARED_RULE
+from backend.bench.rule import DECLARED_RULE, GateRule
 from backend.bench.selection import EVERY_CONSTRUCTION
 from backend.bench.shim import serve_callback
 from backend.bench.signing import NoSigningKey, publish_signed, signing_key
@@ -191,6 +194,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         call_price = price(args.price_per_call, args.currency)
         ceiling = _declared_ceiling(args, call_price)
+        # Beside the ceiling because they are the same kind of statement — what this
+        # workflow declared about the run — and resolved here so that a mistyped
+        # family name or a denominator of zero costs nothing: both are refused
+        # before the attestation is read and before anything is sent (ADR-0075).
+        covered = declared_families(args.families)
+        rule = declared_rule(args.attempts_per_case)
     except (InvalidOperation, ValueError) as bad:
         print(f"The declared inputs do not describe a run: {bad}")
         return EXIT_WITHHELD
@@ -282,6 +291,36 @@ def main(argv: Sequence[str] | None = None) -> int:
         # copies of it would be two libraries called by one flag's name.
         cases, gaps = deterministic_subset(cases)
 
+    # The family switch, through the one function that is the authority on which of
+    # the library's cases a run may attempt and why the rest are out — the same
+    # `plan_for` `POST /runs` estimates against, so a family switched off in a
+    # workflow reads exactly as one switched off in the console (ADR-0066 §6).
+    #
+    # Here rather than inside the `with` below, because it needs no target: the two
+    # questions that do — whether anything was planted — are answered against the
+    # target a few lines further on, and are passed to `plan_for` as already
+    # answered. Answering them twice would record a plant gap this entrypoint had
+    # already recorded, in the words of the wrong surface, and against a family
+    # name rather than against the `Case.requires` this bench reads (ADR-0061).
+    plan = plan_for(
+        BenchConfig(cases=cases, rule=rule, adjudicator=adjudicator, families=covered),
+        note_planted=True,
+        nonce_planted=True,
+    )
+    cases = list(plan.cases)
+    for switched_off, reason in plan.gaps.items():
+        print(f"{switched_off}: {reason.stated()}")
+    if not cases:
+        # Nothing to attempt is not a narrower run. A suite with no case in it would
+        # sign a document whose figures are none and whose every family is absent —
+        # a report about nothing, under a signature.
+        print(
+            "This run has no case to send: every family the library holds was "
+            "switched off, or has nothing left in it. A narrower run is a run; an "
+            "empty one is a signed document about nothing."
+        )
+        return EXIT_WITHHELD
+
     withdrawn: dict[AnyFamily, OperatorGap] = {}
 
     with ExitStack() as serving:
@@ -341,8 +380,9 @@ def main(argv: Sequence[str] | None = None) -> int:
                 adjudicator=adjudicator,
                 narrator=narrator,
                 usage=ledger,
+                rule=rule,
                 budget=RunBudget.declare(
-                    cases=cases, targets=[target], price=call_price
+                    cases=cases, targets=[target], rule=rule, price=call_price
                 ),
                 planters={} if planter is None else {target.name: planter},
                 planted_nonces=(
@@ -389,7 +429,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         payload_for(
             result,
             cases,
-            DECLARED_RULE,
+            # The rule this run was measured under, which is the declared one unless
+            # `--attempts-per-case` moved the denominator — and then the artefact
+            # carries `rule.NOT_A_GATE_RESULT` beside the number rather than leaving
+            # the departure in the workflow that asked for it (ADR-0025, ADR-0027).
+            rule,
             ReportConfig(
                 signing_key=key,
                 models=DeclaredModels(
@@ -420,6 +464,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 standings=standings,
             ),
             EVERY_CONSTRUCTION,
+            _declared_gaps(gaps, plan.gaps),
         ),
         Path(args.out),
         key,
@@ -455,6 +500,90 @@ def main(argv: Sequence[str] | None = None) -> int:
         f"Check them with `uv run python -m scripts.verify {args.out}`."
     )
     return EXIT_NOT_REGISTERED if target_run.registration.refused else 0
+
+
+def declared_families(named: Sequence[str] | None) -> frozenset[Family]:
+    """The families this workflow asked for, or all six where it named none.
+
+    **Refused rather than repaired, and refused before anything is sent.** A name
+    this bench does not hold is a workflow input somebody mistyped, and the
+    alternative to a refusal is a run that covers five families and signs a document
+    saying the caller switched the sixth off — a narrowing nobody chose, attributed
+    to them. The six are named back, because a caller reading *not a family* with no
+    list beside it has to go and find one (`GateRule` is not the place it is written
+    down; `Family` is).
+
+    `None` and the empty list are the same declaration — *nothing was narrowed* — and
+    it is the whole of the six rather than nothing: an absent input is not a request
+    for an empty suite, and a workflow that means the empty suite is refused below.
+    """
+    if not named:
+        return frozenset(Family)
+    held = {family.value: family for family in Family}
+    unknown = sorted(one for one in named if one not in held)
+    if unknown:
+        raise ValueError(
+            f"{', '.join(repr(one) for one in unknown)} is not a family this bench "
+            f"holds. The six are {', '.join(held)} — a name that is not one of them "
+            "is refused rather than dropped, because a run that quietly covered "
+            "fewer families would report the rest as switched off by a caller who "
+            "did not switch them off (ADR-0075)"
+        )
+    return frozenset(held[one] for one in named)
+
+
+def _declared_gaps(
+    withdrawn: dict[Family, OperatorGap], planned: Mapping[Family, DeclaredGap]
+) -> dict[Family, DeclaredGap]:
+    """Every family this run did not attempt, in the words the artefact is written in.
+
+    Two sources because this entrypoint narrows in two places and neither may be
+    dropped: what it withdrew itself — the judged families of a run with no
+    instrument, the plant-dependent families nothing was planted for, in
+    `OperatorGap`'s terminal words — and what `plan_for` recorded, which is already a
+    `DeclaredGap`. `OperatorGap.declared` is the translation and the argument for it
+    ([ADR-0075](../docs/adr/0075-a-declared-gap-reaches-the-signed-artefact.md)).
+
+    **The earlier reason wins, and that is what the argument order says.** A family
+    withdrawn for want of a plant is gone from `cases` before `plan_for` sees it, so
+    the plan records nothing for it and there is nothing to lose; a family that is
+    both switched off and unplanted keeps the reason this run acted on first. Two
+    reasons for one absence would be a reader choosing.
+    """
+    stated = {family: gap.declared() for family, gap in withdrawn.items()}
+    return {**dict(planned), **stated}
+
+
+def declared_rule(attempts_per_case: int | None) -> GateRule:
+    """The rule this run is measured under: the declared one, or a cheaper denominator.
+
+    **The one number of `GateRule` a caller may set** (ADR-0025), and the second
+    declared input of this entrypoint that moves a scored denominator — the first is
+    `--families` above. Everything else in the record stays the declared rule, which
+    is what lets `scripts/verify.py` assert the rest against `DECLARED_RULE` and read
+    this one (ADR-0027).
+
+    **No upper bound is checked here, and the ceiling is the reason.** The console
+    offers the setting on a screen and bounds it to what that screen can show
+    (`app.ATTEMPTS_RANGE`); a workflow has no screen, and a number large enough to
+    matter is a number the estimate will price and the declared ceiling will decline
+    before the first send. A second range in this file would be a bound nobody
+    declared, checked against a run that already has one.
+
+    What a run below ten costs is stated in the artefact rather than here:
+    `rule.denominator_stated` writes the caveat and `rule.NOT_A_GATE_RESULT` is the
+    sentence, so the departure travels with the document instead of staying in the
+    workflow that asked for it.
+    """
+    if attempts_per_case is None:
+        return DECLARED_RULE
+    if attempts_per_case < 1:
+        raise ValueError(
+            f"--attempts-per-case={attempts_per_case} is not a denominator. A case "
+            "attempted no times is a case that was not sent, and a family measured "
+            "over nothing is an absence rather than a rate (ADR-0003)"
+        )
+    return replace(DECLARED_RULE, attempts_per_case=attempts_per_case)
 
 
 def withdrawn_for_want_of_a_plant(
@@ -861,6 +990,33 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--currency", default="USD")
     parser.add_argument("--adjudicator-model", default=None)
     parser.add_argument("--deterministic-only", action="store_true")
+    parser.add_argument(
+        "--families",
+        nargs="+",
+        default=None,
+        metavar="FAMILY",
+        help=(
+            "the families this run covers, by name, space-separated. All six "
+            "without it. A cheaper run and a narrower reading, and both are the "
+            "caller's to choose — a family switched off is reported as **not run** "
+            "in the signed artefact rather than measured at zero, so a reader of "
+            "the document can tell a family that was not asked from one that held "
+            "(ADR-0058, ADR-0075). A name this bench does not hold is refused "
+            "before anything is sent"
+        ),
+    )
+    parser.add_argument(
+        "--attempts-per-case",
+        type=int,
+        default=None,
+        help=(
+            "how many times each case is attempted. Ten without it, which is the "
+            "declared denominator of ADR-0003 and the only number a report may be "
+            "compared at; a run below it is a real run and **not a gate result**, "
+            "and the artefact says so beside the figures rather than leaving it to "
+            "this flag's reader (ADR-0025, ADR-0027)"
+        ),
+    )
     parser.add_argument(
         "--note-planted",
         action="store_true",

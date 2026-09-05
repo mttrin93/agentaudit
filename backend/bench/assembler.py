@@ -1671,6 +1671,7 @@ def assemble(
     elective: ElectiveSelection = NOTHING_REQUESTED,
     source_anchor: SourceAnchor = NOT_RUN_WHERE_THE_CODE_IS,
     standings: Mapping[str, FixStanding] | None = None,
+    not_run: Mapping[Family, DeclaredGap] | None = None,
 ) -> TargetResult:
     """Assemble one target's result from what was recorded against it.
 
@@ -1694,6 +1695,14 @@ def assemble(
     `elective` is the tier's declared selection, carried onto the result and read by
     nothing here: no section below is built from it, because what a report may say
     about an elective family is which ones it was not asked for (ADR-0035).
+
+    `not_run` is what this run's caller declared away — the plan's own gaps, keyed on
+    the six. It is an argument rather than something read off `target_run` because
+    there is nothing on a run to read it off: a family whose cases were dropped
+    before the first send made no attempt, so the record it would be derived from is
+    the run's *plan* and not its result
+    ([ADR-0075](../../docs/adr/0075-a-declared-gap-reaches-the-signed-artefact.md)).
+    Empty for a run that narrowed nothing.
     """
     scanned = scan(target_run.target)
     return TargetResult(
@@ -1721,6 +1730,11 @@ def assemble(
                 reliability or {},
             ),
             not_measurable=dict(target_run.not_measurable),
+            # The caller's own narrowings, which are the one absence this function
+            # cannot derive: a family whose cases were dropped before the run left
+            # no attempt, no rate and no precondition behind it, so it arrives as an
+            # argument or it does not arrive at all (ADR-0075).
+            not_run=dict(not_run or {}),
             cuts=cuts,
         ),
         declared=DeclaredSection(

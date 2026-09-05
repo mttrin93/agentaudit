@@ -106,7 +106,7 @@ def _calibrate(
 
 def _planting_block(result: CalibrationResult, cases: list[Case]) -> dict[str, object]:
     payload = payload_for(
-        result, cases, DECLARED_RULE, ReportConfig(), EVERY_CONSTRUCTION
+        result, cases, DECLARED_RULE, ReportConfig(), EVERY_CONSTRUCTION, {}
     )
     block: dict[str, object] = document(payload)["provenance"]["planting"]
     return block

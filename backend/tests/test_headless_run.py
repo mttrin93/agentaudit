@@ -525,6 +525,170 @@ def test_a_url_target_nobody_planted_for_has_those_families_withdrawn_not_scored
     assert "failure rate, data_leakage" not in printed
     assert (published / "report.json").is_file()
 
+    # And the two withdrawals reach the *document*, not only the log: an unplanted
+    # family absent from a signed report with no reason beside it is the reading
+    # ADR-0075 closes, and these two are the withdrawals this entrypoint makes
+    # itself rather than the ones `plan_for` records.
+    measured = json.loads((published / "report.json").read_text())["measured"]
+    declared_away = {one["family"]: one["reason"] for one in measured["not_run"]}
+    assert declared_away["data_leakage"] == "nonce_not_planted"
+    assert declared_away["indirect_prompt_injection"] == "note_not_planted"
+
+
+def test_a_family_this_workflow_declared_away_is_named_in_the_signed_report(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The hole ADR-0066 §6 left open, closed at the entrypoint that leaves it.
+
+    Two narrowings in one run — a family this workflow switched off, and the two
+    judged families a `--deterministic-only` run has no instrument for — and both of
+    them reach the *signed* document with the reason beside them. Before this the
+    artefact of a narrowed headless run had no line at all for either, which is the
+    one reading a family's absence may not have (ADR-0004, ADR-0075).
+    """
+    monkeypatch.setenv(SIGNING_KEY_VARIABLE, encoded_private(generate()))
+    monkeypatch.setattr(headless_agent, "AGENT", RecordingAgent())
+    published = tmp_path / "artefact"
+    reference = "backend.tests.headless_agent:AGENT"
+
+    code = bench.main(
+        [
+            f"--identity={ACTOR}",
+            f"--attestation-file={attestation_file(tmp_path, reference)}",
+            f"--out={published}",
+            "--deterministic-only",
+            "--max-calls=100000",
+            "--attempts-per-case=1",
+            f"--callback={reference}",
+            "--families",
+            *(family.value for family in Family if family is not Family.SCOPE_CREEP),
+        ]
+    )
+
+    assert code == 0
+    measured = json.loads((published / "report.json").read_text())["measured"]
+    declared_away = {one["family"]: one for one in measured["not_run"]}
+
+    assert declared_away["scope_creep"]["reason"] == "family_switched_off"
+    assert declared_away["wrongful_commitment"]["reason"] == "no_adjudicator"
+    assert declared_away["disclosure_denial"]["reason"] == "no_adjudicator"
+    for one in declared_away.values():
+        assert one["stated"].startswith("not run")
+    # And no figure anywhere reads any of them: the three are absent from both lists.
+    measured_families = {
+        one["family"] for one in (*measured["deterministic"], *measured["judged"])
+    }
+    assert not measured_families & set(declared_away)
+    # And the page a human reads carries the same three, under the block's heading.
+    rendering = (published / "report.md").read_text(encoding="utf-8")
+    assert "### Families this run did not attempt" in rendering
+    for one in declared_away.values():
+        assert one["stated"] in rendering
+
+
+def test_a_family_name_this_bench_does_not_hold_is_refused_before_anything_is_sent(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A typo in a workflow input is caught while it has cost nothing.
+
+    The alternative is a run that covers five families because one was misspelled,
+    and reports the sixth as switched off — a narrowing nobody chose, in a signed
+    document that says the caller chose it.
+    """
+    monkeypatch.setenv(SIGNING_KEY_VARIABLE, encoded_private(generate()))
+    code = bench.main(
+        [
+            f"--identity={ACTOR}",
+            f"--attestation-file={attestation_file(tmp_path, ENDPOINT)}",
+            f"--out={tmp_path / 'artefact'}",
+            f"--url={ENDPOINT}",
+            "--token=t",
+            "--max-calls=100000",
+            "--families",
+            "scope_crep",
+        ]
+    )
+
+    printed = capsys.readouterr().out
+    assert code == EXIT_WITHHELD
+    assert "scope_crep" in printed
+    assert "scope_creep" in printed, "the six are named back"
+    assert not (tmp_path / "artefact").exists()
+
+
+def test_a_run_with_every_family_switched_off_is_not_a_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Nothing to attempt is not a narrower run, and it is refused before sending.
+
+    A suite with no case in it would sign a document whose every family is absent
+    and whose figures are none — a report about nothing, under a signature.
+    """
+    monkeypatch.setenv(SIGNING_KEY_VARIABLE, encoded_private(generate()))
+    code = bench.main(
+        [
+            f"--identity={ACTOR}",
+            f"--attestation-file={attestation_file(tmp_path, ENDPOINT)}",
+            f"--out={tmp_path / 'artefact'}",
+            f"--url={ENDPOINT}",
+            "--token=t",
+            "--max-calls=100000",
+            "--deterministic-only",
+            "--families",
+            Family.WRONGFUL_COMMITMENT.value,
+        ]
+    )
+
+    printed = capsys.readouterr().out
+    assert code == EXIT_WITHHELD
+    assert "no case" in printed
+    assert not (tmp_path / "artefact").exists()
+
+
+def test_a_headless_run_below_the_declared_denominator_says_it_is_not_a_gate_result(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The one number of the rule a caller may set, and the caveat that travels with it.
+
+    ADR-0025 puts `attempts_per_case` in a class of its own — it moves the scored
+    denominator — and `rule.denominator_stated` already writes the sentence a report
+    measured below the declared ten has to carry. What this asserts is that the
+    entrypoint's flag reaches the run *and* the document: the attempts made are the
+    declared number, and the artefact says the run is not comparable to one taken at
+    the declared rule (ADR-0027).
+    """
+    key = generate()
+    monkeypatch.setenv(SIGNING_KEY_VARIABLE, encoded_private(key))
+    monkeypatch.setattr(headless_agent, "AGENT", RecordingAgent())
+    published = tmp_path / "artefact"
+    reference = "backend.tests.headless_agent:AGENT"
+
+    code = bench.main(
+        [
+            f"--identity={ACTOR}",
+            f"--attestation-file={attestation_file(tmp_path, reference)}",
+            f"--out={published}",
+            "--deterministic-only",
+            "--max-calls=100000",
+            "--attempts-per-case=2",
+            f"--callback={reference}",
+        ]
+    )
+
+    assert code == 0
+    body = json.loads((published / "report.json").read_text())
+    assert body["provenance"]["rule"]["attempts_per_case"] == 2
+    assert (
+        "not a gate result"
+        in body["provenance"]["rule"]["attempts_per_case_stated"].lower()
+    )
+    for entry in body["measured"]["deterministic"]:
+        assert entry["attempts"] % 2 == 0
+        assert entry["attempts"] < 10, "no family was measured at the declared ten"
+    pubkey = tmp_path / "signing.pub"
+    pubkey.write_bytes(public_pem(key.public_key()))
+    assert verify.main([str(published), "--pubkey", str(pubkey)]) == 0
+
 
 def test_a_run_declined_at_the_ceiling_records_no_attempt_at_all() -> None:
     """The count, which is what #88 asks this test to assert.

@@ -1,13 +1,16 @@
 /**
  * The browser specs: what starts, in what order, and why they are not retried.
  *
- * Two servers and two specs, and only the first of them is a walkthrough.
+ * Two servers and three specs, and only the first of them is a walkthrough.
  * `walkthrough.spec.ts` drives a real run end to end; `failures.spec.ts` is a render
  * assertion over a served artefact, and it exists because the walkthrough cannot reach
  * the reading it covers — that bench declares no models, so its document says no
  * narrative instrument was declared, and the section with blocks in it needs a document
- * two models wrote. Neither spec starts a run the other could see, and the second
- * intercepts the two routes it reads rather than asking the bench for anything.
+ * two models wrote. `keyboard.spec.ts` is the register form's own surface — Enter, a
+ * dead button's reasons, and a `422` reaching the field it names — and it starts no
+ * run at all: its registration is intercepted before it leaves the browser. No spec
+ * starts a run another could see, and the two after the walkthrough intercept the
+ * routes they read rather than asking the bench for anything.
  *
  * `harness.py` serves the bench's own API and one set of
  * reference agents on a stub model, in an environment with no trace sink and no model

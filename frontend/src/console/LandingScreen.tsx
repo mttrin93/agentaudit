@@ -350,6 +350,12 @@ export function LandingScreen() {
         `indirect prompt injection` on four screens before anything says what one is.
         Six sentences, no figure in any of them, and the names read as words.
       */}
+      {/* No form on this screen or the one below it, and that is the decision rather
+          than the omission (#120). Every input here is a tick that writes on change:
+          there is no text field for implicit submission to serve, and nothing is
+          waiting to be sent, so a form would add a submit that submits what is
+          already stored. The screens that got one are the ones with a field to
+          finish — `RegisterScreen`, `SettingsScreen`, `GateAttestation`. */}
       <section>
         <h2>The families</h2>
         {refused ? (

@@ -73,6 +73,7 @@ def completed(
     pinned: Ed25519PublicKey | None = None,
     gate: GateCitation | None = None,
     reliability: Mapping[Family, Reliability] | None = None,
+    families: frozenset[Family] = frozenset(Family),
 ) -> Iterator[Served]:
     """One run taken through the API to completion, against a served reference agent.
 
@@ -90,6 +91,10 @@ def completed(
     adjudicator and a judged family's rate is withheld rather than published, which
     is the state every deterministic-only test here runs in.
 
+    `families` is what this bench was asked to cover. Left out, all six — and a run
+    that covers fewer signs an artefact naming the ones it did not attempt, which is
+    what `not_run` is for (ADR-0075).
+
     `gate` is the citation this bench carries into the provenance of what it signs.
     Left out, the bench cites no gate run, which is the state a report states rather
     than omits — and `test_api_gate.py` hands one in so that the route serving the
@@ -106,6 +111,7 @@ def completed(
                 gate=gate,
                 reliability=reliability or {},
             ),
+            families=families,
         )
     )
     bench = cast(BenchRuns, app.state.bench)
@@ -604,6 +610,44 @@ def _keys(node: Any) -> Iterator[str]:
     elif isinstance(node, list):
         for value in node:
             yield from _keys(value)
+
+
+def test_a_family_this_bench_was_not_asked_for_is_named_in_what_it_signs(
+    leakage_case: Case, scope_creep_case: Case
+) -> None:
+    """The reading `BenchConfig.families` exists to make unavailable, under a signature.
+
+    `POST /runs` has recorded `DeclaredGap.FAMILY_SWITCHED_OFF` since ADR-0058 and
+    served it on the run's own response; what it did not do was put it in the
+    document that travels, so the artefact of a narrowed run had no line at all for
+    the family — absent with no reason beside it, which is the one reading a family's
+    absence may not have (ADR-0004, ADR-0075).
+    """
+    with completed(
+        [leakage_case, scope_creep_case],
+        generate(),
+        families=frozenset(Family) - {Family.SCOPE_CREEP},
+    ) as served:
+        measured = served.fetch().json()["measured"]
+
+    assert [one["family"] for one in measured["deterministic"]] == ["data_leakage"]
+    declared_away = {one["family"]: one for one in measured["not_run"]}
+    assert declared_away["scope_creep"]["reason"] == "family_switched_off"
+    assert declared_away["scope_creep"]["stated"].startswith("not run")
+
+
+def test_a_run_that_narrowed_nothing_signs_an_empty_fourth_absence(
+    leakage_case: Case,
+) -> None:
+    """The block is present and empty rather than absent, in the payload as on the page.
+
+    A key that appeared only on narrowed runs would make *this run asked for
+    everything* and *this artefact predates the block* the same bytes to a reader.
+    """
+    with completed([leakage_case], generate()) as served:
+        measured = served.fetch().json()["measured"]
+
+    assert measured["not_run"] == []
 
 
 # --- a judged family, and the κ that decides whether its rate is published -------

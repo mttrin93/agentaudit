@@ -396,17 +396,20 @@ def _family_outcome(
 
 
 _NO_REASON = (
-    "and the artefact carries no reason beside it, which is a family whose cases "
-    "were dropped before the run: a narrowed run does not yet record its declared "
-    "gaps in the payload (#138, ADR-0066 §6), so what it was is in the run's log and "
-    "not in the document. Switch it off in the bar with the reason, or run it"
+    "and the artefact names it in none of its four absences, so this bar has no "
+    "reason to quote and does not invent one. Every narrowing a run makes is "
+    "recorded — a family switched off, a construction switched off, an instrument "
+    "nobody configured, an artefact nobody planted — so a family missing from all "
+    "of them came from a producer this bar cannot account for (ADR-0075). Switch it "
+    "off in the bar with the reason, or run it"
 )
 """What the bar says about a family that is absent from the artefact entirely.
 
-The third way a family goes unmeasured, and the only one whose sentence this module
-has to supply: `not_measurable` and `withheld` both carry their own words, and a
-family dropped before the run is not in the payload at all — so there is nothing to
-quote and the honest line says so, names where the reason went, and does not guess.
+The one absence whose sentence this module has to supply, and since ADR-0075 it is
+also the one this bench does not produce: `not_measurable`, `withheld` and `not_run`
+all carry their own words, and a family in none of them is an artefact whose
+narrowings were not recorded. There is nothing to quote, so the honest line says so
+and does not guess.
 """
 
 
@@ -437,14 +440,20 @@ def _bands(document: Mapping[str, Any]) -> Mapping[Family, Band]:
 def _absences(document: Mapping[str, Any]) -> Mapping[Family, str]:
     """Every family this run says it did not measure, with the sentence it says it in.
 
-    The two kinds the artefact carries: a family the target could not answer, and a
-    judged family whose instrument was measured and found wanting. Both print their
-    own `stated`, which is the field every kind of nothing in this payload has for
-    exactly this reader.
+    The three kinds the artefact carries: a family the target could not answer, a
+    judged family whose instrument was measured and found wanting, and — since
+    [ADR-0075](../../docs/adr/0075-a-declared-gap-reaches-the-signed-artefact.md) —
+    a family this run's caller declared away before anything was sent. All three
+    print their own `stated`, which is the field every kind of nothing in this
+    payload has for exactly this reader.
+
+    What is left for `_NO_REASON` after the third arrived is an artefact that names a
+    family in none of the four lists, which is a producer this bar cannot account
+    for rather than a narrowing it cannot read.
     """
     measured = _section(document)
     absent: dict[Family, str] = {}
-    for key in ("not_measurable", "withheld"):
+    for key in ("not_measurable", "withheld", "not_run"):
         for entry in _entries(measured, key):
             family = _named(entry)
             stated = entry.get("stated")

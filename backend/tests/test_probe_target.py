@@ -18,6 +18,7 @@ from dataclasses import replace
 import pytest
 
 from backend.bench.contract import Transcript
+from backend.bench.declared_gap import DeclaredGap
 from backend.bench.evaluator import Verdict
 from backend.bench.library import Case, Family, Transform, VerdictClass
 from backend.graph.runstate import Attempt
@@ -270,3 +271,44 @@ def test_the_two_flags_contradict_each_other_rather_than_one_winning(
 
     assert exit_code == EXIT_WITHHELD
     assert "contradict each other" in capsys.readouterr().out
+
+
+def test_every_withdrawal_a_probe_prints_is_sayable_in_the_artefacts_own_words() -> (
+    None
+):
+    """The three that withdraw a family have a `DeclaredGap` counterpart, by name.
+
+    Two enumerations, one concept, and a third reader since ADR-0075 — the signed
+    document, which is written in `DeclaredGap`'s words. A withdrawal with no
+    counterpart there is a family that reaches the artefact as silence, so the pairing
+    is asserted rather than left to whoever next adds a member.
+    """
+    assert OperatorGap.NOTE_NOT_PLANTED.declared() is DeclaredGap.NOTE_NOT_PLANTED
+    assert OperatorGap.NONCE_NOT_PLANTED.declared() is DeclaredGap.NONCE_NOT_PLANTED
+    assert OperatorGap.ADJUDICATOR_NOT_SUPPLIED.declared() is DeclaredGap.NO_ADJUDICATOR
+    for gap in (
+        OperatorGap.NOTE_NOT_PLANTED,
+        OperatorGap.NONCE_NOT_PLANTED,
+        OperatorGap.ADJUDICATOR_NOT_SUPPLIED,
+    ):
+        assert gap.declared().stated().startswith("not run")
+
+
+@pytest.mark.parametrize(
+    "annotation",
+    [OperatorGap.PLANTING_UNVERIFIED, OperatorGap.NO_STOP_POSITION_RECORDED],
+)
+def test_a_gap_that_annotates_a_measured_rate_has_no_counterpart_in_the_artefact(
+    annotation: OperatorGap,
+) -> None:
+    """The two that are notes beside a figure, and they raise rather than return one.
+
+    These annotate a rate the run *did* produce, so no family is absent for them and
+    there is nothing for a *not run* sentence to be about. Raising rather than
+    answering `None` is the point: a `None` is the one route by which a withdrawal
+    could reach a signed document as silence.
+    """
+    with pytest.raises(ValueError) as refused:
+        annotation.declared()
+
+    assert "annotates a rate this run measured" in str(refused.value)

@@ -154,6 +154,29 @@ inputs:
     required: false
     default: USD
 
+  # --- what it covers, and at what denominator ------------------------------------
+  families:
+    description: >-
+      The families this run covers, by name, space-separated — `scope_creep
+      data_leakage halt_defeat`, and so on. All six by default. A cheaper run and a
+      narrower reading, and both are yours to choose: a family switched off is
+      reported in the signed artefact as **not run**, with the reason beside it,
+      rather than measured at zero — so a reader of the report can tell a family
+      that was not asked from one that held (ADR-0058, ADR-0075). A name the bench
+      does not hold is refused before anything is sent.
+    required: false
+    default: ""
+  attempts-per-case:
+    description: >-
+      How many times each case is attempted. Ten by default, which is ADR-0003's
+      declared denominator and the only number two reports may be compared at. A run
+      below it is a real run and **not a gate result** — the artefact says so beside
+      every figure, in its own words, rather than leaving the departure in this file
+      (ADR-0025, ADR-0027). Lower it to spend less on a first look; leave it alone
+      for a number anybody can compare.
+    required: false
+    default: ""
+
   # --- the instruments, which run on your key -------------------------------------
   adjudicator-model:
     description: >-
@@ -326,6 +349,8 @@ runs:
         EXPOSES_TOOL_CALLS: ${{ inputs.exposes-tool-calls }}
         NOTE_PLANTED: ${{ inputs.note-planted }}
         DETERMINISTIC_ONLY: ${{ inputs.deterministic-only }}
+        FAMILIES: ${{ inputs.families }}
+        ATTEMPTS: ${{ inputs.attempts-per-case }}
         WRITE_SUMMARY: ${{ inputs.summary }}
         ARTIFACT_NAME: ${{ inputs.artifact-name }}
         # The callback is imported by dotted name and the module is the caller's, in
@@ -370,8 +395,21 @@ runs:
           read -r -a tools <<< "$DECLARED_TOOLS"
           declared+=(--declared-tools "${tools[@]}")
         fi
+        if [ -n "$ATTEMPTS" ]; then
+          declared+=(--attempts-per-case "$ATTEMPTS")
+        fi
         if [ "$WRITE_SUMMARY" = "true" ]; then
           declared+=(--summary "$GITHUB_STEP_SUMMARY" --artifact-name "$ARTIFACT_NAME")
+        fi
+        # **Last, and it has to stay last.** `--families` takes one or more values,
+        # so it consumes every following word that is not an option token: the
+        # entrypoint takes no positional arguments today, and appending one after
+        # this would hand it to argparse as a seventh family name. Split the way the
+        # tool list above is split, and a name the bench does not hold is refused
+        # before anything is sent rather than covering fewer families in silence.
+        if [ -n "$FAMILIES" ]; then
+          read -r -a families <<< "$FAMILIES"
+          declared+=(--families "${families[@]}")
         fi
 
         # Written before the run rather than after it, so a later step can name the

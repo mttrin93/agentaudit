@@ -37,6 +37,7 @@ from backend.bench.capability import (
     ReasoningEffort,
 )
 from backend.bench.contract import AgentCapability, DeclaredControl
+from backend.bench.declared_gap import DeclaredGap
 from backend.bench.editions import AGENTIC_TOP_10_2026, LLM_TOP_10_2026
 from backend.bench.elective import ElectiveSelection
 from backend.bench.library import ElectiveFamily, Family, Transform
@@ -155,7 +156,7 @@ def test_every_section_states_its_own_reproducibility_and_four_read_the_payload(
 
 # --- The golden digest: one document, pinned to the byte ---------------------
 
-GOLDEN_ONE_FAMILY = "088f733ae8567b285d4c88367c5adb2f7155be07a6cebc069cf15e9cc016cb14"
+GOLDEN_ONE_FAMILY = "e16faf348d0f52ae3b8ac6368a4d9c132f4f6f81e2a838be31980ce0849d3e0d"
 """The sha256 of `_one_family()`'s rendering, written down.
 
 **A tripwire, and it is deliberately a strict one.** Every other assertion in this
@@ -1155,6 +1156,80 @@ def test_a_family_that_could_not_be_measured_reads_apart_from_a_rate_of_zero() -
         assert not re.search(r"rate \d", line), f"{line} reads as a rate"
     assert "This is not a rate of zero" in text
     assert NotMeasurable.NO_TOOL_CALL_VISIBILITY.stated() in text
+
+
+def test_a_family_the_caller_declared_away_is_its_own_block_on_the_page() -> None:
+    """The fourth absence, printed apart from the third and from a rate of zero.
+
+    Three families, three shapes, one page: one measured at 0 of 30, one the target
+    could not answer, and one this run's caller switched off before anything was
+    sent. A single *not tested* list would be the document deciding those are the
+    same statement (ADR-0004, ADR-0075).
+    """
+    payload = a_payload(
+        result=a_result(
+            families=(Family.DATA_LEAKAGE,),
+            successes=0,
+            judged=(),
+            not_measurable={Family.HALT_DEFEAT: NotMeasurable.NO_TOOL_CALL_VISIBILITY},
+            not_run={Family.SCOPE_CREEP: DeclaredGap.FAMILY_SWITCHED_OFF},
+        )
+    )
+    text = render(payload)
+
+    assert "### Families this run did not attempt" in text
+    assert DeclaredGap.FAMILY_SWITCHED_OFF.stated() in text
+
+    declared_away = [line for line in text.splitlines() if "scope_creep" in line]
+    assert declared_away
+    for line in declared_away:
+        assert not re.search(r"rate \d", line), f"{line} reads as a rate"
+        assert "**Band" not in line
+    # And it is not the sentence the family beside it gets: one gap is the bench's
+    # reading of the target, the other is the caller's own declaration.
+    assert NotMeasurable.NO_TOOL_CALL_VISIBILITY.stated() in text
+    assert "**0 of 30 attempts succeeded** — rate 0.00" in text
+
+
+def test_a_family_declared_away_carries_no_discovery_count() -> None:
+    """The one block whose rows do not pair a search with a suite, and it is arithmetic.
+
+    Every other family row carries what one adaptive attacker found beside what the
+    scored layer measured, because the join is the family and never the figure
+    (ADR-0056). A family here has no case left in the run, and
+    `adaptive/layer.objectives_for` picks each family's objective out of that same
+    pool — so no episode could have been opened against it, and a count that could
+    only ever print its own empty answer would suggest the search had been asked.
+    """
+    payload = a_payload(
+        result=a_result(
+            families=(Family.DATA_LEAKAGE,),
+            judged=(),
+            not_measurable={Family.HALT_DEFEAT: NotMeasurable.NO_TOOL_CALL_VISIBILITY},
+            not_run={Family.SCOPE_CREEP: DeclaredGap.FAMILY_SWITCHED_OFF},
+        )
+    )
+    text = render(payload)
+
+    [declared_away] = [line for line in text.splitlines() if "scope_creep" in line]
+    assert "Discoveries" not in declared_away
+    # And the neighbouring block still carries one, so this is the absence of a line
+    # rather than the removal of the pairing.
+    unmeasured = [line for line in text.splitlines() if "halt_defeat" in line]
+    assert any("Discoveries" in line for line in unmeasured)
+
+
+def test_a_run_that_narrowed_nothing_says_so_where_the_block_would_be() -> None:
+    """The empty case is a sentence and not a missing heading.
+
+    A block that vanished on a full run would leave a reader unable to tell it from
+    a report written before the block existed — the argument the elective absences
+    below already make for their own heading (ADR-0035).
+    """
+    text = render(a_payload())
+
+    assert "### Families this run did not attempt" in text
+    assert "- None. Every family this library holds was asked for" in text
 
 
 def test_a_family_this_run_was_not_asked_for_is_the_fifth_absence_on_the_page() -> None:

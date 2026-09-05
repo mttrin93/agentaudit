@@ -63,6 +63,7 @@ from enum import StrEnum
 from backend.bench.adaptive.episode import AdaptiveEpisode, EpisodeOutcome
 from backend.bench.calibration import TargetRun
 from backend.bench.contract import DeclaredControl
+from backend.bench.declared_gap import DeclaredGap
 from backend.bench.elective import NOTHING_REQUESTED, ElectiveSelection
 from backend.bench.evaluator import Verdict
 from backend.bench.fix_standing import NOT_PROVEN, FixStanding, FixStandingReading
@@ -490,6 +491,22 @@ class MeasuredSection:
     deterministic: tuple[FamilyEntry, ...] = ()
     judged: tuple[FamilyEntry, ...] = ()
     not_measurable: Mapping[Family, NotMeasurable] = field(default_factory=dict)
+    not_run: Mapping[Family, DeclaredGap] = field(default_factory=dict)
+    """The families this run's caller declared away, and which of the reasons it was.
+
+    A **fourth** field beside the third rather than entries at a rate of zero, and a
+    fourth kind of nothing rather than a rewording of `not_measurable`: that one is a
+    case precondition *this bench checked* and could not meet, and this is a family
+    whose cases were dropped before the run because of something only the caller knows
+    — no adjudicating instrument, an artefact nobody planted, a family or a
+    construction switched off
+    ([ADR-0075](../../docs/adr/0075-a-declared-gap-reaches-the-signed-artefact.md)).
+
+    Empty on a run that narrowed nothing, which is the honest reading rather than a
+    missing field: every family the library holds was asked for, and the two figure
+    lists above account for all of them.
+    """
+
     cuts: BandCuts = DECLARED_BAND_CUTS
     """The cut points the bands above were read against, printed with them."""
 
@@ -559,6 +576,27 @@ class MeasuredSection:
                 f"{sorted(overlap)} are reported not measurable and also carry a "
                 "rate. Not measurable is a distinct outcome from pass and from "
                 "fail, and a family cannot hold two of the three"
+            )
+
+        # The same refusal one absence along, and a separate check because it is a
+        # separate pair: a family is absent for exactly one reason, so a run that
+        # both dropped its cases and measured it is a run whose reader believes
+        # whichever block was printed first (ADR-0075).
+        declared_away = measured & set(self.not_run)
+        if declared_away:
+            raise ValueError(
+                f"{sorted(declared_away)} carry a rate and a declared gap saying "
+                "this run did not attempt them. A family was measured or it was "
+                "declared away, and one that says both is a figure no reader can "
+                "place"
+            )
+        both = set(self.not_measurable) & set(self.not_run)
+        if both:
+            raise ValueError(
+                f"{sorted(both)} are reported both not measurable and not run. One "
+                "is a precondition this bench checked and the other is a narrowing "
+                "its caller declared, so a family holding both would be two answers "
+                "to why nothing was attempted"
             )
 
     @property
@@ -1633,6 +1671,7 @@ def assemble(
     elective: ElectiveSelection = NOTHING_REQUESTED,
     source_anchor: SourceAnchor = NOT_RUN_WHERE_THE_CODE_IS,
     standings: Mapping[str, FixStanding] | None = None,
+    not_run: Mapping[Family, DeclaredGap] | None = None,
 ) -> TargetResult:
     """Assemble one target's result from what was recorded against it.
 
@@ -1656,6 +1695,14 @@ def assemble(
     `elective` is the tier's declared selection, carried onto the result and read by
     nothing here: no section below is built from it, because what a report may say
     about an elective family is which ones it was not asked for (ADR-0035).
+
+    `not_run` is what this run's caller declared away — the plan's own gaps, keyed on
+    the six. It is an argument rather than something read off `target_run` because
+    there is nothing on a run to read it off: a family whose cases were dropped
+    before the first send made no attempt, so the record it would be derived from is
+    the run's *plan* and not its result
+    ([ADR-0075](../../docs/adr/0075-a-declared-gap-reaches-the-signed-artefact.md)).
+    Empty for a run that narrowed nothing.
     """
     scanned = scan(target_run.target)
     return TargetResult(
@@ -1683,6 +1730,11 @@ def assemble(
                 reliability or {},
             ),
             not_measurable=dict(target_run.not_measurable),
+            # The caller's own narrowings, which are the one absence this function
+            # cannot derive: a family whose cases were dropped before the run left
+            # no attempt, no rate and no precondition behind it, so it arrives as an
+            # argument or it does not arrive at all (ADR-0075).
+            not_run=dict(not_run or {}),
             cuts=cuts,
         ),
         declared=DeclaredSection(

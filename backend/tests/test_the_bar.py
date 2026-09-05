@@ -20,6 +20,7 @@ from backend.bench.bar import (
     decided,
     read_bar,
 )
+from backend.bench.declared_gap import DeclaredGap
 from backend.bench.library import Family
 from backend.bench.payload import ARTEFACT, ARTEFACT_VERSION
 from backend.bench.scorer import Band
@@ -48,6 +49,7 @@ def a_document(
     judged: list[dict[str, Any]] | None = None,
     withheld: list[dict[str, Any]] | None = None,
     not_measurable: list[dict[str, Any]] | None = None,
+    not_run: list[dict[str, Any]] | None = None,
     gate: dict[str, Any] | None = None,
     planting: dict[str, Any] | None = None,
     recorded_at: str = "2026-09-05T03:48:51.290644+00:00",
@@ -69,6 +71,7 @@ def a_document(
             "judged": judged if judged is not None else [],
             "withheld": withheld if withheld is not None else [],
             "not_measurable": not_measurable if not_measurable is not None else [],
+            "not_run": not_run if not_run is not None else [],
         },
         "provenance": {
             "attestation": {"recorded_at": recorded_at, "control_proved": True},
@@ -277,12 +280,14 @@ def test_a_judged_family_withheld_below_the_kappa_floor_does_not_pass() -> None:
     assert "0.31" in decision.stated()
 
 
-def test_a_family_dropped_before_the_run_is_absent_and_does_not_pass() -> None:
-    """The withdrawal with no sentence in the artefact: switched off, or unplanted.
+def test_a_family_absent_from_every_list_is_still_not_a_pass() -> None:
+    """The absence with no sentence anywhere in the artefact.
 
-    A narrowed run's declared gaps do not reach the payload yet (#138), so this
-    family is simply not in the document. That absence is the one a bar most easily
-    reads as nothing to check.
+    Since ADR-0075 this bench records every narrowing it makes, so a family in none
+    of the four absences is a document whose producer this bar cannot account for.
+    It is still red — the family the bar covers has no band — and it is red saying
+    that there was nothing to quote, which is the absence a bar most easily reads as
+    nothing to check.
     """
     decision = decided(
         a_document(
@@ -297,6 +302,38 @@ def test_a_family_dropped_before_the_run_is_absent_and_does_not_pass() -> None:
 
     assert decision.outcome is Outcome.BELOW_THE_BAR
     assert "wrongful_commitment" in decision.stated()
+
+
+def test_a_family_the_caller_declared_away_fails_the_bar_in_the_gaps_own_words() -> (
+    None
+):
+    """The fourth withdrawal, and it is red with a sentence rather than red with none.
+
+    A family the bar covers and the run's caller switched off has no band, so the
+    step is red either way (ADR-0067). What changed with #138 is that the artefact
+    now carries the reason, so the line the step prints is `DeclaredGap`'s own
+    sentence — the same discipline `not_measurable` and `withheld` already get.
+    """
+    decision = decided(
+        a_document(
+            deterministic=[
+                one
+                for one in every_family(Band.HOLDS)
+                if one["family"] != "wrongful_commitment"
+            ],
+            not_run=[
+                {
+                    "family": "wrongful_commitment",
+                    "reason": DeclaredGap.NO_ADJUDICATOR.value,
+                    "stated": DeclaredGap.NO_ADJUDICATOR.stated(),
+                }
+            ],
+        ),
+        read_bar(WHOLE_BAR),
+    )
+
+    assert decision.outcome is Outcome.BELOW_THE_BAR
+    assert DeclaredGap.NO_ADJUDICATOR.stated() in decision.stated()
 
 
 def test_a_family_switched_off_in_the_bar_is_not_held_to_a_band_and_is_named() -> None:

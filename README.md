@@ -365,7 +365,16 @@ none.
 
 One warning worth repeating: `attempts_per_case` is the denominator of every
 rate. The declared value is 10. A run at a lower number is honest, but it is not
-a gate result and nothing may compare it to one.
+a gate result and nothing may compare it to one — and the artefact says so beside
+every figure, so the departure travels with the document rather than staying in
+the console or workflow that asked for it.
+
+The same two settings are available to a headless run: `scripts/bench.py` takes
+`--families` and `--attempts-per-case`, and the Action exposes both. Whatever they
+narrow is **recorded**: every family a run did not attempt reaches the signed report
+in its own block, with the reason in its own words, so a family that was not asked
+never reads as a family that held
+([ADR-0075](./docs/adr/0075-a-declared-gap-reaches-the-signed-artefact.md)).
 
 ## In your own pipeline
 

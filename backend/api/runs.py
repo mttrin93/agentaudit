@@ -938,6 +938,10 @@ def _published(
             config.rule,
             config.report,
             config.selection,
+            # The plan's own gaps, off the record the estimate was built from: the
+            # families this caller declared away reach the signed document rather
+            # than only this run's own response (ADR-0075).
+            record.plan.gaps,
         )
     except Exception as unpublished:
         return Unsigned(

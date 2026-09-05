@@ -49,6 +49,7 @@ from backend.bench.assembler import (
 )
 from backend.bench.capability import ReasoningEffort
 from backend.bench.contract import AgentCapability, DeclaredControl, Transcript
+from backend.bench.declared_gap import DeclaredGap
 from backend.bench.editions import AGENTIC_TOP_10_2026, LLM_TOP_10_2026
 from backend.bench.elective import ElectiveSelection
 from backend.bench.evaluator import Verdict
@@ -616,6 +617,53 @@ def test_a_family_named_without_a_rate_carries_its_label_too() -> None:
     assert unmeasurable["label"]["agentic"] == ["ASI10:2026"]
 
 
+def test_a_family_the_caller_declared_away_is_absent_with_its_reason_beside_it() -> (
+    None
+):
+    """The fourth kind of nothing, in the document that gets signed (ADR-0075).
+
+    A family switched off before the run has no rate, no interval and no band, and
+    until this block existed it had no line either: it was simply not in the payload,
+    which is the reading `BenchConfig.families` exists to make unavailable arriving
+    one document further on and now under a signature (ADR-0004, ADR-0066 §6).
+    """
+    measured = document(
+        a_payload(
+            result=a_result(
+                families=(Family.DATA_LEAKAGE,),
+                judged=(),
+                not_run={Family.SCOPE_CREEP: DeclaredGap.FAMILY_SWITCHED_OFF},
+            )
+        )
+    )["measured"]
+
+    [declared_away] = measured["not_run"]
+    assert declared_away["family"] == Family.SCOPE_CREEP
+    assert declared_away["reason"] == "family_switched_off"
+    assert declared_away["stated"] == DeclaredGap.FAMILY_SWITCHED_OFF.stated()
+    # The label is the family's and not the run's, exactly as it is on the two lists
+    # above: a duty is not something the measurement conferred (ADR-0044).
+    assert declared_away["label"]["articles"] == ["14", "15"]
+    # And no rate anywhere reads it: the family is absent from both figure lists.
+    assert [one["family"] for one in measured["deterministic"]] == [Family.DATA_LEAKAGE]
+    assert measured["judged"] == []
+
+
+def test_a_family_cannot_carry_a_rate_and_a_declared_gap_at_once() -> None:
+    """The refusal `not_measurable` already has, for the fourth absence.
+
+    Two of the outcomes at once is a family a reader can read either way, and the one
+    that would be believed is whichever is printed first.
+    """
+    with pytest.raises(ValueError) as refused:
+        MeasuredSection(
+            deterministic=(an_entry(Family.DATA_LEAKAGE, successes=0),),
+            not_run={Family.DATA_LEAKAGE: DeclaredGap.FAMILY_SWITCHED_OFF},
+        )
+
+    assert "data_leakage" in str(refused.value)
+
+
 def test_no_elective_family_and_no_episode_carries_a_label() -> None:
     """The tier names families in this document and none of them is labelled.
 
@@ -641,7 +689,7 @@ def test_no_elective_family_and_no_episode_carries_a_label() -> None:
     # section names: the whole document holds exactly as many as it names families.
     named = {
         entry["family"]
-        for key in ("deterministic", "judged", "withheld", "not_measurable")
+        for key in ("deterministic", "judged", "withheld", "not_measurable", "not_run")
         for entry in body["measured"][key]
     }
     assert len(_labels_in(body)) == len(named)
@@ -1601,6 +1649,7 @@ def a_result(
     successes: int = 30,
     judged: tuple[FamilyEntry, ...] | None = None,
     not_measurable: dict[Family, NotMeasurable] | None = None,
+    not_run: dict[Family, DeclaredGap] | None = None,
     controls: tuple[ScannedControl, ...] | None = None,
     absent: tuple[DeclaredControl, ...] = (DeclaredControl.STOP_CONTROL,),
     rule_of_two: RuleOfTwo = NOTHING_DECLARED,
@@ -1644,6 +1693,7 @@ def a_result(
             ),
             judged=judged,
             not_measurable=not_measurable or {},
+            not_run=not_run or {},
         ),
         declared=DeclaredSection(
             controls=controls, absent=absent, rule_of_two=rule_of_two

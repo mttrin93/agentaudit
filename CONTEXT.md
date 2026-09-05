@@ -321,6 +321,26 @@ here. The two are told apart by whose gap it is and whether the bench detects it
 never by which family is missing.
 _Avoid_: not applicable, skipped, unknown, n/a, zero
 
+**Declared gap**:
+Something a run's own **caller** did not provide, and the **family** it costs — no
+adjudicating instrument, an artefact nobody planted, a family or a **transform**
+switched off. The caller's statement about their own setup, which the bench cannot
+detect: no **attempt** is skipped for one, because the family is not run at all rather
+than measured at zero. Told apart from **not measurable** by whose gap it is and
+whether the bench detects it, never by which family is missing — the sentence under
+that term is the whole of the distinction. Since
+[ADR-0075](./docs/adr/0075-a-declared-gap-reaches-the-signed-artefact.md) it is carried
+in the **signed report**'s measured section as its own block, keyed on the six, with
+the reason in the gap's own words beside the family's **label** — because a family
+absent from a signed document with no reason beside it is a reader guessing which of
+the absences it was (ADR-0004). Two enumerations spell it, and that is deliberate:
+`DeclaredGap` is what the artefact and an HTTP caller read, `OperatorGap` is what a
+terminal prints, and a probe's prose names command-line flags an HTTP caller has none
+of. Not everything `OperatorGap` holds is one — two of its members annotate a rate the
+run *did* measure, so no family is absent for them and they have no counterpart in the
+artefact.
+_Avoid_: not measurable (for one), skipped, not applicable, disabled, missing
+
 **Not requested**:
 An **elective family** a run was not asked to test — the fifth of the absences a
 report keeps apart, and never a rate of zero. Nothing was attempted, so nobody could

@@ -72,6 +72,18 @@ facts, and only one of them is safe to confirm without reading further.
 """
 
 
+PLANTING_CALLS = 0
+"""What every planting a run performs costs on the operator's endpoint.
+
+Zero, and itemised rather than absent —
+[ADR-0062](../../docs/adr/0062-planting-is-a-pre-run-step-off-every-counter.md) §6
+has the argument. The consequence here is that this is a literal and not arithmetic
+over the run: there is nothing a caller can pass that makes it non-zero, so editing
+this number is the only way the line moves, which makes it the tripwire for a
+planting step that ever became a send (`test_planting_off_the_counters.py`).
+"""
+
+
 class Layer(StrEnum):
     """The two halves of a run, as budget counters.
 
@@ -232,6 +244,9 @@ class BudgetPayload(TypedDict):
     scored: LayerFigurePayload
     adaptive: LayerFigurePayload
     total: LayerFigurePayload
+    planting: LayerFigurePayload
+    """The pre-run plantings, at `PLANTING_CALLS`. Present and zero, never absent."""
+
     hard_ceiling: LayerFigurePayload
     scored_ceiling: int
     adaptive_ceiling: int
@@ -389,6 +404,28 @@ class RunBudget:
             retry_allowance=max(sends, default=1),
         )
 
+    @property
+    def planting(self) -> CallFigure:
+        """The pre-run planting step, as the figure the estimate itemises.
+
+        A property over the constant rather than a third field on `Estimate`, and the
+        difference is the point: `Estimate`'s two figures are arithmetic over this
+        run's cases and targets, and this one is not a function of anything. There is
+        nothing a caller could pass that would make it non-zero, which is what makes
+        the line a statement of the invariant rather than a reading of it.
+
+        Exact and not a ceiling: a bound would say the bench does not know what a
+        plant costs, and it does.
+        """
+        return CallFigure(
+            calls=PLANTING_CALLS,
+            kind=FigureKind.EXACT,
+            basis=(
+                "a plant is a call on the operator's own object before the run "
+                "registers: off every counter, and never a message on the wire"
+            ),
+        )
+
     def ceiling(self, layer: Layer) -> int:
         """The ceiling over one layer. Read per layer, never summed: the two are
         enforced independently, so a layer with room left cannot borrow from the
@@ -433,6 +470,7 @@ class RunBudget:
         """
         estimate = self.estimate
         rows = (
+            _Row("Planting", self.planting, estimate.cost(self.planting)),
             _Row("Scored layer", estimate.scored, estimate.cost(estimate.scored)),
             _Row("Adaptive layer", estimate.adaptive, estimate.cost(estimate.adaptive)),
             None,
@@ -488,6 +526,7 @@ class RunBudget:
                 estimate.adaptive, estimate.cost(estimate.adaptive)
             ),
             total=_layer_payload(estimate.total, estimate.total_cost()),
+            planting=_layer_payload(self.planting, estimate.cost(self.planting)),
             hard_ceiling=_layer_payload(self.hard_ceiling, self.hard_ceiling_cost),
             scored_ceiling=self.scored_ceiling,
             adaptive_ceiling=self.adaptive_ceiling,

@@ -704,7 +704,17 @@ turn — and, as a closed set, which acts those are: into the target's
 **configuration**, or into **content the target fetches**. A **precondition** and
 never a turn: it is performed before the run, no **attempt** is recorded for one, and
 there is no route by which planting could arrive as a message
-([ADR-0061](./docs/adr/0061-a-plant-is-a-precondition-the-bench-can-check.md)). A
+([ADR-0061](./docs/adr/0061-a-plant-is-a-precondition-the-bench-can-check.md)). It
+sits at a fixed point in the run — attestation, **nonce** issued, plant, registration
+probe, run — and it is **off every counter**: not the per-layer spend, not the
+**attempt** list a rate is denominated on, not a **send** on the wire, and the
+estimate an operator confirms itemises it at zero rather than leaving it out. The
+**attestation** is what authorises it, because a plant already touches somebody
+else's system; authorised and counted are different questions
+([ADR-0062](./docs/adr/0062-planting-is-a-pre-run-step-off-every-counter.md)). A plant
+that *fails* is not a withdrawn family: a withdrawal is a hook that does not exist,
+and this is one that exists and did not work, so the run stops before its first
+attempt and no family is measured. A
 target that can be planted is one the bench can put the artefact into: a function
 this bench served says so by implementing the hook, and a URL says so through its
 operator, which is why the same missing plant is **not measurable** on one surface

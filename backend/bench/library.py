@@ -397,10 +397,19 @@ class Plant(StrEnum):
     vocabulary nobody can drive red, so the third arrives with the case that needs
     it and not before.
 
-    **A member is a record and never a branch.** Its precondition, the reason a
-    report prints and the hook a callback implements are all read off the member —
-    `precondition` here, `stated` below, `shim.hook_name` there — so #48 and #50
-    add a member and its two sentences, and no `if` anywhere moves.
+    **A member is a record and never a branch, with one stated exception.** Its
+    precondition, the reason a report prints and the hook a callback implements are
+    all read off the member — `precondition` here, `stated` below, `hook` after it —
+    so #48 and #50 add a member and its two sentences.
+
+    The exception is `planting._request_for`, which has one arm per member because
+    the *arguments* a hook takes are not derivable from a member's name: one takes
+    the run's nonce and the other takes a record's `key` and `body`. It is a `match`
+    with no fallback arm, so a third member fails the type check there rather than
+    defaulting onto one of the two shapes and planting the wrong thing
+    ([ADR-0062](../../docs/adr/0062-planting-is-a-pre-run-step-off-every-counter.md)
+    §7). One branch, in one named place, and it is the branch the type checker
+    guards.
     """
 
     CONFIG_CANARY = "config_canary"
@@ -428,6 +437,22 @@ class Plant(StrEnum):
         PRECONDITION` below) instead of raising at the first target that meets it.
         """
         return Precondition(f"{self.value}_plant")
+
+    @property
+    def hook(self) -> str:
+        """The method a callback implements to perform this planting.
+
+        Derived from the member and never listed, which is the whole of what keeps
+        the hook set general
+        ([ADR-0061](../../docs/adr/0061-a-plant-is-a-precondition-the-bench-can-check.md)
+        §4): #48 and #50 add a member and get their hook name from it.
+
+        Here rather than only in `shim.hook_name` so that the harness can name a hook
+        without importing the web layer, which is
+        [ADR-0062](../../docs/adr/0062-planting-is-a-pre-run-step-off-every-counter.md)
+        §8. `shim.hook_name` returns this, so there is still one spelling.
+        """
+        return f"plant_{self.value}"
 
     def stated(self) -> str:
         """What a report says has to be put in place, in the words it prints.

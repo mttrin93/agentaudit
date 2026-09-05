@@ -3798,5 +3798,74 @@ checks, rather than a sentence the caller wrote
   decorator the new fixture class had taken from the one below it; and this ADR and
   this file citing different precedents for the same digest move. None of the three
   changed a figure.
+- **The review found five things and each was answered.** ADR-0062's argument was
+  restated in four docstrings rather than linked, and three of them were cut back to
+  the link plus the local consequence; `Plant`'s *no `if` anywhere moves* was left
+  contradicted by `_request_for` and is now amended with the one exception and the
+  reason it is type-checked; the headline test multiplied the attempt count by
+  `turns`, which is the send count and not the denominator, and the two are now
+  computed apart; `runnable` was called twice per target and is now called once; and
+  `TargetRun.plantings` has no reporting consumer, which is stated in the ADR as #87's
+  to add rather than left to be found. None of the five changed a figure.
+- **No variant was admitted, and none was proposed.** Admission needs a person at a
+  tty (ADR-0052 §5), and nothing here asks for one.
+
+### Planting became a step the run takes, and it moved no counter (#85, 2026-09-05)
+
+**This section records an invariant, an estimate line that reads zero, and no figure
+that moved.** ADR-0061 left two planting hooks that nothing called;
+[ADR-0062](./adr/0062-planting-is-a-pre-run-step-off-every-counter.md) decides what
+calls them — `planting.plant`, from `calibration._run_target`, between the nonce being
+issued and the registration probe. Read on 2026-09-05.
+
+- **The counters were enumerated, and a plant is on none of them.** Per-layer spend
+  (`RunState.spent`), the attempt list a rate is denominated on (`RunState.attempts`),
+  the adaptive episodes, both positions, `Transcript.sends`, the declared ceilings and
+  the estimate, the `UsageLedger`, the trace's two call figures, and every published
+  rate. The first five are held by one absence — `plant` takes no `RunState` and its
+  module names no counter at all — the sixth by `PLANTING_CALLS = 0`, the seventh by
+  taking no model client, and the last two by being read off the first two. ADR-0062
+  §2 is the table.
+- **The headline reading, from inside the hook and after the run, over two targets.**
+  A whole shim bench over `data-leakage-001` against two served callbacks. At the
+  first target's plant: `spent[SCORED] = 0`, `spent[ADAPTIVE] = 0`, zero attempts, no
+  message yet. At the **second** target's plant — which runs after the first target's
+  whole suite — `(11, 0, 10)` exactly, which is what the first target spent and not
+  one call more. Two targets rather than one because a single target cannot tell
+  *nothing had happened yet* from *the plant moved nothing*. At the end, **22 scored
+  calls — two registration probes plus twenty attempts — and twenty attempts, which
+  is `cases × attempts_per_case` per target exactly.** Driven red by planting through
+  `send_message` inside `_run_target` as the issue prescribes: the first snapshot
+  reads `(1, 0, 0)` against `(0, 0, 0)`, and it is that assertion that fails.
+- **Attempts and sends are computed apart in the test even where they coincide.** The
+  denominator is `attempts_per_case` per case; the sends are `turns ×
+  attempts_per_case` plus one registration probe. This library's leakage case is one
+  turn, so the two numbers are equal here — and a multi-turn case makes them diverge,
+  which is why one name is not used for both (`Case.turns`, ADR-0041).
+- **Fifteen guards, and every one of them was driven red for its own reason.** The
+  counter test and the ordering test by the planting turn above; the import wall and
+  the signature test by adding `RunState` and `send_message` to `planting.py`; the
+  three failure modes each by removing their own refusal; the withdrawal test by
+  handing the harness the cases `runnable` had already dropped — which is exactly the
+  mistake that would turn a named withdrawal into a failed run; the estimate test by
+  setting `PLANTING_CALLS = 1`; the record test by dropping `plantings` off
+  `TargetRun`; the once-per-run test by removing the de-duplication; the URL test by
+  removing the `plants is None` return; the content test by planting an empty body;
+  and the nonce test by planting a value that is not the run's own; and the
+  named-outcome test by returning an empty sentence from one `PlantingFailure.stated`
+  arm.
+- **No rate, `D`, κ, interval, band, gate decision or gate citation moved, and the
+  library digest did not move either.** No case record is in this diff: the eighteen
+  and the three are the same records, `c515a89956cd` is still the digest, and
+  `GOLDEN_ONE_FAMILY` did not move. A plant decides whether a family is *attempted* and
+  never what an attempt measures (ADR-0006, ADR-0024).
+- **The estimate gained a line and no run gained a call.** `PLANTING_CALLS = 0`, a
+  `Planting` row in the table an operator confirms and a `planting` key in
+  `BudgetPayload`. Neither ceiling changes, the total is still the two layers added,
+  and no confirmed estimate is invalidated.
+- **Nothing about an endpoint run changed.** A URL target's `plants` is `None`, so
+  nothing is requested and nothing is planted; `plant_nonce` — the stand-in for the
+  human who edits their own configuration — still runs exactly where it did, and
+  `plan_for`'s two declared gaps still decide.
 - **No variant was admitted, and none was proposed.** Admission needs a person at a
   tty (ADR-0052 §5), and nothing here asks for one.

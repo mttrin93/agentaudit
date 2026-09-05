@@ -105,8 +105,14 @@ def hook_name(plant: Plant) -> str:
     §4). The two `Protocol`s below spell the names out for a type checker and are
     checked against this function by the suite, so a member whose hook nobody wrote
     is caught here rather than at a run.
+
+    **The derivation itself moved to `Plant.hook` and this delegates to it**, so that
+    the harness that calls a hook can name one without importing this module and its
+    FastAPI app (ADR-0062). This function stays because it is the name ADR-0061 §4
+    gave the shim's reading and the name the protocol test asserts against; what it
+    may never become is a second spelling.
     """
-    return f"plant_{plant.value}"
+    return plant.hook
 
 
 class ConfigCanaryPlanting(Protocol):
@@ -120,7 +126,8 @@ class ConfigCanaryPlanting(Protocol):
 
     The value is the run's registration nonce and the bench issues it — one planted
     value, two roles (ADR-0007) — so the hook receives it and does not choose it.
-    What calls this, when, and into what namespace, is #85 and #86; nothing in this
+    **What calls this is `planting.plant`, before the registration probe and off every
+    counter** (ADR-0062); the namespace it plants into is #86. Nothing in *this*
     module calls it, and there is deliberately no route by which a plant could arrive
     through `send_message` as an attempt.
     """
@@ -362,10 +369,13 @@ def serve_callback(
     field `None` and its plantings stay the caller's declaration, where ADR-0024 put
     them.
 
-    Not in scope here, stated so nobody adds it: nothing calls a planting hook yet
-    (#85, #86, #87), there is no `teardown()`, and there is no route by which a plant
-    could become an attempt — this module's one route is `MESSAGES_PATH`, and a hook
-    is not on it.
+    Not in scope here, stated so nobody adds it: **this module still calls no hook**.
+    `planting.plant` does, from the harness and before the registration probe
+    (ADR-0062), which is why `serve_callback` yields the target and the caller keeps
+    the object — the hooks are on the callback and the served app has no route to
+    them. There is no `teardown()` yet (#86), and there is no route by which a plant
+    could become an attempt: this module's one route is `MESSAGES_PATH`, and a hook is
+    not on it.
     """
     exposes_tool_calls = exposes_tool_calls_of(callback)
     auth_token = secrets.token_urlsafe(32)

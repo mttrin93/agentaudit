@@ -140,12 +140,17 @@ def test_a_callback_that_raises_twice_costs_sends_and_not_attempts(
     # Wrapped so the target declares the config-canary planting hook, which is what
     # data leakage now requires of a served target: a callback with no hook has that
     # family withdrawn as `NotMeasurable` and there would be no rate below to read
-    # (ADR-0061). The hook is not what plants here — `_calibrate` still does that, as
-    # a human would — and nothing in the bench calls one yet (#85).
-    with serve_callback(
-        PlantsItsConfig(flaky), name="flaky", retry=IMPATIENT
-    ) as target:
-        result = _calibrate(target, leakage_case, state)
+    # (ADR-0061). The object is handed to the run as its planter, so the bench plants
+    # through the hook before it registers (ADR-0062); `_calibrate`'s `plant_nonce`
+    # stands in beside it for the human who edits a URL target's configuration, and
+    # is what puts the value where this callback reads it from.
+    agent = PlantsItsConfig(flaky)
+    with serve_callback(agent, name="flaky", retry=IMPATIENT) as target:
+        result = _calibrate(target, leakage_case, state, planter=agent)
+
+    # The planting happened, off every counter: the hook was called with the run's
+    # own nonce, and the sends below are the attempts and the probe alone.
+    assert agent.planted == state.nonce
 
     [target_run] = result.target_runs
     assert target_run.registration.complete
@@ -403,7 +408,10 @@ class PlantedState:
 
 
 def _calibrate(
-    target: TargetConfig, case: Case, state: PlantedState
+    target: TargetConfig,
+    case: Case,
+    state: PlantedState,
+    planter: object | None = None,
 ) -> CalibrationResult:
     def plant(planted_target: TargetConfig, nonce: str) -> None:
         state.nonce = nonce
@@ -413,5 +421,6 @@ def _calibrate(
         targets=[target],
         attestation=BENCH_ATTESTATION,
         plant_nonce=plant,
+        planters={} if planter is None else {target.name: planter},
         approve=CONFIRMING,
     )

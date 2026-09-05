@@ -98,6 +98,7 @@ from backend.bench.narration import (
     narrate_successes,
 )
 from backend.bench.nonce import issue_nonce
+from backend.bench.planting import Planter, Planting, plant
 from backend.bench.registration import (
     Attestation,
     Registration,
@@ -163,6 +164,20 @@ class TargetRun:
     This is where memory poisoning lands against a target that keeps no session
     state, and it is the outcome rather than a rate of zero
     ([ADR-0041](../../docs/adr/0041-the-persistence-canary-is-read-over-two-turns.md)).
+    """
+
+    plantings: tuple[Planting, ...] = ()
+    """What was put in place before this target was registered, and never counted.
+
+    **The record ADR-0007 asks for, kept beside the attempts and summable into
+    none of them.** A `Planting` carries the planting, the record that asked for it
+    and the attestation that authorised it, and carries no `Layer`, no `sends` and
+    no `Transcript` — so a reporting surface that reached for this tuple would find
+    nothing a rate could be denominated on
+    ([ADR-0062](../../docs/adr/0062-planting-is-a-pre-run-step-off-every-counter.md)).
+
+    Empty for every target that is a URL: its operator plants by hand and the run
+    performed no act of its own, which is a fact and not a missing field.
     """
 
     not_applicable: tuple[SkippedCase, ...] = ()
@@ -672,6 +687,7 @@ def run_calibration(
     run_state: RunState | None = None,
     usage: UsageLedger | None = None,
     planted_nonces: Mapping[str, str] | None = None,
+    planters: Mapping[str, Planter] | None = None,
     proof_waived: bool = False,
     trace: TracedRun | None = None,
     thread_id: str | None = None,
@@ -719,6 +735,14 @@ def run_calibration(
     would check for a value nobody has planted and refuse every registration. Empty
     for the terminal path, where the run issues its own and `plant_nonce` puts it
     in place.
+
+    `planters` is the object a served callback target is planted through, keyed by
+    the target's name. `serve_callback` yields a plain `TargetConfig` and the caller
+    keeps the callback (ADR-0059), so the caller is the only thing that can hand the
+    hooks over — and it hands over the object rather than a function, because which
+    hooks it has is already recorded on `TargetConfig.plants`. Empty for an endpoint
+    run: a URL target does not answer for its own plantings and its operator plants
+    by hand, exactly where ADR-0024 left that.
 
     `proof_waived` is the operator declaring that the run may start without the echo
     (ADR-0007, amended). It reaches `register` and changes one thing there: whether a
@@ -789,6 +813,7 @@ def run_calibration(
                     precedent=precedent,
                     rule=rule,
                     planted=(planted_nonces or {}).get(target.name),
+                    planter=(planters or {}).get(target.name),
                     proof_waived=proof_waived,
                 )
             )
@@ -900,6 +925,7 @@ def _run_target(
     precedent: PrecedentStore,
     rule: GateRule,
     planted: str | None,
+    planter: Planter | None = None,
     proof_waived: bool = False,
 ) -> TargetRun:
     """Register one target, then run the cases that apply to it if it registered.
@@ -908,10 +934,36 @@ def _run_target(
     one before the run started. A fresh nonce is issued when there is none, which
     is every terminal run: one value, planted by whoever can edit the target's
     configuration, and checked by the probe below either way.
+
+    `planter` is the object this target's plantings are performed on, for a served
+    callback that declared any (ADR-0061). `None` for every URL target, and for a
+    served one that declared none — in both of those `plant` performs nothing.
     """
     nonce = planted or issue_nonce()
     if plant_nonce is not None:
         plant_nonce(target, nonce)
+    # Applicability first, and here rather than after registration, because the plant
+    # below is performed for the cases that will actually be attempted: planting an
+    # artefact for a case this target's agent type was never written for would be an
+    # act on somebody's content store that nothing in the run is going to read.
+    written_for = applicable(cases, target)
+    # And then the plant, in the one place ADR-0007's ordering puts it: after the
+    # attestation, after the nonce is issued, and **before the registration probe**.
+    # Before, because the probe is the first thing that can carry evidence the plant
+    # landed (#87), and because the attestation is what authorises an act on the
+    # operator's own systems and a plant is already one.
+    #
+    # `run_state` is deliberately not passed and there is no parameter for it. A plant
+    # is neither an attempt nor a send, so nothing here may reach a counter, and the
+    # signature is what carries that rather than a reviewer remembering it
+    # ([ADR-0062](../../docs/adr/0062-planting-is-a-pre-run-step-off-every-counter.md)).
+    # A `PlantingFailed` propagates: it stops the run before the first attempt, with
+    # no family measured, which is a different reading from a family withdrawn for a
+    # hook that does not exist.
+    measurable_here = runnable(written_for, target)
+    plantings = plant(
+        planter, target, measurable_here, canary=nonce, attestation=attestation
+    )
     # The hash and never the url, through the one function that derives it, and
     # recorded before the probe rather than after it: a registration that failed is
     # the misfire a reader most needs to place, and it has no record to read the
@@ -927,16 +979,12 @@ def _run_target(
             span.errored(unreachable.failure)
             raise
 
-    # Two filters, in this order, and both ahead of the first attempt.
+    # Two filters, in this order, and both ahead of the first attempt. Applicability
+    # is read above, before the plant; preconditions gate measurability and never
+    # scoring, so a case this target cannot answer is skipped before an attempt is
+    # spent on it, and the families left with nothing to run report not measurable
+    # rather than a rate (ADR-0004).
     #
-    # Applicability first: a case not written for this target's agent type is not
-    # this target's business at all, so asking what its preconditions are would be
-    # answering a question about a case that is never going to run (spec story 16).
-    # Then preconditions, which gate measurability and never scoring: a case this
-    # target cannot answer is skipped before an attempt is spent on it, and the
-    # families left with nothing to run report not measurable rather than a rate
-    # (ADR-0004).
-    written_for = applicable(cases, target)
     # Three filters now, and the third is the endpoint's own answer. Tool-call
     # visibility is the operator's declaration and there is nothing to check it
     # against at registration — nothing has been sent yet — so it is checked against
@@ -954,7 +1002,7 @@ def _run_target(
         # that is not there (`plan_for`).
         attempts = tuple(
             attempt
-            for case in runnable(written_for, target)
+            for case in measurable_here
             if case.family not in contradicted
             for attempt in run_case(
                 target,
@@ -971,6 +1019,7 @@ def _run_target(
         registration=registration,
         attempts=attempts,
         rule=rule,
+        plantings=plantings,
         # Read over the cases written for this target, never over the whole
         # library: a family whose every case was skipped for the agent type has
         # not been found unmeasurable, and reporting it that way would send the

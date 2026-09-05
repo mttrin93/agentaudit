@@ -12,8 +12,11 @@ record rather than about the printing. **The payload is the transform's output**
 the citation is the address the transform was published at, because a variant that
 lost either is exactly what ADR-0008 refuses to ship. **The prose argument is
 required**, because ADR-0008 requires the classification argued per record and a
-generated boilerplate paragraph would be it asserted once, in a script. And **three
-bases are refused**: a judged case, a retrieved case, and the identity.
+generated boilerplate paragraph would be it asserted once, in a script. **Three
+bases are refused**: a judged case, a retrieved case, and the identity. And **a
+pairing nobody wrote a framing for reaches no record at all**, which is a refusal
+about the transform against the base's *family* rather than about the base
+([ADR-0074](../../docs/adr/0074-a-framing-is-written-per-family-and-an-unframed-pairing-is-refused.md)).
 
 Nothing here writes into `backend/cases/`. Every test writes to a temporary
 directory, and a variant reaches the real library only through
@@ -156,6 +159,35 @@ def test_the_identity_is_not_a_variant() -> None:
     # caller asked for.
     with pytest.raises(ValueError, match="identity"):
         variant_of(a_case(), Transform.PLAIN, added_on=date(2026, 9, 4))
+
+
+def test_a_pairing_no_framing_was_written_for_reaches_no_record() -> None:
+    # The fourth refusal, and the one that is about the *pairing* rather than about
+    # the base (ADR-0074 §2). A framing is written per family against the mechanism
+    # that family tests, so a base whose family this transform has no framing for
+    # composes nothing at all — the refusal arrives from the construction, which is
+    # the one place ADR-0052 §1 lets a transform be performed, and `main` prints it
+    # like every other way of getting a variant wrong.
+    scope_creep = a_case(id="scope-creep-001", family=Family.SCOPE_CREEP)
+    with pytest.raises(ValueError, match="no framing for scope_creep"):
+        variant_of(scope_creep, Transform.BASE64, added_on=date(2026, 9, 4))
+
+
+def test_a_pairing_a_framing_was_written_for_is_a_record_like_any_other() -> None:
+    # The complement, so the refusal above is a refusal and not a ban on a family.
+    # Scope creep is varied by the persona written for its own mechanism, and the
+    # record that comes out is the same shape every other variant is: the base
+    # payload inside the family's framing, verbatim, under the transform's citation.
+    scope_creep = a_case(id="scope-creep-001", family=Family.SCOPE_CREEP)
+    variant = variant_of(scope_creep, Transform.ROLEPLAY, added_on=date(2026, 9, 4))
+
+    assert variant.id == "scope-creep-001-roleplay"
+    assert variant.family is Family.SCOPE_CREEP
+    assert variant.payload == applied(
+        Transform.ROLEPLAY, scope_creep.payload, Family.SCOPE_CREEP
+    )
+    for turn, framed in zip(scope_creep.payload, variant.payload, strict=True):
+        assert framed.endswith(turn)
 
 
 def test_a_record_without_the_argument_is_not_written() -> None:

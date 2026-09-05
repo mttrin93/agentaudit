@@ -1,8 +1,20 @@
 ---
 status: accepted
+extended_by: 0074-a-framing-is-written-per-family-and-an-unframed-pairing-is-refused.md
 ---
 
 # A transform is a committed function, and no judged family gets a variant
+
+> **Extended — not amended — by
+> [ADR-0074](./0074-a-framing-is-written-per-family-and-an-unframed-pairing-is-refused.md),
+> on the number of framings and on what §4's prose is carried by.** §3 said each
+> framing is this repository's wording, written out once; there are now three
+> roleplay framings, one per family, and what each is a claim about is ADR-0074 §4.
+> Every other word of §3 stands, the cost it states is unchanged, and §4's paragraph
+> about scope creep and halt defeat is now a refusal in code rather than only a
+> paragraph. One sentence of §1 is narrowed there and named: *nothing refused* was
+> totality over **text**, which still holds, and the five single-turn constructions
+> are now partial over the (transform, family) **pairing**.
 
 [ADR-0051](./0051-a-variant-is-a-case-and-the-transform-is-a-function-it-names.md) made a transform a dimension of the library and left every member of it without an implementation: `Transform.BASE64` named a construction nothing performed. #73 writes the five published single-turn techniques as functions and decides which cases get a variant of them. Four of its decisions are not ADR-0051's and are recorded here; the arithmetic is untouched and stays #76's.
 

@@ -560,6 +560,12 @@ export function RegisterScreen() {
    * A name rather than a boolean, so that a second refusal about a second field
    * moves the focus again — and cleared by the effect that spends it, so that
    * nothing steals the keyboard back on the next render.
+   *
+   * **Below the arrival above, and it stays below it.** Both want the keyboard on the
+   * render a refusal walks the walk back on, and React runs effects in the order they
+   * are declared, so the later one keeps it. That is this one, deliberately — the
+   * field is what the bench refused (ADR-0079) — and `e2e/keyboard.spec.ts` fails if
+   * the two are swapped.
    */
   const [focusOn, setFocusOn] = useState<string | null>(null)
   useEffect(() => {
@@ -598,7 +604,7 @@ export function RegisterScreen() {
       */}
       <header>
         <h1 ref={heading} tabIndex={-1}>
-          {STEP_TITLES[current]}
+          {arriving}
         </h1>
       </header>
 

@@ -77,6 +77,10 @@ can be produced by this module, which has no name for a target and never reads o
   returns, and a clock advanced inside the poll's own tick would stop with it.
 - `POLL_SECONDS` moves into that module, because the span is declared in polls missed
   and the two numbers should not be able to drift apart.
+- **A settled run draws no stamp.** The figures on a run that has stopped are final
+  rather than dated: there is no next answer they could be older than, and a time of
+  day above them would read as a screen still watching something. The stamp is for the
+  screen that is still asking.
 - A stalled screen keeps drawing the figures it has. Blanking them would destroy the
   one piece of evidence a reader has about where the run was, and the stamp above them
   is what makes them honest.

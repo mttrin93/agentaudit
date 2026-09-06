@@ -1,25 +1,17 @@
 /**
  * What a screen says about itself to somebody who is not looking at it.
  *
- * Two facts about this console are stated nowhere on its screens. The first is which
- * screen you are on: it is a hash router, so a screen change moves no document, and
- * the tab strip and the browser history said `AgentAudit` for all seven of them —
- * `index.html` set the title once and nothing has set it since. The second is what a
- * screen is doing while it is not on top: a run takes minutes, and a run somebody
- * backgrounded is exactly the run whose phase is worth carrying into the tab.
+ * Two facts about this console were stated nowhere on its screens: which screen you
+ * are on, and — while a run takes minutes — what that screen is doing. It is a hash
+ * router, so a screen change moves no document: nothing announced one, nothing moved
+ * the keyboard onto one, and `index.html` set one `<title>` that all seven screens
+ * kept. **ADR-0079** decides what the announcement is, what counts as an arrival, and
+ * why a run's title carries a phase and never a figure.
  *
- * **The screen's own name comes first and the app's name last.** A tab strip and a
- * history list both truncate a title from the right, so the part that has to survive
- * the cut is the part that tells the two apart. What a screen is *doing* goes in
- * front of its name for the same reason, one step further: on a run there is nothing
- * more worth reading at a glance than whether it is still running.
- *
- * **What the title carries about a run is its phase and never a figure.** The run
- * screen's counts are per family and per layer and this app adds none of them up
- * (`run/progress.ts`); a number in a tab strip, with the label it was drawn beside
- * left behind on the page, is the one place a reader would take a length for a rate
- * (ADR-0005). So the title carries the standing's heading — the word the screen's
- * own `h1` carries — and nothing that could be read as a score.
+ * What is here is the consequence: one pure function the tab strip is built from, and
+ * two hooks a screen calls. `announce.test.ts` holds the first in node;
+ * `e2e/liveness.spec.ts` holds the two hooks in a browser, which is the division
+ * `vite.config.ts` sets out.
  */
 
 import { useEffect, useRef, type RefObject } from 'react'
@@ -31,11 +23,22 @@ export const APP_NAME = 'AgentAudit'
 const BETWEEN = ' — '
 
 /**
+ * The screen this document last announced, or `null` before it announced any.
+ *
+ * Module state rather than a ref, and ADR-0079 says why: an arrival is one screen
+ * replacing another, and each screen is a different component, so the question spans
+ * two of them. Written and read only inside the effect below — never during a render
+ * — so it is not state React draws from and the compiler has nothing to memoise
+ * around it.
+ */
+let announced: string | null = null
+
+/**
  * One screen's title: what it is doing, what it is, and what this is.
  *
  * `doing` is optional because most screens are not doing anything — a screen that
- * lists artefacts is the same screen whatever it is showing — and an empty one
- * leaves no dangling separator behind it.
+ * lists artefacts is the same screen whatever it is showing — and an empty one leaves
+ * no dangling separator behind it.
  */
 export function screenTitle(name: string, doing = ''): string {
   return [doing, name, APP_NAME].filter((part) => part !== '').join(BETWEEN)
@@ -44,9 +47,9 @@ export function screenTitle(name: string, doing = ''): string {
 /**
  * Set the document's title for as long as this screen is on it.
  *
- * No cleanup that puts the old title back: the next screen sets its own on the
- * render it arrives in, and a restore on the way out would put `AgentAudit` in the
- * tab for one frame between two screens that both have names.
+ * No cleanup that puts the old title back (ADR-0079): the next screen sets its own on
+ * the render it arrives in, and a restore on the way out would put `AgentAudit` in
+ * the tab for one frame between two screens that both have names.
  */
 export function useScreenTitle(name: string, doing = ''): void {
   useEffect(() => {
@@ -57,25 +60,15 @@ export function useScreenTitle(name: string, doing = ''): void {
 /**
  * The heading a screen change puts the keyboard on, and when it takes it.
  *
- * A router that swaps the screen under a reader moves nothing: a screen reader
- * announces nothing, and the next Tab resumes from the top of the document rather
- * than from the screen that just arrived. So the arriving screen's `h1` takes the
- * keyboard, which announces the screen by reading its heading and puts the tab order
- * where the reader is.
+ * ADR-0079: the arriving screen's `h1` takes focus, an arrival is the heading's own
+ * name rather than a route, and the first screen of a session moves nothing.
  *
- * **What counts as an arrival is the heading's own name, held across mounts.** Each
- * screen is a different component, so a ref inside one cannot tell *this screen has
- * just replaced another* from *this screen is being drawn for the first time*: it is
- * a first render either way. The name last announced is therefore held in the module
- * — one document, one console — and a call whose name differs from it is an arrival.
- *
- * **The first screen of a session does not take the keyboard.** Nobody navigated to
- * it; it is where the address bar landed, and focus belongs at the top of a document
- * somebody has just opened. So the first call records the name and moves nothing.
- *
- * **The step of a walk is an arrival too**, which is what `name` rather than a path
- * buys: the registration walk swaps its whole screen under one route, and a reader
- * who is not told is a reader whose next Tab starts from the document again.
+ * The local consequence, for a screen calling this: **pass the name of the screen and
+ * not what its heading currently reads.** The run screen's heading changes when the
+ * run changes phase and the report screen's becomes the target's name when the
+ * document arrives; a key that followed either would take the keyboard off whatever
+ * the reader was reading, mid-screen. The registration walk is the opposite case and
+ * passes its step, because there the step *is* the screen.
  */
 export function useArrivalFocus(name: string): RefObject<HTMLHeadingElement | null> {
   const heading = useRef<HTMLHeadingElement>(null)
@@ -91,11 +84,3 @@ export function useArrivalFocus(name: string): RefObject<HTMLHeadingElement | nu
   }, [name])
   return heading
 }
-
-/**
- * The screen this document last announced, or `null` before it announced any.
- *
- * Module state rather than a ref, and the docstring above says why: the question it
- * answers spans two components, because an arrival is one screen replacing another.
- */
-let announced: string | null = null

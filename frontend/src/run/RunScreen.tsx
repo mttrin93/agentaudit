@@ -277,6 +277,10 @@ export function RunScreen() {
         {said}
       </p>
 
+      {/* When what is below was last true, for the reader who did not watch it
+          arrive. Not on a run that has stopped: those figures are final rather than
+          dated, and a time of day over them reads as a screen still watching
+          something (ADR-0078). */}
       {live.stamp !== '' && live.kind !== 'settled' ? (
         <p className="answered">Answered at {live.stamp}</p>
       ) : null}

@@ -97,12 +97,12 @@ function clockTime(at: number): string {
 }
 
 /** What the screen was last told, and how long ago. */
-export function liveness(read: {
+export function liveness(poll: {
   answeredAt: number | null
   now: number
   inFlight: boolean
 }): Liveness {
-  const { answeredAt, now, inFlight } = read
+  const { answeredAt, now, inFlight } = poll
   if (answeredAt === null) {
     return { kind: inFlight ? 'waiting' : 'settled', stamp: '', silentFor: 0 }
   }

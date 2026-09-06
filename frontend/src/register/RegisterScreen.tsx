@@ -64,6 +64,8 @@ import {
   type Step,
 } from './declarations'
 import { rememberTheFigures, rememberWhoAttested } from '../run/interrupt'
+import { useArrivalFocus, useScreenTitle } from '../console/announce'
+import { REGISTER_A_TARGET } from '../console/rail'
 import { Blocked, STILL_UNDECLARED } from '../blocked'
 
 /*
@@ -539,11 +541,31 @@ export function RegisterScreen() {
   }
 
   /**
+   * The step, said in the tab strip and read out on arrival.
+   *
+   * **Above the `focusOn` effect below, and that is the whole of why it is here**
+   * rather than beside `current`. A refusal that names a field walks back to the step
+   * drawing it *and* puts the keyboard on the field, so on that one render both this
+   * arrival and that effect want the keyboard — and the later of the two is the one
+   * that keeps it. The field is the more specific answer: it is the thing the bench
+   * refused, and the heading it is under is one Shift-Tab away.
+   */
+  const arriving = STEP_TITLES[WALK_STEPS[step]]
+  useScreenTitle(REGISTER_A_TARGET, arriving)
+  const heading = useArrivalFocus(arriving)
+
+  /**
    * The field the keyboard is owed, once the step drawing it is on screen.
    *
    * A name rather than a boolean, so that a second refusal about a second field
    * moves the focus again — and cleared by the effect that spends it, so that
    * nothing steals the keyboard back on the next render.
+   *
+   * **Below the arrival above, and it stays below it.** Both want the keyboard on the
+   * render a refusal walks the walk back on, and React runs effects in the order they
+   * are declared, so the later one keeps it. That is this one, deliberately — the
+   * field is what the bench refused (ADR-0079) — and `e2e/keyboard.spec.ts` fails if
+   * the two are swapped.
    */
   const [focusOn, setFocusOn] = useState<string | null>(null)
   useEffect(() => {
@@ -581,7 +603,9 @@ export function RegisterScreen() {
         to anybody's endpoint until an operator answers it.
       */}
       <header>
-        <h1>{STEP_TITLES[current]}</h1>
+        <h1 ref={heading} tabIndex={-1}>
+          {arriving}
+        </h1>
       </header>
 
       {refusal.statement ? (

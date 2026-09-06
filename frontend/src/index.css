@@ -603,6 +603,52 @@ pre {
   margin: 0;
 }
 
+/*
+ * A live region a screen reader reads and nothing draws.
+ *
+ * Not `display: none` and not `hidden`: either would take it out of the accessibility
+ * tree and there would be nothing to announce. A one-pixel clipped box is the way a
+ * region stays in the tree with nothing on the page, and it is the only rule in this
+ * stylesheet whose purpose is to make something invisible.
+ *
+ * The screen says the same thing in its own heading, which is why this is not drawn:
+ * a second copy in the reading column would be the console saying everything twice.
+ */
+.announced {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* When what is on the screen was last true. A stamp, in the quiet the asides use. */
+.answered {
+  margin: 0 0 1.5rem;
+  font-size: 0.85rem;
+  color: var(--quiet);
+}
+
+/*
+ * The screen saying it has stopped being told anything.
+ *
+ * A well with the same hairline every block of figures has, and no accent colour: a
+ * poll that stopped being answered is a fact about this browser's link to the bench
+ * and not a verdict, a refusal, or anything the target did (ADR-0078). Drawn in the
+ * ordinary chrome for the same reason the words avoid the word *failed*.
+ */
+.stalled {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--paper);
+  padding: 0.2rem 1rem 1rem;
+  margin-bottom: 2rem;
+}
+
 .refusal {
   border: 1px solid var(--refusal);
   border-radius: var(--radius);

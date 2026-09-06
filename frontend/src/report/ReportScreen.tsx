@@ -102,6 +102,8 @@ import {
   type ReportView,
   type RouteReading,
 } from './report'
+import { useArrivalFocus, useScreenTitle } from '../console/announce'
+import { ITS_REPORT } from '../console/rail'
 
 /** What this screen is holding: the things it needs, or why it has none of them. */
 interface Held {
@@ -209,6 +211,11 @@ export function ReportScreen() {
   }, [runId])
 
   const view = held.report ? reportView(held.report) : null
+  useScreenTitle(ITS_REPORT, view ? view.target : 'Reading the report')
+  // The screen and not the target: the heading is the target's name once the
+  // document arrives, and a heading that took the keyboard when it did would move
+  // it under a reader who is already reading the report.
+  const heading = useArrivalFocus(ITS_REPORT)
   return (
     <main className="screen">
       {/*
@@ -221,7 +228,9 @@ export function ReportScreen() {
         which is where a reader looking for what this document is goes.
       */}
       <header>
-        <h1>{view ? view.target : 'Reading the report'}</h1>
+        <h1 ref={heading} tabIndex={-1}>
+          {view ? view.target : 'Reading the report'}
+        </h1>
       </header>
 
       {held.unavailable ? (

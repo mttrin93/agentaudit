@@ -54,6 +54,8 @@ import {
   type SettingsBlock,
   type TuningBlock,
 } from './settings'
+import { useArrivalFocus, useScreenTitle } from './announce'
+import { SETTINGS } from './rail'
 
 /** What this screen is holding: the configuration, or why it has none. */
 interface Held {
@@ -68,6 +70,8 @@ const SETTLED_MS = 400
 
 export function SettingsScreen() {
   const [held, setHeld] = useState<Held>(NOTHING_YET)
+  useScreenTitle(SETTINGS)
+  const heading = useArrivalFocus(SETTINGS)
 
   useEffect(() => {
     let current = true
@@ -100,7 +104,9 @@ export function SettingsScreen() {
         `WHAT_THIS_SCREEN_ANSWERS` is still built and still exported.
       */}
       <header>
-        <h1>Settings</h1>
+        <h1 ref={heading} tabIndex={-1}>
+          {SETTINGS}
+        </h1>
       </header>
 
       {held.unavailable ? (

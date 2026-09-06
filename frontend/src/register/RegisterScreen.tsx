@@ -608,6 +608,10 @@ export function RegisterScreen() {
         </h1>
       </header>
 
+      {/* Assertive (ADR-0080): the operator pressed *Register the target* and the
+          bench refused it. A refusal that names a field also takes the keyboard to
+          that field (#120); one that names none moves nothing, and then this is the
+          only thing that says the press was answered at all. */}
       {refusal.statement ? (
         <section className="refusal" role="alert">
           <h2>Registration did not complete</h2>

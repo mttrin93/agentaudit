@@ -233,8 +233,11 @@ export function ReportScreen() {
         </h1>
       </header>
 
+      {/* Both blocks below are polite (ADR-0080). Neither is the answer to a press:
+          this screen reads a report on arrival, so whichever of the two is true is
+          true before the reader has done anything on it. */}
       {held.unavailable ? (
-        <section className="refusal" role="alert">
+        <section className="refusal" role="status">
           <h2>The bench did not serve this report</h2>
           <p>{held.unavailable}</p>
           <p>
@@ -245,7 +248,7 @@ export function ReportScreen() {
       ) : null}
 
       {held.noReport ? (
-        <section className="refusal" role="alert">
+        <section className="refusal" role="status">
           <h2>This run has no report</h2>
           <p>{held.noReport}</p>
           <p>

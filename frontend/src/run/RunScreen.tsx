@@ -305,13 +305,20 @@ export function RunScreen() {
         </section>
       ) : null}
 
+      {/* Polite, and ADR-0080 is why: nobody pressed anything to produce this. It is
+          the poll's own refusal, arriving on a two-second timer that runs whether or
+          not a reader is looking at the screen — and it can be here in the first
+          paint, where an assertive region announces nothing anyway. */}
       {unavailable ? (
-        <section className="refusal" role="alert">
+        <section className="refusal" role="status">
           <h2>The bench did not say where this run is</h2>
           <p>{unavailable}</p>
         </section>
       ) : null}
 
+      {/* One of the six that stay assertive (ADR-0080): this is on the screen only
+          because an operator answered the interrupt and the bench did not take the
+          answer, and it is what they are waiting to be told. */}
       {refused ? (
         <section className="refusal" role="alert">
           <h2>That answer was not taken</h2>
@@ -386,12 +393,14 @@ function TheInterrupt({
           at the top, and that the run is holding is what the screen being here at
           all means. Three paragraphs went with the heading: the bench's own sentence
           about the halt, this screen's sentence saying nothing has been sent, and the
-          one saying why there is no third figure. The `FIGURES_NOT_HELD` alert stays,
+          one saying why there is no third figure. The `FIGURES_NOT_HELD` block stays,
           because it is the only thing that explains a screen with no figures and no
-          confirmation on it.
+          confirmation on it. It is polite rather than assertive: nothing was refused
+          and nobody pressed anything — the handoff simply held nothing for this run,
+          which is true before the reader has done a thing (ADR-0080).
         */}
         {view === null ? (
-          <p role="alert">{FIGURES_NOT_HELD}</p>
+          <p role="status">{FIGURES_NOT_HELD}</p>
         ) : (
           <dl className="figures">
             {view.figures.map((figure) => (

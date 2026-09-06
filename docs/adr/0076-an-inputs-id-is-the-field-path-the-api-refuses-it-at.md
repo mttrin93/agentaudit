@@ -3,6 +3,14 @@
 **Status:** accepted (#120, sub-issue of #119)
 **Date:** 2026-09-06
 
+> **Amended by [ADR-0077](./0077-a-mark-is-retired-by-the-edit-and-the-last-mark-takes-the-sentence.md)
+> on how long a mark lasts, and on nothing else.** This ADR says what names an input
+> and got the message to it; it left open when either stops being drawn, and the
+> answer shipped as *never, until the next post*. ADR-0077 retires a mark when the
+> operator edits the field it is on, and the sentence when the last mark goes.
+> Everything here stands and is used by it — the retirement reads `event.target.id`
+> off one delegated handler precisely because the DOM name is the wire name.
+
 ## Context
 
 The console posts one body it did not choose the shape of. `POST /runs` takes

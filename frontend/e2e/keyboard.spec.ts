@@ -49,6 +49,18 @@ const REFUSED_FIELD = 'body.cost.price_per_call'
 
 const REFUSED_MSG = 'a price per call is a decimal, and this is not one'
 
+/**
+ * A second field on the same step, so that a refusal can name two.
+ *
+ * ADR-0077 is about which of two marks goes when one of them is corrected, and a
+ * refusal naming one field cannot show it: the rule that retires the whole refusal
+ * and the rule that retires one mark agree exactly while there is only one. Both of
+ * these are drawn by the endpoint step, so both are on screen at once.
+ */
+const ALSO_REFUSED_FIELD = 'body.target.name'
+
+const ALSO_REFUSED_MSG = 'a target needs a name that is not blank'
+
 /** The three statements ticked and the name recorded, which is what holds step one. */
 async function completeTheEndpointStep(page: Page): Promise<void> {
   await page.goto('/#/register')
@@ -105,7 +117,18 @@ test('a step the walk may not leave says what it is waiting for, over the button
   await expect(reasons).toHaveCount(0)
 })
 
-test('a 422 naming a field marks that field and says why under it', async ({ page }) => {
+/**
+ * The whole walk, up to the press that posts a registration the API will refuse.
+ *
+ * The `detail` is the caller's, in FastAPI's own shape, because the two specs below
+ * differ in exactly one thing: how many fields the refusal names. Everything before
+ * the press is the same three steps, and a second copy of them would be three steps
+ * to keep in step with the screen rather than one.
+ */
+async function registerAndBeRefused(
+  page: Page,
+  detail: readonly { loc: readonly string[]; msg: string }[],
+): Promise<void> {
   const served = servedTarget()
   await completeTheEndpointStep(page)
   await page.getByPlaceholder('the name the report will call this target').fill(served.name)
@@ -121,13 +144,14 @@ test('a 422 naming a field marks that field and says why under it', async ({ pag
   await page.getByRole('button', { name: 'Continue' }).click()
 
   await page.getByRole('radio', { name: /answers in text only/ }).check()
-  await page.route('**/runs', (route) =>
-    route.fulfill({
-      status: 422,
-      json: { detail: [{ loc: ['body', 'cost', 'price_per_call'], msg: REFUSED_MSG }] },
-    }),
-  )
+  await page.route('**/runs', (route) => route.fulfill({ status: 422, json: { detail } }))
   await page.getByRole('button', { name: 'Register the target' }).click()
+}
+
+test('a 422 naming a field marks that field and says why under it', async ({ page }) => {
+  await registerAndBeRefused(page, [
+    { loc: ['body', 'cost', 'price_per_call'], msg: REFUSED_MSG },
+  ])
 
   // Back on the step that draws the field, which is two steps behind where the
   // registration was posted from: a message bound to an input the operator cannot
@@ -144,6 +168,45 @@ test('a 422 naming a field marks that field and says why under it', async ({ pag
   // And the bench's own sentence is still over the form: a refusal names a field or
   // it does not, and either way it says what happened to the registration.
   await expect(page.locator('section.refusal')).toContainText(REFUSED_MSG)
+})
+
+test('a corrected field loses its mark, and the last mark takes the sentence with it', async ({
+  page,
+}) => {
+  await registerAndBeRefused(page, [
+    { loc: ['body', 'cost', 'price_per_call'], msg: REFUSED_MSG },
+    { loc: ['body', 'target', 'name'], msg: ALSO_REFUSED_MSG },
+  ])
+
+  const price = page.locator(`[id="${REFUSED_FIELD}"]`)
+  const name = page.locator(`[id="${ALSO_REFUSED_FIELD}"]`)
+  const sentence = page.locator('section.refusal')
+  await expect(price).toHaveAttribute('aria-invalid', 'true')
+  await expect(name).toHaveAttribute('aria-invalid', 'true')
+  await expect(sentence).toContainText(REFUSED_MSG)
+
+  // ADR-0077: a mark is retired by the edit and not by the value, so this asserts
+  // nothing about whether `0.02` is a price the API would now take. It is an edit,
+  // and the bench is the only thing that decides what it thinks of the new one.
+  await price.fill('0.02')
+  await expect(price).not.toHaveAttribute('aria-invalid')
+  await expect(price).not.toHaveAttribute('aria-describedby')
+  await expect(page.locator(`[id="${REFUSED_FIELD}.refused"]`)).toHaveCount(0)
+
+  // And only that one. The other field was refused about a value that has not
+  // changed, and the sentence stands while any mark it arrived with is standing.
+  await expect(name).toHaveAttribute('aria-invalid', 'true')
+  await expect(page.locator(`[id="${ALSO_REFUSED_FIELD}.refused"]`)).toHaveText(
+    ALSO_REFUSED_MSG,
+  )
+  await expect(sentence).toContainText(REFUSED_MSG)
+
+  // The last mark takes the sentence with it: nothing on this screen is still
+  // refused, so there is nothing left for the block over the form to be about.
+  await name.fill('a name this spec never posts')
+  await expect(name).not.toHaveAttribute('aria-invalid')
+  await expect(page.locator(`[id="${ALSO_REFUSED_FIELD}.refused"]`)).toHaveCount(0)
+  await expect(sentence).toHaveCount(0)
 })
 
 test('Enter in one of the settings screen’s number boxes sends what it now reads', async ({

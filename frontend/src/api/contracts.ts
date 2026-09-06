@@ -41,6 +41,11 @@ export interface FieldRefusal {
  * about the registration, and a refusal about the registration names no field at
  * all — so a screen holding these apart is a screen that can show one refusal's
  * sentence beside the previous one's marks. `fields` is empty and never absent.
+ *
+ * ADR-0077: a refusal only ever moves toward nothing. A new one replaces it whole and
+ * the operator's edits narrow it field by field, so the two halves are never set
+ * apart — but they are no longer *cleared* together, and the last field to go takes
+ * the sentence with it.
  */
 export interface Refusal {
   statement: string

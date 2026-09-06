@@ -42,7 +42,15 @@ function fieldComponent(): string {
     -1,
   )
   const to = screen.indexOf('\n}\n', from)
-  return screen.slice(from, to)
+  const body = screen.slice(from, to)
+  // The slice is the component and stops at it. A `}` in the first column ends every
+  // top-level block in this file, so a slice carrying a second declaration is one
+  // that ran past the end of this one — and every assertion below would then be
+  // about more of the file than it says it is, silently.
+  expect(body, 'the field component was sliced past its own end').not.toMatch(
+    /\nfunction |\nconst |\ninterface /,
+  )
+  return body
 }
 
 describe('the mark on a refused input and the message under it', () => {

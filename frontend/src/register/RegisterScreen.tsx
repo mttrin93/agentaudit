@@ -208,7 +208,7 @@ interface Marks {
  * the state and `aria-describedby` is the sentence, which is the pair a screen reader
  * announces on reaching the field — the whole of what #120 asked for, since a
  * page-level block leaves the reader to map a `loc` path onto a form by hand. They
- * used to be two independent edits at every field, thirteen times over: an input that
+ * used to be two independent edits at every field, ten controls over: an input that
  * got the attributes and no message would point `aria-describedby` at an id nothing
  * renders, which is a dangling reference a screen reader resolves to nothing and
  * which nothing in the types or the tests could catch. Here the id, the attributes

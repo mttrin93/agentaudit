@@ -21,10 +21,14 @@
  * construction. Here it is one string, and the condition that draws the list is the
  * same list the button is disabled by.
  *
- * A constant rather than a `cited(reasons)` helper, which is the shape this wanted:
- * a `.tsx` that exports a function beside a component loses fast refresh for the file
- * and `.oxlintrc.json` warns about it, while a constant is allowed. So the ternary is
- * at the call sites, where it reads off the same array the list does.
+ * A constant rather than a `cited(reasons)` helper: `.oxlintrc.json` warns on a
+ * `.tsx` that exports a function beside a component — fast refresh goes for the file
+ * — and allows a constant beside one. So the ternary is at the call sites, where it
+ * reads off the same array the list is drawn from.
+ *
+ * **One list a page**, since the id is a constant and not a prop. Both walks draw one
+ * over one footer, which is what the id is for; a screen wanting two would want an id
+ * per list, and the day that arrives is the day this takes a name.
  */
 
 /** Where the reasons the primary button is dead are written, for the button to cite. */

@@ -64,6 +64,7 @@ import {
   type Step,
 } from './declarations'
 import { rememberTheFigures, rememberWhoAttested } from '../run/interrupt'
+import { Blocked, STILL_UNDECLARED } from '../blocked'
 
 /*
  * The steps and the rule that decides when one may be left are `WALK_STEPS` and
@@ -118,9 +119,6 @@ const NOTHING_REFUSED: Refusal = { statement: '', fields: [] }
 function said(statement: string): Refusal {
   return { statement, fields: [] }
 }
-
-/** Where the reasons the primary button is dead are written, for the button to cite. */
-const STILL_UNDECLARED = 'still-undeclared'
 
 /**
  * Every input on this walk, named by the path the API would refuse it at.
@@ -626,27 +624,15 @@ export function RegisterScreen() {
         ) : null}
 
         {/*
-          Why the button below is grey, immediately above the button.
-
-          It sits over the footer rather than under it, and it is the arrangement the
-          gate walk already uses (`GateAttestation.tsx`): the reader arrives at the
-          button, finds it dead, and the reason is the line their eye has just passed
-          rather than something below the fold or back up the form. `aria-describedby`
-          binds it to the button as well, because a screen reader in browse mode reads
-          a disabled control and would otherwise read *Continue, dimmed* and nothing
-          else.
+          Why the button below is grey, immediately above the button — the list and
+          the citation both out of `blocked.tsx`, which is where the arrangement and
+          its reasons are written down, and which the gate walk draws too.
 
           On the last step the reasons are the registration guard's own, because that
           is what disables the button there: the walk may be complete step by step and
           still be missing a URL, and the operator is owed the field and not the step.
         */}
-        {held.length ? (
-          <ul className="blocked" id={STILL_UNDECLARED}>
-            {held.map((one) => (
-              <li key={one}>{one}</li>
-            ))}
-          </ul>
-        ) : null}
+        <Blocked reasons={held} />
 
         <footer className="walk">
           <button

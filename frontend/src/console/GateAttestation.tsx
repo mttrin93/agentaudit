@@ -17,6 +17,7 @@ import type {
 import {
   GATE_RUN_STATEMENTS,
 } from './gaterun'
+import { Blocked, STILL_UNDECLARED } from '../blocked'
 
 /**
  * The three statements, one at a time, in the record's own wording.
@@ -55,6 +56,16 @@ export function TheAttestation({
   const statement = GATE_RUN_STATEMENTS[step]
   const made = attesting.attested[statement.field]
   const held = busy || !made || (last && missing.length > 0)
+  /**
+   * What is holding the forward control, where anything this screen can say holds it.
+   *
+   * The statement's own tick is not in here and cannot be: it is the one control on
+   * the screen, directly above the button, and a line reading *not attested* under
+   * the box the operator has not ticked says nothing they cannot see. What the guard
+   * refuses in is the rest of the declaration, and it is only knowable on the last
+   * step, where the body is built.
+   */
+  const reasons = last ? missing : []
   return (
     <section>
       {/* A form, so that Enter in either of the two fields below does what the primary
@@ -113,19 +124,22 @@ export function TheAttestation({
           </>
         ) : null}
 
-        {last && missing.length ? (
-          <ul className="blocked">
-            {missing.map((one) => (
-              <li key={one}>{one}</li>
-            ))}
-          </ul>
-        ) : null}
+        {/* The register walk's own list, out of the module both walks draw it from
+            (`blocked.tsx`), and cited by the button below rather than only sitting
+            over it. Only on the last step: the earlier ones are held by their own
+            statement and the tick beside it is the whole of what is missing. */}
+        <Blocked reasons={reasons} />
 
         <footer className="walk">
           <button type="button" onClick={back} disabled={busy}>
             {step === 0 ? 'Not now' : 'Back'}
           </button>
-          <button type="submit" className="primary" disabled={held}>
+          <button
+            type="submit"
+            className="primary"
+            disabled={held}
+            aria-describedby={reasons.length ? STILL_UNDECLARED : undefined}
+          >
             {last
               ? busy
                 ? 'Starting…'

@@ -72,6 +72,10 @@ export function TheEstimate({
           </div>
         ))}
       </dl>
+      {/* No form, on the run screen's own reasoning: this is the halt in front of
+          the spend, there is no field for Enter to finish, and the one thing a form
+          would buy is a keystroke that confirms 830-odd calls from the checkbox
+          below (#120, ADR-0007). The attestation walk before it has one. */}
       <label className="declaration">
         <input
           type="checkbox"

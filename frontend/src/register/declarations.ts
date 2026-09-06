@@ -182,6 +182,128 @@ export function withheldStatements(declarations: Declarations): string[] {
 }
 
 /**
+ * The steps of the register walk, in order, one per screen.
+ *
+ * Listed rather than generated, so that the flow's shape is readable — and listed
+ * *here* rather than in `RegisterScreen.tsx`, because `unmetConditions` below is the
+ * rule that decides when one of them may be left, and a step name that rule could not
+ * see would be a step nothing holds. The three attestations share the one `target`
+ * step and are generated from `ATTESTATION_STATEMENTS` inside it, so a statement
+ * added to the record appears on the walk without anything here being touched.
+ */
+export const WALK_STEPS = ['target', 'plant', 'tools'] as const
+
+export type Step = (typeof WALK_STEPS)[number]
+
+/*
+ * The five sentences a step and the registration guard both refuse with.
+ *
+ * Constants rather than two literals, because the screen now prints them under the
+ * button they disable: a condition reworded on the button would say one thing where
+ * the operator is stopped and another where the post is refused, and the second is
+ * the one they would eventually meet. One string, both readers.
+ */
+const IDENTITY_UNRECORDED = 'an attestation has to record who made it'
+
+const NONCE_UNISSUED = 'no nonce has been issued, so there is nothing planted to prove'
+
+const NONCE_UNPLANTED =
+  'the nonce is not declared planted, and the proof of control has not been ' +
+  'waived. Registration completes on the echo, and the run’s first call ' +
+  'asks for it'
+
+const TOOL_VISIBILITY_UNDECLARED =
+  'tool-call visibility is not declared. It decides whether ' +
+  `${TOOL_TRACE_FAMILIES.join(' and ')} can be measured at all`
+
+const TOOLS_UNDECLARED =
+  'a target that exposes its tool calls has to declare which tools it has: ' +
+  'scope creep is read against that list, and against an empty one every ' +
+  'call this target makes would score as a finding'
+
+/**
+ * What one step of the walk is still waiting for, in the wording it will be refused
+ * in.
+ *
+ * The negation of `canLeave` below, said rather than counted — and that the two are
+ * one function is the whole of the point: a button disabled with nothing beside it
+ * makes the reader hunt the step for the field they missed, and a reason printed
+ * under an enabled button is a condition the walk does not actually hold. Named
+ * rather than counted for `withheldStatements`’ reason, and worded from the
+ * constants above so that the sentence on the button is the sentence in the refusal.
+ *
+ * The endpoint step’s own fields — the name, the URL, the agent type — are
+ * deliberately absent, because they do not hold this step: they are refused at the
+ * post by `registrationRequest`, which is where an operator meets them. This says
+ * what *this button* is waiting for and never what the registration will want.
+ *
+ * **Every step is named, and none of them is the fall-through.** A `tools` branch
+ * reached by exhausting the other two is a branch a fourth step would silently land
+ * in — the walk would gain a screen and the screen would be held by the tool list’s
+ * conditions, and it would compile the whole way. The `never` below is what refuses
+ * that: a step added to `WALK_STEPS` and not to this function stops being a screen
+ * an operator meets and starts being a type error.
+ */
+export function unmetConditions(step: Step, declarations: Declarations): string[] {
+  if (step === 'target') {
+    // The three statements are on this step, and they hold it exactly as they held
+    // their own page: all three, and the name they are recorded against. A screen
+    // that let the walk past them would be a console asserting them itself.
+    const unmet = withheldStatements(declarations).map(
+      (wording) => `not attested: ${wording}`,
+    )
+    if (!declarations.identity.trim()) {
+      unmet.push(IDENTITY_UNRECORDED)
+    }
+    return unmet
+  }
+  if (step === 'plant') {
+    // Either the value is issued and declared planted, or the proof is waived and
+    // there is no value to wait for.
+    if (declarations.proof_waived) {
+      return []
+    }
+    if (!declarations.nonce) {
+      return [NONCE_UNISSUED]
+    }
+    return declarations.nonce_planted ? [] : [NONCE_UNPLANTED]
+  }
+  if (step === 'tools') {
+    if (declarations.exposes_tool_calls === null) {
+      return [TOOL_VISIBILITY_UNDECLARED]
+    }
+    if (declarations.exposes_tool_calls && !declaredTools(declarations).length) {
+      return [TOOLS_UNDECLARED]
+    }
+    return []
+  }
+  return unheldStep(step)
+}
+
+/**
+ * A step of the walk that nothing above holds, of which there is not one.
+ *
+ * The parameter is `never`, so reaching this line is a compile error and not a call.
+ * The `throw` is what a value that got past the typechecker anyway would meet, and
+ * it names the step rather than being a bare `never`, because the one way here is a
+ * `WALK_STEPS` that grew.
+ */
+function unheldStep(step: never): never {
+  throw new Error(`no conditions are written for the ${String(step)} step`)
+}
+
+/**
+ * Whether a step has been completed enough to leave.
+ *
+ * Read off `unmetConditions` rather than checked again beside it. Two functions
+ * asserting the same rule is the arrangement where a button opens on a condition
+ * nobody printed, or prints one it no longer waits for.
+ */
+export function canLeave(step: Step, declarations: Declarations): boolean {
+  return unmetConditions(step, declarations).length === 0
+}
+
+/**
  * A registration ready to post, or the reasons it is not.
  *
  * Two outcomes rather than a body and a separate `valid` flag, so that there is
@@ -223,20 +345,16 @@ export function registrationRequest(
     // it would be a value nobody plants, nothing checks and one family no longer
     // needs (ADR-0007, as amended).
   } else if (!declarations.nonce) {
-    missing.push('no nonce has been issued, so there is nothing planted to prove')
+    missing.push(NONCE_UNISSUED)
   } else if (!declarations.nonce_planted) {
     // Two ways past this step and the second one is not silence. Either the value
     // is planted, or the operator has said in as many words that the run may start
     // without the proof — and until one of them is stated, the walk is unfinished
     // rather than waived by default.
-    missing.push(
-      'the nonce is not declared planted, and the proof of control has not been ' +
-        'waived. Registration completes on the echo, and the run’s first call ' +
-        'asks for it',
-    )
+    missing.push(NONCE_UNPLANTED)
   }
   if (!declarations.identity.trim()) {
-    missing.push('an attestation has to record who made it')
+    missing.push(IDENTITY_UNRECORDED)
   }
   missing.push(
     ...withheldStatements(declarations).map(
@@ -245,19 +363,12 @@ export function registrationRequest(
   )
 
   if (declarations.exposes_tool_calls === null) {
-    missing.push(
-      'tool-call visibility is not declared. It decides whether ' +
-        `${TOOL_TRACE_FAMILIES.join(' and ')} can be measured at all`,
-    )
+    missing.push(TOOL_VISIBILITY_UNDECLARED)
   } else if (declarations.exposes_tool_calls && !declaredTools(declarations).length) {
     // The API's own refusal, held here so the operator meets it as an unfinished
     // step rather than as a 422: scope creep is read against this list, and
     // against an empty one every call the target makes would score as a finding.
-    missing.push(
-      'a target that exposes its tool calls has to declare which tools it has: ' +
-        'scope creep is read against that list, and against an empty one every ' +
-        'call this target makes would score as a finding',
-    )
+    missing.push(TOOLS_UNDECLARED)
   }
   if (declarations.price_per_call.trim() && !declarations.currency.trim()) {
     // `CallPrice`'s guard, for the same reason: an amount with a currency the

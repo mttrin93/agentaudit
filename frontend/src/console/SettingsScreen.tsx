@@ -315,6 +315,36 @@ function TheTuning({
     pending.current = setTimeout(() => void send(asked), SETTLED_MS)
   }
 
+  /**
+   * Enter in a number box sends what it now reads, without waiting it out.
+   *
+   * There is no button an operator can see on this form and there is deliberately
+   * not going to be one — nothing here spends anything, so there is nothing to
+   * confirm — but a form Enter does nothing in, on a screen of number boxes, is a
+   * form missing the one key an operator will press. So the settled timer is dropped
+   * and the request goes now, which is the same request the pause would have sent
+   * 400ms later.
+   *
+   * **A `hidden` submit button is what makes that happen, and it is not decoration.**
+   * A submit handler alone was not enough and the screen shipped for a while as if it
+   * were: implicit submission runs the handler only when the form has a default
+   * button, *or* when exactly one field blocks implicit submission. This form draws
+   * three number boxes, and a `type="number"` is such a field — so with no button at
+   * all the handler could never fire here, on the one screen it was written for. The
+   * button is `hidden`, which keeps it out of the tab order and out of the
+   * accessibility tree: the operator gains a keystroke and not a control.
+   *
+   * Without the timer being cleared this would send twice, and the second would be a
+   * `PUT` of a reading the bench had just answered with.
+   */
+  const sendNow = () => {
+    if (pending.current !== null) {
+      clearTimeout(pending.current)
+      pending.current = null
+    }
+    void send({ model, effort, temperature, numbers })
+  }
+
   return (
     <section>
       {/* The heading and the block's own paragraph are built and not drawn. It argued why these
@@ -324,7 +354,22 @@ function TheTuning({
           decides, and `block.warning` stays, because that one is not an
           explanation of the screen but a limit on what a run at that setting may
           be called. */}
-      <div className="tuning">
+      <form
+        className="tuning"
+        onSubmit={(event) => {
+          // Prevented for the reason `RegisterScreen`'s is: the browser's own submit
+          // would reload the console and take the declaration with it.
+          event.preventDefault()
+          sendNow()
+        }}
+      >
+        {/* The form's default button, and the whole of what it is for is that a form
+            without one does not implicitly submit when three number boxes block the
+            keypress. `hidden`, so it is not in the tab order, not in the
+            accessibility tree, and not a control this screen offers — see `sendNow`. */}
+        <button type="submit" hidden>
+          Send these settings now
+        </button>
         <label>
           <span className="kind">the adaptive attacker</span>
           <select
@@ -467,8 +512,10 @@ function TheTuning({
 
             There is no button either. Nothing here spends anything: these are the
             settings the *next* run starts with, and that run has its own attestation
-            and its own halt in front of its own estimate. */}
-      </div>
+            and its own halt in front of its own estimate — and Enter still sends,
+            because a form with no control at all is one a keyboard cannot finish
+            (`sendNow`). */}
+      </form>
 
       {refused ? (
         <div className="citation uncited" role="alert">

@@ -54,74 +54,86 @@ export function TheAttestation({
 }) {
   const statement = GATE_RUN_STATEMENTS[step]
   const made = attesting.attested[statement.field]
+  const held = busy || !made || (last && missing.length > 0)
   return (
     <section>
-      <h2>
-        Statement {statement.step} of {statement.of}
-      </h2>
-      <p className="consequence">{statement.consequence}</p>
-      <label className="declaration">
-        <input
-          type="checkbox"
-          checked={made}
-          onChange={(event) =>
-            declare({
-              attested: {
-                ...attesting.attested,
-                [statement.field]: event.target.checked,
-              },
-            })
+      {/* A form, so that Enter in either of the two fields below does what the primary
+          button does — the register walk's own arrangement, for the same reason and on
+          the same footer (#120). Nothing here spends anything: the forward control
+          reaches the estimate, and the halt in front of the spend is the screen after
+          this one (ADR-0007). */}
+      <form
+        onSubmit={(event) => {
+          // Prevented for the reason `RegisterScreen`'s is: the browser's own submit
+          // would reload the console and take the declaration with it.
+          event.preventDefault()
+          if (!held) {
+            forward()
           }
-        />
-        <span className="wording">{statement.wording}</span>
-      </label>
+        }}
+      >
+        <h2>
+          Statement {statement.step} of {statement.of}
+        </h2>
+        <p className="consequence">{statement.consequence}</p>
+        <label className="declaration">
+          <input
+            type="checkbox"
+            checked={made}
+            onChange={(event) =>
+              declare({
+                attested: {
+                  ...attesting.attested,
+                  [statement.field]: event.target.checked,
+                },
+              })
+            }
+          />
+          <span className="wording">{statement.wording}</span>
+        </label>
 
-      {step === 0 ? (
-        <>
-          <label>
-            Who is attesting
-            <input
-              value={attesting.identity}
-              onChange={(event) => declare({ identity: event.target.value })}
-              placeholder="recorded against every one of the three statements"
-            />
-          </label>
-          <label>
-            What one call costs you, on your own provider
-            <input
-              value={attesting.price_per_call}
-              onChange={(event) => declare({ price_per_call: event.target.value })}
-              placeholder="leave empty for a gate run you have not priced"
-            />
-          </label>
-        </>
-      ) : null}
+        {step === 0 ? (
+          <>
+            <label>
+              Who is attesting
+              <input
+                value={attesting.identity}
+                onChange={(event) => declare({ identity: event.target.value })}
+                placeholder="recorded against every one of the three statements"
+              />
+            </label>
+            <label>
+              What one call costs you, on your own provider
+              <input
+                value={attesting.price_per_call}
+                onChange={(event) => declare({ price_per_call: event.target.value })}
+                placeholder="leave empty for a gate run you have not priced"
+              />
+            </label>
+          </>
+        ) : null}
 
-      {last && missing.length ? (
-        <ul className="blocked">
-          {missing.map((one) => (
-            <li key={one}>{one}</li>
-          ))}
-        </ul>
-      ) : null}
+        {last && missing.length ? (
+          <ul className="blocked">
+            {missing.map((one) => (
+              <li key={one}>{one}</li>
+            ))}
+          </ul>
+        ) : null}
 
-      <footer className="walk">
-        <button type="button" onClick={back} disabled={busy}>
-          {step === 0 ? 'Not now' : 'Back'}
-        </button>
-        <button
-          type="button"
-          className="primary"
-          onClick={forward}
-          disabled={busy || !made || (last && missing.length > 0)}
-        >
-          {last
-            ? busy
-              ? 'Starting…'
-              : 'See what it will cost'
-            : 'Continue'}
-        </button>
-      </footer>
+        <footer className="walk">
+          <button type="button" onClick={back} disabled={busy}>
+            {step === 0 ? 'Not now' : 'Back'}
+          </button>
+          <button type="submit" className="primary" disabled={held}>
+            {last
+              ? busy
+                ? 'Starting…'
+                : 'See what it will cost'
+              : 'Continue'}
+          </button>
+        </footer>
+      </form>
     </section>
   )
 }

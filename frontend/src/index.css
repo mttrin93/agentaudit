@@ -365,6 +365,30 @@ textarea {
 }
 
 /*
+ * The field the API refused, and what it said about it.
+ *
+ * The hairline in `--refusal` and nothing else — no fill, no icon, no shake. A form
+ * this bench draws is a declaration somebody is making and a rejected field is a
+ * sentence to read, not an alarm: the message under the box is the whole of the
+ * signal, and the edge is there so the eye finds which box it is under.
+ *
+ * The colour is the one the page already refuses in (`.refusal` below), because a
+ * second red would be a second severity, and this bench has one.
+ */
+input[aria-invalid='true'],
+select[aria-invalid='true'],
+textarea[aria-invalid='true'] {
+  border-color: var(--refusal);
+}
+
+.field-refused {
+  display: block;
+  margin-top: 0.35rem;
+  font-size: 0.9rem;
+  color: var(--refusal);
+}
+
+/*
  * A declaration is a sentence somebody is making, so it is set as one: the box is
  * beside the words at reading size rather than under a caption in small grey type.
  */

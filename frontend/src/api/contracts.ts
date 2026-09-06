@@ -21,6 +21,33 @@
  */
 
 /**
+ * One thing the API refused, and the field it refused it at.
+ *
+ * `field` is the `loc` path joined with dots and edited on the way in no other way
+ * — `body.cost.price_per_call` and not `price_per_call` — because that string is
+ * also the `id` of the input the screen marks invalid (ADR-0076). A path that was
+ * shortened here would be a name the DOM and the wire agree on only until somebody
+ * changed the shortening rule.
+ */
+export interface FieldRefusal {
+  field: string
+  msg: string
+}
+
+/**
+ * A refusal read whole: the sentence for the page, the fields for the fields.
+ *
+ * Both, and never one or the other. A `422` that names a field still has a sentence
+ * about the registration, and a refusal about the registration names no field at
+ * all — so a screen holding these apart is a screen that can show one refusal's
+ * sentence beside the previous one's marks. `fields` is empty and never absent.
+ */
+export interface Refusal {
+  statement: string
+  fields: FieldRefusal[]
+}
+
+/**
  * The three statements, one field each, beside who made them.
  *
  * Three booleans rather than one `i_agree`, because the record has to show *what*

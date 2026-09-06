@@ -304,6 +304,16 @@ function TheInterrupt({
         `sessionStorage` beside the figures, so the bench's `confirmed by <name>` is
         still a name and nobody types it twice.
       */}
+      {/*
+        No form here, and that is the decision rather than the omission.
+
+        Every other screen that takes input got one (#120), because Enter should
+        finish a form. This one is the halt in front of the spend: there is no text
+        field for implicit submission to serve, and what a form would buy is a
+        keystroke on the tick below that confirms the figures and starts the run.
+        A consent interrupt whose primary is one key away from a checkbox is not the
+        block ADR-0007 asks for. The two buttons stay `type="button"`.
+      */}
       <section>
         {view === null ? null : (
           <label className="declaration">

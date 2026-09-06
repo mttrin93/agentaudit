@@ -81,6 +81,9 @@ export function GateScreen() {
         </h1>
       </header>
 
+      {/* Assertive (ADR-0080): the operator pressed the control that starts a gate
+          run and nothing started. Everything else on this screen that reports a
+          silence is polite, because the rest of it is read rather than pressed. */}
       {refused ? (
         <section className="refusal" role="alert">
           <h2>That was not taken</h2>
@@ -92,10 +95,11 @@ export function GateScreen() {
         </section>
       ) : null}
 
+      {/* Polite: read on arrival, answering nothing anybody pressed (ADR-0080). */}
       {held.unavailable ? (
         <section>
           <h2>This bench did not answer for its gate</h2>
-          <div className="citation uncited" role="alert">
+          <div className="citation uncited" role="status">
             <h3>Neither the rule nor the citation could be read</h3>
             <p>{held.unavailable}</p>
             <p className="aside">
@@ -183,8 +187,9 @@ export function GateScreen() {
 
       {stage === 'watching' ? null : lastly.unavailable ? (
         <section>
+          {/* Polite, for the same reason as the block above (ADR-0080). */}
           <h2>The last gate run's figures could not be read</h2>
-          <div className="citation uncited" role="alert">
+          <div className="citation uncited" role="status">
             <h3>This bench did not answer for what its last gate run measured</h3>
             <p>{lastly.unavailable}</p>
             <p className="aside">

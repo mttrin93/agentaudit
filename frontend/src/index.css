@@ -6,6 +6,10 @@
  * skimmed is prose that was not read. So the type is set for reading, in one column
  * per screen, and nothing here decorates a declaration into looking like a form
  * field.
+ *
+ * Two consequences of that are decided elsewhere and enforced rather than intended:
+ * what may move (ADR-0081, and `src/motion.test.ts`), and the one step every hover in
+ * this file makes (`button:hover`, below).
  */
 
 :root {
@@ -364,6 +368,13 @@ textarea {
   font-size: 0.9rem;
 }
 
+/* A field is an outlined control, so it takes the edge (ADR-0082). */
+input:hover:not(:disabled),
+select:hover:not(:disabled),
+textarea:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
 /*
  * The field the API refused, and what it said about it.
  *
@@ -557,6 +568,11 @@ details.plant summary {
   font-size: 0.9rem;
 }
 
+/* Already in the accent, so it goes the other way (ADR-0082). */
+details.plant summary:hover {
+  color: var(--ink);
+}
+
 details.plant article {
   margin-top: 1rem;
 }
@@ -608,8 +624,9 @@ pre {
  *
  * Not `display: none` and not `hidden`: either would take it out of the accessibility
  * tree and there would be nothing to announce. A one-pixel clipped box is the way a
- * region stays in the tree with nothing on the page, and it is the only rule in this
- * stylesheet whose purpose is to make something invisible.
+ * region stays in the tree with nothing on the page. It is one of two rules in this
+ * stylesheet whose purpose is to make something invisible, and the other one —
+ * `.skip` — is invisible only until the keyboard reaches it.
  *
  * The screen says the same thing in its own heading, which is why this is not drawn:
  * a second copy in the reading column would be the console saying everything twice.
@@ -695,8 +712,16 @@ button.primary {
   border-color: var(--accent);
 }
 
-/* An outlined control answers the pointer with the accent on its edge: on this
- * ground the ink hairline it used to take was barely a change at all. */
+/*
+ * An outlined control answers the pointer with the accent on its edge: on this
+ * ground the ink hairline it used to take was barely a change at all.
+ *
+ * **ADR-0082** decides that one step for every hover in this file, and this is where
+ * the decision is pointed at from. The local consequence, for anybody adding a rule
+ * below: a surface moves toward the accent, a surface already in the accent moves
+ * toward the ink, and the step is on the edge or the ink and never a fill, a lift or
+ * a size. The rail is the one exception, at `.rail li a:hover`.
+ */
 button:hover:not(:disabled) {
   border-color: var(--accent);
 }
@@ -848,6 +873,22 @@ button:disabled {
   outline-offset: 2px;
 }
 
+/* Unticked it is a hairline and ticked it is already the accent, so ADR-0082's step
+   is taken in whichever direction the box currently is. The `label` selectors are
+   the constructions nested under a layer, where the box and its name are one row a
+   pointer lands anywhere on: the row answers, and not only the eighth of it that is
+   the box. */
+.said .tick:hover,
+.said .sent label:hover .tick {
+  border-color: var(--accent);
+}
+
+.said .tick:checked:hover,
+.said .tick.on:hover,
+.said .sent label:hover .tick:checked {
+  border-color: var(--ink);
+}
+
 .said dd {
   margin: 0.3rem 0 0;
   font-size: 0.9rem;
@@ -942,6 +983,14 @@ button:disabled {
 
 a {
   color: inherit;
+}
+
+/* A link in the prose is ink like the sentence around it, so ADR-0082's step is on
+   the ink — and the underline the browser draws stays either way, so nothing here is
+   carried by hue alone. The rail's links are not these: they set their own colour, at
+   higher specificity, and answer with a lift instead. */
+a:hover {
+  color: var(--accent);
 }
 
 /*
@@ -2192,6 +2241,13 @@ code {
   list-style-position: outside;
 }
 
+/* Set in ink, so it takes the accent (ADR-0082). The marker the browser draws says
+   *this opens*; what this adds is which of six identical rows the pointer is on. */
+.findings details.family > summary:hover,
+.findings .finding details.diff > summary:hover {
+  color: var(--accent);
+}
+
 .findings details.family > summary h3 {
   display: inline;
   margin: 0;
@@ -2388,7 +2444,13 @@ section > .asserts {
 
 /* The temperature slider. Full width of the field, because a track is read by its
  * length and a short one cannot be set precisely; the number that says where it is
- * sits in the label above it. */
+ * sits in the label above it.
+ *
+ * It has no border, so the field hover above is a no-op on it, and that is deliberate:
+ * this is one of the two controls ADR-0082 leaves to the browser. `accent-color` draws
+ * its thumb in the house mint and the browser answers the pointer on it; a step this
+ * file could take would have to be on the track, which is not the part being pointed
+ * at. */
 .tuning input[type='range'] {
   padding: 0;
   border: 0;
@@ -2421,6 +2483,71 @@ section > .asserts {
 .tuning button[disabled] {
   cursor: progress;
   color: var(--quiet);
+}
+
+/*
+ * The one moving thing in this stylesheet: a surface reporting that it changed.
+ *
+ * **ADR-0081** decides what may move and what may not, and `src/motion.test.ts`
+ * enforces the half of it a machine can read. The local consequence is this list and
+ * this number. Four colour properties and no geometry — a surface that grows, slides
+ * or lifts is a surface announcing itself, and a colour that moves is the same
+ * surface saying it changed. `all` is refused by name.
+ *
+ * The selectors are the interactive surfaces and nothing else, so a paragraph, a
+ * figure, a card or a rate cannot inherit a transition from anywhere: there is no
+ * state on any of them for one to report. Each one is here because one of the four
+ * properties above actually changes on it — `.skip` is not, because the only thing
+ * that moves on it is `left`, and `.rail li` is not, because the lift under the
+ * pointer is drawn on the anchor and `a` already covers that.
+ */
+a,
+button,
+summary,
+input,
+select,
+textarea,
+.said .tick {
+  transition:
+    color 120ms ease,
+    background-color 120ms ease,
+    border-color 120ms ease,
+    opacity 120ms ease;
+}
+
+/*
+ * The control that skips the rail, off the page until the keyboard finds it.
+ *
+ * It is the first thing in the document and it is drawn nowhere, which is the whole
+ * of the arrangement: a reader with a pointer has no use for a control about tab
+ * order, and the first thing on a screen should be the screen. Moved off the page
+ * rather than hidden, for `.announced`'s reason — `display: none` would take it out
+ * of the tab order too, and a skip link nothing can reach is worse than none.
+ *
+ * `fixed` and not `absolute`, so that it needs no positioned ancestor: `.console` is
+ * a two-column grid and a positioned wrapper around it would change what every
+ * absolutely positioned box inside a screen is placed against. When it has the
+ * keyboard it sits over the top of the rail, which is where the reader's eye already
+ * is at the start of a document.
+ */
+.skip {
+  position: fixed;
+  z-index: 1;
+  top: 0.6rem;
+  /* Off the page, and off it by a whole viewport so that no window is wide enough
+     to bring a corner of it back. */
+  left: -100vw;
+  color: var(--accent);
+  background: var(--accent-paper);
+  border-color: var(--accent);
+}
+
+/* `:focus` and not `:focus-visible`: this control is only ever reached by the
+   keyboard, and it is also focused in script by nothing at all — but a rule that
+   drew it for one kind of focus and not the other is a rule with a way to be
+   invisible while it has the keyboard, which is the one state it must not have. */
+.skip:focus {
+  left: 0.6rem;
 }
 
 /*
@@ -2556,8 +2683,20 @@ section > .asserts {
   background: transparent;
 }
 
+/*
+ * Where the skip control lands, which is why this takes focus at all.
+ *
+ * `tabIndex={-1}` in `ConsoleShell.tsx` makes it focusable in script and leaves it
+ * out of the tab order; no outline is drawn on it, because the thing that says the
+ * skip worked is the next tab stop being inside the reading column rather than a
+ * ring around a wrapper the width of the screen.
+ */
 .console-body {
   min-width: 0;
+}
+
+.console-body:focus {
+  outline: none;
 }
 
 @media (max-width: 52rem) {
@@ -2606,5 +2745,28 @@ section > .asserts {
   .watching,
   .families.per-family {
     grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/*
+ * Everything above stops here, for a reader who has asked their machine for that.
+ *
+ * Last in the file, after everything it turns off, and universal because it has to
+ * outlive whatever a later rule adds — see ADR-0081 for why the `!important` and the
+ * pseudo-elements are both load-bearing rather than defensive habit.
+ *
+ * Not `0s`: a duration of zero cancels the `transitionend` event in some engines, and
+ * a hundredth of a millisecond is imperceptible while still being a transition that
+ * finishes. Nothing in this app listens for one today, which is precisely why the
+ * cheap version is the one to write down — the rule outlives the fact.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
   }
 }

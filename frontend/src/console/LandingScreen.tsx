@@ -295,8 +295,12 @@ export function LandingScreen() {
         */}
         <h2>Your runs</h2>
 
+        {/* Polite, and so is the artefacts block below it: both are what this screen
+            found when it read the record on arrival, and neither answers a press. The
+            two blocks further down that look identical to these are assertive, because
+            those two *are* answers to a tick (ADR-0080). */}
         {runs.unavailable ? (
-          <div className="citation uncited" role="alert">
+          <div className="citation uncited" role="status">
             <h3>This bench did not answer for its runs</h3>
             <p>{runs.unavailable}</p>
             <p className="aside">
@@ -326,7 +330,7 @@ export function LandingScreen() {
         <h2>Your artefacts</h2>
 
         {signed.unavailable ? (
-          <div className="citation uncited" role="alert">
+          <div className="citation uncited" role="status">
             <h3>This bench did not answer for its artefacts</h3>
             <p>{signed.unavailable}</p>
             <p className="aside">
@@ -364,6 +368,9 @@ export function LandingScreen() {
           finish — `RegisterScreen`, `SettingsScreen`, `GateAttestation`. */}
       <section>
         <h2>The families</h2>
+        {/* Assertive (ADR-0080): an operator moved a family's switch and the bench
+            would not move it. The switch has gone back to where it was, so this
+            sentence is the only thing that says the press did nothing. */}
         {refused ? (
           <div className="citation uncited" role="alert">
             <h3>Nothing was changed</h3>
@@ -431,6 +438,8 @@ export function LandingScreen() {
         <section>
           <h2>What a run sends</h2>
           <p className="aside">{sends.caveat}</p>
+          {/* Assertive, on the same terms as the families block above (ADR-0080):
+              this is the answer to a layer's own switch. */}
           {refusedSelection ? (
             <div className="citation uncited" role="alert">
               <h3>Nothing was changed</h3>

@@ -111,8 +111,10 @@ export function SettingsScreen() {
 
       {held.unavailable ? (
         <section>
+          {/* Polite (ADR-0080): this is the screen's own read failing, in the first
+              paint, and not the answer to anything on it being pressed. */}
           <h2>This bench did not answer for its own configuration</h2>
-          <div className="citation uncited" role="alert">
+          <div className="citation uncited" role="status">
             <h3>Nothing below could be read</h3>
             <p>{held.unavailable}</p>
             <p className="aside">
@@ -523,6 +525,9 @@ function TheTuning({
             (`sendNow`). */}
       </form>
 
+      {/* Assertive (ADR-0080): a value was typed or dragged, the settle sent it, and
+          the bench would not store it. The control still reads what was typed, so
+          without this sentence the screen would look as though it had been taken. */}
       {refused ? (
         <div className="citation uncited" role="alert">
           <h3>Nothing was changed</h3>

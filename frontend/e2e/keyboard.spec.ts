@@ -232,3 +232,45 @@ test('Enter in one of the settings screen’s number boxes sends what it now rea
   await numbers.first().press('Enter')
   await sent
 })
+
+/**
+ * The rail, and the one control that gets past it.
+ *
+ * Seven destinations sit before the reading column on every screen, so a keyboard
+ * reader arriving at the console pays seven tab stops for a screen they have already
+ * chosen — on every screen, every time. What this asserts is the whole of the remedy:
+ * that the first thing the keyboard finds is the control that skips the rail, that
+ * pressing it lands past the rail, and that the rail really is the several stops being
+ * skipped rather than one.
+ *
+ * It is a browser test because every claim in it is about focus order, and node has
+ * no focus. And it presses the control with the keyboard rather than clicking it: a
+ * skip link nobody can see is only reachable one way.
+ */
+test('the rail is skippable, and the skip is the first thing the keyboard finds', async ({
+  page,
+}) => {
+  await page.goto('/#/')
+  await expect(
+    page.getByRole('heading', { name: 'AgentAudit: an adversarial bench' }),
+  ).toBeVisible()
+
+  // The thing being skipped. Seven is what `rail.ts` names off a screen that is not a
+  // run's; asserting *more than two* rather than exactly seven keeps this test about
+  // the rail being a queue and not about how long the queue is this week.
+  expect(await page.locator('nav.rail a').count()).toBeGreaterThan(2)
+
+  await page.keyboard.press('Tab')
+  const skip = page.getByRole('button', { name: 'Skip to the screen' })
+  await expect(skip).toBeFocused()
+
+  await skip.press('Enter')
+  await expect(page.locator('.console-body')).toBeFocused()
+
+  // Past the rail, and not merely somewhere else in it: the next stop the keyboard
+  // finds is inside the reading column. Asked as a selector rather than through
+  // `document.activeElement`, because this spec is typed against node and has no DOM
+  // lib — the browser is the page's, not this file's.
+  await page.keyboard.press('Tab')
+  await expect(page.locator('main.screen :focus')).toHaveCount(1)
+})

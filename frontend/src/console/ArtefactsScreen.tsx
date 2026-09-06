@@ -100,10 +100,12 @@ export function ArtefactsScreen() {
         </h1>
       </header>
 
+      {/* Polite: this is what the screen turned out to say once it had read what it
+          reads, and not the answer to anything anybody pressed (ADR-0080). */}
       {held.unavailable ? (
         <section>
           <h2>This bench did not answer for its artefacts</h2>
-          <div className="citation uncited" role="alert">
+          <div className="citation uncited" role="status">
             <h3>The list could not be read</h3>
             <p>{held.unavailable}</p>
             <p className="aside">

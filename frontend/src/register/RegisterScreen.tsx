@@ -121,6 +121,28 @@ function said(statement: string): Refusal {
 }
 
 /**
+ * The refusal left standing once the operator has edited one of the fields it names.
+ *
+ * ADR-0077: the edit retires the mark, not the value — nothing here re-validates, and
+ * a field whose posted value is no longer in the box is a field this screen has no
+ * standing to keep `aria-invalid` on. Per field, because a `422` naming three is three
+ * statements, and the two the operator has not answered yet cost a spent nonce to see
+ * again. The last one out takes the sentence with it: *registration did not complete*
+ * is true of a post whose refusals have all been answered.
+ *
+ * Returns the refusal it was given where nothing matched — a keystroke in a field
+ * nothing was refused about is not a state change, and the memo sites below are not
+ * invalidated by one.
+ */
+function retire(refusal: Refusal, field: string): Refusal {
+  const fields = refusal.fields.filter((one) => one.field !== field)
+  if (fields.length === refusal.fields.length) {
+    return refusal
+  }
+  return fields.length === 0 ? NOTHING_REFUSED : { ...refusal, fields }
+}
+
+/**
  * Every input on this walk, named by the path the API would refuse it at.
  *
  * ADR-0076: the `id` of an input is the `loc` path a `422` carries for it, joined
@@ -284,11 +306,18 @@ export function RegisterScreen() {
    *
    * **One state and not two.** A `422` that names a field still has a statement, and
    * a refusal about the registration as a whole names no field at all — so the two
-   * are always set together and must always be cleared together. Held as two
-   * `useState`s they were not: a later refusal that named nothing left the previous
-   * one's marks standing on inputs, and the operator was shown a sentence about this
-   * registration beside `aria-invalid` about the one before it. There is no setter
-   * here that can move one without the other.
+   * are always set together. Held as two `useState`s they were not: a later refusal
+   * that named nothing left the previous one's marks standing on inputs, and the
+   * operator was shown a sentence about this registration beside `aria-invalid` about
+   * the one before it. There is no setter here that can move one without the other.
+   *
+   * **It is no longer true that they are always cleared together, and ADR-0077 says
+   * why.** A refusal only ever moves toward nothing: a new one replaces it whole, and
+   * `retire` above narrows it a field at a time as the operator answers the marks,
+   * until the empty one is `NOTHING_REFUSED` and the sentence goes with the last mark.
+   * The state that invariant was written to forbid — this refusal's sentence beside
+   * the previous one's marks — needs a *widening* move that is not a replacement, and
+   * there is none.
    */
   const [refusal, setRefusal] = useState<Refusal>(NOTHING_REFUSED)
   const [busy, setBusy] = useState(false)
@@ -574,6 +603,22 @@ export function RegisterScreen() {
         disabled primary submits nothing.
       */}
       <form
+        /*
+          Where a refused field stops being refused, and the only place it can happen.
+
+          One handler for the whole walk rather than a callback threaded through four
+          step components to ten `Field` call sites, and it is ADR-0076 paying for
+          itself a second time: the `id` of an input *is* the `loc` path the API
+          refuses it at, so a change event arriving here already carries the name of
+          the field it changed in the vocabulary the refusal arrived in. Nothing
+          translates, and an id no standing refusal names is a no-op (ADR-0077).
+        */
+        onChange={(event) => {
+          const edited = event.target
+          if (edited instanceof HTMLElement) {
+            setRefusal((standing) => retire(standing, edited.id))
+          }
+        }}
         onSubmit={(event) => {
           // Always, and before anything else: a form that reached the browser's own
           // submit would reload the app and lose every declaration on it.

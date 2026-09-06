@@ -6,6 +6,10 @@
  * skimmed is prose that was not read. So the type is set for reading, in one column
  * per screen, and nothing here decorates a declaration into looking like a form
  * field.
+ *
+ * Two consequences of that are decided elsewhere and enforced rather than intended:
+ * what may move (ADR-0081, and `src/motion.test.ts`), and the one step every hover in
+ * this file makes (`button:hover`, below).
  */
 
 :root {
@@ -364,6 +368,16 @@ textarea {
   font-size: 0.9rem;
 }
 
+/* A field is an outlined control, so it answers the pointer the way the outlined
+ * button above it does. Not the same signal as focus, which is drawn as a ring
+ * *outside* the box: the edge says the pointer is over it, the ring says the keyboard
+ * is in it, and a reader can have both at once and tell them apart. */
+input:hover:not(:disabled),
+select:hover:not(:disabled),
+textarea:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
 /*
  * The field the API refused, and what it said about it.
  *
@@ -557,6 +571,12 @@ details.plant summary {
   font-size: 0.9rem;
 }
 
+/* Already in the accent, so it moves to the ink — `.act`'s direction, for `.act`'s
+   reason. */
+details.plant summary:hover {
+  color: var(--ink);
+}
+
 details.plant article {
   margin-top: 1rem;
 }
@@ -696,8 +716,23 @@ button.primary {
   border-color: var(--accent);
 }
 
-/* An outlined control answers the pointer with the accent on its edge: on this
- * ground the ink hairline it used to take was barely a change at all. */
+/*
+ * An outlined control answers the pointer with the accent on its edge: on this
+ * ground the ink hairline it used to take was barely a change at all.
+ *
+ * **This is the move every hover in this file makes**, and there is one rule behind
+ * all of them: *a surface answers the pointer by moving toward the accent, and a
+ * surface already in the accent moves toward the ink.* So an outlined button takes an
+ * accent edge, a field takes an accent edge, a summary set in ink takes accent ink —
+ * and `.act`, whose border is already the accent, goes the other way to `--ink`. It
+ * is one step in one direction, never a fill, a lift or a size, which is what keeps a
+ * hover from reading as a press.
+ *
+ * The accent means *chrome* and never data (`--accent` above), and a hover is chrome:
+ * it says *this is a thing you can press*, which is the same sentence the ring around
+ * the focused control says. The rail is the one surface that answers differently, and
+ * it says why at `.rail li a:hover`.
+ */
 button:hover:not(:disabled) {
   border-color: var(--accent);
 }
@@ -849,6 +884,18 @@ button:disabled {
   outline-offset: 2px;
 }
 
+/* An unticked box is a hairline, so it takes the accent; a ticked one is already
+   filled with the accent, so it goes the other way. Both are the same one step the
+   outlined button makes, on whichever edge the box currently has. */
+.said .tick:hover {
+  border-color: var(--accent);
+}
+
+.said .tick:checked:hover,
+.said .tick.on:hover {
+  border-color: var(--ink);
+}
+
 .said dd {
   margin: 0.3rem 0 0;
   font-size: 0.9rem;
@@ -943,6 +990,16 @@ button:disabled {
 
 a {
   color: inherit;
+}
+
+/* A link in the prose is ink like the sentence around it, which is what keeps a
+   paragraph from being read as a row of controls. Under the pointer it takes the
+   accent, which is the one step every surface in this file makes — and the underline
+   the browser draws stays either way, so nothing here is carried by hue alone.
+   The rail's links are not these: they set their own colour, at higher specificity,
+   and answer with a lift instead. */
+a:hover {
+  color: var(--accent);
 }
 
 /*
@@ -2193,6 +2250,14 @@ code {
   list-style-position: outside;
 }
 
+/* Set in ink, so it takes the accent. The marker the browser draws is the affordance;
+   this is what says the pointer is on *this* family and not the one above it, which a
+   page of six identical rows badly needs. */
+.findings details.family > summary:hover,
+.findings .finding details.diff > summary:hover {
+  color: var(--accent);
+}
+
 .findings details.family > summary h3 {
   display: inline;
   margin: 0;
@@ -2425,6 +2490,36 @@ section > .asserts {
 }
 
 /*
+ * The one moving thing in this stylesheet: a surface reporting that it changed.
+ *
+ * **ADR-0081** decides what may move and what may not, and `src/motion.test.ts`
+ * enforces the half of it a machine can read. The local consequence is this list and
+ * this number. Four colour properties and no geometry — a surface that grows, slides
+ * or lifts is a surface announcing itself, and a colour that moves is the same
+ * surface saying it changed. `all` is refused by name.
+ *
+ * The selectors are the interactive surfaces and nothing else, so a paragraph, a
+ * figure, a card or a rate cannot inherit a transition from anywhere: there is no
+ * state on any of them for one to report.
+ */
+.skip,
+a,
+button,
+summary,
+input,
+select,
+textarea,
+.rail li,
+.rail li a,
+.said .tick {
+  transition:
+    color 120ms ease,
+    background-color 120ms ease,
+    border-color 120ms ease,
+    opacity 120ms ease;
+}
+
+/*
  * The control that skips the rail, off the page until the keyboard finds it.
  *
  * It is the first thing in the document and it is drawn nowhere, which is the whole
@@ -2654,5 +2749,28 @@ section > .asserts {
   .watching,
   .families.per-family {
     grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/*
+ * Everything above stops here, for a reader who has asked their machine for that.
+ *
+ * Last in the file, after everything it turns off, and universal because it has to
+ * outlive whatever a later rule adds — see ADR-0081 for why the `!important` and the
+ * pseudo-elements are both load-bearing rather than defensive habit.
+ *
+ * Not `0s`: a duration of zero cancels the `transitionend` event in some engines, and
+ * a hundredth of a millisecond is imperceptible while still being a transition that
+ * finishes. Nothing in this app listens for one today, which is precisely why the
+ * cheap version is the one to write down — the rule outlives the fact.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
   }
 }

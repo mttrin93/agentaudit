@@ -24,12 +24,12 @@
 
 import type {
   AdaptiveProgress,
-  FieldRefusal,
   ApprovalBody,
   AttemptExchange,
   AttestationBody,
   CostBody,
   FamilyRun,
+  Refusal,
   ReportLocation,
   ScoredProgress,
 } from './contracts'
@@ -261,13 +261,14 @@ export type StartOutcome =
   /**
    * The bench said no, in its own sentence and — where it named one — at a field.
    *
-   * `fields` is always present and often empty: a refusal about the registration
-   * has no input to land on, and the screen shows the statement over the form for
-   * it. Where the API's own validation refused a body field, the entry carries the
-   * `loc` path the screen names that input by (ADR-0076), so the message reaches
-   * the field rather than the top of the page.
+   * `Refusal` named rather than its two fields spelled out again, so that the
+   * sentence and the fields stay the one value they are read out of the response
+   * as: the invariant that they are set together and cleared together is argued in
+   * that type's own docstring, and an arm that listed them separately is the shape
+   * that invited holding them apart on the screen. A field added to `Refusal`
+   * reaches the register screen without a second edit here.
    */
-  | { kind: 'refused'; statement: string; fields: FieldRefusal[] }
+  | ({ kind: 'refused' } & Refusal)
   | { kind: 'unreachable'; statement: string }
 
 const UNREACHABLE =
@@ -296,8 +297,7 @@ export async function startRun(body: StartRunBody): Promise<StartOutcome> {
   if (response.ok) {
     return { kind: 'registered', run: (await response.json()) as RunStarted }
   }
-  const { statement, fields } = await refusalRead(response)
-  return { kind: 'refused', statement, fields }
+  return { kind: 'refused', ...(await refusalRead(response)) }
 }
 
 /** Where one run has got to, or the reason this app could not find out. */

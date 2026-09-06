@@ -24,12 +24,12 @@
 
 import type {
   AdaptiveProgress,
-  FieldRefusal,
   ApprovalBody,
   AttemptExchange,
   AttestationBody,
   CostBody,
   FamilyRun,
+  Refusal,
   ReportLocation,
   ScoredProgress,
 } from './contracts'
@@ -266,8 +266,12 @@ export type StartOutcome =
    * it. Where the API's own validation refused a body field, the entry carries the
    * `loc` path the screen names that input by (ADR-0076), so the message reaches
    * the field rather than the top of the page.
+   *
+   * `Refusal` named rather than its two fields spelled out again here, so that a
+   * refusal travels as the one value `refusalRead` returns and the register screen
+   * has nothing to reassemble.
    */
-  | { kind: 'refused'; statement: string; fields: FieldRefusal[] }
+  | ({ kind: 'refused' } & Refusal)
   | { kind: 'unreachable'; statement: string }
 
 const UNREACHABLE =
@@ -296,8 +300,7 @@ export async function startRun(body: StartRunBody): Promise<StartOutcome> {
   if (response.ok) {
     return { kind: 'registered', run: (await response.json()) as RunStarted }
   }
-  const { statement, fields } = await refusalRead(response)
-  return { kind: 'refused', statement, fields }
+  return { kind: 'refused', ...(await refusalRead(response)) }
 }
 
 /** Where one run has got to, or the reason this app could not find out. */

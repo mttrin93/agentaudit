@@ -450,17 +450,28 @@ export function RegisterScreen() {
     // bench's own sentence, and nothing else the operator declared is lost.
     setIssued(null)
     declare({ nonce: '', nonce_planted: false })
-    setRefusal({
-      statement: outcome.statement,
-      fields: outcome.kind === 'refused' ? outcome.fields : [],
-    })
+    // A bench that never answered named no field and cannot have: there is no
+    // response to have named one in. `said` is the refusal with the empty list,
+    // and the walk resumes at the plant step like any refusal that named nothing.
+    if (outcome.kind !== 'refused') {
+      setRefusal(said(outcome.statement))
+      setStep(PLANT_STEP)
+      return
+    }
+    // Narrowed once, and read off the narrowed value from here down. The refused
+    // arm *is* a `Refusal`, so the sentence and the fields reach the state as the
+    // one value they were read out of the response as, rather than being taken
+    // apart here and put back together in `setRefusal`. The `kind` tag rides along
+    // into state and nothing reads it there — deliberately, because stripping it
+    // would be the reassembly this is removing.
+    setRefusal(outcome)
     // Where the API named a field, the walk goes to the step that draws it and puts
     // the keyboard on it, instead of to the plant step. Both are true of a refusal —
     // the nonce is spent either way and the sentence above says so — but a message
     // bound to an input the operator cannot see is the page-level block this
     // replaced. Where no field was named there is nothing to go to, and the plant
     // step is where the walk resumes.
-    const named = outcome.kind === 'refused' ? outcome.fields[0]?.field : undefined
+    const named = outcome.fields[0]?.field
     if (named === undefined) {
       setStep(PLANT_STEP)
       return

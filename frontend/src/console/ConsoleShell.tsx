@@ -43,14 +43,14 @@ export function ConsoleShell() {
   const { pathname } = useLocation()
   const onScreen = runInPath(pathname)
   /**
-   * Where the skip control puts the keyboard: the wrapper the screen renders into.
+   * The wrapper the screen renders into, which is where the skip control lands.
    *
-   * The wrapper and not the screen's own `<main>`, because the `<main>` belongs to
-   * whichever screen is on — it arrives through `<Outlet />` and this component has
-   * no handle on it. What is landed on is therefore one element outside it, and the
-   * next tab stop is the first control in the reading column either way.
+   * The wrapper and not the screen's own `<main>`: the `<main>` belongs to whichever
+   * screen is on — it arrives through `<Outlet />` and this component has no handle on
+   * it — so what is landed on is one element outside it. The next tab stop is the
+   * first control in the reading column either way.
    */
-  const theScreen = useRef<HTMLDivElement>(null)
+  const wrapper = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     // Written as you arrive, so the way back exists before you decide to leave.
@@ -86,7 +86,7 @@ export function ConsoleShell() {
       <button
         type="button"
         className="skip"
-        onClick={() => theScreen.current?.focus()}
+        onClick={() => wrapper.current?.focus()}
       >
         Skip to the screen
       </button>
@@ -112,7 +112,7 @@ export function ConsoleShell() {
         )}
       </nav>
 
-      <div className="console-body" ref={theScreen} tabIndex={-1}>
+      <div className="console-body" ref={wrapper} tabIndex={-1}>
         <Outlet />
       </div>
     </div>

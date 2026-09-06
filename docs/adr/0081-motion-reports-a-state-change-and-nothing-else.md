@@ -27,10 +27,10 @@ motion is given.
 
 ## Decision
 
-**Motion reports a state change and nothing else.** A hover, a focus, a control going
-dead, a thing opening: those are transitions, at 120ms. Everything else is refused —
-nothing enters, nothing fades in on arrival, nothing pulses, nothing draws attention
-to itself, and there is no `@keyframes` in this file.
+**Motion reports a state change and nothing else.** A hover, a control going dead:
+those are transitions, at 120ms. Everything else is refused — nothing enters, nothing
+fades in on arrival, nothing pulses, nothing draws attention to itself, and there is
+no `@keyframes` in this file.
 
 **Only colour is transitioned, never geometry.** The transitioned properties are
 `color`, `background-color`, `border-color` and `opacity`, and that list is enforced
@@ -74,6 +74,20 @@ is a `role="img"` rather than a control (it is drawn beside a statement, not pre
 and the disclosure triangle is the browser's own. Nothing on any screen is waiting on
 it.
 
+**Animate a `<details>` opening.** #122 names *expand* alongside hover, focus and
+disabled, and it is the one of the four this decision does not deliver. Rejected on
+the same ground as `transform`: a disclosure opens by changing its own height, so
+there is no way to transition it that is not a geometry transition — and both of the
+ones in this app (`details.plant`, and a family's findings) open onto a block of
+prose, which is the content this file's header exists to protect from motion. The
+summary's *own* state change — the pointer arriving on it — is transitioned, which is
+the part a reader is given feedback about.
+
+**Transition the focus ring.** Also named by #122. Rejected because there is nothing
+to transition: `:focus-visible` draws an `outline` where there was none, and an
+outline that appears does not interpolate from absent. What the reader sees moving on
+a focused control is the surface's own hover step, if the pointer is there too.
+
 **Honour reduced motion by omitting motion entirely on those machines, per rule.**
 Rejected: it means every future rule that moves anything has to remember to add its
 own opt-out, and the one that forgets is invisible to everybody who is not affected by
@@ -88,6 +102,9 @@ this that stays true.
 - The reduced-motion block sits at the end of `index.css` on purpose, so that it is
   after everything it is turning off, and so that a reader looking for it finds it
   where a reader looks.
+- **Two of the four state changes #122 named are not transitioned**, and the
+  Alternatives above say why: an expand is geometry, and a focus ring is an outline
+  that appears rather than a colour that moves.
 - **This ADR does not license entrance or attention motion at any duration.** #119's
   rule is that nothing under it makes a screen louder, faster or more decorated, and
   a fade-in is all three.

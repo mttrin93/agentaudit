@@ -32,6 +32,19 @@ import { expect, test } from 'vitest'
 const STYLESHEET = readFileSync(new URL('./index.css', import.meta.url), 'utf8')
 
 /**
+ * The stylesheet with its prose taken out.
+ *
+ * This file's house style is long comments, and `index.css` argues about transitions
+ * in several of them — including at the rule that declares the only one. A reader who
+ * quoted `transition: all` inside a comment saying it is refused would fail the test
+ * that refuses it, which is the sort of trap that gets a guard deleted rather than
+ * understood.
+ */
+function withoutComments(css: string): string {
+  return css.replace(/\/\*[\s\S]*?\*\//g, '')
+}
+
+/**
  * The properties every `transition` and `transition-property` in the file names.
  *
  * A `transition` shorthand is a comma-separated list whose first token is the
@@ -41,7 +54,9 @@ const STYLESHEET = readFileSync(new URL('./index.css', import.meta.url), 'utf8')
  */
 function whatIsTransitioned(css: string): readonly string[] {
   const named: string[] = []
-  for (const [, value] of css.matchAll(/transition(?:-property)?\s*:([^;}]+)/g)) {
+  for (const [, value] of withoutComments(css).matchAll(
+    /transition(?:-property)?\s*:([^;}]+)/g,
+  )) {
     for (const part of value.split(',')) {
       const first = part.trim().split(/\s+/)[0]
       if (first !== undefined && first !== '') {
@@ -53,7 +68,8 @@ function whatIsTransitioned(css: string): readonly string[] {
 }
 
 /** The body of the `prefers-reduced-motion: reduce` block, or `''` where there is none. */
-function theReducedMotionBlock(css: string): string {
+function theReducedMotionBlock(whole: string): string {
+  const css = withoutComments(whole)
   const opened = css.search(/@media\s*\(prefers-reduced-motion:\s*reduce\)\s*\{/)
   if (opened === -1) {
     return ''

@@ -5,7 +5,7 @@
 
 ## Context
 
-Eighteen blocks across the seven screens carried `role="alert"`. They are of two
+Sixteen blocks across the seven screens carried `role="alert"`. They are of two
 kinds and the markup did not distinguish them.
 
 The first kind is a block that is on the screen when the screen arrives, or that

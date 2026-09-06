@@ -368,10 +368,7 @@ textarea {
   font-size: 0.9rem;
 }
 
-/* A field is an outlined control, so it answers the pointer the way the outlined
- * button above it does. Not the same signal as focus, which is drawn as a ring
- * *outside* the box: the edge says the pointer is over it, the ring says the keyboard
- * is in it, and a reader can have both at once and tell them apart. */
+/* A field is an outlined control, so it takes the edge (ADR-0082). */
 input:hover:not(:disabled),
 select:hover:not(:disabled),
 textarea:hover:not(:disabled) {
@@ -571,8 +568,7 @@ details.plant summary {
   font-size: 0.9rem;
 }
 
-/* Already in the accent, so it moves to the ink — `.act`'s direction, for `.act`'s
-   reason. */
+/* Already in the accent, so it goes the other way (ADR-0082). */
 details.plant summary:hover {
   color: var(--ink);
 }
@@ -720,18 +716,11 @@ button.primary {
  * An outlined control answers the pointer with the accent on its edge: on this
  * ground the ink hairline it used to take was barely a change at all.
  *
- * **This is the move every hover in this file makes**, and there is one rule behind
- * all of them: *a surface answers the pointer by moving toward the accent, and a
- * surface already in the accent moves toward the ink.* So an outlined button takes an
- * accent edge, a field takes an accent edge, a summary set in ink takes accent ink —
- * and `.act`, whose border is already the accent, goes the other way to `--ink`. It
- * is one step in one direction, never a fill, a lift or a size, which is what keeps a
- * hover from reading as a press.
- *
- * The accent means *chrome* and never data (`--accent` above), and a hover is chrome:
- * it says *this is a thing you can press*, which is the same sentence the ring around
- * the focused control says. The rail is the one surface that answers differently, and
- * it says why at `.rail li a:hover`.
+ * **ADR-0082** decides that one step for every hover in this file, and this is where
+ * the decision is pointed at from. The local consequence, for anybody adding a rule
+ * below: a surface moves toward the accent, a surface already in the accent moves
+ * toward the ink, and the step is on the edge or the ink and never a fill, a lift or
+ * a size. The rail is the one exception, at `.rail li a:hover`.
  */
 button:hover:not(:disabled) {
   border-color: var(--accent);
@@ -884,15 +873,19 @@ button:disabled {
   outline-offset: 2px;
 }
 
-/* An unticked box is a hairline, so it takes the accent; a ticked one is already
-   filled with the accent, so it goes the other way. Both are the same one step the
-   outlined button makes, on whichever edge the box currently has. */
-.said .tick:hover {
+/* Unticked it is a hairline and ticked it is already the accent, so ADR-0082's step
+   is taken in whichever direction the box currently is. The `label` selectors are
+   the constructions nested under a layer, where the box and its name are one row a
+   pointer lands anywhere on: the row answers, and not only the eighth of it that is
+   the box. */
+.said .tick:hover,
+.said .sent label:hover .tick {
   border-color: var(--accent);
 }
 
 .said .tick:checked:hover,
-.said .tick.on:hover {
+.said .tick.on:hover,
+.said .sent label:hover .tick:checked {
   border-color: var(--ink);
 }
 
@@ -992,12 +985,10 @@ a {
   color: inherit;
 }
 
-/* A link in the prose is ink like the sentence around it, which is what keeps a
-   paragraph from being read as a row of controls. Under the pointer it takes the
-   accent, which is the one step every surface in this file makes — and the underline
-   the browser draws stays either way, so nothing here is carried by hue alone.
-   The rail's links are not these: they set their own colour, at higher specificity,
-   and answer with a lift instead. */
+/* A link in the prose is ink like the sentence around it, so ADR-0082's step is on
+   the ink — and the underline the browser draws stays either way, so nothing here is
+   carried by hue alone. The rail's links are not these: they set their own colour, at
+   higher specificity, and answer with a lift instead. */
 a:hover {
   color: var(--accent);
 }
@@ -2250,9 +2241,8 @@ code {
   list-style-position: outside;
 }
 
-/* Set in ink, so it takes the accent. The marker the browser draws is the affordance;
-   this is what says the pointer is on *this* family and not the one above it, which a
-   page of six identical rows badly needs. */
+/* Set in ink, so it takes the accent (ADR-0082). The marker the browser draws says
+   *this opens*; what this adds is which of six identical rows the pointer is on. */
 .findings details.family > summary:hover,
 .findings .finding details.diff > summary:hover {
   color: var(--accent);
@@ -2454,7 +2444,13 @@ section > .asserts {
 
 /* The temperature slider. Full width of the field, because a track is read by its
  * length and a short one cannot be set precisely; the number that says where it is
- * sits in the label above it. */
+ * sits in the label above it.
+ *
+ * It has no border, so the field hover above is a no-op on it, and that is deliberate:
+ * this is one of the two controls ADR-0082 leaves to the browser. `accent-color` draws
+ * its thumb in the house mint and the browser answers the pointer on it; a step this
+ * file could take would have to be on the track, which is not the part being pointed
+ * at. */
 .tuning input[type='range'] {
   padding: 0;
   border: 0;
@@ -2500,17 +2496,17 @@ section > .asserts {
  *
  * The selectors are the interactive surfaces and nothing else, so a paragraph, a
  * figure, a card or a rate cannot inherit a transition from anywhere: there is no
- * state on any of them for one to report.
+ * state on any of them for one to report. Each one is here because one of the four
+ * properties above actually changes on it — `.skip` is not, because the only thing
+ * that moves on it is `left`, and `.rail li` is not, because the lift under the
+ * pointer is drawn on the anchor and `a` already covers that.
  */
-.skip,
 a,
 button,
 summary,
 input,
 select,
 textarea,
-.rail li,
-.rail li a,
 .said .tick {
   transition:
     color 120ms ease,

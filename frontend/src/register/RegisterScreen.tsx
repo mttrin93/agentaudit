@@ -34,7 +34,7 @@
  * honest retry when one nonce starts one run and no more.
  */
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 
 import {
@@ -64,6 +64,7 @@ import {
   type Step,
 } from './declarations'
 import { rememberTheFigures, rememberWhoAttested } from '../run/interrupt'
+import { Blocked, STILL_UNDECLARED } from '../blocked'
 
 /*
  * The steps and the rule that decides when one may be left are `WALK_STEPS` and
@@ -118,9 +119,6 @@ const NOTHING_REFUSED: Refusal = { statement: '', fields: [] }
 function said(statement: string): Refusal {
   return { statement, fields: [] }
 }
-
-/** Where the reasons the primary button is dead are written, for the button to cite. */
-const STILL_UNDECLARED = 'still-undeclared'
 
 /**
  * Every input on this walk, named by the path the API would refuse it at.
@@ -191,48 +189,74 @@ function stepShowing(field: string): Step {
   return WALK_STEPS.find((step) => STEP_DRAWING[step].includes(field)) ?? 'target'
 }
 
-/**
- * The attributes an input carries while the API is refusing it, and nothing when
- * it is not.
- *
- * `aria-invalid` is the state and `aria-describedby` is the sentence, which is the
- * pair a screen reader announces on reaching the field — the whole of what #120
- * asked for, since a page-level block leaves the reader to map a `loc` path onto a
- * form by hand.
- */
-function refusedAttributes(refusals: readonly FieldRefusal[], field: string) {
-  const refused = refusals.some((one) => one.field === field)
-  return refused
-    ? { id: field, 'aria-invalid': true, 'aria-describedby': saidAt(field) }
-    : { id: field }
-}
-
 /** The id of the sentence under a field, derived from the field's own name. */
 function saidAt(field: string): string {
   return `${field}.refused`
 }
 
+/** What a control is given while the API is refusing it, and when it is not. */
+interface Marks {
+  id: string
+  'aria-invalid'?: true
+  'aria-describedby'?: string
+}
+
 /**
- * What the API said about this field, under the field it said it about.
+ * One field of this walk: its label, the control, and what the API said about it.
  *
- * Nothing at all where nothing was refused: an empty block reserved against a
- * message that has not arrived is a form that looks like it is holding something.
+ * **The mark and the message are one thing to add and not two.** `aria-invalid` is
+ * the state and `aria-describedby` is the sentence, which is the pair a screen reader
+ * announces on reaching the field — the whole of what #120 asked for, since a
+ * page-level block leaves the reader to map a `loc` path onto a form by hand. They
+ * used to be two independent edits at every field, ten controls over: an input that
+ * got the attributes and no message would point `aria-describedby` at an id nothing
+ * renders, which is a dangling reference a screen reader resolves to nothing and
+ * which nothing in the types or the tests could catch. Here the id, the attributes
+ * and the message are all derived from the one `field` string, in one place, and a
+ * call site cannot be handed the first without the second.
+ *
+ * **The control is the caller's, drawn from the marks it is handed.** An input, a
+ * select, a number box and a textarea are four different controls with four different
+ * sets of attributes, and a component that took them all as props would be a second
+ * copy of the DOM. So the child is a function of the marks: what to spread, and the
+ * caller spreads it on whatever it draws.
+ *
+ * `aside` is the line some fields carry under the message — what a bearer token is
+ * for, what a send is — taken as a prop rather than left to the child so that the
+ * bench's own sentence stays directly under the control it is about.
  */
-function Refused({
-  refusals,
+function Field({
+  label,
   field,
+  refusals,
+  aside,
+  children,
 }: {
-  refusals: readonly FieldRefusal[]
+  label: ReactNode
   field: string
+  refusals: readonly FieldRefusal[]
+  aside?: ReactNode
+  children: (marks: Marks) => ReactNode
 }) {
   const refused = refusals.find((one) => one.field === field)
-  if (refused === undefined) {
-    return null
-  }
   return (
-    <span className="field-refused" id={saidAt(field)}>
-      {refused.msg}
-    </span>
+    <label>
+      {label}
+      {children(
+        refused
+          ? { id: field, 'aria-invalid': true, 'aria-describedby': saidAt(field) }
+          : { id: field },
+      )}
+      {/* Nothing at all where nothing was refused: an empty block reserved against a
+          message that has not arrived is a form that looks like it is holding
+          something. */}
+      {refused ? (
+        <span className="field-refused" id={saidAt(field)}>
+          {refused.msg}
+        </span>
+      ) : null}
+      {aside}
+    </label>
   )
 }
 
@@ -600,27 +624,15 @@ export function RegisterScreen() {
         ) : null}
 
         {/*
-          Why the button below is grey, immediately above the button.
-
-          It sits over the footer rather than under it, and it is the arrangement the
-          gate walk already uses (`GateAttestation.tsx`): the reader arrives at the
-          button, finds it dead, and the reason is the line their eye has just passed
-          rather than something below the fold or back up the form. `aria-describedby`
-          binds it to the button as well, because a screen reader in browse mode reads
-          a disabled control and would otherwise read *Continue, dimmed* and nothing
-          else.
+          Why the button below is grey, immediately above the button — the list and
+          the citation both out of `blocked.tsx`, which is where the arrangement and
+          its reasons are written down, and which the gate walk draws too.
 
           On the last step the reasons are the registration guard's own, because that
           is what disables the button there: the walk may be complete step by step and
           still be missing a URL, and the operator is owed the field and not the step.
         */}
-        {held.length ? (
-          <ul className="blocked" id={STILL_UNDECLARED}>
-            {held.map((one) => (
-              <li key={one}>{one}</li>
-            ))}
-          </ul>
-        ) : null}
+        <Blocked reasons={held} />
 
         <footer className="walk">
           <button
@@ -691,37 +703,37 @@ function AgentType({
 }: RefusableProps & { kinds: readonly string[] }) {
   if (kinds.length === 0) {
     return (
-      <label>
-        Agent type
-        <input
-          {...refusedAttributes(refusals, FIELDS.agent_type)}
-          value={declarations.agent_type}
-          onChange={(event) => declare({ agent_type: event.target.value })}
-          placeholder="what kind of agent this is"
-        />
-        <Refused refusals={refusals} field={FIELDS.agent_type} />
-      </label>
+      <Field label="Agent type" field={FIELDS.agent_type} refusals={refusals}>
+        {(marks) => (
+          <input
+            {...marks}
+            value={declarations.agent_type}
+            onChange={(event) => declare({ agent_type: event.target.value })}
+            placeholder="what kind of agent this is"
+          />
+        )}
+      </Field>
     )
   }
   return (
-    <label>
-      Agent type
+    <Field label="Agent type" field={FIELDS.agent_type} refusals={refusals}>
       {/* No empty row over the kinds. The list is the kinds, one of them is chosen
           from the moment it arrives, and there is no state in which this field is
           showing a word the declaration does not hold. */}
-      <select
-        {...refusedAttributes(refusals, FIELDS.agent_type)}
-        value={declarations.agent_type}
-        onChange={(event) => declare({ agent_type: event.target.value })}
-      >
-        {kinds.map((kind) => (
-          <option value={kind} key={kind}>
-            {kind}
-          </option>
-        ))}
-      </select>
-      <Refused refusals={refusals} field={FIELDS.agent_type} />
-    </label>
+      {(marks) => (
+        <select
+          {...marks}
+          value={declarations.agent_type}
+          onChange={(event) => declare({ agent_type: event.target.value })}
+        >
+          {kinds.map((kind) => (
+            <option value={kind} key={kind}>
+              {kind}
+            </option>
+          ))}
+        </select>
+      )}
+    </Field>
   )
 }
 
@@ -749,98 +761,116 @@ function TargetStep({
         no zero for one. It is not something an operator needs told before typing a URL.
       */}
       <p>The endpoint the bench will attack, and the price you pay per call on it.</p>
-      <label>
-        Name
-        <input
-          {...refusedAttributes(refusals, FIELDS.name)}
-          value={declarations.name}
-          onChange={(event) => declare({ name: event.target.value })}
-          placeholder="the name the report will call this target"
-        />
-        <Refused refusals={refusals} field={FIELDS.name} />
-      </label>
-      <label>
-        URL
-        <input
-          {...refusedAttributes(refusals, FIELDS.url)}
-          value={declarations.url}
-          onChange={(event) => declare({ url: event.target.value })}
-          placeholder="https://staging.example/agent"
-        />
-        <Refused refusals={refusals} field={FIELDS.url} />
-      </label>
-      <label>
-        Bearer token
-        <input
-          {...refusedAttributes(refusals, FIELDS.auth_token)}
-          type="password"
-          value={declarations.auth_token}
-          onChange={(event) => declare({ auth_token: event.target.value })}
-          placeholder="the credential your endpoint expects, if it expects one"
-        />
-        <Refused refusals={refusals} field={FIELDS.auth_token} />
-        {/*
-          The one field on this step that said nothing about itself, which is the one
-          field that is somebody's secret. What it is for is not guessable from its
-          name: it is the header on every call the bench makes, and it is the header
-          on every call to a reference agent too, because there is one code path
-          (`contract.py`). Empty is a real answer — an endpoint that needs no
-          credential is a normal endpoint on a laptop — and the bench sends the header
-          either way rather than branching on it.
-        */}
-        <span className="aside">
-          Sent as <code>Authorization: Bearer …</code> on every call to this endpoint.
-          Leave it empty if yours needs no credential.
-        </span>
-      </label>
+      <Field label="Name" field={FIELDS.name} refusals={refusals}>
+        {(marks) => (
+          <input
+            {...marks}
+            value={declarations.name}
+            onChange={(event) => declare({ name: event.target.value })}
+            placeholder="the name the report will call this target"
+          />
+        )}
+      </Field>
+      <Field label="URL" field={FIELDS.url} refusals={refusals}>
+        {(marks) => (
+          <input
+            {...marks}
+            value={declarations.url}
+            onChange={(event) => declare({ url: event.target.value })}
+            placeholder="https://staging.example/agent"
+          />
+        )}
+      </Field>
+      <Field
+        label="Bearer token"
+        field={FIELDS.auth_token}
+        refusals={refusals}
+        aside={
+          /*
+            The one field on this step that said nothing about itself, which is the one
+            field that is somebody's secret. What it is for is not guessable from its
+            name: it is the header on every call the bench makes, and it is the header
+            on every call to a reference agent too, because there is one code path
+            (`contract.py`). Empty is a real answer — an endpoint that needs no
+            credential is a normal endpoint on a laptop — and the bench sends the header
+            either way rather than branching on it.
+          */
+          <span className="aside">
+            Sent as <code>Authorization: Bearer …</code> on every call to this
+            endpoint. Leave it empty if yours needs no credential.
+          </span>
+        }
+      >
+        {(marks) => (
+          <input
+            {...marks}
+            type="password"
+            value={declarations.auth_token}
+            onChange={(event) => declare({ auth_token: event.target.value })}
+            placeholder="the credential your endpoint expects, if it expects one"
+          />
+        )}
+      </Field>
       <AgentType
         declarations={declarations}
         declare={declare}
         kinds={kinds}
         refusals={refusals}
       />
-      <label>
-        Sends per message
-        <input
-          {...refusedAttributes(refusals, FIELDS.sends)}
-          type="number"
-          min={1}
-          value={declarations.sends}
-          onChange={(event) => declare({ sends: Number(event.target.value) })}
-        />
-        <Refused refusals={refusals} field={FIELDS.sends} />
-        {/* Without the rest: that the enforced ceiling is built from this figure
-            rather than from a constant, and that a send is not an attempt. Both are
-            true and both are enforced — `sends` is what the ceiling is computed from,
-            and `CONTEXT.md` keeps the two words apart — and the estimate is where an
-            operator meets the ceiling this number produced. */}
-        <span className="aside">
-          How many times one message may go on the wire to this endpoint.
-        </span>
-      </label>
-      <label>
-        Price per call
-        <input
-          {...refusedAttributes(refusals, FIELDS.price_per_call)}
-          value={declarations.price_per_call}
-          onChange={(event) => declare({ price_per_call: event.target.value })}
-          placeholder="leave empty for a run you have not priced"
-        />
-        <Refused refusals={refusals} field={FIELDS.price_per_call} />
-      </label>
-      <label>
-        Currency
-        <input
-          {...refusedAttributes(refusals, FIELDS.currency)}
-          value={declarations.currency}
-          onChange={(event) => declare({ currency: event.target.value })}
-        />
-        <Refused refusals={refusals} field={FIELDS.currency} />
-        {/* Without the reason. That an amount in a currency the bench chose is a
-            figure the operator did not state is the argument for the field existing,
-            and the field exists. */}
-        <span className="aside">Required when a price is declared.</span>
-      </label>
+      <Field
+        label="Sends per message"
+        field={FIELDS.sends}
+        refusals={refusals}
+        aside={
+          /* Without the rest: that the enforced ceiling is built from this figure
+             rather than from a constant, and that a send is not an attempt. Both are
+             true and both are enforced — `sends` is what the ceiling is computed from,
+             and `CONTEXT.md` keeps the two words apart — and the estimate is where an
+             operator meets the ceiling this number produced. */
+          <span className="aside">
+            How many times one message may go on the wire to this endpoint.
+          </span>
+        }
+      >
+        {(marks) => (
+          <input
+            {...marks}
+            type="number"
+            min={1}
+            value={declarations.sends}
+            onChange={(event) => declare({ sends: Number(event.target.value) })}
+          />
+        )}
+      </Field>
+      <Field label="Price per call" field={FIELDS.price_per_call} refusals={refusals}>
+        {(marks) => (
+          <input
+            {...marks}
+            value={declarations.price_per_call}
+            onChange={(event) => declare({ price_per_call: event.target.value })}
+            placeholder="leave empty for a run you have not priced"
+          />
+        )}
+      </Field>
+      <Field
+        label="Currency"
+        field={FIELDS.currency}
+        refusals={refusals}
+        aside={
+          /* Without the reason. That an amount in a currency the bench chose is a
+             figure the operator did not state is the argument for the field existing,
+             and the field exists. */
+          <span className="aside">Required when a price is declared.</span>
+        }
+      >
+        {(marks) => (
+          <input
+            {...marks}
+            value={declarations.currency}
+            onChange={(event) => declare({ currency: event.target.value })}
+          />
+        )}
+      </Field>
       {/*
         The family, named over the box.
         Every other field on this form says what it is in two or three words and then
@@ -1080,16 +1110,16 @@ function WaiveTheProof({
 function AttestationStep({ declarations, declare, refusals }: RefusableProps) {
   return (
     <section>
-      <label>
-        Who is attesting
-        <input
-          {...refusedAttributes(refusals, FIELDS.identity)}
-          value={declarations.identity}
-          onChange={(event) => declare({ identity: event.target.value })}
-          placeholder="recorded against every one of the three statements"
-        />
-        <Refused refusals={refusals} field={FIELDS.identity} />
-      </label>
+      <Field label="Who is attesting" field={FIELDS.identity} refusals={refusals}>
+        {(marks) => (
+          <input
+            {...marks}
+            value={declarations.identity}
+            onChange={(event) => declare({ identity: event.target.value })}
+            placeholder="recorded against every one of the three statements"
+          />
+        )}
+      </Field>
       <ol className="attestations">
         {ATTESTATION_STATEMENTS.map((statement) => (
           <li key={statement.field}>
@@ -1155,20 +1185,24 @@ function ToolVisibilityStep({ declarations, declare, refusals }: RefusableProps)
         ) : null}
       </fieldset>
       {declarations.exposes_tool_calls === true ? (
-        <label>
-          The tools this target has, one per line
-          <textarea
-            {...refusedAttributes(refusals, FIELDS.declared_tools)}
-            rows={6}
-            value={declarations.declared_tools.join('\n')}
-            onChange={(event) =>
-              declare({ declared_tools: event.target.value.split('\n') })
-            }
-            placeholder={'send_email\nlookup_order\nissue_refund'}
-          />
-          <Refused refusals={refusals} field={FIELDS.declared_tools} />
-          <span className="aside">{A_DECLARATION_THE_BENCH_CANNOT_VERIFY}</span>
-        </label>
+        <Field
+          label="The tools this target has, one per line"
+          field={FIELDS.declared_tools}
+          refusals={refusals}
+          aside={<span className="aside">{A_DECLARATION_THE_BENCH_CANNOT_VERIFY}</span>}
+        >
+          {(marks) => (
+            <textarea
+              {...marks}
+              rows={6}
+              value={declarations.declared_tools.join('\n')}
+              onChange={(event) =>
+                declare({ declared_tools: event.target.value.split('\n') })
+              }
+              placeholder={'send_email\nlookup_order\nissue_refund'}
+            />
+          )}
+        </Field>
       ) : null}
     </section>
   )

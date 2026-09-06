@@ -79,7 +79,7 @@ import {
   type ScoredColumn,
 } from './runs'
 import { artefactsReading, type ArtefactsReading } from './artefacts'
-import { useScreenTitle } from './announce'
+import { useArrivalFocus, useScreenTitle } from './announce'
 import { THE_BENCH } from './rail'
 
 /** What the second region is holding: the runs, or why it could not read them. */
@@ -259,10 +259,13 @@ export function LandingScreen() {
     )
 
   useScreenTitle(THE_BENCH)
+  const heading = useArrivalFocus(THE_BENCH)
   return (
     <main className="screen">
       <header>
-        <h1>AgentAudit: an adversarial bench</h1>
+        <h1 ref={heading} tabIndex={-1}>
+          AgentAudit: an adversarial bench
+        </h1>
       </header>
 
       <section>

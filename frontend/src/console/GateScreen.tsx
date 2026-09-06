@@ -42,7 +42,7 @@ import {
   gateDecline,
   gateInterruptView,
 } from './gaterun'
-import { useScreenTitle } from './announce'
+import { useArrivalFocus, useScreenTitle } from './announce'
 import { THE_GATE } from './rail'
 
 export function GateScreen() {
@@ -72,10 +72,13 @@ export function GateScreen() {
   } = useGateRun()
 
   useScreenTitle(THE_GATE)
+  const heading = useArrivalFocus(THE_GATE)
   return (
     <main className="screen">
       <header>
-        <h1>The gate</h1>
+        <h1 ref={heading} tabIndex={-1}>
+          {THE_GATE}
+        </h1>
       </header>
 
       {refused ? (

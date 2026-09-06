@@ -47,7 +47,7 @@ import {
 import { RegisterScreen } from './register/RegisterScreen'
 import { ReportScreen } from './report/ReportScreen'
 import { RunScreen } from './run/RunScreen'
-import { useScreenTitle } from './console/announce'
+import { useArrivalFocus, useScreenTitle } from './console/announce'
 
 export default function App() {
   return (
@@ -66,12 +66,18 @@ export default function App() {
   )
 }
 
+/** What a path no screen answers is called, on the screen and in the tab strip. */
+const NO_SUCH_SCREEN = 'No such screen'
+
 /** A path no screen answers, said inside the shell rather than instead of it. */
 function NoSuchScreen() {
-  useScreenTitle('No such screen')
+  useScreenTitle(NO_SUCH_SCREEN)
+  const heading = useArrivalFocus(NO_SUCH_SCREEN)
   return (
     <main className="screen">
-      <h1>No such screen</h1>
+      <h1 ref={heading} tabIndex={-1}>
+        {NO_SUCH_SCREEN}
+      </h1>
       <p>
         The console's front door is at <Link to={CONSOLE_PATH}>/</Link>,
         registration at <Link to={REGISTER_PATH}>/register</Link>, the bench's own

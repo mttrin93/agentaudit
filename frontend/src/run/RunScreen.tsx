@@ -71,7 +71,7 @@ import {
 // declared. A second copy here would be a second answer to *which green is resisted*,
 // and the two would only have to disagree once.
 import { ANSWER_KEYS } from '../console/gaterun'
-import { useScreenTitle } from '../console/announce'
+import { useArrivalFocus, useScreenTitle } from '../console/announce'
 import { THE_RUN } from '../console/rail'
 
 const POLL_SECONDS = 2
@@ -178,6 +178,14 @@ export function RunScreen() {
 
   const at = progress === null ? null : standing(progress)
   useScreenTitle(THE_RUN, at === null ? 'Reading the run' : at.heading)
+  /*
+   * The screen and never the phase. This heading changes when the run changes what
+   * it is doing, and a run that finishes under somebody who is reading the panel
+   * below it would take the keyboard off what they are reading. So the arrival is
+   * the screen — announced once, on the way in — and what the run is doing is said
+   * in the live region instead, which announces without moving anything.
+   */
+  const heading = useArrivalFocus(THE_RUN)
   return (
     <main className="screen">
       {/*
@@ -191,7 +199,9 @@ export function RunScreen() {
         in the bench's own words.
       */}
       <header>
-        <h1>{at === null ? 'Reading the run' : at.heading}</h1>
+        <h1 ref={heading} tabIndex={-1}>
+          {at === null ? 'Reading the run' : at.heading}
+        </h1>
       </header>
 
       {unavailable ? (

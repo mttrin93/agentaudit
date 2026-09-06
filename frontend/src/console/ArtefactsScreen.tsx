@@ -42,7 +42,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 
 import { benchArtefacts, type ArtefactList } from '../api/bench'
-import { useScreenTitle } from './announce'
+import { useArrivalFocus, useScreenTitle } from './announce'
 import { SIGNED_ARTEFACTS } from './rail'
 
 import {
@@ -62,6 +62,7 @@ const NOTHING_YET: Held = { list: null, unavailable: '' }
 export function ArtefactsScreen() {
   const [held, setHeld] = useState<Held>(NOTHING_YET)
   useScreenTitle(SIGNED_ARTEFACTS)
+  const heading = useArrivalFocus(SIGNED_ARTEFACTS)
 
   useEffect(() => {
     let current = true
@@ -94,7 +95,9 @@ export function ArtefactsScreen() {
         below that. `WHAT_THIS_SCREEN_ANSWERS` is still built and still exported.
       */}
       <header>
-        <h1>Signed artefacts</h1>
+        <h1 ref={heading} tabIndex={-1}>
+          {SIGNED_ARTEFACTS}
+        </h1>
       </header>
 
       {held.unavailable ? (

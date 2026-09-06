@@ -64,7 +64,7 @@ import {
   type Step,
 } from './declarations'
 import { rememberTheFigures, rememberWhoAttested } from '../run/interrupt'
-import { useScreenTitle } from '../console/announce'
+import { useArrivalFocus, useScreenTitle } from '../console/announce'
 import { REGISTER_A_TARGET } from '../console/rail'
 import { Blocked, STILL_UNDECLARED } from '../blocked'
 
@@ -541,6 +541,20 @@ export function RegisterScreen() {
   }
 
   /**
+   * The step, said in the tab strip and read out on arrival.
+   *
+   * **Above the `focusOn` effect below, and that is the whole of why it is here**
+   * rather than beside `current`. A refusal that names a field walks back to the step
+   * drawing it *and* puts the keyboard on the field, so on that one render both this
+   * arrival and that effect want the keyboard — and the later of the two is the one
+   * that keeps it. The field is the more specific answer: it is the thing the bench
+   * refused, and the heading it is under is one Shift-Tab away.
+   */
+  const arriving = STEP_TITLES[WALK_STEPS[step]]
+  useScreenTitle(REGISTER_A_TARGET, arriving)
+  const heading = useArrivalFocus(arriving)
+
+  /**
    * The field the keyboard is owed, once the step drawing it is on screen.
    *
    * A name rather than a boolean, so that a second refusal about a second field
@@ -557,7 +571,6 @@ export function RegisterScreen() {
   }, [focusOn, setFocusOn])
 
   const current = WALK_STEPS[step]
-  useScreenTitle(REGISTER_A_TARGET, STEP_TITLES[current])
   const last = current === WALK_STEPS[WALK_STEPS.length - 1]
   /**
    * What is holding the primary button, in the words it will be refused in.
@@ -584,7 +597,9 @@ export function RegisterScreen() {
         to anybody's endpoint until an operator answers it.
       */}
       <header>
-        <h1>{STEP_TITLES[current]}</h1>
+        <h1 ref={heading} tabIndex={-1}>
+          {STEP_TITLES[current]}
+        </h1>
       </header>
 
       {refusal.statement ? (

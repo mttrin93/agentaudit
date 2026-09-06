@@ -61,3 +61,34 @@ test('every screen’s title names the screen, and a step of the walk names the 
   await page.getByRole('button', { name: 'Continue' }).click()
   await expect(page).toHaveTitle('Plant the nonce — Register a target — AgentAudit')
 })
+
+test('a step of the walk arrives with the keyboard on its own heading', async ({
+  page,
+}) => {
+  await page.goto('/#/register')
+  const first = page.getByRole('heading', { name: 'The endpoint', level: 1 })
+  await expect(first).toBeVisible()
+  // Nobody navigated to this one — it is where the address bar landed — so the
+  // keyboard is where a freshly opened document puts it, and not on the heading.
+  await expect(first).not.toBeFocused()
+
+  await completeTheEndpointStep(page)
+  await page.getByRole('button', { name: 'Continue' }).click()
+
+  // The step swaps the whole screen under one route. The heading of the one that
+  // arrived is what a screen reader reads out and where the next Tab starts from.
+  await expect(page.getByRole('heading', { name: 'Plant the nonce', level: 1 })).toBeFocused()
+})
+
+test('a screen reached from the rail arrives with the keyboard on its heading', async ({
+  page,
+}) => {
+  await page.goto('/#/settings')
+  await expect(page.getByRole('heading', { name: 'Settings', level: 1 })).toBeVisible()
+
+  await page.getByRole('link', { name: 'Signed artefacts' }).click()
+
+  await expect(
+    page.getByRole('heading', { name: 'Signed artefacts', level: 1 }),
+  ).toBeFocused()
+})

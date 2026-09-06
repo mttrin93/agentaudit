@@ -71,6 +71,16 @@ export const NOT_ANSWERING =
   'The bench has stopped answering this screen. What is below is the last thing it ' +
   'said, and the run itself is very likely still going.'
 
+/**
+ * The same state in the two words a tab strip has room for.
+ *
+ * A title is read at a glance and out of the corner of an eye, and the sentence above
+ * is a sentence. This is the state, not a shortening of the explanation: what a
+ * backgrounded run's tab has to carry is that the screen is no longer being told
+ * anything, and the screen itself carries the rest.
+ */
+export const NOT_ANSWERING_BRIEFLY = 'Not answering'
+
 /** What the retry offers to do, which is exactly one read and nothing else. */
 export const ASK_AGAIN = 'Ask the bench now'
 

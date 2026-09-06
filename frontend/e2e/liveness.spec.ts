@@ -92,3 +92,91 @@ test('a screen reached from the rail arrives with the keyboard on its heading', 
     page.getByRole('heading', { name: 'Signed artefacts', level: 1 }),
   ).toBeFocused()
 })
+
+/** The run this spec watches. The bench this process talks to never made one. */
+const RUN = 'a-run-this-spec-never-started'
+
+/**
+ * A run in flight, cut to what the run screen reads off it.
+ *
+ * Written as the JSON it goes over the wire as rather than typed against
+ * `RunProgress` — the spec directory resolves like Node and `src` like a bundler, so
+ * a spec that imported across that line would need configuration bought by a test
+ * (`failures.spec.ts` says the same thing at length). What is asserted below is a
+ * rendering, and this is the record that renders.
+ */
+const RUNNING = {
+  run_id: RUN,
+  status: 'running',
+  statement: 'the suite is running against the target',
+  scored: {
+    reached: true,
+    statement: 'the scored layer is on its fortieth attempt',
+    position: { family: 'wrongful_commitment', case_id: 'wc-003', attempt: 40 },
+    calls_spent: 41,
+    succeeded_attempts: 2,
+  },
+  adaptive: {
+    reached: false,
+    statement: 'the adaptive layer has not started',
+    position: null,
+    calls_spent: 0,
+    adaptive_findings: null,
+  },
+  transport: null,
+  report: null,
+  recent: [],
+  families: [
+    {
+      family: 'wrongful_commitment',
+      attempted: 40,
+      of: 181,
+      resisted: 38,
+      succeeded: 2,
+      not_run: '',
+    },
+  ],
+}
+
+test('a poll that stops being answered says so, over the figures it last read', async ({
+  page,
+}) => {
+  // Answered, and then not. The hung state is a request that never comes back rather
+  // than one that fails: a failure is a poll that *was* answered — with a refusal —
+  // and the screen has said so since it was written. What nothing on it could say is
+  // this: the answers stopped, and the figures below are as old as the silence.
+  let answering = true
+  await page.route(`**/runs/${RUN}`, async (route) => {
+    if (answering) {
+      await route.fulfill({ json: RUNNING })
+    }
+  })
+
+  await page.goto(`/#/runs/${RUN}`)
+  await expect(page.getByRole('heading', { name: 'Running', level: 1 })).toBeVisible()
+  // The figures are dated on the screen that draws them, so a reader who came back to
+  // the tab can tell how old they are without watching one arrive.
+  const dated = page.locator('p.answered')
+  await expect(dated).toHaveText(/Answered at \d{2}:\d{2}:\d{2}/)
+  // And the phase in the tab strip, which is what a run somebody backgrounded has.
+  await expect(page).toHaveTitle('Running — The run — AgentAudit')
+
+  answering = false
+  const stalled = page.locator('section.stalled')
+  // Twelve seconds of silence, plus the tick that notices it.
+  await expect(stalled).toBeVisible({ timeout: 30_000 })
+  await expect(stalled).toContainText('stopped answering this screen')
+  // Including in the tab of the reader who is not looking at it, which is the whole
+  // point of putting a run's phase there.
+  await expect(page).toHaveTitle('Not answering — The run — AgentAudit')
+  // And the figures are still there: they are the only evidence of where the run had
+  // got to, and the stamp above them is what keeps them honest.
+  await expect(page.getByText('40 / 181')).toBeVisible()
+
+  // The offer is one read, made now. Nothing here restarts a run or touches a target.
+  const again = page.getByRole('button', { name: 'Ask the bench now' })
+  await expect(again).toBeVisible()
+  answering = true
+  await again.click()
+  await expect(stalled).toHaveCount(0)
+})

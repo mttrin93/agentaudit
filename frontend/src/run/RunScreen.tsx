@@ -73,17 +73,16 @@ import {
 import { ANSWER_KEYS } from '../console/gaterun'
 import { useArrivalFocus, useScreenTitle } from '../console/announce'
 import { THE_RUN } from '../console/rail'
-
-const POLL_SECONDS = 2
-/**
- * How often the run is asked where it has got to.
- *
- * The frontend polls because the spec says it does. Two seconds because the thing
- * being watched is a position moving through 181 attempts over minutes: often
- * enough that the attempt on screen is the attempt in flight, rare enough that a
- * screen left open is not a load on the bench that is attacking somebody's
- * endpoint.
- */
+// Whether this screen is still being told anything, which is a rule and not a line:
+// the span, the words and what the retry does are ADR-0078's.
+import {
+  ASK_AGAIN,
+  NOT_ANSWERING,
+  NOT_ANSWERING_BRIEFLY,
+  POLL_SECONDS,
+  announcement,
+  liveness,
+} from './liveness'
 
 export function RunScreen() {
   const { runId = '' } = useParams()
@@ -92,6 +91,17 @@ export function RunScreen() {
   const [refused, setRefused] = useState('')
   const [busy, setBusy] = useState(false)
   const [confirmed, setConfirmed] = useState(false)
+  /**
+   * When the bench last answered this screen, and what time it is now.
+   *
+   * Two moments rather than a state that says *stalled*, because what stalled means
+   * is a rule and the rule is `liveness.ts`'s. `now` is what makes the silence
+   * visible at all: nothing arrives while the bench is quiet, so a screen with no
+   * clock of its own renders at the moment it stops being told anything and then
+   * never again.
+   */
+  const [answeredAt, setAnsweredAt] = useState<number | null>(null)
+  const [clock, setClock] = useState(() => Date.now())
 
   /**
    * The figures this run was estimated at, read once from the handoff.
@@ -116,6 +126,11 @@ export function RunScreen() {
       const now = await runProgress(runId)
       setProgress(now)
       setUnavailable('')
+      // The moment the bench answered, which is what dates every figure below.
+      // Recorded on the answer and never on the asking: a poll that never comes back
+      // is exactly the failure the stamp is here to make visible.
+      setAnsweredAt(Date.now())
+      setClock(Date.now())
       return now
     } catch (unknown: unknown) {
       setUnavailable(`${unknown}`)
@@ -141,6 +156,27 @@ export function RunScreen() {
       clearInterval(timer)
     }
   }, [read])
+
+  /**
+   * The clock this screen reads its own silence against.
+   *
+   * **A second interval beside the poll, and it has to be a second one.** The failure
+   * being watched for is a request that never comes back, so a `now` advanced inside
+   * the poll's own tick would stop advancing at exactly the moment it was needed. It
+   * asks nothing of anybody: one `Date.now()` at the poll's own cadence.
+   *
+   * It stops when the poll does. A run that has stopped is settled rather than silent
+   * (ADR-0078), and a tab left open on a finished run should not re-render every two
+   * seconds for the rest of the day.
+   */
+  const inFlight = progress === null || stillGoing(progress.status)
+  useEffect(() => {
+    if (!inFlight) {
+      return
+    }
+    const ticking = setInterval(() => setClock(Date.now()), POLL_SECONDS * 1000)
+    return () => clearInterval(ticking)
+  }, [inFlight])
 
   /**
    * The name the confirmation is recorded under, from the registration that made
@@ -177,7 +213,21 @@ export function RunScreen() {
   }
 
   const at = progress === null ? null : standing(progress)
-  useScreenTitle(THE_RUN, at === null ? 'Reading the run' : at.heading)
+  const live = liveness({ answeredAt, now: clock, inFlight })
+  /**
+   * What this screen says out loud, and what the tab strip says for a run somebody
+   * has backgrounded.
+   *
+   * The same two words in both places, and neither is a figure: a phase, or that the
+   * screen has stopped being told anything. `announce.ts` says why a count has no
+   * business in a tab strip, and ADR-0078 why the announcement carries nothing that
+   * moves on its own.
+   */
+  const said = announcement(at === null ? null : at.heading, live)
+  useScreenTitle(
+    THE_RUN,
+    live.kind === 'stalled' ? NOT_ANSWERING_BRIEFLY : (at?.heading ?? 'Reading the run'),
+  )
   /*
    * The screen and never the phase. This heading changes when the run changes what
    * it is doing, and a run that finishes under somebody who is reading the panel
@@ -189,7 +239,7 @@ export function RunScreen() {
   return (
     <main className="screen">
       {/*
-        The heading, and nothing over or under it.
+        The heading, and under it the date of everything below it.
 
         The eyebrow said *AgentAudit — run*: the app's name is in the rail and the
         rail's current row says which screen this is. The line under it carried the
@@ -197,12 +247,59 @@ export function RunScreen() {
         addresses, and the interval is a fact about this client, not about the run.
         What the run is doing is the heading, and the section under it says it again
         in the bench's own words.
+
+        The stamp that took their place is not a fact about this client either: it is
+        when the figures on this screen were last true, which is the one thing a
+        reader cannot get from the figures themselves (ADR-0078).
       */}
       <header>
         <h1 ref={heading} tabIndex={-1}>
           {at === null ? 'Reading the run' : at.heading}
         </h1>
       </header>
+
+      {/*
+        What the run is doing, said once each time it changes.
+
+        Polite, and off the screen: the heading above says the same thing to anybody
+        looking at it, and a second copy in the reading column would be this screen
+        saying everything twice. What it buys is the reader who is not looking —
+        a run takes minutes, and its phases change while somebody is in another tab
+        or reading further down this one.
+
+        It announces on a phase change and never on a tick, which is a property of
+        the sentence rather than of this element: `announcement` is built from the
+        standing and the liveness kind alone, so the text React writes here is
+        identical between two polls of one phase and the region stays silent
+        (ADR-0078).
+      */}
+      <p className="announced" role="status" aria-live="polite">
+        {said}
+      </p>
+
+      {live.stamp !== '' && live.kind !== 'settled' ? (
+        <p className="answered">Answered at {live.stamp}</p>
+      ) : null}
+
+      {/*
+        The silence, said where the figures are — and the figures left standing.
+
+        Not a `role="alert"`: the polite region above has already announced it, and
+        the same words twice in two politenesses is the screen shouting. It is also
+        not a refusal — nothing was refused, and nobody's endpoint did anything. The
+        run is very likely still going.
+      */}
+      {live.kind === 'stalled' ? (
+        <section className="stalled">
+          <h2>This screen has stopped being answered</h2>
+          <p>{NOT_ANSWERING}</p>
+          <p>
+            <button type="button" onClick={() => void read()}>
+              {ASK_AGAIN}
+            </button>
+          </p>
+        </section>
+      ) : null}
 
       {unavailable ? (
         <section className="refusal" role="alert">

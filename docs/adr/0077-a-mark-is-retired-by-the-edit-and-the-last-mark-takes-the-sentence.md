@@ -84,6 +84,17 @@ wholesale replacement and there is still no setter that can move one half.
   field is not a render, and the compiled memo sites in that file are not invalidated.
 - `Field` is unchanged. It draws what the refusal says, and it has never decided how
   long the refusal lives.
+- **A field this screen draws no control for retires nothing, and holds the sentence
+  until the next nonce.** Five of the fourteen names in `FIELDS` are ticks, radios and
+  the nonce itself — `FIELDS`' own docstring says they are listed for the routing and
+  carry no `id` a message could be hung under. A `422` naming one of those puts an
+  entry in `fields` that no edit can match, so the sentence stands even after every
+  visible mark has been answered. That is the honest reading rather than a stuck
+  state: the refusal *was* about something, the page-level sentence is the only place
+  it is reported, and it is not the operator's to dismiss. Nor is it permanent — every
+  refusal spends the nonce, so registering again means pressing *Issue a nonce*, and
+  `issue()` clears the refusal whole. Giving those controls ids so their refusals could
+  be drawn and retired is a change to what ADR-0076 names, and it is not this one.
 - The e2e case in `frontend/e2e/keyboard.spec.ts` names **two** fields, because a
   refusal naming one cannot tell the three rules apart: with a single mark, retiring
   that mark and retiring the whole refusal are the same observable screen.

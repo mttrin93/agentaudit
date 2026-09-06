@@ -132,7 +132,10 @@ function said(statement: string): Refusal {
  *
  * Returns the refusal it was given where nothing matched — a keystroke in a field
  * nothing was refused about is not a state change, and the memo sites below are not
- * invalidated by one.
+ * invalidated by one. Which is also what happens to the five names in `FIELDS` no
+ * control on this walk carries an `id` for: an entry no edit can match holds the
+ * sentence until the next nonce is issued, and ADR-0077 says why that is the reading
+ * rather than a stuck screen.
  */
 function retire(refusal: Refusal, field: string): Refusal {
   const fields = refusal.fields.filter((one) => one.field !== field)

@@ -19,9 +19,15 @@
  * **The rail is a nav and the screen is a main.** Each screen brings its own
  * `<main className="screen">`, which is what keeps the prose in one reading column
  * inside the frame, so this file contributes a wrapper and no second `main`.
+ *
+ * **And it is skippable.** The rail is seven destinations before the reading column
+ * on every screen, which a keyboard reader pays for every time they arrive at a
+ * screen they have already chosen. The control that skips it is the first thing in
+ * the document, drawn only while it has the keyboard, and `e2e/keyboard.spec.ts`
+ * holds all three claims — first stop, past the rail, and a rail worth skipping.
  */
 
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { Link, Outlet, useLocation } from 'react-router-dom'
 
 import {
@@ -36,6 +42,15 @@ import { RailGlyph } from './railIcons'
 export function ConsoleShell() {
   const { pathname } = useLocation()
   const onScreen = runInPath(pathname)
+  /**
+   * Where the skip control puts the keyboard: the wrapper the screen renders into.
+   *
+   * The wrapper and not the screen's own `<main>`, because the `<main>` belongs to
+   * whichever screen is on — it arrives through `<Outlet />` and this component has
+   * no handle on it. What is landed on is therefore one element outside it, and the
+   * next tab stop is the first control in the reading column either way.
+   */
+  const theScreen = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     // Written as you arrive, so the way back exists before you decide to leave.
@@ -54,6 +69,28 @@ export function ConsoleShell() {
   const rail = railView(pathname, remembered)
   return (
     <div className="console">
+      {/*
+        The rail, skipped.
+
+        **A button and not an `<a href="#…">`, and the router is why.** Every screen
+        in this app lives in the fragment (`main.tsx`), so a link to a fragment id is
+        a link to a route that does not exist: the browser would set the hash, the
+        `HashRouter` would read it as a path, and the skip control would navigate off
+        the screen it was supposed to take the reader into. Moving the focus in code
+        is the only way to skip a rail in a hash-routed app.
+
+        It is drawn only while it has the keyboard — `.skip` in `index.css` — because
+        a control whose whole subject is the tab order has nothing to say to a reader
+        using a pointer, and the first thing on every screen should be the screen.
+      */}
+      <button
+        type="button"
+        className="skip"
+        onClick={() => theScreen.current?.focus()}
+      >
+        Skip to the screen
+      </button>
+
       <nav className="rail" aria-label="The console">
         <p className="mark">
           Agent<span>Audit</span>
@@ -75,7 +112,7 @@ export function ConsoleShell() {
         )}
       </nav>
 
-      <div className="console-body">
+      <div className="console-body" ref={theScreen} tabIndex={-1}>
         <Outlet />
       </div>
     </div>

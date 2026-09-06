@@ -608,8 +608,9 @@ pre {
  *
  * Not `display: none` and not `hidden`: either would take it out of the accessibility
  * tree and there would be nothing to announce. A one-pixel clipped box is the way a
- * region stays in the tree with nothing on the page, and it is the only rule in this
- * stylesheet whose purpose is to make something invisible.
+ * region stays in the tree with nothing on the page. It is one of two rules in this
+ * stylesheet whose purpose is to make something invisible, and the other one —
+ * `.skip` — is invisible only until the keyboard reaches it.
  *
  * The screen says the same thing in its own heading, which is why this is not drawn:
  * a second copy in the reading column would be the console saying everything twice.
@@ -2424,6 +2425,41 @@ section > .asserts {
 }
 
 /*
+ * The control that skips the rail, off the page until the keyboard finds it.
+ *
+ * It is the first thing in the document and it is drawn nowhere, which is the whole
+ * of the arrangement: a reader with a pointer has no use for a control about tab
+ * order, and the first thing on a screen should be the screen. Moved off the page
+ * rather than hidden, for `.announced`'s reason — `display: none` would take it out
+ * of the tab order too, and a skip link nothing can reach is worse than none.
+ *
+ * `fixed` and not `absolute`, so that it needs no positioned ancestor: `.console` is
+ * a two-column grid and a positioned wrapper around it would change what every
+ * absolutely positioned box inside a screen is placed against. When it has the
+ * keyboard it sits over the top of the rail, which is where the reader's eye already
+ * is at the start of a document.
+ */
+.skip {
+  position: fixed;
+  z-index: 1;
+  top: 0.6rem;
+  /* Off the page, and off it by a whole viewport so that no window is wide enough
+     to bring a corner of it back. */
+  left: -100vw;
+  color: var(--accent);
+  background: var(--accent-paper);
+  border-color: var(--accent);
+}
+
+/* `:focus` and not `:focus-visible`: this control is only ever reached by the
+   keyboard, and it is also focused in script by nothing at all — but a rule that
+   drew it for one kind of focus and not the other is a rule with a way to be
+   invisible while it has the keyboard, which is the one state it must not have. */
+.skip:focus {
+  left: 0.6rem;
+}
+
+/*
  * The console shell: a rail that persists, and a screen that does not move.
  *
  * The frame is a two-column grid rather than a fixed sidebar and a margin, because
@@ -2556,8 +2592,20 @@ section > .asserts {
   background: transparent;
 }
 
+/*
+ * Where the skip control lands, which is why this takes focus at all.
+ *
+ * `tabIndex={-1}` in `ConsoleShell.tsx` makes it focusable in script and leaves it
+ * out of the tab order; no outline is drawn on it, because the thing that says the
+ * skip worked is the next tab stop being inside the reading column rather than a
+ * ring around a wrapper the width of the screen.
+ */
 .console-body {
   min-width: 0;
+}
+
+.console-body:focus {
+  outline: none;
 }
 
 @media (max-width: 52rem) {

@@ -461,7 +461,9 @@ export function RegisterScreen() {
     // Narrowed once, and read off the narrowed value from here down. The refused
     // arm *is* a `Refusal`, so the sentence and the fields reach the state as the
     // one value they were read out of the response as, rather than being taken
-    // apart here and put back together in `setRefusal`.
+    // apart here and put back together in `setRefusal`. The `kind` tag rides along
+    // into state and nothing reads it there — deliberately, because stripping it
+    // would be the reassembly this is removing.
     setRefusal(outcome)
     // Where the API named a field, the walk goes to the step that draws it and puts
     // the keyboard on it, instead of to the plant step. Both are true of a refusal —

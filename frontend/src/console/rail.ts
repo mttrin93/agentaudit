@@ -200,6 +200,31 @@ interface Place {
 export const THE_BENCH = 'The bench'
 
 /**
+ * The other six screens, named beside the rail's own name for the first.
+ *
+ * Exported for the same reason `THE_BENCH` is, and for a second one that arrived
+ * with the titles: a screen states its own name in the tab strip, and a literal
+ * there would be a second copy of a name the rail is already drawing. Two of them
+ * belong to a run rather than to the console, and they are here because a run's two
+ * screens are named by this module too.
+ *
+ * The gate is named here without being a standing destination: its path is declared
+ * above with the paragraph saying why it is off the rail, and a screen that is off
+ * the rail still has a name in a tab strip.
+ */
+export const REGISTER_A_TARGET = 'Register a target'
+
+export const SIGNED_ARTEFACTS = 'Signed artefacts'
+
+export const SETTINGS = 'Settings'
+
+export const THE_GATE = 'The gate'
+
+export const THE_RUN = 'The run'
+
+export const ITS_REPORT = 'Its report'
+
+/**
  * The console's standing destinations.
  *
  * Five, today, and the shell is the reason there can be more: a screen added to
@@ -212,15 +237,15 @@ export const THE_BENCH = 'The bench'
  */
 const STANDING: readonly (Place & { path: string })[] = [
   { path: CONSOLE_PATH, name: THE_BENCH, icon: 'bench' },
-  { path: REGISTER_PATH, name: 'Register a target', icon: 'target' },
-  { path: ARTEFACTS_PATH, name: 'Signed artefacts', icon: 'artefacts' },
-  { path: SETTINGS_PATH, name: 'Settings', icon: 'settings' },
+  { path: REGISTER_PATH, name: REGISTER_A_TARGET, icon: 'target' },
+  { path: ARTEFACTS_PATH, name: SIGNED_ARTEFACTS, icon: 'artefacts' },
+  { path: SETTINGS_PATH, name: SETTINGS, icon: 'settings' },
 ]
 
 /** What a run's two screens are called in the rail. */
-const RUN_SCREEN: Place = { name: 'The run', icon: 'run' }
+const RUN_SCREEN: Place = { name: THE_RUN, icon: 'run' }
 
-const REPORT_SCREEN: Place = { name: 'Its report', icon: 'report' }
+const REPORT_SCREEN: Place = { name: ITS_REPORT, icon: 'report' }
 
 /**
  * Where a path is, as the few cases the console can be in.

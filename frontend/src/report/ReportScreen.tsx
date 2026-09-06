@@ -102,6 +102,8 @@ import {
   type ReportView,
   type RouteReading,
 } from './report'
+import { useScreenTitle } from '../console/announce'
+import { ITS_REPORT } from '../console/rail'
 
 /** What this screen is holding: the things it needs, or why it has none of them. */
 interface Held {
@@ -209,6 +211,7 @@ export function ReportScreen() {
   }, [runId])
 
   const view = held.report ? reportView(held.report) : null
+  useScreenTitle(ITS_REPORT, view ? view.target : 'Reading the report')
   return (
     <main className="screen">
       {/*

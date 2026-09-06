@@ -42,6 +42,8 @@ import {
   gateDecline,
   gateInterruptView,
 } from './gaterun'
+import { useScreenTitle } from './announce'
+import { THE_GATE } from './rail'
 
 export function GateScreen() {
   const {
@@ -69,6 +71,7 @@ export function GateScreen() {
     step,
   } = useGateRun()
 
+  useScreenTitle(THE_GATE)
   return (
     <main className="screen">
       <header>

@@ -71,6 +71,8 @@ import {
 // declared. A second copy here would be a second answer to *which green is resisted*,
 // and the two would only have to disagree once.
 import { ANSWER_KEYS } from '../console/gaterun'
+import { useScreenTitle } from '../console/announce'
+import { THE_RUN } from '../console/rail'
 
 const POLL_SECONDS = 2
 /**
@@ -175,6 +177,7 @@ export function RunScreen() {
   }
 
   const at = progress === null ? null : standing(progress)
+  useScreenTitle(THE_RUN, at === null ? 'Reading the run' : at.heading)
   return (
     <main className="screen">
       {/*

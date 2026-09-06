@@ -42,6 +42,8 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 
 import { benchArtefacts, type ArtefactList } from '../api/bench'
+import { useScreenTitle } from './announce'
+import { SIGNED_ARTEFACTS } from './rail'
 
 import {
   artefactsReading,
@@ -59,6 +61,7 @@ const NOTHING_YET: Held = { list: null, unavailable: '' }
 
 export function ArtefactsScreen() {
   const [held, setHeld] = useState<Held>(NOTHING_YET)
+  useScreenTitle(SIGNED_ARTEFACTS)
 
   useEffect(() => {
     let current = true

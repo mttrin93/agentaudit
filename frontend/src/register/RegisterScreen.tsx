@@ -64,6 +64,8 @@ import {
   type Step,
 } from './declarations'
 import { rememberTheFigures, rememberWhoAttested } from '../run/interrupt'
+import { useScreenTitle } from '../console/announce'
+import { REGISTER_A_TARGET } from '../console/rail'
 import { Blocked, STILL_UNDECLARED } from '../blocked'
 
 /*
@@ -555,6 +557,7 @@ export function RegisterScreen() {
   }, [focusOn, setFocusOn])
 
   const current = WALK_STEPS[step]
+  useScreenTitle(REGISTER_A_TARGET, STEP_TITLES[current])
   const last = current === WALK_STEPS[WALK_STEPS.length - 1]
   /**
    * What is holding the primary button, in the words it will be refused in.

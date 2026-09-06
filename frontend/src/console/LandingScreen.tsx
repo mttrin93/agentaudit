@@ -79,6 +79,8 @@ import {
   type ScoredColumn,
 } from './runs'
 import { artefactsReading, type ArtefactsReading } from './artefacts'
+import { useScreenTitle } from './announce'
+import { THE_BENCH } from './rail'
 
 /** What the second region is holding: the runs, or why it could not read them. */
 interface HeldRuns {
@@ -256,6 +258,7 @@ export function LandingScreen() {
         .map((one) => one.transform),
     )
 
+  useScreenTitle(THE_BENCH)
   return (
     <main className="screen">
       <header>

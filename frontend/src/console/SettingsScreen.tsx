@@ -54,6 +54,8 @@ import {
   type SettingsBlock,
   type TuningBlock,
 } from './settings'
+import { useScreenTitle } from './announce'
+import { SETTINGS } from './rail'
 
 /** What this screen is holding: the configuration, or why it has none. */
 interface Held {
@@ -68,6 +70,7 @@ const SETTLED_MS = 400
 
 export function SettingsScreen() {
   const [held, setHeld] = useState<Held>(NOTHING_YET)
+  useScreenTitle(SETTINGS)
 
   useEffect(() => {
     let current = true

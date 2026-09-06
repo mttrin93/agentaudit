@@ -47,6 +47,7 @@ import {
 import { RegisterScreen } from './register/RegisterScreen'
 import { ReportScreen } from './report/ReportScreen'
 import { RunScreen } from './run/RunScreen'
+import { useScreenTitle } from './console/announce'
 
 export default function App() {
   return (
@@ -67,6 +68,7 @@ export default function App() {
 
 /** A path no screen answers, said inside the shell rather than instead of it. */
 function NoSuchScreen() {
+  useScreenTitle('No such screen')
   return (
     <main className="screen">
       <h1>No such screen</h1>

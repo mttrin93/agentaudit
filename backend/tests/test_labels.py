@@ -27,6 +27,7 @@ from backend.bench.labels import (
     bears_stated,
     claims_stated,
     covering,
+    elective_label_for,
     label_for,
 )
 from backend.bench.library import ElectiveFamily, Family
@@ -380,3 +381,30 @@ def test_the_article_half_prints_as_a_whole_sentence_naming_the_act() -> None:
 
     with pytest.raises(ValueError, match="bears no article"):
         bears_stated(())
+
+
+def test_an_elective_family_has_an_accessor_of_its_own_and_the_two_do_not_cross() -> (
+    None
+):
+    # The bench page prints nine rows of labels since the console stopped drawing the
+    # tier in a section of its own, so `ELECTIVE_LABELS` has a reader outside its own
+    # table for the first time and `label_for`'s docstring no longer holds.
+    #
+    # A second accessor rather than one widened to `AnyFamily`: the key type of each
+    # table is the boundary (ADR-0035), and a single function over both would be the
+    # one argument through which an elective family reaches a caller written for the
+    # six — `published.py`'s coverage subtraction being the one that matters.
+    assert elective_label_for(ElectiveFamily.MEMORY_POISONING).agentic == (
+        "ASI06:2026",
+    )
+    assert elective_label_for(ElectiveFamily.PII_LEAKAGE).llm == ("LLM02:2026",)
+    assert elective_label_for(ElectiveFamily.DIRECT_PROMPT_INJECTION).articles == (
+        Article.ROBUSTNESS_AND_CYBERSECURITY,
+    )
+
+    # Neither accessor answers the other's enumeration, which is the property the two
+    # tables' key types carry and this asserts of the functions over them.
+    with pytest.raises(KeyError):
+        elective_label_for(Family.DATA_LEAKAGE)  # type: ignore[arg-type]
+    with pytest.raises(KeyError):
+        label_for(ElectiveFamily.PII_LEAKAGE)  # type: ignore[arg-type]

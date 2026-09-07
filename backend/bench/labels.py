@@ -490,11 +490,31 @@ def label_for(family: Family) -> FamilyLabel:
     coverage subtraction in `published.py` being the one that matters, because a claim
     is the only thing that shortens a printed untested list.
 
-    There is no counterpart for `ELECTIVE_LABELS`, which nothing outside its own table
-    reads yet. The type boundary is the key type of the table and not this function, so
-    a second accessor with no caller would be ceremony rather than a constraint.
+    `elective_label_for` below is its counterpart, added when the console became the
+    first reader of `ELECTIVE_LABELS` outside its own table. The type boundary is the
+    key type of each table rather than either function, and the pair is two accessors
+    precisely so that no signature exists which accepts both.
     """
     return LABELS[family]
+
+
+def elective_label_for(family: ElectiveFamily) -> FamilyLabel:
+    """The label one of the elective tier carries.
+
+    Keyed on `ElectiveFamily` and never on both enumerations, for the reason
+    `label_for` above is keyed on `Family`: the key type of each table is the boundary
+    ADR-0035 asks for, and one accessor over `AnyFamily` would be the single argument
+    through which an elective family reaches a caller written for the six.
+
+    Its reader is the console. The bench page prints every family's published claims
+    and the articles it bears beside the tick that requests it, over the nine rows it
+    now draws as one list
+    ([ADR-0091](../../docs/adr/0091-the-console-draws-the-nine-families-as-one-list.md)).
+    What that screen may not print, and does not, is a rate or a `D`: a label is what a
+    family *is* read onto, and the tier's discriminating power is a fact about this
+    bench that belongs in the gate run's own document (ADR-0018).
+    """
+    return ELECTIVE_LABELS[family]
 
 
 def article_for(family: Family) -> tuple[Article, ...]:

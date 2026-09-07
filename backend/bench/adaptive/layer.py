@@ -27,22 +27,25 @@ adaptive section rather than reported as a family nothing broke.
 from __future__ import annotations
 
 import random
+import time
 from collections.abc import Sequence
 from dataclasses import dataclass
 
 from backend.bench.adaptive.attacker import (
     AttackerCompletion,
+    AttackerUnavailable,
     Objective,
     run_episode,
 )
 from backend.bench.adaptive.blinding import Blinding
 from backend.bench.adaptive.budget import DECLARED_ADAPTIVE_BUDGET, AdaptiveBudget
-from backend.bench.adaptive.episode import AdaptiveEpisode
+from backend.bench.adaptive.episode import AdaptiveEpisode, EpisodeOutcome
 from backend.bench.adaptive.precedent import DURABLE_PRECEDENT, PrecedentStore
 from backend.bench.applicability import applicable
-from backend.bench.contract import TargetConfig
+from backend.bench.contract import TargetConfig, TargetUnreachable
 from backend.bench.library import Case, Family, VerdictClass, one_of_the_six
 from backend.bench.measurability import runnable
+from backend.bench.unfinished import ReplyUnfinished
 from backend.graph.runstate import RunState
 from backend.observability import Field, Span, traced
 
@@ -75,6 +78,38 @@ class AttackableTarget:
     """
 
 
+EPISODE_FAILURES: tuple[type[Exception], ...] = (
+    TargetUnreachable,
+    AttackerUnavailable,
+    ReplyUnfinished,
+)
+"""The instrument failures an episode may have and still leave a run measured.
+
+Three, and deliberately no more: the target on the wire, the attacker's own model, and
+that model answering with a tool call the cap cut off. `TargetUnreachable` from
+`contract`; `AttackerUnavailable` from the attacker seam rather than a provider's own
+exception class, which would reach the verifier's import closure; and `ReplyUnfinished`,
+which is this bench's own named failure for a truncated reply and surfaces as itself
+because `test_unfinished_replies.py` holds that it must.
+Both are things that break *outside* this repository, which is what makes an episode
+that met one an absent observation rather than a bug — and the pair is the whole of
+what this layer talks to besides the case record it was handed.
+
+**A bare `except Exception` here would be the failure this catch exists to prevent,
+arriving from the other side.** Every future defect in the layer would become a run
+that quietly attacked nothing and published an `A_break` over whatever survived, which
+is PLAN §10's own failure mode; ADR-0050 decided this for the narrative instruments on
+the same reasoning and keeps a test that a `MemoryError` from the judge's seat still
+stops the run. The counterpart test is `test_adaptive_attacker.py`'s.
+
+Why an episode may fail without failing the run at all is ADR-0010: this layer decides
+nothing, so an absence here costs a diagnostic and never a rate. Before this it cost
+the run — the exception left `run_suite` with a scored layer already paid for. The
+decision, and the four alternatives it refused, is
+[ADR-0085](../../../docs/adr/0085-an-episode-whose-instrument-broke-is-a-failed-episode-and-the-run-is-still-measured.md).
+"""
+
+
 def run_adaptive_layer(
     attackable: Sequence[AttackableTarget],
     cases: Sequence[Case],
@@ -102,8 +137,9 @@ def run_adaptive_layer(
                 continue
             for _ in range(budget.episodes_per_family):
                 with traced(Span.EPISODE, {Field.FAMILY: family}) as span:
-                    episodes.append(
-                        run_episode(
+                    started = time.monotonic()
+                    try:
+                        episode = run_episode(
                             target=entry.target,
                             objective=Objective(
                                 family=family, case=objective, canary=entry.canary
@@ -114,7 +150,22 @@ def run_adaptive_layer(
                             budget=budget,
                             precedent=precedent,
                         )
-                    )
+                    except EPISODE_FAILURES as broke:
+                        episode = AdaptiveEpisode.against(
+                            target=entry.target,
+                            family=family,
+                            outcome=EpisodeOutcome.FAILED,
+                            turns=0,
+                            failure=f"{type(broke).__name__}: {broke}",
+                            started_at=started,
+                        )
+                        # Filed on the run state as well, the way `run_episode`
+                        # files the ones it completes: the run state is what the
+                        # report and `/runs` read, and an episode recorded only in
+                        # the return value would be a failure the document does not
+                        # carry.
+                        run_state.record_episode(episode)
+                    episodes.append(episode)
                     # Read off the run state rather than counted here. The position
                     # is the run's own and the run is the authority for it — a second
                     # counter beside it would be a figure that could come to disagree

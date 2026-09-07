@@ -26,6 +26,7 @@ from datetime import date
 
 from backend.bench.contract import TargetConfig
 from backend.bench.library import (
+    CARRIED_BY_FETCHED_CONTENT,
     Case,
     CaseStatus,
     DiscoveredBy,
@@ -35,6 +36,23 @@ from backend.bench.library import (
     Trigger,
     VerdictClass,
 )
+
+
+class RouteNotFilable(Exception):
+    """A route the attacker found and no record can carry.
+
+    Raised instead of a `Case` this module cannot construct honestly, and caught by
+    the episode, which records the declination and hands the reason back to the
+    attacker. A separate type rather than `None` so that the reason travels to both
+    readers — the attacker, which asked, and the episode record, which is the only
+    place a route the layer could not file is ever written down.
+
+    It is *not* an error in the layer: a declined route is a fact about the attacker
+    and the family it worked in, so an episode that raises this one still completes
+    and still reports its outcome. Why the route is declined rather than filed with a
+    synthesised artefact is
+    [ADR-0084](../../../docs/adr/0084-a-route-the-record-cannot-carry-is-declined-and-not-synthesised.md).
+    """
 
 
 @dataclass(frozen=True)
@@ -74,7 +92,29 @@ def proposed_from(
     The success condition is copied off the objective rather than composed, which
     is what keeps the proposal deterministic: the attacker found a new *payload*,
     not a new definition of what counts as a break (ADR-0004).
+
+    **And copying it is what makes two families unfilable**, which is why the refusal
+    is here rather than in the caller. A condition in `CARRIED_BY_FETCHED_CONTENT`
+    says the attack arrives in content the target fetched, so ADR-0060 requires the
+    record to carry that content — while what the attacker composed is a message, and
+    the payload above is the probe that ran. Synthesising the artefact from the probe
+    would file a message as fetched content and would then have to invent the two
+    invariants that hang off it: the canary is the artefact's own halves joined, and
+    the content key is named by the turn that fetches. So the route is declined with
+    its reason and the episode records it (`RouteNotFilable`, #166).
     """
+    kind = (
+        None
+        if objective.success_condition is None
+        else objective.success_condition.kind
+    )
+    if kind in CARRIED_BY_FETCHED_CONTENT:
+        raise RouteNotFilable(
+            f"a route in {family.value} is not filable as a case: the attack in this "
+            "family arrives in content the target fetched and a probe is a message, "
+            "so the record would carry no content to show a reader (ADR-0060). The "
+            "route is recorded on the episode and proposed to nothing"
+        )
     return ProposedRoute(
         case=Case(
             id=f"adaptive-{family}-{uuid.uuid4().hex[:8]}",

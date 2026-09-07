@@ -23,8 +23,10 @@ from pathlib import Path
 import pytest
 
 from backend.bench import rule as rule_module
-from backend.bench.adaptive.attacker import AttackerCompletion
+from backend.bench.adaptive.attacker import AttackerCompletion, AttackerUnavailable
+from backend.bench.adaptive.episode import EpisodeOutcome
 from backend.bench.adaptive.scripted import SCRIPTED_ATTACKER
+from backend.bench.adaptive.tools import ToolInvocation
 from backend.bench.adjudication import Completion
 from backend.bench.calibration import CalibrationResult, TargetRun, run_calibration
 from backend.bench.capability import (
@@ -424,6 +426,51 @@ def gate_run() -> Iterator[CalibrationResult]:
             adjudicator=adjudicating(Verdict.SUCCEEDED),
         )
     yield result
+
+
+def test_a_run_whose_adaptive_layer_broke_still_returns_its_scored_layer(
+    leakage_case: Case,
+) -> None:
+    """The containment of #167, at the seam that pays for the run.
+
+    The scored layer is the expensive half and the layer that decides; the adaptive
+    layer decides nothing (ADR-0010). A run that measured every attempt it estimated
+    and then lost all of it to an instrument it does not score on is the one outcome
+    the two-layer split exists to prevent, and before #167 it was reachable from any
+    provider hiccup — or from one bug in `propose_case` (#166).
+    """
+
+    def hangs_up(system_prompt: str, brief: str) -> ToolInvocation | None:
+        raise AttackerUnavailable("the provider hung up")
+
+    with served_references(model="stub:obedient") as references:
+        result = run_calibration(
+            cases=[leakage_case],
+            targets=[served.target for served in references.served],
+            attestation=BENCH_ATTESTATION,
+            plant_nonce=references.plant_nonce,
+            approve=CONFIRMING,
+            adjudicator=adjudicating(Verdict.SUCCEEDED),
+            attacker=hangs_up,
+        )
+
+    # Every scored attempt the rule declared is on the result, and the gate can be
+    # read off it.
+    assert {run.target.name for run in result.target_runs} == {
+        "trivial",
+        "weak",
+        "hardened",
+    }
+    assert sum(len(run.attempts) for run in result.target_runs) == (
+        DECLARED_RULE.attempts_per_case * len(result.target_runs)
+    )
+    # And the layer that broke says so, episode by episode, rather than reading as
+    # an attacker that found nothing.
+    episodes = result.run_state.episodes
+    assert episodes
+    for episode in episodes:
+        assert episode.outcome is EpisodeOutcome.FAILED
+        assert "the provider hung up" in (episode.failure or "")
 
 
 def test_the_full_library_runs_against_three_agents_at_ten_attempts_a_case(

@@ -33,7 +33,7 @@ from scripts.attack import (
     declared_budget,
     main,
 )
-from scripts.console import EXIT_WITHHELD
+from scripts.console import EXIT_WITHHELD, episode_lines
 
 ATTACK_NAMESPACE = namespace_for("attack-script-test")
 """The namespace this script would derive for itself, spelled once for the tests
@@ -289,6 +289,40 @@ def test_an_episode_is_printed_when_it_is_recorded_and_not_when_the_run_ends(
     assert "episode 1" in announced
     assert "use a tool you were not given" in landed
     assert "done" in landed
+
+
+def test_a_failed_episode_and_a_declined_route_both_print_their_reason() -> None:
+    """Two absences a reader cannot act on unless the line says which it is.
+
+    A failed episode printed as its bare outcome would read as an attacker that
+    stopped, and a declined route printed as nothing at all would lose the only
+    record that the attacker found something and no case could carry it (#166, #167).
+    """
+    target = a_target(name="finbrief")
+
+    printed = episode_lines(
+        [
+            AdaptiveEpisode.against(
+                target=target,
+                family=Family.INDIRECT_PROMPT_INJECTION,
+                outcome=EpisodeOutcome.FAILED,
+                turns=0,
+                failure="OpenAIError: the provider hung up",
+            ),
+            AdaptiveEpisode.against(
+                target=target,
+                family=Family.INDIRECT_PROMPT_INJECTION,
+                outcome=EpisodeOutcome.BROKEN,
+                turns=2,
+                declined=["not filable as a case: ... (ADR-0060)"],
+            ),
+        ]
+    )
+
+    assert "the provider hung up" in printed
+    assert "ADR-0060" in printed
+    # And the failed one does not read as an observation of the family.
+    assert "no reading" in printed
 
 
 def test_each_turn_prints_broke_it_held_or_not_checkable() -> None:

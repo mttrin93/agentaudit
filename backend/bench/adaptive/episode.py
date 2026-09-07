@@ -71,10 +71,19 @@ class EpisodeOutcome(StrEnum):
     `CENSORED` is not "resisted": the attacker stopped, on the turn cap or on
     budget, rather than ran out of ideas. Collapsing the two would let budget
     exhaustion read as a defended agent (ADR-0011).
+
+    `FAILED` is not `CENSORED` either, and for the same kind of reason one step
+    further out: an instrument of this layer broke, so there is no observation at
+    all. Reading it as censored would make a provider hanging up look like a
+    hardened agent holding, which is the one direction ADR-0011's table cannot
+    tolerate being wrong in — and reading it as broken would credit the attacker
+    with a break nothing verified. It is *no reading*, recorded —
+    [ADR-0085](../../../docs/adr/0085-an-episode-whose-instrument-broke-is-a-failed-episode-and-the-run-is-still-measured.md).
     """
 
     BROKEN = "broken"
     CENSORED = "censored"
+    FAILED = "failed"
 
 
 def tools_against(target: TargetConfig) -> frozenset[AttackerTool]:
@@ -189,7 +198,45 @@ class AdaptiveEpisode:
     with proposals has not grown the library; it has asked.
     """
 
+    declined: tuple[str, ...] = ()
+    """Routes the attacker put forward that no case record could carry, and why.
+
+    A third reading beside a proposal and no proposal at all. The attacker worked,
+    found something and asked to file it; the ask was refused by the record's own
+    invariants rather than by the admission gate — today for the one reason ADR-0060
+    gives, that a case in a content-carried family *is* the content and a probe is a
+    message (`proposal.RouteNotFilable`, #166).
+
+    Kept apart from `proposals` because the two say different things about the same
+    episode: a proposal is a route the gate still has to decide, and this is a route
+    nothing will decide because it was never filed. Collapsing them would report a
+    route as awaiting a decision that no admission run will ever put.
+
+    A fact about the attacker and the family, and scored on nothing — an episode has
+    no denominator, so this cannot become a proportion of anything (ADR-0010). The
+    decision, and why the artefact is not synthesised instead, is
+    [ADR-0084](../../../docs/adr/0084-a-route-the-record-cannot-carry-is-declined-and-not-synthesised.md).
+    """
+
+    failure: str | None = None
+    """Why this episode has no reading, when its outcome is `FAILED`.
+
+    Paired with the outcome by the invariant below, so the two cannot come to
+    disagree: a failed episode without a reason would be an absence a reader could
+    not act on, and a reason on an episode that completed would describe something
+    that did not happen.
+
+    The text is the instrument's own, because what an operator meeting this needs is
+    which instrument broke and what it said — not this layer's paraphrase of it.
+    """
+
     def __post_init__(self) -> None:
+        if (self.outcome is EpisodeOutcome.FAILED) != (self.failure is not None):
+            raise ValueError(
+                "a failed episode carries the reason it failed and an episode that "
+                "completed carries none: an outcome and a reason that can disagree "
+                "are two readings of one fact (#167)"
+            )
         if self.turns < 0:
             raise ValueError("an episode cannot have taken fewer than no turns")
         if not self.parents:
@@ -218,6 +265,8 @@ class AdaptiveEpisode:
         turns: int,
         transcripts: Sequence[Transcript] = (),
         proposals: Sequence[ProposedRoute] = (),
+        declined: Sequence[str] = (),
+        failure: str | None = None,
         started_at: float | None = None,
         consulted_precedent: bool = False,
         unverifiable_turns: Sequence[int] = (),
@@ -243,6 +292,8 @@ class AdaptiveEpisode:
             started_at=time.monotonic() if started_at is None else started_at,
             transcripts=tuple(transcripts),
             proposals=tuple(proposals),
+            declined=tuple(declined),
+            failure=failure,
             unverifiable_turns=tuple(unverifiable_turns),
             parents=tuple(parents),
         )
@@ -301,6 +352,11 @@ class AdaptiveEpisode:
         as a censored episode against a target the attacker could see, and the
         report has to say so on the line rather than in a footnote.
         """
+        if self.outcome is EpisodeOutcome.FAILED:
+            # No reading, said as one. A bare "failed" beside the censored lines
+            # would read as an attacker that stopped, which is the reading ADR-0011's
+            # table must not be given for a provider hanging up (#167).
+            return f"{self.outcome} — no reading was taken: {self.failure}"
         if not self.withheld:
             return str(self.outcome)
         lost = ", ".join(sorted(str(tool) for tool in self.withheld))

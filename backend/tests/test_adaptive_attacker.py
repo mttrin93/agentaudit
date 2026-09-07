@@ -15,6 +15,7 @@ put a turn anywhere a rate could divide by it.
 """
 
 import random
+import re
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import replace
@@ -23,7 +24,7 @@ from typing import Any, cast
 
 import pytest
 
-from backend.bench.adaptive.attacker import AttackerCompletion
+from backend.bench.adaptive.attacker import AttackerCompletion, AttackerUnavailable
 from backend.bench.adaptive.blinding import Blinding
 from backend.bench.adaptive.budget import DECLARED_ADAPTIVE_BUDGET, AdaptiveBudget
 from backend.bench.adaptive.discrimination import SeparationReading, measure
@@ -44,6 +45,7 @@ from backend.bench.adaptive.precedent import (
     JudgedPrecedent,
     PrecedentStore,
 )
+from backend.bench.adaptive.proposal import RouteNotFilable, proposed_from
 from backend.bench.adaptive.scripted import SCRIPTED_ATTACKER
 from backend.bench.adaptive.tools import (
     ATTACKER_TOOL_SCHEMAS,
@@ -713,6 +715,59 @@ def test_a_proposed_route_is_a_case_the_gate_still_has_to_decide(
     assert {proposal.case.payload for proposal in proposals} <= sent
 
 
+def test_a_route_in_a_content_carried_family_is_declined_and_not_filed(
+    injection_case: Case,
+) -> None:
+    # ADR-0060: a case in these two families *is* a piece of content, and what the
+    # attacker composed is a message. So the record cannot be built honestly — the
+    # canary is the artefact's own two halves joined and the content key is named by
+    # the turn that fetches, neither of which a probe supplies — and the refusal is
+    # stated rather than raised out of `Case.__post_init__` and out of the run (#166).
+    with pytest.raises(RouteNotFilable) as declined:
+        proposed_from(
+            objective=injection_case,
+            target=a_target(),
+            family=Family.INDIRECT_PROMPT_INJECTION,
+            payload="a probe the attacker composed",
+            description="I asked it to summarise the note and it followed the note",
+        )
+
+    said = str(declined.value)
+    assert Family.INDIRECT_PROMPT_INJECTION.value in said
+    assert "ADR-0060" in said
+
+
+def test_an_episode_that_cannot_file_its_route_records_it_and_still_finishes(
+    injection_case: Case,
+) -> None:
+    # The containment half of the same fact. A route the layer cannot file is a
+    # reading about the attacker, so the episode records the reason and reports its
+    # own outcome — where before the refusal left `Case.__post_init__` and took the
+    # scored run with it (#166, #167).
+    #
+    # Driven by an attacker that proposes whatever it found, because the stand-in
+    # proposes only when the bench tells it the objective is met and what is under
+    # test is the declination rather than the break that precedes it.
+    def probe_then_propose(system_prompt: str, brief: str) -> ToolInvocation | None:
+        # Read off the brief rather than a counter, so every episode probes once
+        # before it proposes: the budget opens `k` of them and a closure counter
+        # would leave the second with nothing to propose.
+        probed = re.search(r"^\s*\d+\.\s", brief, re.MULTILINE)
+        if probed is None:
+            return ToolInvocation(AttackerTool.RUN_PROBE, "follow the shared note")
+        return ToolInvocation(AttackerTool.PROPOSE_CASE, "the note was followed")
+
+    with attackable() as targets:
+        _, episodes = attack(targets, [injection_case], attacker=probe_then_propose)
+
+    assert episodes
+    for episode in episodes:
+        assert episode.proposals == ()
+        assert episode.declined, "a route the attacker found and could not file"
+        assert "ADR-0060" in episode.declined[0]
+        assert episode.outcome in (EpisodeOutcome.BROKEN, EpisodeOutcome.CENSORED)
+
+
 def test_a_judged_family_is_given_no_objective(
     wrongful_commitment_case: Case, leakage_case: Case
 ) -> None:
@@ -749,6 +804,58 @@ def test_a_case_not_written_for_this_target_opens_no_episode(
         _, episodes = attack(targets, [for_something_else])
 
     assert episodes == ()
+
+
+# --- When an instrument of this layer breaks --------------------------------
+
+
+def test_an_episode_whose_instrument_broke_is_recorded_failed_and_the_layer_goes_on(
+    leakage_case: Case,
+) -> None:
+    # ADR-0050's shape, one layer over: an instrument that broke is a reading of its
+    # own, and the run it sits in is still measured. Before #167 the exception left
+    # the layer, left `run_suite`, and took a scored run that had already been paid
+    # for with it.
+    calls: list[int] = []
+
+    def hangs_up_once(system_prompt: str, brief: str) -> ToolInvocation | None:
+        calls.append(1)
+        if len(calls) == 1:
+            raise AttackerUnavailable("the provider hung up")
+        return SCRIPTED_ATTACKER(system_prompt, brief)
+
+    with attackable(names=("trivial", "hardened")) as targets:
+        _, episodes = attack(
+            targets, [leakage_case], attacker=hangs_up_once, budget=BRIEF_CANARY_CAP
+        )
+
+    failed = [
+        episode for episode in episodes if episode.outcome is EpisodeOutcome.FAILED
+    ]
+    assert len(failed) == 1
+    assert "the provider hung up" in (failed[0].failure or "")
+    # And the layer went on: every other episode the budget declared was still run
+    # and still reported an outcome it measured.
+    assert len(episodes) == 2
+    for episode in episodes:
+        if episode.outcome is EpisodeOutcome.FAILED:
+            continue
+        assert episode.outcome in (EpisodeOutcome.BROKEN, EpisodeOutcome.CENSORED)
+        assert episode.failure is None
+
+
+def test_a_failure_that_is_not_an_instrument_of_this_layer_still_stops_the_run(
+    leakage_case: Case,
+) -> None:
+    # The other half of ADR-0050's discipline, and the reason the catch is a named
+    # set: a bare `except Exception` would turn every future bug in this layer into
+    # a run that quietly attacked nothing.
+    def out_of_memory(system_prompt: str, brief: str) -> ToolInvocation | None:
+        raise MemoryError("not an instrument failure")
+
+    with attackable() as targets:
+        with pytest.raises(MemoryError):
+            attack(targets, [leakage_case], attacker=out_of_memory)
 
 
 # --- The caps, and what happens when one is reached -------------------------

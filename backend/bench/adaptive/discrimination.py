@@ -205,6 +205,11 @@ def breaks_for(episodes: Iterable[AdaptiveEpisode], target_name: str) -> AgentBr
     for episode in episodes:
         if episode.target_name != target_name:
             continue
+        # An episode whose instrument broke is no observation of this family, so it
+        # neither enters the denominator nor counts as censored — which is what
+        # leaving it in `families` would have made it (#167, ADR-0011).
+        if episode.outcome is EpisodeOutcome.FAILED:
+            continue
         if episode.family not in families:
             families.append(episode.family)
         if episode.outcome is EpisodeOutcome.BROKEN:

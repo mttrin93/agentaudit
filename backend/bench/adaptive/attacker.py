@@ -67,7 +67,11 @@ from backend.bench.adaptive.episode import (
 )
 from backend.bench.adaptive.precedent import DURABLE_PRECEDENT, PrecedentStore
 from backend.bench.adaptive.prompt import ATTACKER_SYSTEM_PROMPT, episode_brief
-from backend.bench.adaptive.proposal import ProposedRoute, proposed_from
+from backend.bench.adaptive.proposal import (
+    ProposedRoute,
+    RouteNotFilable,
+    proposed_from,
+)
 from backend.bench.adaptive.tools import (
     NO_PROBE_YET,
     ToolInvocation,
@@ -84,6 +88,23 @@ from backend.bench.measurability import checkable
 from backend.graph.budget import BudgetExceeded
 from backend.graph.runstate import RunState
 from backend.observability import Field, Span, traced
+
+
+class AttackerUnavailable(RuntimeError):
+    """The attacker's model could not be reached, or answered with a failure.
+
+    Raised by whatever builds an `AttackerCompletion` over a real provider and
+    caught by `layer.EPISODE_FAILURES`, which is why it lives here beside the seam
+    rather than in `completion.py`: the layer has to name the failure it tolerates,
+    and a layer importing a provider's exception class would put that provider's SDK
+    in the import closure of everything that reaches the layer — including the
+    verifier, which is asserted to reach no network and read no credential
+    (`test_verify.py`).
+
+    The stand-in attacker raises it never. A run on `SCRIPTED_ATTACKER` has no
+    provider to be unavailable, which is the point of the stand-in.
+    """
+
 
 AttackerCompletion = Callable[[str, str], ToolInvocation | None]
 """The attacker's model: a system prompt and a brief in, one tool call out.
@@ -212,6 +233,7 @@ class _Episode:
         `transcripts` by construction — both are appended in `_probe` and nowhere
         else — so a turn number indexes both."""
         self.proposals: list[ProposedRoute] = []
+        self.declined: list[str] = []
         self.tree = EpisodeTree(budget.branching)
         """Which turn the next probe continues from, and which turns are closed.
 
@@ -264,6 +286,7 @@ class _Episode:
             turns=self.turns,
             transcripts=self.transcripts,
             proposals=self.proposals,
+            declined=self.declined,
             started_at=self.started_at,
             consulted_precedent=self.consulted_precedent,
             unverifiable_turns=tuple(
@@ -438,13 +461,22 @@ class _Episode:
                 "a proposed route needs a description of what you did. Nothing "
                 "was proposed"
             )
-        proposal = proposed_from(
-            objective=self.objective.case,
-            target=self.target,
-            family=self.objective.family,
-            payload=str(self._last.sent.get("message", "")),
-            description=description,
-        )
+        # A refusal from the record's own invariants, caught here and recorded.
+        # The alternative is the one this replaces: it left `Case.__post_init__`,
+        # left the layer, and took a paid-for scored run with it (#166, #167). The
+        # catch is this one named type and no wider — a bug in the proposal path is
+        # still a bug, on ADR-0050's discipline for the other instrument.
+        try:
+            proposal = proposed_from(
+                objective=self.objective.case,
+                target=self.target,
+                family=self.objective.family,
+                payload=str(self._last.sent.get("message", "")),
+                description=description,
+            )
+        except RouteNotFilable as declined:
+            self.declined.append(str(declined))
+            return str(declined)
         self.proposals.append(proposal)
         return (
             "recorded as a proposed case. It enters the library only if it "

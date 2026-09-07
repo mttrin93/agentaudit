@@ -427,6 +427,11 @@ def episode_lines(episodes: Sequence[AdaptiveEpisode]) -> str:
             f"  {episode.target_name} / {episode.family}: {episode.stated()} "
             f"after {episode.turns} turns"
         )
+        for reason in episode.declined:
+            # A route the attacker found and no record could carry. Printed beside
+            # the proposals because it is the same fact one step earlier — the
+            # attacker asked, and the library's own invariants answered (#166).
+            lines.append(f"    declined, and proposed to nothing: {reason}")
         for proposal in episode.proposals:
             # Proposed, never admitted. `propose_case` drafts and the admission
             # gate decides, and an adaptive-discovered case faces the cross-model

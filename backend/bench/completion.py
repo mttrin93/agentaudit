@@ -30,9 +30,12 @@ import os
 import time
 from enum import StrEnum
 
-from openai import OpenAI, omit
+from openai import OpenAI, OpenAIError, omit
 
-from backend.bench.adaptive.attacker import AttackerCompletion
+from backend.bench.adaptive.attacker import (
+    AttackerCompletion,
+    AttackerUnavailable,
+)
 from backend.bench.adaptive.tools import (
     ATTACKER_TOOL_SCHEMAS,
     ToolInvocation,
@@ -405,6 +408,25 @@ def _openrouter_attacker(
     client = _client()
 
     def attack(system_prompt: str, brief: str) -> ToolInvocation | None:
+        # The provider's own failure, translated once and here. What the adaptive
+        # layer tolerates is `AttackerUnavailable` (ADR-0085), and translating at this
+        # seam is what keeps the OpenAI SDK out of the import closure of everything
+        # that reaches the layer — the verifier included, which is asserted to read no
+        # credential and reach no network (`test_verify.py`).
+        #
+        # A truncated tool call is *not* translated: `ReplyUnfinished` is already a
+        # named failure of this bench's own and surfaces as itself, which
+        # `test_unfinished_replies.py` holds. The layer tolerates that name too.
+        try:
+            return _answered_with_a_tool_call(system_prompt, brief)
+        except OpenAIError as unavailable:
+            raise AttackerUnavailable(
+                f"the attacker's model {name} did not answer: {unavailable}"
+            ) from unavailable
+
+    def _answered_with_a_tool_call(
+        system_prompt: str, brief: str
+    ) -> ToolInvocation | None:
         started = time.monotonic()
         answered = client.chat.completions.create(
             model=name,

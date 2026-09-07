@@ -243,6 +243,7 @@ from backend.bench.gate_record import (
     declared_rule,
     gate_decided,
 )
+from backend.bench.labels import FamilyLabel, elective_label_for, label_for
 from backend.bench.library import (
     AnyFamily,
     Case,
@@ -2875,11 +2876,53 @@ class Bounds(BaseModel):
     high: float
 
 
+class FamilyLabelled(BaseModel):
+    """What one family is read onto: two published lists, and the articles it bears.
+
+    The same three fields `payload._stated` puts on a report, and read from the same
+    tables — `labels.label_for` and `labels.elective_label_for` — so the console and
+    the signed document cannot come to disagree about what a family claims. Not the
+    two prose sentences beside them there: a report has room for *claims ASI01:2026
+    Agent Goal Hijack on the OWASP agentic list*, and a cell in a nine-row table has
+    room for the identifier
+    ([ADR-0091](../../docs/adr/0091-the-console-draws-the-nine-families-as-one-list.md)).
+
+    **Empty is an answer.** `agentic` is empty on data leakage and `llm` on halt defeat
+    and disclosure denial, and both are the refusals `labels.py` argues for rather than
+    a lookup that failed. `articles` is never empty, and that is a guard on the record
+    rather than a convention here (ADR-0040).
+    """
+
+    agentic: list[str]
+    llm: list[str]
+    articles: list[str]
+
+
+def _labelled(label: FamilyLabel) -> FamilyLabelled:
+    """One declared label as the three lists the console draws.
+
+    Beside `payload._stated` and not shared with it: that one builds the report's
+    block, which carries the two whole sentences as well, and one function serving
+    both would have to grow a flag saying which caller it was answering.
+    """
+    return FamilyLabelled(
+        agentic=list(label.agentic),
+        llm=list(label.llm),
+        articles=[article.value for article in label.articles],
+    )
+
+
 class FamilyCovered(BaseModel):
-    """One failure family, and whether the next run covers it."""
+    """One failure family, whether the next run covers it, and what it is read onto.
+
+    The label rides on the switch rather than arriving on a route of its own, because
+    the screen prints the two in one row: a console that fetched the nine labels
+    separately could draw a tick beside a claim read at a different moment.
+    """
 
     family: str
     covered: bool
+    labels: FamilyLabelled
 
 
 class Tuning(BaseModel):
@@ -3197,13 +3240,19 @@ def tuning(config: BenchConfig) -> Tuning:
         declared_attempts_per_case=DECLARED_RULE.attempts_per_case,
         attempts_warning=A_RUN_BELOW_THE_DECLARED_RULE_IS_NOT_A_GATE_RESULT,
         families=[
-            FamilyCovered(family=str(family), covered=family in config.families)
+            FamilyCovered(
+                family=str(family),
+                covered=family in config.families,
+                labels=_labelled(label_for(family)),
+            )
             for family in Family
         ],
         families_off_statement=A_FAMILY_SWITCHED_OFF_IS_NOT_RUN,
         elective_families=[
             FamilyCovered(
-                family=str(family), covered=family in config.elective.requested
+                family=str(family),
+                covered=family in config.elective.requested,
+                labels=_labelled(elective_label_for(family)),
             )
             for family in ElectiveFamily
         ],

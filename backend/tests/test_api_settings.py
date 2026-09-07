@@ -80,7 +80,14 @@ from backend.bench.capability import (
     accepts_temperature,
     capabilities_of,
 )
-from backend.bench.library import Case, Family, LibraryVersion, Transform
+from backend.bench.labels import elective_label_for, label_for
+from backend.bench.library import (
+    Case,
+    ElectiveFamily,
+    Family,
+    LibraryVersion,
+    Transform,
+)
 from backend.bench.payload import DeclaredModels
 from backend.bench.rule import DECLARED_RULE, GateRule
 from backend.bench.selection import (
@@ -224,7 +231,11 @@ def test_the_route_states_the_configuration_a_run_will_actually_use() -> None:
     switches = body["tuning"].pop("families")
     assert [row["family"] for row in switches] == [str(family) for family in Family]
     for row in switches:
-        assert set(row) == {"family", "covered"}
+        # The label joined the switch in ADR-0091 and is not a third thing here: it is
+        # what the family is *read onto* — published entries and articles — and carries
+        # no rate, no interval and no `D`. What it is checked against is
+        # `test_every_family_switch_carries_the_labels_its_row_prints`.
+        assert set(row) == {"family", "covered", "labels"}
         assert isinstance(row["covered"], bool)
     for family in Family:
         assert family.value not in json.dumps(body)
@@ -1527,3 +1538,55 @@ def test_a_run_that_would_score_nothing_is_refused_rather_than_widened() -> None
     assert "scores nothing" in nothing.json()["detail"]
     assert adaptive_only.status_code == 422
     assert all(row["selected"] for row in after["layers"])
+
+
+def test_every_family_switch_carries_the_labels_its_row_prints() -> None:
+    """The nine rows the console draws as one list, each with what it is read onto.
+
+    The screen prints a family's published claims and the articles it bears beside the
+    tick that requests it, and it reads them from here rather than from a table of its
+    own: a second copy of a declared label in TypeScript is the drift `labels.py`
+    exists to prevent, and ADR-0036's edition tag is exactly the thing a hand copy
+    loses (ADR-0091).
+
+    **Two lists on the wire and one list on the screen.** The tier is presented
+    undifferentiated (ADR-0091) and is still carried in `elective_families`, because
+    `PUT /bench/settings/families` takes the two as one statement and the six are the
+    denominator the gate is decided over (ADR-0015, ADR-0035).
+    """
+    body = a_client(configured(models=DECLARED)).get(BENCH_SETTINGS_ROUTE).json()
+
+    # The two are walked separately and never zipped into one loop, which mypy insists
+    # on: `LABELS` and `ELECTIVE_LABELS` are keyed on two enumerations and there is no
+    # index type accepting both. The boundary this test relies on refuses the
+    # convenience of reading it in one pass, which is the boundary working.
+    six = body["tuning"]["families"]
+    assert [row["family"] for row in six] == [str(f) for f in Family]
+    for row, family in zip(six, Family, strict=True):
+        label = label_for(family)
+        assert row["labels"]["agentic"] == list(label.agentic)
+        assert row["labels"]["llm"] == list(label.llm)
+        assert row["labels"]["articles"] == [a.value for a in label.articles]
+
+    tier = body["tuning"]["elective_families"]
+    assert [row["family"] for row in tier] == [str(f) for f in ElectiveFamily]
+    for row, elective in zip(tier, ElectiveFamily, strict=True):
+        held = elective_label_for(elective)
+        assert row["labels"]["agentic"] == list(held.agentic)
+        assert row["labels"]["llm"] == list(held.llm)
+        assert row["labels"]["articles"] == [a.value for a in held.articles]
+
+    # Every one of the nine bears an article, so no row prints an empty legal column
+    # (`FamilyLabel.__post_init__`, ADR-0040) — and a family claiming nothing on one of
+    # the two published lists says so with an empty list rather than being absent.
+    every = six + tier
+    assert len(every) == 9
+    assert all(row["labels"]["articles"] for row in every)
+    assert any(not row["labels"]["agentic"] for row in every)
+    assert any(not row["labels"]["llm"] for row in every)
+
+    # And no figure arrives with them. A label is what a family is read onto; how well
+    # this bench discriminates on one is a claim about the bench and is in the gate
+    # run's own document (ADR-0018).
+    for row in every:
+        assert set(row["labels"]) == {"agentic", "llm", "articles"}

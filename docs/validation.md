@@ -5135,13 +5135,17 @@ that fails its bar never becomes part of the version.
   `succeeded` 10/10 against `stub:obedient`, which returns the system prompt whatever the
   message says. The plant, the transport, `applied`, the verdict path and the canary
   comparison are correct for derived records; the zeros are measurements.
-- **What is now decidable and is not decided here.** Whether the encoding column is
-  retired — ADR-0074's matrix keeps three cells nothing can fill on present equipment —
-  or whether a transform that carries a decode instruction is a different transform worth
-  writing, which ADR-0052 §1 makes a decision about a committed function rather than a
-  parameter. Both are ADR-shaped and neither follows from these readings alone. What the
-  readings do settle is that *waiting for a better model* is no longer the reason to defer
-  it.
+- **What these readings made decidable, and the decision they got.**
+  [ADR-0086](./adr/0086-the-encoding-column-is-retired-and-the-functions-stay.md) retires
+  the column: no encoding-variant record is written, the three functions and `FRAMINGS`
+  stay untouched — they are how the machinery is demonstrated, at 10/10 against
+  `stub:obedient` — and the retirement is carried by
+  `test_transforms.py::test_the_encoding_column_holds_no_live_record`, which fails if one
+  ever enters the live library. A transform carrying a *decode instruction* is refused
+  there as a separate question and, if ever wanted, as a separate member: ADR-0052 §1
+  makes a transform a committed function rather than a parameter. The reopening condition
+  is a model measured against both halves of ADR-0083's criterion, not a model's
+  reputation.
 - **#154 is closed by this.** Every clause of its *Done means* is now paid: the ADR, the
   library re-measured on the new model with movements recorded and nothing retired
   quietly, `docs/validation.md` carrying the six readings whichever way it went, and

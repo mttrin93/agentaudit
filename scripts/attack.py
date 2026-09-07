@@ -62,7 +62,9 @@ from backend.bench.admission import NotAdmitted, admitted_library
 from backend.bench.applicability import applicable
 from backend.bench.calibration import DropNamespace, PlantNonce
 from backend.bench.completion import (
+    ATTACKER_MODEL_ENV,
     DEFAULT_ATTACKER_MODEL,
+    REFERENCE_MODEL_ENV,
     attacker_completion_for,
 )
 from backend.bench.contract import TargetConfig
@@ -187,12 +189,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--model",
-        default=os.environ.get("AGENTAUDIT_REFERENCE_MODEL", DEFAULT_MODEL),
+        default=os.environ.get(REFERENCE_MODEL_ENV, DEFAULT_MODEL),
         help="the reference agents' underlying model, as '<provider>:<model>'",
     )
     parser.add_argument(
         "--attacker-model",
-        default=os.environ.get("AGENTAUDIT_ATTACKER_MODEL", DEFAULT_ATTACKER_MODEL),
+        default=os.environ.get(ATTACKER_MODEL_ENV, DEFAULT_ATTACKER_MODEL),
         help=(
             "the model the adaptive attacker runs on. The instrument under test "
             "here, and named rather than defaulted inside the run"

@@ -112,9 +112,12 @@ from backend.bench.calibration import CalibrationResult, run_calibration
 from backend.bench.capability import temperature_for
 from backend.bench.cited import cite
 from backend.bench.completion import (
+    ADJUDICATOR_MODEL_ENV,
+    ATTACKER_MODEL_ENV,
     DEFAULT_ADJUDICATOR_MODEL,
     DEFAULT_ATTACKER_MODEL,
     DEFAULT_ATTACKER_TEMPERATURE,
+    REFERENCE_MODEL_ENV,
     attacker_completion_for,
     completion_for,
     declared_reasoning_effort,
@@ -212,14 +215,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--model",
-        default=os.environ.get("AGENTAUDIT_REFERENCE_MODEL", DEFAULT_MODEL),
+        default=os.environ.get(REFERENCE_MODEL_ENV, DEFAULT_MODEL),
         help="the reference agents' underlying model, as '<provider>:<model>'",
     )
     parser.add_argument(
         "--adjudicator-model",
-        default=os.environ.get(
-            "AGENTAUDIT_ADJUDICATOR_MODEL", DEFAULT_ADJUDICATOR_MODEL
-        ),
+        default=os.environ.get(ADJUDICATOR_MODEL_ENV, DEFAULT_ADJUDICATOR_MODEL),
         help=(
             "the bench's own model, which decides the two judged families and is "
             "the instrument κ is measured on. Never a reference agent's model"
@@ -227,7 +228,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     parser.add_argument(
         "--attacker-model",
-        default=os.environ.get("AGENTAUDIT_ATTACKER_MODEL", DEFAULT_ATTACKER_MODEL),
+        default=os.environ.get(ATTACKER_MODEL_ENV, DEFAULT_ATTACKER_MODEL),
         help=(
             "the model the adaptive attacker runs on. A third setting, and it "
             "decides nothing about the gate"

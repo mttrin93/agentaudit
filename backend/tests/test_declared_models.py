@@ -53,9 +53,8 @@ def declared_in_example(variable: str) -> str:
 def test_the_reference_agents_default_to_what_the_example_environment_says() -> None:
     # The two ends of one decision: the constant is what an unset environment gets,
     # and the line in `.env.example` is what a reader copying the file gets. A
-    # disagreement is a bench whose documented model and measured model differ, which
-    # is unreadable in exactly the way ADR-0004 keeps a declared instrument printed
-    # beside its rate to avoid.
+    # disagreement is a bench whose documented model and measured model differ, and a
+    # rate is not readable without knowing which instrument produced it.
     assert declared_in_example(REFERENCE_MODEL_ENV) == DEFAULT_REFERENCE_MODEL, (
         f"{ENV_EXAMPLE.name} declares "
         f"{REFERENCE_MODEL_ENV}={declared_in_example(REFERENCE_MODEL_ENV)} and the "
@@ -74,15 +73,18 @@ def test_the_two_instrument_models_default_to_what_the_example_says() -> None:
 
 
 def test_every_entry_point_falls_back_to_the_one_reference_model_constant() -> None:
-    # Four commands send the reference agents at a model and each one used to name it
-    # itself. The failure that shape allows is silent and expensive: three of the four
-    # edited leaves one command admitting cases on the model the other three stopped
-    # measuring on, and a family's pooled rate then spans two instruments — the
-    # averaging ADR-0055 keys its breakdown to avoid, arriving through configuration
-    # rather than through arithmetic.
-    from scripts import admit, attack, calibrate, gate
+    # Five commands send the reference agents at a model and four of them used to name
+    # it themselves. The failure that shape allows is silent and expensive: three of
+    # the four edited leaves one command admitting cases on the model the others
+    # stopped measuring on, and a family's pooled rate then spans two instruments —
+    # the averaging ADR-0055 keys its breakdown to avoid, arriving through
+    # configuration rather than through arithmetic.
+    from scripts import admit, attack, calibrate, gate, swap
 
-    for entry in (gate, admit, calibrate, attack):
+    # `swap.py` re-exports `gate.DEFAULT_MODEL` rather than holding its own, so it is
+    # here to hold that re-export in place: it is the fifth command that resolves
+    # `AGENTAUDIT_REFERENCE_MODEL`, and the one whose whole subject is two models.
+    for entry in (gate, admit, calibrate, attack, swap):
         assert entry.DEFAULT_MODEL == DEFAULT_REFERENCE_MODEL, (
             f"scripts/{entry.__name__.split('.')[-1]}.py defaults the reference "
             f"agents to {entry.DEFAULT_MODEL}, and the declared default is "

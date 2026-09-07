@@ -60,7 +60,12 @@ from backend.bench.admission import (
     decide,
 )
 from backend.bench.calibration import TargetRun, run_calibration
-from backend.bench.completion import DEFAULT_ADJUDICATOR_MODEL, completion_for
+from backend.bench.completion import (
+    ADJUDICATOR_MODEL_ENV,
+    DEFAULT_ADJUDICATOR_MODEL,
+    REFERENCE_MODEL_ENV,
+    completion_for,
+)
 from backend.bench.entry import admission_block
 from backend.bench.evaluator import Verdict
 from backend.bench.library import (
@@ -132,7 +137,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     parser.add_argument(
         "--model",
-        default=os.environ.get("AGENTAUDIT_REFERENCE_MODEL", DEFAULT_MODEL),
+        default=os.environ.get(REFERENCE_MODEL_ENV, DEFAULT_MODEL),
         help="the reference agents' underlying model, as '<provider>:<model>'",
     )
     parser.add_argument(
@@ -146,9 +151,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     parser.add_argument(
         "--adjudicator-model",
-        default=os.environ.get(
-            "AGENTAUDIT_ADJUDICATOR_MODEL", DEFAULT_ADJUDICATOR_MODEL
-        ),
+        default=os.environ.get(ADJUDICATOR_MODEL_ENV, DEFAULT_ADJUDICATOR_MODEL),
         help=(
             "the bench's own model, which decides the two judged families. Recorded "
             "on a judged case's reading, because a judged count is a count that "

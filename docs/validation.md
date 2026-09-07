@@ -60,8 +60,9 @@ the model it moved off.** `AGENTAUDIT_REFERENCE_MODEL` read
 `openrouter:openai/gpt-4.1-mini` from 2026-09-07, because nano reports only the ends of
 its own gradient — `10/10/0` or `0/0/0` — and a `D` is measured across the middle
 ([ADR-0083](./adr/0083-the-reference-model-must-resolve-its-own-middle.md)). Three
-certified gate runs, twenty admissions and every `[[history]]` block in
-`backend/cases/` are nano readings, kept as taken and not re-taken. So a rate quoted
+certified gate runs, twenty admissions, and seventy-two of the ninety `[[history]]`
+blocks the library holds are nano readings — the other eighteen are `stub:obedient`
+and were never measurements of the field — all kept as taken and none re-taken. So a rate quoted
 out of this document is a nano rate until a gate run on mini exists, and the section
 *The reference model moved, and no case has ever been measured on the new one* is where
 that is set out at length. A rate is never averaged across the two models.
@@ -2217,11 +2218,15 @@ where it read `openrouter:openai/gpt-4.1-nano` from 2026-08-17.
 **Every figure in this document was measured on nano, and none of them has been
 re-taken.** That is the whole of what this section says, and it is worth saying at
 length because the numbers above do not carry a warning label. Three certified gate
-runs, eighteen base admissions, two derived admissions, the multi-model check, the
-adaptive readings and every `D` in every `[[history]]` block in `backend/cases/` were
-taken on an instrument this bench no longer declares. They are kept exactly as taken
-([ADR-0006](./adr/0006-overrides-never-change-a-measured-rate.md)) and they are not
-predictions about mini.
+runs, eighteen base admissions, two derived admissions, the multi-model check and the
+adaptive readings were all taken on an instrument this bench no longer declares. The
+series say so record by record: `backend/cases/` holds twenty records and seventy-two
+`[[history]]` blocks, fifty-four naming nano and eighteen `stub:obedient`, and
+`backend/cases/elective/` nine records and eighteen more blocks, all nano. Two records
+carry no series at all — the derived pair admitted on 2026-09-05, which no gate run has
+read. Every stored reading is kept exactly as taken
+([ADR-0006](./adr/0006-overrides-never-change-a-measured-rate.md)) and none of them is
+a prediction about mini.
 
 - **The library is single-model today and it is nano's.** A family's pooled rate is
   quoted from one model and never averaged across two (ADR-0083 §5), so until a gate

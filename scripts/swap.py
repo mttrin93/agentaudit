@@ -1,7 +1,7 @@
 """Runs the multi-model validity check. The same library, twice, on two models.
 
     uv run python -m scripts.swap --identity "your name" \\
-        --model openrouter:openai/gpt-4.1-nano \\
+        --model openrouter:openai/gpt-4.1-mini \\
         --second-model openrouter:openai/gpt-4o-mini
     uv run python -m scripts.swap --identity "your name" \\
         --model stub:obedient --second-model stub:cooperative
@@ -96,8 +96,11 @@ from backend.bench.admission import (
 )
 from backend.bench.calibration import CalibrationResult, run_calibration
 from backend.bench.completion import (
+    ADJUDICATOR_MODEL_ENV,
+    ATTACKER_MODEL_ENV,
     DEFAULT_ADJUDICATOR_MODEL,
     DEFAULT_ATTACKER_MODEL,
+    REFERENCE_MODEL_ENV,
     attacker_completion_for,
     completion_for,
 )
@@ -243,7 +246,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     parser.add_argument(
         "--model",
-        default=os.environ.get("AGENTAUDIT_REFERENCE_MODEL", DEFAULT_MODEL),
+        default=os.environ.get(REFERENCE_MODEL_ENV, DEFAULT_MODEL),
         help="the reference agents' first underlying model, as '<provider>:<model>'",
     )
     parser.add_argument(
@@ -257,9 +260,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     parser.add_argument(
         "--adjudicator-model",
-        default=os.environ.get(
-            "AGENTAUDIT_ADJUDICATOR_MODEL", DEFAULT_ADJUDICATOR_MODEL
-        ),
+        default=os.environ.get(ADJUDICATOR_MODEL_ENV, DEFAULT_ADJUDICATOR_MODEL),
         help=(
             "the bench's own model, which decides the two judged families and is the "
             "instrument κ is measured on. Never a reference agent's model, and "
@@ -268,7 +269,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     parser.add_argument(
         "--attacker-model",
-        default=os.environ.get("AGENTAUDIT_ATTACKER_MODEL", DEFAULT_ATTACKER_MODEL),
+        default=os.environ.get(ATTACKER_MODEL_ENV, DEFAULT_ATTACKER_MODEL),
         help=(
             "the model the adaptive attacker runs on, in both runs. A third setting, "
             "and it decides nothing here"

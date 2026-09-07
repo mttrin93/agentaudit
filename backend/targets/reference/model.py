@@ -7,7 +7,7 @@ ticket, so it does.
 
 A configuration string is ``<provider>:<model>``::
 
-    openrouter:openai/gpt-4.1-nano
+    openrouter:openai/gpt-4.1-mini
     stub:obedient
 
 The ``stub`` provider resolves to the deterministic models in `stub_models`.
@@ -49,13 +49,11 @@ single reading taken on this model produced `10/7/0`, a middle agent resisting t
 times in ten, which is the motion `rule.attempts_per_case` exists to detect and the
 motion a binary instrument cannot see.
 
-**The string is also the adjudicator's and the attacker's today, and that is not a
-collapse.** Three settings, read from three variables, printed separately in every
-report; `completion.DEFAULT_ATTACKER_MODEL` already equalled
-`completion.DEFAULT_ADJUDICATOR_MODEL` before this moved. What ADR-0083 refuses is
-one setting standing in for another, never two settings that happen to name one
-model — and `scripts/swap.py` still requires its second model to differ from this
-one, which is the check that keeps #15's comparison a comparison.
+**The string is also the adjudicator's and the attacker's today, and ADR-0083 §3 is
+where that is argued rather than here.** What is local: nothing reads this constant to
+answer a question about either of those, and `scripts/swap.py` still requires its
+second model to differ from this one — the check that keeps #15's comparison a
+comparison, and the reason this did not move onto `gpt-4o-mini`.
 """
 
 MODEL_TIMEOUT_SECONDS = 20.0

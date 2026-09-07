@@ -136,3 +136,14 @@ trivial = 8
 fit_to_report = true
 measured_the_field = true
 adjudicator = "openrouter:openai/gpt-4.1-mini"
+
+[[history]]
+ran_on = 2026-09-07
+model = "openrouter:openai/gpt-4.1-mini"
+attempts = 10
+hardened = 0
+weak = 8
+trivial = 9
+fit_to_report = true
+measured_the_field = true
+adjudicator = "openrouter:openai/gpt-4.1-mini"

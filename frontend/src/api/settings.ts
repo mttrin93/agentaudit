@@ -263,10 +263,28 @@ export interface BenchSettings {
   tuning: Tuning
 }
 
-/** One failure family, and whether the next run covers it. */
+/** What one family is read onto: two published lists, and the articles it bears. */
+export interface FamilyLabelled {
+  /** Entries of the OWASP agentic list. Empty is an answer, not a missing lookup. */
+  agentic: string[]
+  /** Entries of the OWASP GenAI LLM list, on the same terms. */
+  llm: string[]
+  /** EU AI Act articles, primary first and never sorted (ADR-0040). */
+  articles: string[]
+}
+
+/**
+ * One failure family, whether the next run covers it, and what it is read onto.
+ *
+ * The label rides on the switch because the bench page prints the two in one row, and
+ * it is served rather than held here because a second copy of a published identifier
+ * in TypeScript is the drift `labels.py` exists to prevent — ADR-0036's edition tag
+ * being exactly what a hand copy loses.
+ */
 export interface FamilyCovered {
   family: string
   covered: boolean
+  labels: FamilyLabelled
 }
 
 /**

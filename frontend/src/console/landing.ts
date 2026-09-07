@@ -123,6 +123,8 @@ export const WHAT_THIS_CONSOLE_DOES: readonly ConsoleDoes[] = [
   },
 ]
 
+import type { FamilyCovered } from '../api/settings'
+
 /** One family, and the failure it is the name of. */
 export interface FamilySays {
   /** The wire name, as every record spells it. Read as words on the way out. */
@@ -222,6 +224,74 @@ export const THE_ELECTIVE_FAMILIES: readonly FamilySays[] = [
       'operator and never asked to be in the conversation.',
   },
 ]
+
+/**
+ * One family as the bench page draws it: what it is, what it claims, what it bears.
+ *
+ * Nine of these and one list. The six and the elective three are presented
+ * undifferentiated — same row, same columns, no mark saying which tier a row is in
+ * ([ADR-0091](../../../docs/adr/0091-the-console-draws-the-nine-families-as-one-list.md)).
+ * What that ADR did **not** do is merge the two closed sets: `tier` is read by the
+ * switch, which has to know which array a move writes to, and is printed by nothing.
+ *
+ * `owasp` folds the two published lists into one column because the screen has one:
+ * `agentic` first and `llm` after it, each entry carrying its edition (ADR-0036). Both
+ * may be empty and that is an answer — data leakage claims nothing on the agentic list,
+ * halt defeat and disclosure denial nothing on the LLM one — so an empty column here is
+ * a refusal `labels.py` argues for and never a lookup that failed.
+ *
+ * **No figure on the row.** Not a rate, not a `D`, not a band: this screen says what
+ * the nine *are*, and how a target answered one is the report's business (ADR-0018).
+ */
+export interface FamilyRow {
+  /** The wire name, as every record spells it. Read as words on the way out. */
+  family: string
+  says: string
+  /** Which array the switch writes to. Never drawn. */
+  tier: 'six' | 'elective'
+  owasp: readonly string[]
+  articles: readonly string[]
+}
+
+/**
+ * The nine rows, joining what a family *is* to what the bench says it is read onto.
+ *
+ * Two sources and one row, which is the whole of it: the sentence is this module's,
+ * written here because it is prose about a failure and not configuration, and the
+ * labels are the bench's, served on the switch so that the console cannot hold a
+ * second copy of a published identifier that has drifted from `labels.py`.
+ *
+ * **A family the bench did not name gets empty columns and never a guessed label.**
+ * The settings read can fail, and the two arrays arrive `null` when it does; a row
+ * still draws, because the nine and their sentences are this console's own and do not
+ * depend on a fetch. What it will not do is invent an identifier — an empty legal
+ * column on this screen is indistinguishable from data leakage's honest empty agentic
+ * one, and the alternative is worse: a claim nobody published.
+ */
+export function familyRows(
+  families: FamilyCovered[] | null,
+  elective: FamilyCovered[] | null,
+): readonly FamilyRow[] {
+  const drawn = (
+    said: readonly FamilySays[],
+    rows: FamilyCovered[] | null,
+    tier: 'six' | 'elective',
+  ): readonly FamilyRow[] =>
+    said.map((one) => {
+      const labels = rows?.find((held) => held.family === one.family)?.labels
+      return {
+        family: one.family,
+        says: one.says,
+        tier,
+        owasp: [...(labels?.agentic ?? []), ...(labels?.llm ?? [])],
+        articles: labels?.articles ?? [],
+      }
+    })
+  return [
+    ...drawn(THE_FAMILIES, families, 'six'),
+    ...drawn(THE_ELECTIVE_FAMILIES, elective, 'elective'),
+  ]
+}
 
 /** One construction, and whether the next run sends it. */
 export interface ConstructionOffered {

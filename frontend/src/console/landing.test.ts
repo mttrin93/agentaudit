@@ -19,11 +19,14 @@
 import { describe, expect, it } from 'vitest'
 
 import type { GateCitation } from '../api/bench'
+import type { FamilyCovered } from '../api/settings'
 import {
   A_FACT_ABOUT_THE_BENCH,
   gateReading,
   type GateReading,
+  familyRows,
   selectionReading,
+  THE_ELECTIVE_FAMILIES,
   THE_FAMILIES,
 } from './landing'
 
@@ -335,5 +338,97 @@ describe('what the next run sends', () => {
     expect(everyString(reading.layers).join(' ')).not.toMatch(
       /rate|denominator|interval|κ|zero|attempts/,
     )
+  })
+})
+
+
+/** One switch as the route serves it, with the label its row prints. */
+const covered = (
+  family: string,
+  agentic: string[],
+  llm: string[],
+  articles: string[],
+): FamilyCovered => ({
+  family,
+  covered: true,
+  labels: { agentic, llm, articles },
+})
+
+describe('the nine families the bench page draws as one list', () => {
+  it('is the six then the tier, in the two enums’ order and undifferentiated', () => {
+    const rows = familyRows(
+      THE_FAMILIES.map((one) => covered(one.family, [], ['LLM01:2026'], ['15'])),
+      THE_ELECTIVE_FAMILIES.map((one) =>
+        covered(one.family, [], ['LLM01:2026'], ['15']),
+      ),
+    )
+
+    // Nine rows and one list. The tier is not a section of its own on this screen and
+    // carries no mark distinguishing it from the six (ADR-0091); what stays two is the
+    // pair of arrays, because the switch has to know which one it writes to.
+    expect(rows.map((one) => one.family)).toEqual([
+      ...THE_FAMILIES.map((one) => one.family),
+      ...THE_ELECTIVE_FAMILIES.map((one) => one.family),
+    ])
+    expect(rows).toHaveLength(9)
+    expect(rows.filter((one) => one.tier === 'elective')).toHaveLength(3)
+
+    // Every row is the same shape, so nothing a reader sees says which tier a row is
+    // in. `tier` is read by the tick and printed by nothing.
+    for (const one of rows) {
+      expect(Object.keys(one).sort()).toEqual([
+        'articles',
+        'family',
+        'owasp',
+        'says',
+        'tier',
+      ])
+    }
+  })
+
+  it('folds the two OWASP lists into the one column the screen has', () => {
+    const found = (rows: FamilyCovered[], family: string) =>
+      familyRows(rows, []).find((one) => one.family === family)!
+    const leakage = found(
+      [covered('data_leakage', [], ['LLM02:2026', 'LLM08:2026'], ['15'])],
+      'data_leakage',
+    )
+
+    // The agentic entries first and the LLM entries after them, each carrying its
+    // edition: `LLM06` alone means Excessive Agency under one numbering and Unbounded
+    // Consumption under the copy stored today, and a column that dropped the tag would
+    // print a claim nobody could resolve (ADR-0036).
+    expect(leakage.owasp).toEqual(['LLM02:2026', 'LLM08:2026'])
+
+    const hijack = found(
+      [covered('indirect_prompt_injection', ['ASI01:2026'], ['LLM01:2026'], ['15'])],
+      'indirect_prompt_injection',
+    )
+    expect(hijack.owasp).toEqual(['ASI01:2026', 'LLM01:2026'])
+  })
+
+  it('draws a family the bench did not name with empty columns, never a guess', () => {
+    // The settings read failed, so both arrays are null. The nine still draw — their
+    // sentences are this console's own — and the two label columns are empty, which is
+    // the only honest thing a screen can print about a claim it has not been told.
+    const unread = familyRows(null, null)
+    expect(unread).toHaveLength(9)
+    expect(unread.every((one) => one.owasp.length === 0)).toBe(true)
+    expect(unread.every((one) => one.articles.length === 0)).toBe(true)
+    expect(unread.every((one) => one.says.length > 0)).toBe(true)
+  })
+
+  it('carries no figure on any row, because a family is not a measurement of one', () => {
+    const rows = familyRows(
+      THE_FAMILIES.map((one) => covered(one.family, ['ASI01:2026'], [], ['15'])),
+      THE_ELECTIVE_FAMILIES.map((one) => covered(one.family, [], [], ['10'])),
+    )
+    // The same rule the six sentences are held to, over the whole row now that a row
+    // carries served data: no rate, no interval, no band, no `D`. An article number
+    // and an entry's edition year are the only digits a row is allowed.
+    for (const one of rows) {
+      expect(one.says).not.toMatch(/\d/)
+      expect(Object.keys(one)).not.toContain('rate')
+    }
   })
 })

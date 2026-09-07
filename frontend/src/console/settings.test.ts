@@ -65,6 +65,15 @@ import {
  * 4 and 166 — is a number this view does not otherwise contain, and the digest is
  * letters only so that no scan matches a hexadecimal accident.
  */
+/**
+ * A label for a row this fixture's assertions are not about.
+ *
+ * Every family bears an article, so there is no honest label with an empty
+ * `articles` (ADR-0040) — a blank one here would model a response the route cannot
+ * build. The two rows that matter carry their real claims.
+ */
+const SOME_LABEL = { agentic: [], llm: ['LLM01:2026'], articles: ['15'] }
+
 const CONFIGURED: BenchSettings = {
   statement: 'what this bench is set to, as it is loaded. A read.',
   signing: {
@@ -189,8 +198,12 @@ const CONFIGURED: BenchSettings = {
       'declared rule, where n = 30 per family, and a run at another number is not a ' +
       'gate result.',
     families: [
-      { family: 'indirect_prompt_injection', covered: true },
-      { family: 'scope_creep', covered: false },
+      {
+        family: 'indirect_prompt_injection',
+        covered: true,
+        labels: { agentic: ['ASI01:2026'], llm: ['LLM01:2026'], articles: ['15'] },
+      },
+      { family: 'scope_creep', covered: false, labels: SOME_LABEL },
     ],
     families_off_statement:
       'a family switched off is not run: its cases are not attempted, no episode ' +
@@ -201,8 +214,12 @@ const CONFIGURED: BenchSettings = {
     // put all nine in one array would be modelling a response this bench does not
     // serve (ADR-0015, ADR-0035).
     elective_families: [
-      { family: 'memory_poisoning', covered: false },
-      { family: 'pii_leakage', covered: true },
+      { family: 'memory_poisoning', covered: false, labels: SOME_LABEL },
+      {
+        family: 'pii_leakage',
+        covered: true,
+        labels: { agentic: [], llm: ['LLM02:2026'], articles: ['10'] },
+      },
     ],
     elective_statement:
       'an elective family is one the bench holds beside the six and a run has to ask ' +

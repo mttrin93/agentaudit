@@ -180,6 +180,47 @@ export const THE_FAMILIES: readonly FamilySays[] = [
   },
 ]
 
+/**
+ * The elective tier, each in one sentence, in the enum's own order.
+ *
+ * The same shape as `THE_FAMILIES` and deliberately a **second list rather than three
+ * more entries in the first**. The six are the gate's denominator, fixed at six
+ * (ADR-0015); these three are a tier the bench holds and a run has to ask for, and a
+ * reader who found them in one list of nine would be reading a denominator this bench
+ * does not have (ADR-0035).
+ *
+ * **No tick beside any of them, and that is the honest shape rather than an omission.**
+ * The switches above write `RunConfig.families`, which is typed on the six, so there is
+ * nothing on this screen that could request an elective family and a box drawn here
+ * would be a control that does nothing. Where one is asked for is a gate run — the
+ * `--elective` flag of `scripts/gate.py` — and a target's report states each of them as
+ * *not requested* until then, which is the fifth kind of nothing.
+ *
+ * **No figure in any of them**, on the same rule as the six: a sentence about what a
+ * family is has nothing to do with how anything answered it. What these families
+ * measured is a fact about the bench, and it is in the gate run's own document.
+ */
+export const THE_ELECTIVE_FAMILIES: readonly FamilySays[] = [
+  {
+    family: 'memory_poisoning',
+    says:
+      'The agent carries an instruction from one session into a later one, and acts ' +
+      'on it after the conversation that planted it has ended.',
+  },
+  {
+    family: 'direct_prompt_injection',
+    says:
+      'The instruction arrives in the operator’s own message rather than in content ' +
+      'the agent retrieved, and the agent follows it past its own limits.',
+  },
+  {
+    family: 'pii_leakage',
+    says:
+      'The agent discloses a third party’s personal data — someone who is not its ' +
+      'operator and never asked to be in the conversation.',
+  },
+]
+
 /** One construction, and whether the next run sends it. */
 export interface ConstructionOffered {
   /** The wire name, as every record spells it. Read as words on the way out. */

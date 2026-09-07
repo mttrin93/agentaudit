@@ -71,6 +71,7 @@ import {
   type ConsoleDoes,
   type SelectionReading,
   THE_FAMILIES,
+  THE_ELECTIVE_FAMILIES,
 } from './landing'
 import {
   runsReading,
@@ -409,6 +410,38 @@ export function LandingScreen() {
                 )}
                 {readFamily(one.family)}
               </dt>
+              <dd>{one.says}</dd>
+            </div>
+          ))}
+        </dl>
+      </section>
+
+      {/*
+        The tier the bench holds and a run has to ask for.
+
+        Its own section under the six and never nine rows in one list: the six are the
+        gate's denominator (ADR-0015), and these three are selectable per run — a reader
+        who met all nine in one list would be reading a denominator this bench does not
+        have (ADR-0035).
+
+        **No tick, because there is nothing here one could turn on.** The switches above
+        write `RunConfig.families`, which is typed on the six; an elective family is
+        asked for on a gate run, with `--elective`. So this block says what the three
+        are and where they are requested, and a control that did nothing is exactly what
+        it does not draw.
+      */}
+      <section>
+        <h2>The elective tier</h2>
+        <p className="aside">
+          Three more families this bench holds and can be asked for. A run has to ask:
+          they are requested on a gate run, they are measured on the gate’s own terms —
+          the same <code>D</code>, the same floor, the same intervals — and they decide
+          no gate. Until one is asked for, a target’s report states it as not requested.
+        </p>
+        <dl className="said">
+          {THE_ELECTIVE_FAMILIES.map((one) => (
+            <div key={one.family}>
+              <dt>{readFamily(one.family)}</dt>
               <dd>{one.says}</dd>
             </div>
           ))}

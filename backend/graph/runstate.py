@@ -21,7 +21,6 @@ from backend.bench.evaluator import Verdict
 from backend.bench.library import (
     EMPTY_LIBRARY,
     AnyFamily,
-    Family,
     LibraryVersion,
     Transform,
     VerdictClass,
@@ -205,7 +204,14 @@ class EpisodePosition:
     """
 
     target_name: str
-    family: Family
+    family: AnyFamily
+    """Which family the episode is in, in either tier.
+
+    `AnyFamily` since #173: the layer opens episodes on the elective families a run
+    requested, and a position is an ordinal rather than a container the gate reads —
+    the same reason `Position.family` above widened (ADR-0035, ADR-0089).
+    """
+
     index: int
     """Which episode of this run is running, counted from one.
 
@@ -279,7 +285,7 @@ class RunState:
         """Move the scored position to the attempt about to be sent."""
         self.position = Position(target_name, family, case_id, attempt_index)
 
-    def enter_episode(self, target_name: str, family: Family) -> None:
+    def enter_episode(self, target_name: str, family: AnyFamily) -> None:
         """Move the adaptive position to a new episode, before its first turn.
 
         A method of its own, and it writes to a field of its own: an adaptive

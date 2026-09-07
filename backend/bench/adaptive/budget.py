@@ -12,8 +12,8 @@ something, then reported as though it had been fixed in advance, is the adaptive
 layer's version of tuning the gate (spec: Further Notes).
 
 **Two ceilings, and they are different limits.** `turns_per_episode` caps one
-episode; `turn_ceiling` caps the whole layer. A per-family cap multiplied by six
-families is a multiplication a user consents to once and then forgets, so the
+episode; `turn_ceiling` caps the whole layer. A per-family cap multiplied by the
+families in scope is a multiplication a user consents to once and then forgets, so the
 second is enforced independently of the first, against its own counter
 (ADR-0007). The per-episode cap is the attacker's to enforce as it runs (#16);
 the layer ceiling is enforced by the run budget, which cannot see inside an
@@ -50,7 +50,35 @@ class AdaptiveBudget:
 
     family_count: int = len(Family)
     """The six families of `Family`, read from the closed enum rather than typed
-    again, so that the ceiling cannot drift from the set of families it covers."""
+    again, so that the ceiling cannot drift from the set of families it covers.
+
+    **The six, and it stays the six.** `A_break`'s shortfall line is read against this
+    number — *n of the six opened no episode against both agents* — so a value that
+    moved with an operator's selection would print a denominator nobody declared
+    ([ADR-0089](../../../docs/adr/0089-a-break-is-over-the-six-and-the-tier-is-read-beside-it.md)).
+    What a requested tier widens is the ceiling, and that is the field below.
+    """
+
+    elective_families: int = 0
+    """How many elective families this run asked the layer to attack as well.
+
+    Zero by default, which is every run that requested nothing from the tier. It
+    widens the **ceiling** and nothing else: the layer opens `k` episodes per family
+    per target in either tier (#173), so an operator who asked for three more families
+    is shown, and consents to, the turns those cost. A ceiling left at six while nine
+    families ran would stop a run inside its own second layer at the counter, which is
+    ADR-0007's guarantee working correctly against a figure declared wrongly
+    (ADR-0089 section 5).
+
+    **Filled by `RunBudget.declare` off the run's planned cases**, and by nothing else
+    in this repository — the one caller that knows what a run covers is the one that
+    prices it. Nothing here can enforce that, because a default on a frozen record is
+    not a guard; what makes it hold is that this field is read only where a ceiling is
+    computed, so a value invented anywhere else would have to be carried to that call
+    site to have an effect. The reason it is derived at all is `family_count`'s: the
+    number of families the layer may attack is a property of what the run planned, and
+    a second statement of it could disagree with the first.
+    """
 
     steps_per_turn: int = len(AttackerTool)
     """How many tool calls one turn may take before the episode is a loop.
@@ -87,11 +115,21 @@ class AdaptiveBudget:
         ):
             if getattr(self, name) < 1:
                 raise ValueError(f"{name} has to be at least 1")
+        if self.elective_families < 0:
+            raise ValueError(
+                "a run cannot have asked the layer for fewer than no elective "
+                "families: the tier is a selection and an empty one is zero"
+            )
+
+    @property
+    def families_attacked(self) -> int:
+        """How many families the layer may open an episode on, over both tiers."""
+        return self.family_count + self.elective_families
 
     @property
     def episode_count(self) -> int:
         """How many episodes the layer runs against one target."""
-        return self.family_count * self.episodes_per_family
+        return self.families_attacked * self.episodes_per_family
 
     @property
     def steps_per_episode(self) -> int:

@@ -43,7 +43,7 @@ from enum import StrEnum
 from backend.bench.adaptive.proposal import ProposedRoute
 from backend.bench.adaptive.tree import deepest_path
 from backend.bench.contract import TargetConfig, Transcript
-from backend.bench.library import Family
+from backend.bench.library import AnyFamily
 
 
 class AttackerTool(StrEnum):
@@ -102,7 +102,17 @@ def tools_against(target: TargetConfig) -> frozenset[AttackerTool]:
 class AdaptiveEpisode:
     """One episode, and what the attacker had to work with while it ran."""
 
-    family: Family
+    family: AnyFamily
+    """The family this episode attacked, in either tier.
+
+    `AnyFamily` since #173: the layer opens episodes on the elective families a run
+    requested, and an episode is scored on nothing whichever tier it ran in
+    (ADR-0010). What stays keyed on `Family` is the separation statistic —
+    `A_break`'s denominator is the six and does not widen with an operator's
+    selection
+    ([ADR-0089](../../../docs/adr/0089-a-break-is-over-the-six-and-the-tier-is-read-beside-it.md)).
+    """
+
     target_name: str
     outcome: EpisodeOutcome
     turns: int
@@ -260,7 +270,7 @@ class AdaptiveEpisode:
     def against(
         cls,
         target: TargetConfig,
-        family: Family,
+        family: AnyFamily,
         outcome: EpisodeOutcome,
         turns: int,
         transcripts: Sequence[Transcript] = (),

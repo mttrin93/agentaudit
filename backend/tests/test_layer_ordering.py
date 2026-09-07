@@ -24,7 +24,7 @@ import pytest
 from backend.api.run_config import BenchConfig, plan_for
 from backend.bench.adaptive.layer import objectives_for
 from backend.bench.calibration import CalibrationResult, run_calibration
-from backend.bench.library import Case, Family, Transform
+from backend.bench.library import AnyFamily, Case, Family, Transform
 from backend.bench.selection import (
     EVERY_CONSTRUCTION,
     AttackLayer,
@@ -200,7 +200,7 @@ def test_a_construction_selection_narrows_what_the_adaptive_layer_aims_at(
     config = BenchConfig(cases=[leakage_case, variant, scope_creep_case])
     target = a_target("customer-agent")
 
-    def aims_at(selection: AttackSelection) -> dict[Family, Case]:
+    def aims_at(selection: AttackSelection) -> dict[AnyFamily, Case]:
         plan = plan_for(replace(config, selection=selection), note_planted=True)
         return objectives_for(plan.cases, target)
 

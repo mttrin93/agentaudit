@@ -83,7 +83,7 @@ from backend.bench.adaptive.tools import (
 from backend.bench.adaptive.tree import Continuation, EpisodeTree
 from backend.bench.contract import TargetConfig, Transcript
 from backend.bench.evaluator import Verdict
-from backend.bench.library import Case, Family
+from backend.bench.library import AnyFamily, Case
 from backend.bench.measurability import checkable
 from backend.graph.budget import BudgetExceeded
 from backend.graph.runstate import RunState
@@ -165,7 +165,9 @@ class Objective:
     authored payload would be running the fixed suite again.
     """
 
-    family: Family
+    family: AnyFamily
+    """The family this episode attacks, in either tier (#173, ADR-0089)."""
+
     case: Case
     canary: str
 

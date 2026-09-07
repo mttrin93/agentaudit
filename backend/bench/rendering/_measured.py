@@ -257,7 +257,7 @@ def _figures(
             "",
             "### The elective families this run asked for, and what they measured",
             "",
-            *_elective_figures(measured["elective"]),
+            *_elective_figures(measured["elective"], found),
             "",
             "### The elective families this target could not be measured on",
             "",
@@ -270,7 +270,9 @@ def _figures(
     )
 
 
-def _elective_figures(entries: Sequence[Mapping[str, Any]]) -> tuple[str, ...]:
+def _elective_figures(
+    entries: Sequence[Mapping[str, Any]], found: Mapping[str, Discoveries]
+) -> tuple[str, ...]:
     """One block per elective family this run requested and measured.
 
     **What is here is about the target; what is not here is about the bench**
@@ -293,14 +295,20 @@ def _elective_figures(entries: Sequence[Mapping[str, Any]]) -> tuple[str, ...]:
     ADR-0044).
     """
     return _listed(
-        (line for entry in entries for line in _elective_block(entry)),
+        (
+            line
+            for entry in entries
+            for line in _elective_block(entry, found.get(str(entry["family"])))
+        ),
         "- None. This run asked the elective tier for nothing, so its figures are the "
         "six mandatory families and only those.",
     )
 
 
-def _elective_block(entry: Mapping[str, Any]) -> tuple[str, ...]:
-    """One elective family: its counts, its interval, its band and its mix.
+def _elective_block(
+    entry: Mapping[str, Any], discoveries: Discoveries | None
+) -> tuple[str, ...]:
+    """One elective family: its counts, its interval, its band, its mix and the search.
 
     `_family_block`'s lines minus the ones an elective entry does not carry, written
     out here rather than shared with it. Two writers because they print different
@@ -308,13 +316,13 @@ def _elective_block(entry: Mapping[str, Any]) -> tuple[str, ...]:
     and a renderer that prints a claim about the bench when somebody forgets to tell
     it not to is the shape ADR-0018 refuses.
 
-    **And no discovery count**, which is the one omission that is not ADR-0018's. A
-    discovery count is per family per adaptive episode, and the layer's
-    `objectives_for` picks its objectives over the six — so no episode is ever opened
-    in the tier and the line could only ever print its own empty answer. A row that can
-    only say *none* says nothing, and a reader would take it for the search having
-    looked here and found nothing (ADR-0056, ADR-0010). It is the same refusal
-    `_not_run` already makes one block up, for the same reason.
+    **The discovery count is here since #173**, and it was absent for one run's worth
+    of history because the layer picked its objectives over the six: a row that could
+    only ever say *none* would have read as the search having looked. It looks now —
+    the layer attacks the elective families a run requested — so the row is drawn
+    through the same `_found` a family block above is, and a family the search never
+    worked in still reads as *no episode is recorded* rather than as a nought
+    (ADR-0056, ADR-0010).
     """
     interval = entry["interval"]
     return (
@@ -329,6 +337,8 @@ def _elective_block(entry: Mapping[str, Any]) -> tuple[str, ...]:
         f"- **Band — {entry['band']}**: "
         f"{BAND_IN_A_TARGET_REPORT[Band(entry['band'])]}.",
         f"- **Verdict class**: {entry['verdict_class']}.",
+        f"- **Discoveries — what one adaptive attacker found here** — "
+        f"{_found(discoveries)}.",
         *_variants(entry["variants"]),
         "- **What this figure is not** — it is this target's rate on a family the "
         "bench holds beside the six and a run has to ask for. It moves no gate, it "

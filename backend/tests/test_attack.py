@@ -17,7 +17,7 @@ import pytest
 from backend.bench.adaptive.budget import AdaptiveBudget
 from backend.bench.adaptive.episode import AdaptiveEpisode, EpisodeOutcome
 from backend.bench.contract import Transcript
-from backend.bench.library import Case, Family
+from backend.bench.library import Case, ElectiveFamily, Family
 from backend.bench.planting import namespace_for
 from backend.graph.budget import REGISTRATION_PROBES_PER_TARGET, FigureKind
 from backend.graph.runstate import RunState
@@ -323,6 +323,33 @@ def test_a_failed_episode_and_a_declined_route_both_print_their_reason() -> None
     assert "ADR-0060" in printed
     # And the failed one does not read as an observation of the family.
     assert "no reading" in printed
+
+
+def test_an_elective_declination_prints_as_a_declination_and_not_as_a_failure() -> None:
+    """The script a bench engineer reads the attack from prints it too (#173).
+
+    `scripts/console.py` printed a declined route and this script did not, and the
+    difference stopped being cosmetic when the layer began attacking the elective tier:
+    memory poisoning declines every route it finds (ADR-0084) and a direct override the
+    blinded attacker could not spell out declines too (ADR-0090), so a run whose
+    declinations printed nowhere here would read as a layer that found nothing.
+    """
+    target = a_target(name="finbrief")
+
+    printed = _episode_block(
+        1,
+        AdaptiveEpisode.against(
+            target=target,
+            family=ElectiveFamily.MEMORY_POISONING,
+            outcome=EpisodeOutcome.CENSORED,
+            turns=2,
+            declined=["not filable as a case: ... (ADR-0060)"],
+        ),
+    )
+
+    assert "declined, and proposed to nothing" in printed
+    assert "ADR-0060" in printed
+    assert str(ElectiveFamily.MEMORY_POISONING) in printed
 
 
 def test_each_turn_prints_broke_it_held_or_not_checkable() -> None:

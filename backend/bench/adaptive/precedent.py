@@ -57,7 +57,7 @@ from pathlib import Path
 from typing import Any, Protocol
 
 from backend.bench.judge import Finding
-from backend.bench.library import Family, VerdictClass
+from backend.bench.library import AnyFamily, Family, VerdictClass
 from backend.bench.store import DatabaseStore
 
 PRECEDENT_NAMESPACE = ("agentaudit", "precedent")
@@ -251,8 +251,16 @@ class PrecedentStore(Protocol):
     it claimed to be, which is a type saying less than it appears to.
     """
 
-    def for_family(self, family: Family) -> Sequence[Precedent]:
-        """The findings recorded against this family, most recently filed first."""
+    def for_family(self, family: AnyFamily) -> Sequence[Precedent]:
+        """The findings recorded against this family, most recently filed first.
+
+        Asked in either tier since #173, and answered from a store that holds the six
+        alone: `Precedent.of` is built from a `Finding`, and a finding is refused for
+        an elective family because its label is a table no coverage claim reads
+        (`judge.narrated`, ADR-0039). So an elective lookup is answered *empty*, which
+        is the true answer — nothing has been filed against it — and the episode
+        records that it asked (`AdaptiveEpisode.consulted_precedent`).
+        """
         ...
 
 
@@ -317,7 +325,7 @@ class DurablePrecedents:
         self.store.put(self.namespace, entry.key, entry.stored())
         return entry
 
-    def for_family(self, family: Family) -> Sequence[Precedent]:
+    def for_family(self, family: AnyFamily) -> Sequence[Precedent]:
         found = self.store.search(
             self.namespace, filter={"family": str(family)}, limit=RETRIEVAL_LIMIT
         )
@@ -337,7 +345,7 @@ class RecordedPrecedents:
 
     entries: tuple[Precedent, ...] = ()
 
-    def for_family(self, family: Family) -> Sequence[Precedent]:
+    def for_family(self, family: AnyFamily) -> Sequence[Precedent]:
         return tuple(entry for entry in self.entries if entry.family is family)
 
 

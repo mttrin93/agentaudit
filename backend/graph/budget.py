@@ -42,14 +42,14 @@ overspends.
 from __future__ import annotations
 
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from decimal import ROUND_UP, Decimal
 from enum import StrEnum
 from typing import TypedDict
 
 from backend.bench.adaptive.budget import DECLARED_ADAPTIVE_BUDGET, AdaptiveBudget
 from backend.bench.contract import TargetConfig
-from backend.bench.library import Case
+from backend.bench.library import Case, one_of_the_six
 from backend.bench.rule import DECLARED_RULE, GateRule
 from backend.bench.selection import EVERY_CONSTRUCTION, AttackSelection
 
@@ -379,13 +379,25 @@ class RunBudget:
         # is exact, and a bound of nothing is the one bound that cannot be exceeded.
         # The basis says which of the two zeros this is — a layer nobody asked for,
         # rather than a budget somebody set to nothing.
-        per_target_turns = adaptive.turn_ceiling if selection.adaptive else 0
+        # The declared budget, widened by the elective families this run planned.
+        # Read off the cases rather than taken as an argument, for the reason the
+        # scored figure is read off them: `plan_for` has already admitted exactly the
+        # tier the run asked for, so this is the run's own selection and not a second
+        # statement of it that could disagree (#173, ADR-0089 section 5).
+        covering = replace(
+            adaptive,
+            elective_families=len(
+                {case.family for case in cases if not one_of_the_six(case.family)}
+            ),
+        )
+        per_target_turns = covering.turn_ceiling if selection.adaptive else 0
         adaptive_figure = CallFigure(
             calls=len(targets) * per_target_turns,
             kind=FigureKind.CEILING,
             basis=(
-                f"{adaptive.family_count} families × T={adaptive.turns_per_episode}"
-                f" × k={adaptive.episodes_per_family},"
+                f"{covering.families_attacked} families × "
+                f"T={covering.turns_per_episode}"
+                f" × k={covering.episodes_per_family},"
                 f" × {_count(len(targets), 'target')}"
                 if selection.adaptive
                 else (

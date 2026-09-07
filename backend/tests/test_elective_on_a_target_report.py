@@ -570,18 +570,23 @@ def test_the_offline_verifier_passes_over_a_document_carrying_an_elective_family
     assert ReDerivationOutcome.AGREES.value in printed
 
 
-def test_no_discovery_count_prints_against_an_elective_family(
+def test_a_discovery_count_prints_against_an_elective_family(
     entry: ElectiveEntry,
 ) -> None:
-    """A row that could only ever say *none* says nothing, so it is not drawn.
+    """The search looks here now, so the row is drawn — and says what it found.
 
-    `adaptive/layer.objectives_for` picks its objectives over the six, so no episode is
-    ever opened in the tier — a discovery line here could print only its own empty
-    answer, and a reader would take that for the search having looked and found
-    nothing (ADR-0056, ADR-0010).
+    Reversed by #173: `objectives_for` used to pick its objectives over the six, so a
+    discovery line in the tier could only ever print its own empty answer and a reader
+    would have taken that for the search having looked. The layer attacks the elective
+    families a run requested now, so the row is a reading rather than a nought — and a
+    family the search never worked in still reads as *no episode is recorded* rather
+    than as a count of zero (ADR-0056, ADR-0010, ADR-0089).
     """
     markdown = render(_payload_carrying(entry))
     tier = markdown.split("### The elective families this run asked for", 1)[1]
 
     assert "3 of 10 attempts succeeded" in tier
-    assert "adaptive attacker found here" not in tier
+    assert "adaptive attacker found here" in tier
+    # This payload records no episode at all, so the row says so in the one wording
+    # the three other places a family is drawn use.
+    assert "no episode is recorded against this family" in tier

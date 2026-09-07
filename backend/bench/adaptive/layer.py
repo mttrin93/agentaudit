@@ -9,8 +9,8 @@ instead: `backend/tests/test_layer_ordering.py`.
 
 **Order is randomised per family** (ADR-0011). Not once per run: per family, so
 that the turn budget is not spent in a sequence the attacker could learn across the
-six of them. Together with a fresh brief per episode and a per-run handle, this is
-the context isolation half of the blinding — the half the judge never needed,
+families it attacks. Together with a fresh brief per episode and a per-run handle,
+this is the context isolation half of the blinding — the half the judge never needed,
 because the judge grades one transcript at a time and the attacker meets three
 targets in a row.
 
@@ -22,6 +22,16 @@ the adaptive layer gained a new semantic component to reach for and no new edge 
 reach it by. So episodes run over the families this run holds a deterministic,
 applicable and runnable case for, and a family with none is absent from the
 adaptive section rather than reported as a family nothing broke.
+
+**In both tiers, since #173.** The layer attacks the elective families a run
+requested and no others, and it learns which those are the way it learns the six's
+own switch: from the cases the run planned (`api/run_config.plan_for`). An episode in
+the tier is scored on nothing, exactly as one on the six is (ADR-0010), and it reaches
+the scored side by the one edge that already existed — `propose_case`, into ADR-0012's
+cross-model bar. What does **not** widen is the separation statistic:
+[ADR-0089](../../../docs/adr/0089-a-break-is-over-the-six-and-the-tier-is-read-beside-it.md)
+keeps `A_break`'s denominator over the six, so the readings in `docs/validation.md`
+stay comparable across a run that requested the tier and one that did not.
 """
 
 from __future__ import annotations
@@ -43,7 +53,7 @@ from backend.bench.adaptive.episode import AdaptiveEpisode, EpisodeOutcome
 from backend.bench.adaptive.precedent import DURABLE_PRECEDENT, PrecedentStore
 from backend.bench.applicability import applicable
 from backend.bench.contract import TargetConfig, TargetUnreachable
-from backend.bench.library import Case, Family, VerdictClass, one_of_the_six
+from backend.bench.library import AnyFamily, Case, ElectiveFamily, Family, VerdictClass
 from backend.bench.measurability import runnable
 from backend.bench.unfinished import ReplyUnfinished
 from backend.graph.runstate import RunState
@@ -110,6 +120,21 @@ decision, and the four alternatives it refused, is
 """
 
 
+ATTACKED_IN_ORDER: tuple[AnyFamily, ...] = (*Family, *ElectiveFamily)
+"""Every family an episode may be opened on, the six first and the tier after.
+
+Read off the two closed sets rather than typed out, for the reason
+`AdaptiveBudget.family_count` is read off `Family`: a family added to either
+enumeration is a family the layer attacks when a run asks for it, and a list here
+would have to be remembered. The order is the declaration order and is deliberately
+fixed — what ADR-0011 requires to be randomised is the order of the **targets** within
+a family, which `run_adaptive_layer` draws for each of these in turn.
+
+The six first, so that a run which spends its ceiling attacking a requested tier has
+already attacked the families the gate is decided over.
+"""
+
+
 def run_adaptive_layer(
     attackable: Sequence[AttackableTarget],
     cases: Sequence[Case],
@@ -128,7 +153,7 @@ def run_adaptive_layer(
     }
 
     episodes: list[AdaptiveEpisode] = []
-    for family in Family:
+    for family in ATTACKED_IN_ORDER:
         order = list(attackable)
         draw.shuffle(order)
         for entry in order:
@@ -181,7 +206,7 @@ def objectives_for(
     cases: Sequence[Case],
     target: TargetConfig,
     withdrawn: frozenset[Family] = frozenset(),
-) -> dict[Family, Case]:
+) -> dict[AnyFamily, Case]:
     """One deterministic objective per family, for the families this target can
     answer.
 
@@ -195,17 +220,21 @@ def objectives_for(
 
     `withdrawn` is the third filter, and it is the endpoint's own answer rather than a
     declaration: a family the scored layer withdrew because the target's replies carry
-    no trace is a family whose objective nothing here could check either.
+    no trace is a family whose objective nothing here could check either. It is keyed
+    on `Family` because the two trace-dependent families are both among the six.
+
+    **Both tiers, and the selection is the cases.** There is no fourth filter for the
+    elective tier and deliberately no argument naming it: `plan_for` admits the
+    requested tier's cases into the one plan and admits no others, so a family this
+    run did not ask for arrives here with no case and gets no objective — the same
+    route the six's own family switch takes (#173, ADR-0035 section 5). A selection
+    passed separately would be a second statement of what the run covers, and the two
+    could come to disagree.
     """
-    objectives: dict[Family, Case] = {}
+    objectives: dict[AnyFamily, Case] = {}
     for case in runnable(applicable(cases, target), target):
         family = case.family
-        # The adaptive layer's episodes are over the six. An elective family is
-        # gate-measured and never gate-deciding, and `A_break` is read over families
-        # and episodes — so an episode in the tier would be an adaptive figure about
-        # a family no report carries a figure for (ADR-0010, ADR-0035). The filter is
-        # here rather than at the caller because this is where an objective is chosen.
-        if not one_of_the_six(family) or family in withdrawn:
+        if family in withdrawn:
             continue
         if case.verdict_class is VerdictClass.DETERMINISTIC:
             objectives.setdefault(family, case)

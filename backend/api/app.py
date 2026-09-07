@@ -2827,10 +2827,21 @@ class AdaptiveCeiling(BaseModel):
     """`k` — how many episodes are run per family per target."""
 
     families: int
-    """The families the layer covers, read off the closed enum."""
+    """The six, read off the closed enum, and never the tier as well.
+
+    This route answers *what is declared*, not *what the next run will spend*: the
+    declared budget is over the six, and the elective families a run requests widen
+    that run's own ceiling where they are known, which is `RunBudget.declare` over the
+    cases the run planned (#173,
+    [ADR-0089](../../docs/adr/0089-a-break-is-over-the-six-and-the-tier-is-read-beside-it.md)
+    section 5). A number here that guessed at a selection nobody has made yet would be
+    a ceiling nobody declared.
+    """
 
     turns_per_target: int
-    """The layer's own ceiling: every episode running to its cap, per target."""
+    """The layer's own ceiling over those six: every episode running to its cap, per
+    target. A run that requested the elective tier is held to more, and to a figure it
+    was shown at its own estimate rather than to this one."""
 
     declared_in: str
     statement: str = THE_ADAPTIVE_CEILING_IS_DECLARED

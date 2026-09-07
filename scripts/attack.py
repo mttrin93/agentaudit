@@ -68,7 +68,7 @@ from backend.bench.completion import (
     attacker_completion_for,
 )
 from backend.bench.contract import TargetConfig
-from backend.bench.library import Case, Family, LibraryVersion
+from backend.bench.library import AnyFamily, Case, Family, LibraryVersion
 from backend.bench.measurability import contradicted_by_the_reply
 from backend.bench.nonce import issue_nonce
 from backend.bench.planting import (
@@ -688,6 +688,14 @@ def _episode_block(index: int, episode: AdaptiveEpisode) -> str:
             # on, so a reader judging a censored scope-creep episode needs it beside
             # the reply rather than a screen away.
             lines.extend(f"      {line}" for line in trace.rendered().splitlines())
+    for reason in episode.declined:
+        # A route the attacker found and no record could carry, printed beside the
+        # proposals because it is the same fact one step earlier: the attacker asked,
+        # and the library's own invariants answered (ADR-0084, ADR-0090). Printed here
+        # as it already is in `scripts/console.py` — a declination read as a failed
+        # episode would be the honest outcome of the elective tier looking like a
+        # regression on its first run (#173).
+        lines.append(f"    declined, and proposed to nothing: {reason}")
     for proposal in episode.proposals:
         lines.append(
             f"    proposed {proposal.case.id}: {proposal.description} — faces a "
@@ -718,7 +726,7 @@ class Narrating(RunState):
     """Whether the banner has been printed. Held here rather than checked against
     the episode count, so the words appear exactly once however many episodes run."""
 
-    def enter_episode(self, target_name: str, family: Family) -> None:
+    def enter_episode(self, target_name: str, family: AnyFamily) -> None:
         super().enter_episode(target_name, family)
         if not self.announced:
             print(PROBES_BANNER, flush=True)

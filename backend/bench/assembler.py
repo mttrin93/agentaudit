@@ -817,7 +817,15 @@ class ReportedEpisode:
             )
 
     @property
-    def family(self) -> Family:
+    def family(self) -> AnyFamily:
+        """The family this episode attacked, in either tier.
+
+        Wider than `FamilyEntry.family` deliberately and for the reason ADR-0010
+        gives: an episode is not an attempt, this row is not a row of that table, and
+        nothing that groups by this key divides by anything. The layer attacks the
+        elective families a run requested (#173) and reports them here beside the
+        six's episodes, which is the same section they were always in.
+        """
         return self.episode.family
 
     @property
@@ -847,8 +855,14 @@ class AdaptiveSection:
     episodes: tuple[ReportedEpisode, ...] = ()
 
     @property
-    def families_broken(self) -> frozenset[Family]:
-        """The families some episode broke. Names, not a count and not a rate."""
+    def families_broken(self) -> frozenset[AnyFamily]:
+        """The families some episode broke. Names, not a count and not a rate.
+
+        Either tier, since #173: the layer attacks the elective families a run asked
+        for, and a set of names that silently dropped them would under-report what the
+        attacker achieved. It is safe to widen for the reason it is safe to hold at
+        all — nothing divides by it and no figure is read off it (ADR-0010).
+        """
         return frozenset(
             reported.family
             for reported in self.episodes

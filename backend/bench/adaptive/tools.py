@@ -58,7 +58,7 @@ from backend.bench.adaptive.precedent import Precedent, PrecedentStore
 from backend.bench.adaptive.prompt import TOOL_PURPOSE
 from backend.bench.contract import TargetConfig, Transcript, send_message
 from backend.bench.evaluator import Verdict, evaluate
-from backend.bench.library import Case, Family
+from backend.bench.library import AnyFamily, Case
 from backend.graph.budget import Layer
 from backend.graph.runstate import RunState
 
@@ -278,7 +278,7 @@ def check_canary(
 
 
 def retrieve_precedent(
-    store: PrecedentStore, family: Family, blinding: Blinding
+    store: PrecedentStore, family: AnyFamily, blinding: Blinding
 ) -> str:
     """What has worked on this failure before, with every target identity removed.
 

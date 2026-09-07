@@ -5308,3 +5308,95 @@ prohibition this project has held since ADR-0035 was split in half.
   whose discriminating power on that family is stated in the gate document — which,
   for all three, is still unmeasured. That is the reading the caveat above exists to
   put in front of an operator.
+
+### The adaptive layer attacks the elective tier, and files from one family of three (#173, 2026-09-07)
+
+Nothing was measured against the field for this one either, and the entry is here
+because a layer that had never opened an episode in the tier now does — and because
+**what it can file from there is smaller than the ticket that asked for it assumed**.
+Both halves are written down before the first run rather than explained after it.
+
+- **What changed.** `adaptive/layer.objectives_for` picked its objectives over the six,
+  so no episode was ever opened on an elective family. It now returns
+  `dict[AnyFamily, Case]` and the layer loops over both closed sets, so the tier a run
+  requested is attacked and a family it did not request is not. The selection reaches
+  the layer as **the cases the run planned** — the same route the six's own family
+  switch takes — so there is no second statement of what a run covers to disagree with
+  the first.
+- **`A_break` is unchanged, and that is a decision.**
+  [ADR-0089](./adr/0089-a-break-is-over-the-six-and-the-tier-is-read-beside-it.md): the
+  denominator stays the six that opened an episode against both agents, whatever the
+  operator requested, so every reading in this document remains comparable across this
+  line and a run that requested no elective family produces the identical figure it
+  produced before. `AgentBreaks.families`, `AgentBreaks.broken` and
+  `AdaptiveSeparation.scope` are annotated over `Family` and `breaks_for` narrows
+  explicitly, so widening the denominator is a type error rather than a silent drift.
+  The tier is read **beside** it — `ElectiveAttack`, per family, agents broken and
+  agents censored — and deliberately carries no ratio: the tier is a closed set of
+  three and a run may request one, and ADR-0011 already has to say that `n = 6` is
+  small.
+- **The three families file three different ways, and only one of them files.**
+  - `pii_leakage` files normally. Its condition reads a record the target holds about a
+    third party, and the payload owes the canary nothing.
+  - `memory_poisoning` declines every route, under
+    [ADR-0084](./adr/0084-a-route-the-record-cannot-carry-is-declined-and-not-synthesised.md):
+    `retained_instruction_executed` is in `CARRIED_BY_FETCHED_CONTENT`, so a case in
+    that family **is** the content the target retained and what the attacker composes
+    is a message. This was expected and #173 said so in advance.
+  - `direct_prompt_injection` **also** declines, and this was not expected.
+    `Case._refuse_a_canary_the_wrong_channel_spells_out` requires that family's payload
+    to spell the canary out in two pieces (ADR-0042) and the attacker is blinded to the
+    canary (ADR-0011), so a probe it composed essentially never can. Before this ticket
+    that pairing left `Case.__post_init__` as a `ValueError`, which is #166's crash in a
+    second family; it is now declined with its reason under
+    [ADR-0090](./adr/0090-a-direct-override-the-attacker-could-not-spell-out-is-declined-too.md).
+    The refusal is a property of the **probe** and not of the family: a probe that did
+    spell both halves out is filed and faces the bar.
+- **So a declined route in the tier is the honest outcome and not a regression.** It
+  prints as a declination beside the proposals in `scripts/attack.py` and
+  `scripts/console.py` — *declined, and proposed to nothing* — and never as a failed
+  episode. A declination has no denominator, decides no gate and enters no rate
+  (ADR-0010).
+- **Memory poisoning's turns are *not checkable*, which is a fact about the layer.**
+  `measurability.checkable` answers `False` for `retained_instruction_executed`,
+  because that verdict is the scored turn's reply read against the planting turn's
+  (ADR-0041) and the adaptive layer sends probes rather than two-turn attempts. Driven
+  against the three reference agents with the scripted stand-in attacker on
+  2026-09-07: six episodes, two per elective family against the trivial agent, all six
+  censored at `T = 8`, and memory poisoning's two recorded **every one of their eight
+  turns as unverifiable**. That is the adaptive counterpart of `NotMeasurable` and not
+  a target that held, so the tier's block carries a third word beside *broke* and
+  *censored*: `ElectiveAttack.unreadable` names the agents nothing was checkable
+  against, and memory poisoning is expected to print there every time. A reader meeting
+  it should read *the bench could not ask this question within one probe*, and the two
+  other families' censoring as *the stand-in did not find a route*. What a real attacker
+  model does there is unmeasured, and this stand-in's censoring is not evidence about
+  any target.
+- **The ceiling covers what the layer may attack.** `AdaptiveBudget.family_count` stays
+  the six — it is what `A_break`'s shortfall line is read against — and a second field,
+  `elective_families`, widens the **ceiling** only. `RunBudget.declare` reads it off the
+  planned cases, so an operator who requested one elective family is shown
+  `7 families × T=8 × k=2` and consents to those turns. Without it a run that requested
+  the tier would have been stopped inside its own second layer at the counter, which is
+  ADR-0007's guarantee working correctly against a figure declared wrongly.
+- **What else it collided with.** `adaptive/prompt._BREAK_CONDITION` had no line for the
+  three elective success-condition kinds, so a brief written from the criterion (spec
+  story 18) would have raised `KeyError` at the first turn of the first elective
+  episode; it is total over `SuccessConditionKind` now and asserted so at import.
+  `PrecedentStore.for_family` takes `AnyFamily` and answers an elective lookup **empty**
+  — the true answer, because a `Finding` is refused for an elective family
+  (`judge.narrated`, ADR-0039) and nothing has ever been filed against one.
+- **One row came back.** The discovery count in the tier's report block was removed in
+  #171 because a row that could only ever say *none* would read as the search having
+  looked. It looks now, so the row is drawn through the same writer a family block
+  above uses, and a family the search never worked in still reads as *no episode is
+  recorded* rather than as a nought (ADR-0056).
+- **What did not move.** Six families, 4 of 6, monotonicity on 5 of 6, an elective
+  family in neither count, `ARTEFACT_VERSION` at 2, the golden rendering digest, every
+  scored rate, and ADR-0010 in every particular: an `AdaptiveEpisode` is still not an
+  `Attempt`, an episode in the tier is scored on nothing, and `propose_case` into the
+  admission gate is still the only edge from this layer to anything scored.
+- **Still never validated**: no gate run has ever opened an elective episode against the
+  three reference agents on the field, so the tier's `ElectiveAttack` block has no
+  reading behind it yet, and no route proposed from the tier has ever faced the
+  cross-model bar.

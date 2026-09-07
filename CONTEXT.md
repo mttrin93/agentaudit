@@ -76,9 +76,11 @@ Named apart from **family** for the reason an **episode** is named apart from an
 **attempt**: `Family` is the type both of the gate's counts are defined over, so a value
 that could be assigned into it would be a family in a denominator ADR-0015 fixed at six.
 The distinction is carried by the type and not by a flag, which is why `ElectiveFamily`
-is its own closed set. An elective family that has held the floor for three consecutive
-gate runs on **the field** becomes *eligible to enter the six*; entry is a
-library-version event a human declares before a run, and never something a counter does.
+is its own closed set. Entry into the six is a library-version event a human declares
+before a run, re-declaring the gate rule the run is held to, and no rule in this project
+says when it is earned — the readings are evidence offered to that decision and never a
+count accumulating toward it
+([ADR-0087](./docs/adr/0087-entry-into-the-six-is-a-decision-and-not-a-counter.md)).
 _Avoid_: using **family** for one, seventh family, optional family, extra family
 
 **Label**:

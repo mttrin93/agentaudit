@@ -44,10 +44,9 @@ class ElectiveFamily(StrEnum):
     [ADR-0035](../../docs/adr/0035-the-elective-family-tier-is-never-gate-deciding.md):
     an elective family is measured by the gate exactly as a `Family` is — three
     reference agents, a `D`, the `discrimination_floor` bar, a decay series on each of
-    its cases — and it decides no gate. The tier's rule, its selection and its
-    promotion streak are `backend/bench/elective.py`; what lives here is the closed
-    set of names, beside the other closed sets, because a case that cannot name its
-    family does not load.
+    its cases — and it decides no gate. The tier's rule and its selection are
+    `backend/bench/elective.py`; what lives here is the closed set of names, beside
+    the other closed sets, because a case that cannot name its family does not load.
 
     **A separate enumeration and never a seventh member of `Family` above.** `Family`
     is the type both gate counts are defined over, so a value assignable into one
@@ -2536,8 +2535,9 @@ pattern the tier's other two families copy. `load_library` globs `*.toml` and do
 not recurse, so a run that was asked for nothing from the tier loads exactly the
 cases it has always loaded and its `LibraryVersion` digest does not move — which is
 what makes *skipping is never advantageous* true of the version as well as of the
-streak
-([ADR-0035](../../docs/adr/0035-the-elective-family-tier-is-never-gate-deciding.md)).
+retirement window
+([ADR-0035](../../docs/adr/0035-the-elective-family-tier-is-never-gate-deciding.md),
+[ADR-0087](../../docs/adr/0087-entry-into-the-six-is-a-decision-and-not-a-counter.md)).
 
 Asking for an elective family is therefore a caller reaching for a second directory,
 which is what a **declared input** looks like on disk: nothing the run measures can

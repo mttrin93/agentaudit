@@ -343,17 +343,17 @@ was about to fail, and one invariant closes that reading:
 
 > Skipping an elective family can never be advantageous.
 
-Two halves, and only one was free when this was written. A skipped run must not count
-toward the streak that promotes an elective family into the six, so skipping buys no
-progress. And a skipped run must not reset the retirement window, so skipping buys no
-protection — which used to fall out of `decide_retirement` reading `history[-2:]`
-positionally, since a family that did not run writes no `GateReading` and the readings
-either side of the gap are already adjacent. **That was the open question, and both
-halves are now tests.** ADR-0035 reads the promotion streak over a ledger of gate runs
-where a skip is a `Skipped` that stops the count, and the retirement window stays
-transparent across the gap by decision rather than by adjacency — stated in
-`retirement.window_of` where the model filter ADR-0022 put in front of it now lives. The
-invariant is ADR-0015's monotone-non-improving property read one level down.
+Two halves when this was written, and one of them is now vacuous. A skipped run must not
+reset the retirement window, so skipping buys no protection — which used to fall out of
+`decide_retirement` reading `history[-2:]` positionally, since a family that did not run
+writes no `GateReading` and the readings either side of the gap are already adjacent.
+**That was the open question, and it is a test**: the window stays transparent across
+the gap by decision rather than by adjacency, stated in `retirement.window_of` where the
+model filter ADR-0022 put in front of it now lives. The other half was that a skipped
+run must not count toward the streak that promotes an elective family into the six —
+and [ADR-0087](./docs/adr/0087-entry-into-the-six-is-a-decision-and-not-a-counter.md)
+removed the streak, so there is no progress left for a skip to withhold. The invariant
+is ADR-0015's monotone-non-improving property read one level down.
 
 *A fifth kind of nothing.* `payload.py` keeps four absences apart and states that a
 reader must tell them apart without reading a footnote. A deselected family is **not
@@ -406,14 +406,16 @@ load, so a configuration leak cannot satisfy this family's condition
 elective families now have cases, a reading and a gradient; what none of them has is a
 gate run on the field.
 
-*Promotion, not accretion.* An elective family holding `D ≥ 0.4` across a declared
-number of consecutive gate runs becomes eligible to enter the six, and entry is a
-library-version event that re-declares the gate rule *before* the run rather than after
-it. Without a route in, the interesting attacks accumulate in the tier nobody has to
-pass while the six drift toward trigger 1. The number of runs is deliberately not
-declared here — a threshold first written in a planning table is a threshold nobody
-argued for. It is three, argued in ADR-0035 and declared in `elective.PROMOTION_RUNS`,
-which is outside `GateRule` for the reason `T` and `k` are outside it.
+*Promotion, not accretion — and the counter that stood for it is gone.* Without a route
+into the six, the interesting attacks accumulate in the tier nobody has to pass while
+the six drift toward trigger 1. ADR-0035 answered that with a promotion streak: three
+consecutive gate runs holding the floor made a family eligible. #172 removed it
+([ADR-0087](./docs/adr/0087-entry-into-the-six-is-a-decision-and-not-a-counter.md)).
+Entry into the six re-declares the gate rule *before* the run — 4 of 6 and monotonicity
+on 5 of 6 are counts over a fixed six — so it was always a decision a person argues and
+writes into a library version, and the streak was a precondition on a decision that
+already carries a much heavier one. The risk this paragraph names is unchanged; what is
+removed is the appearance of an answer to it.
 
 **Negative coverage, derived rather than stated — the agentic half is done.**
 `published.py` holds the transcribed copy of `ASI01`–`ASI10` and subtracts the

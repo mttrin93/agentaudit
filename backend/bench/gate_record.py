@@ -262,7 +262,7 @@ class ElectiveTier(BaseModel):
     that an exclusion prints in the decision, read one level down: the scope of a
     gate run has to be recoverable from the gate run rather than from whoever started
     it. `requested_and_unmeasured` is the third answer — asked for, and no reading
-    taken, so no streak counted.
+    taken, so no `D` on this run.
     """
 
     requested: list[str]
@@ -439,8 +439,9 @@ def elective_tier(section: ElectiveSection) -> ElectiveTier:
     """The elective section as fields, off the section the gate run held in memory.
 
     Fields and not only the prose `decision.stated` already carries: a reader who has
-    to parse a sentence to recover a `D` is a reader who cannot recover it, and the
-    promotion streak is read over a ledger of these (`elective.ElectiveReading`).
+    to parse a sentence to recover a `D` is a reader who cannot recover it, and a
+    person arguing that a family should enter the six reads these figures across runs
+    (ADR-0087).
     """
     return ElectiveTier(
         requested=[str(family) for family in section.selection.requested],

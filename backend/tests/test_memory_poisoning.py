@@ -637,8 +637,8 @@ def test_a_measured_elective_reading_moves_no_field_of_the_decision() -> None:
 def test_the_gate_run_record_carries_the_tiers_figures_as_fields() -> None:
     # The record used to carry the tier only inside `decision.stated`, which is
     # prose: a reader who has to parse a sentence to recover a D cannot recover it,
-    # and the promotion streak is read over a ledger of these readings. The fields
-    # sit beside the decision and in none of its counts.
+    # and a person arguing that a family should enter the six reads these figures
+    # across runs. The fields sit beside the decision and in none of its counts.
     section = elective_section(
         run_the_tier(),
         trivial="trivial",

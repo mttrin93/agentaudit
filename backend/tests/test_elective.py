@@ -11,34 +11,29 @@ reading:
 * **Never gate-deciding** is asserted by handing the gate an elective outcome that
   passes on every clause of the per-family rule and comparing the whole decision
   with the one taken without it. Anything that read it would move; nothing does.
-* **Skipping is never advantageous** is asserted in both halves — the streak that
-  promotes and the window that retires — because the invariant is the reason the
-  tier may be a lever on cost at all.
+* **Skipping buys no protection** is asserted over the window that retires, because
+  it is what lets the tier be a lever on cost at all. It is the whole of that
+  invariant now: with no promotion streak there is nothing skipping could buy on the
+  other side (ADR-0087).
 """
 
 from collections.abc import Mapping, Sequence
-from dataclasses import fields, replace
+from dataclasses import replace
 from datetime import date
 from typing import get_type_hints
 
 import pytest
 
+from backend.bench import elective as elective_module
 from backend.bench.assembler import FamilyEntry
 from backend.bench.calibration import TargetRun
 from backend.bench.contract import Transcript
 from backend.bench.elective import (
     NOT_GATE_DECIDING,
-    PROMOTION_RUNS,
     ElectiveRates,
-    ElectiveReading,
     ElectiveSection,
     ElectiveSelection,
-    LedgerEntry,
-    Skipped,
-    Standing,
     score_elective,
-    standing_of,
-    streak_of,
 )
 from backend.bench.evaluator import Verdict
 from backend.bench.gate import GateResult, read_gate
@@ -52,7 +47,7 @@ from backend.bench.library import (
 from backend.bench.measurability import NotMeasurable
 from backend.bench.registration import AttestationRecord, Registration
 from backend.bench.retirement import RetirementOutcome, decide_retirement
-from backend.bench.rule import DECLARED_RULE, GateRule
+from backend.bench.rule import DECLARED_RULE
 from backend.bench.scorer import (
     Excluded,
     FamilyOutcome,
@@ -272,16 +267,10 @@ def test_the_gate_document_names_the_elective_families_it_did_not_request() -> N
 
 
 def test_the_printed_gate_rule_holds_no_elective_threshold() -> None:
-    # The tier's number decides nothing about the run in front of a reader, so it is
-    # not in the rule the gate prints — the same wall `test_gate.py` holds against
-    # `T` and `k` (ADR-0010). Read off the type as well as off the text, because a
-    # field added to `GateRule` would print itself.
-    assert "runs_required" not in {field.name for field in fields(GateRule)}
-    assert (
-        PROMOTION_RUNS
-        == Standing(family=ElectiveFamily.PII_LEAKAGE, streak=0).runs_required
-    )
-
+    # The rule the gate prints holds the numbers that decide the run in front of a
+    # reader and nothing about the tier — the same wall `test_gate.py` holds against
+    # `T` and `k` (ADR-0010). The threshold this used to name is gone (ADR-0087), so
+    # what is left is the text, and no elective word may reach it.
     stated = DECLARED_RULE.stated().lower()
     for word in ("elective", "promotion", "streak", "not requested"):
         assert word not in stated
@@ -309,8 +298,8 @@ def test_a_reading_for_a_family_nobody_requested_is_refused() -> None:
         )
 
     # And one family cannot carry two readings from one gate run: a family has one D
-    # per gate run, and two would make the promotion streak ambiguous about which of
-    # them it counted.
+    # per gate run, and a section holding two would print a family twice and leave a
+    # reader to choose between them.
     with pytest.raises(ValueError, match="two readings for one family"):
         ElectiveSection(
             selection=ElectiveSelection(requested=(ElectiveFamily.PII_LEAKAGE,)),
@@ -343,89 +332,51 @@ def test_a_family_requested_and_never_read_prints_as_neither_absence() -> None:
 
     printed = section.stated()
     assert "memory_poisoning: requested and no reading was taken" in printed
-    assert "this run counts toward no streak for it" in printed
+    assert "so it has no D on this run" in printed
     assert "memory_poisoning: not requested" not in printed
+
+
+# --- The promotion streak is gone --------------------------------------------
+
+RETIRED_STREAK = (
+    "LedgerEntry",
+    "ElectiveReading",
+    "Skipped",
+    "streak_of",
+    "Standing",
+    "standing_of",
+    "PROMOTION_RUNS",
+)
+"""The promotion machinery ADR-0087 removed, named so its return is a failing test."""
+
+
+def test_the_promotion_streak_is_not_in_the_tier() -> None:
+    # The tripwire for ADR-0087. Entry into the six is a decision a person takes and
+    # writes down, and it re-declares the gate rule before the run it applies to —
+    # which is a heavier precondition than any counter. A reader who adds a streak
+    # back has to read that ADR to get past this.
+    for name in RETIRED_STREAK:
+        assert not hasattr(elective_module, name), (
+            f"elective.{name} is back, so the tier counts gate runs toward entry "
+            "into the six again (ADR-0087)"
+        )
+
+    # And the word is gone from what the tier prints, at both selections: a document
+    # that still promised a streak would describe a rule the bench no longer holds.
+    for printed in (
+        ElectiveSection(
+            selection=ElectiveSelection(requested=(ElectiveFamily.MEMORY_POISONING,))
+        ).stated(),
+        _read().stated(),
+    ):
+        assert "streak" not in printed
 
 
 # --- Skipping an elective family is never advantageous -----------------------
 
 
-def test_a_gate_run_the_family_was_not_requested_for_buys_no_progress() -> None:
-    # The first half of the invariant. The streak that makes an elective family
-    # eligible to enter the six is counted over *gate runs*, so a run the family was
-    # not requested for is a run it was not holding the bar on and the streak stops
-    # there. Transparency across the gap would pay an operator for skipping the run
-    # that was about to read low, which is exactly the reading the invariant closes.
-    ran = [_read_at(date(2026, 9, day)) for day in (1, 2, 3)]
-
-    assert streak_of(ran) == PROMOTION_RUNS
-    assert standing_of(ElectiveFamily.MEMORY_POISONING, ran).eligible_to_enter
-
-    skipped: list[LedgerEntry] = [
-        ran[0],
-        Skipped(ran_on=date(2026, 9, 2)),
-        ran[1],
-        ran[2],
-    ]
-    standing = standing_of(ElectiveFamily.MEMORY_POISONING, skipped)
-
-    assert streak_of(skipped) == 2
-    assert not standing.eligible_to_enter
-    assert "2 of 3" in standing.stated()
-
-
-def test_a_streak_on_a_stub_model_is_no_progress_either() -> None:
-    # A gate run on `stub:obedient` measures the field not at all, so its D is a
-    # statement about the fixture (ADR-0022) — and entering the six is a claim about
-    # the field. A reading that did not touch the field counts no more than a run
-    # the family was not requested for, and for the same reason.
-    fixture = [
-        _read_at(date(2026, 9, day), measured_the_field=False) for day in (1, 2, 3)
-    ]
-
-    assert streak_of(fixture) == 0
-    assert not standing_of(ElectiveFamily.MEMORY_POISONING, fixture).eligible_to_enter
-
-
-def test_a_streak_cannot_be_earned_on_readings_the_per_family_rule_refuses() -> None:
-    # The bar the streak counts is `ElectiveOutcome.passes` — `scorer.separation`,
-    # both clauses — and not a floor comparison of its own.
-    #
-    # The reading is chosen so that the *only* clause that can refuse it is interval
-    # separation: hardened 2 of 15 against trivial 8 of 15 is D = 0.40, which clears
-    # the declared floor exactly, with the two Wilson intervals overlapping. A
-    # reading that also fell below the floor would be refused whichever clause the
-    # streak read, which is the shape a worthless guard takes here.
-    refused = ElectiveRates(
-        family=ElectiveFamily.MEMORY_POISONING,
-        hardened=_rate(2, attempts=15),
-        weak=_rate(5, attempts=15),
-        trivial=_rate(8, attempts=15),
-    )
-    reading = score_elective(refused)
-    assert reading.discrimination >= DECLARED_RULE.discrimination_floor
-    assert reading.intervals_separate is False
-    assert reading.passes is False
-
-    ledger = [_read_at(date(2026, 9, day), rates=refused) for day in (1, 2, 3)]
-
-    assert streak_of(ledger) == 0
-    assert not standing_of(ElectiveFamily.MEMORY_POISONING, ledger).eligible_to_enter
-
-
-def test_a_standing_is_refused_a_ledger_holding_another_family() -> None:
-    # A streak is one family holding the bar across gate runs. One assembled from two
-    # families is a claim about neither, and the ledger is per family for the reason
-    # a decay series is per case.
-    with pytest.raises(ValueError, match="a claim about neither"):
-        standing_of(
-            ElectiveFamily.PII_LEAKAGE,
-            [_read_at(date(2026, 9, 1), family=ElectiveFamily.MEMORY_POISONING)],
-        )
-
-
 def test_a_gate_run_the_family_was_not_requested_for_buys_no_protection() -> None:
-    # The second half, and it is read over a different thing: the retirement rule
+    # Skipping buys no protection, and it is read over a case record: the retirement
     # runs over the **decay series** on a case record, which holds `GateReading`s
     # written by the run that scored the case. A gate run the family was not
     # requested for scores nothing and writes none, so the series is what it was and
@@ -444,9 +395,8 @@ def test_a_gate_run_the_family_was_not_requested_for_buys_no_protection() -> Non
     assert decided.considered == series
     assert (series[-1].ran_on - series[0].ran_on).days == 31
 
-    # And nothing a skipped run produces can enter that series: a `Skipped` is not a
-    # `GateReading`, which is what `Case.history` holds.
-    assert not isinstance(Skipped(ran_on=date(2026, 8, 8)), GateReading)
+    # And a decay series holds `GateReading`s and nothing else, which is what a run
+    # that scored nothing cannot write into.
     assert get_type_hints(Case)["history"] == tuple[GateReading, ...]
 
 
@@ -531,30 +481,9 @@ def _read(**elective: object) -> GateResult:
     )
 
 
-def _read_at(
-    ran_on: date,
-    measured_the_field: bool = True,
-    rates: ElectiveRates | None = None,
-    family: ElectiveFamily = ElectiveFamily.MEMORY_POISONING,
-) -> ElectiveReading:
-    """One gate run's reading of one elective family, clearing the bar by default.
-
-    The default is a reading the per-family rule passes, because the streak is what
-    is under test and a helper whose default failed the bar would make every test
-    state its counts twice.
-    """
-    return ElectiveReading(
-        ran_on=ran_on,
-        outcome=score_elective(rates if rates is not None else _rates(family)),
-        measured_the_field=measured_the_field,
-    )
-
-
 def _low(ran_on: date) -> GateReading:
     """One case's reading at `D = 0.00` — the reading the retirement rule is about.
 
     A `GateReading`, which is what a decay series holds: one per case per gate run.
-    Deliberately not the type the promotion ledger is made of — that one is per
-    family, and the two questions are asked of two different records.
     """
     return a_gate_reading(ran_on=ran_on)

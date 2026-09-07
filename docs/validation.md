@@ -39,7 +39,7 @@ result in this document was decided over the same six families and would be deci
 over six today. `ASI06` memory poisoning and `LLM01` direct prompt injection each hold
 three cases and have a reading, taken at admission on a stub model; the sections below
 record what those readings are and what they are not. Neither has been read on a gate
-run, so the promotion streak of both is zero.
+run.
 
 **Since #64 this bench holds an instrument that is measured and marked unfit, and
 that is the honest outcome rather than a failure to finish.** The **family
@@ -176,10 +176,11 @@ see the three sections named for them — so the bullets here are read as being 
 **gate**, which has never been asked for the tier, and not about the tier having no
 figures at all. `ElectiveFamily` holds three members, every one of them has three cases
 and an admission reading, and no `D` has been read on a **gate run** for any of the
-three, so no promotion streak has ever advanced. The tier's rules, its types and both
-halves of the *skipping is never advantageous* invariant are exercised in the suite on
-constructed readings and nowhere else
-([ADR-0035](./adr/0035-the-elective-family-tier-is-never-gate-deciding.md)).
+three. The tier's rules and its types are exercised in the suite on constructed
+readings and nowhere else
+([ADR-0035](./adr/0035-the-elective-family-tier-is-never-gate-deciding.md)), and the
+one rule of its own it used to hold — the promotion streak — is removed
+([ADR-0087](./adr/0087-entry-into-the-six-is-a-decision-and-not-a-counter.md)).
 
 What follows from that, and what does not:
 
@@ -213,12 +214,16 @@ What follows from that, and what does not:
   measurement-linked check exists that could be forgotten. Since #48 it is no longer
   vacuous — there are three readings now, and there is still nowhere in a target report
   for any of them to print.
-- **The promotion streak can be read and cannot yet be recovered.** It is read over a
-  ledger of gate runs holding one family-level `ElectiveReading` each. #48 gave the
-  gate run record the fields a reading goes in, and no record *on disk* carries one —
-  every gate run recorded so far predates them and reads back as having been written
-  before the tier could hold one, which is a different fact from a run that asked the
-  tier for nothing. So a ledger still cannot be assembled from what is committed.
+- **The promotion streak was never read on the field, and it is gone rather than
+  answered.** It was read over a ledger of gate runs holding one family-level
+  `ElectiveReading` each, and no gate run record *on disk* ever carried one: every run
+  recorded so far predates the fields #48 added, which is a different fact from a run
+  that asked the tier for nothing. #172 removed the rule instead of waiting for a
+  ledger, because entry into the six re-declares the gate rule and is therefore a
+  decision a person argues rather than a count
+  ([ADR-0087](./adr/0087-entry-into-the-six-is-a-decision-and-not-a-counter.md)). The
+  readings themselves are unaffected — they are on the case records and in this
+  document.
 
 ### No stored copy has ever been checked against a published document by a person (#44)
 
@@ -436,8 +441,8 @@ the same `scorer.separation` that applies it
 ([ADR-0035](./adr/0035-the-elective-family-tier-is-never-gate-deciding.md)). Read at
 family level over the same run, the tier's reading is `D` = 1.00, intervals apart, no
 inversions, and it passes. What has *not* happened is a **gate run**: no
-`ElectiveReading` is on any gate run record, the promotion streak is zero, and the
-figure above is a statement about a fixture and not about the field
+elective reading is on any gate run record, and the figure above is a statement about
+a fixture and not about the field
 ([ADR-0022](./adr/0022-the-retirement-window-is-two-readings-of-one-model.md)).
 
 - **The reading is 1.00 because the gradient is code, and that is the design and also
@@ -518,8 +523,8 @@ bar the six clear and the same `scorer.separation` that applies it
 ([ADR-0035](./adr/0035-the-elective-family-tier-is-never-gate-deciding.md)). Read at
 family level over the same run, the tier's reading is `D` = 1.00, intervals apart, no
 inversions, and it passes. What has *not* happened is a **gate run**: no
-`ElectiveReading` is on any gate run record, the promotion streak is zero, and the
-figure above is a statement about a fixture and not about the field
+elective reading is on any gate run record, and the figure above is a statement about
+a fixture and not about the field
 ([ADR-0022](./adr/0022-the-retirement-window-is-two-readings-of-one-model.md)).
 
 - **The family is its boundary, and the boundary is structural.**
@@ -613,9 +618,8 @@ with the two Wilson intervals disjoint, the same bar the six clear and the same
 ([ADR-0035](./adr/0035-the-elective-family-tier-is-never-gate-deciding.md)). Read at
 family level over the same run, the tier's reading is `D` = 1.00 (hardened 0/30, weak
 30/30, trivial 30/30), intervals apart, no inversions, and it passes. What has *not*
-happened is a **gate run**: no `ElectiveReading` is on any gate run record, the
-promotion streak is zero, and the figure above is a statement about a fixture and not
-about the field
+happened is a **gate run**: no elective reading is on any gate run record, and the
+figure above is a statement about a fixture and not about the field
 ([ADR-0022](./adr/0022-the-retirement-window-is-two-readings-of-one-model.md)).
 
 - **The neighbour is in the six this time, and the boundary is arithmetic.**
@@ -5202,3 +5206,35 @@ them derived.
   four-record pool to a five-record one at the same time. Both are stated in advance here
   so that a change in that family's rate is read as a change in its mix rather than as
   decay.
+
+### The elective promotion streak is removed, and no figure moved (#172, 2026-09-07)
+
+Nothing was measured for this one, and the entry is here because a rule the bench held
+stopped being held.
+
+- **What it was.** ADR-0035 gave the elective tier a promotion streak: three
+  consecutive gate runs on the field holding the per-family rule made a family
+  *eligible to enter the six*, read by `elective.streak_of` over a ledger of
+  `ElectiveReading | Skipped` and reported as a `Standing`. It never promoted anything
+  — entry was always a library-version event a person declares before the run — and it
+  was never read on the field, because no gate run record on disk ever carried an
+  elective reading.
+- **Why it went.**
+  [ADR-0087](./adr/0087-entry-into-the-six-is-a-decision-and-not-a-counter.md): the
+  decision the streak informed already re-declares the gate rule, and ADR-0003's 4 of 6
+  with monotonicity on 5 of 6 are counts over a six ADR-0015 fixed deliberately. A
+  seventh scored family means new counts argued and written down, whatever the
+  promoting family's history looks like — so the streak was a precondition on a
+  decision that cannot be taken without a heavier one.
+- **What no longer holds, stated because it was an invariant.** *Skipping is never
+  advantageous* keeps its retirement half — a run that scored nothing writes no
+  `GateReading`, so two low readings retire a case across any gap
+  (`retirement.window_of`, ADR-0022) — and loses its promotion half to vacuity: with
+  no streak, there is no progress a skip could withhold.
+- **What did not move.** Six families, 4 of 6, monotonicity on 5 of 6, and an elective
+  family in neither count. `ElectiveSelection`, `ElectiveOutcome`, `score_elective`
+  and the per-family reading printed on every gate run a family was requested for are
+  untouched, and no number in `rule.py` changed. The removal is carried by
+  `test_elective.py::test_the_promotion_streak_is_not_in_the_tier`, which fails if any
+  of the seven deleted names returns or if the word *streak* returns to what the tier
+  prints.

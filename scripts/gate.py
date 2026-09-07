@@ -243,8 +243,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             "elective families to measure on this gate run. Measured on the gate's "
             "own terms — the same D, the same floor, the same intervals — and "
             "counted in neither of the gate's two counts (ADR-0035). A family this "
-            "run is not given is named in the document as not requested, and the "
-            "run counts toward no promotion streak for it"
+            "run is not given is named in the document as not requested"
         ),
     )
     parser.add_argument(

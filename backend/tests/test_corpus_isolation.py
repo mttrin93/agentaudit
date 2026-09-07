@@ -149,14 +149,24 @@ def test_the_library_version_did_not_move() -> None:
     # (#154). Four roleplay proposals over `scope_creep` and `halt_defeat` were
     # withdrawn unmeasured, because those families read their verdict from a substring
     # router that a prefix cannot move, so each would have re-measured its own base.
-    # One, `data-leakage-003-roleplay`, cleared its bar on `gpt-4.1-mini` and is held
+    # One, `data-leakage-003-roleplay`, cleared its bar on `gpt-4.1-mini` and was held
     # rather than admitted, because the gate reads `AGENTAUDIT_REFERENCE_MODEL` and a
     # record admitted on a model the gate does not run is a decay the retirement rule
     # would see and nobody caused (#154). Recorded in docs/validation.md; the previous
     # value was `3d77e4da8891`.
+    #
+    # And a seventh time, because that hold was discharged: the reference model moved
+    # to `gpt-4.1-mini` (ADR-0083), two certified gate runs were taken on it, and
+    # `data-leakage-003-roleplay` was then admitted on 2026-09-07 at 10/9/0 for
+    # `D = 1.00`. **One record is in this diff and it is a new one** — twenty-one cases
+    # where there were twenty, three derived where there were two — so the count is
+    # what says no existing payload was edited. Data leakage now pools five records
+    # and reads `n = 50` while the other families read 30, which is a property of the
+    # family's rate and not of this digest (ADR-0055). Recorded in docs/validation.md;
+    # the previous value was `b009c3794a9f`.
     cases = load_library(CASES_DIR)
-    assert LibraryVersion.of(cases) == LibraryVersion(cases=20, digest="b009c3794a9f")
-    assert len([case for case in cases if case.derived_from is not None]) == 2
+    assert LibraryVersion.of(cases) == LibraryVersion(cases=21, digest="37206295bc50")
+    assert len([case for case in cases if case.derived_from is not None]) == 3
 
 
 def test_nothing_in_the_bench_can_read_a_retrieval_result() -> None:

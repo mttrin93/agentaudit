@@ -522,7 +522,7 @@ def test_the_gate_decision_counts_no_episode_although_the_layer_ran(
     gate_run: CalibrationResult, library: list[Case]
 ) -> None:
     # The adaptive layer really ran in the same run, and not one turn of it reached
-    # a denominator: 600 attempts, and the episodes are somewhere else entirely.
+    # a denominator: 630 attempts, and the episodes are somewhere else entirely.
     #
     # A family's denominator is its own live case count times the attempts per case,
     # and not three-times-ten for every family (ADR-0055). `3 * attempts_per_case`
@@ -540,12 +540,18 @@ def test_the_gate_decision_counts_no_episode_although_the_layer_ran(
     held = Counter(case.family for case in library)
 
     assert result.attempts == len(library) * DECLARED_RULE.attempts_per_case * 3
-    assert result.attempts == 600
+    # 21 × 10 × 3, and written out because the line above derives it: a library that
+    # gained a record moves this figure and a reader has to see which number moved.
+    # It read 600 while the library held twenty (ADR-0055, #73's persona variant).
+    assert result.attempts == 630
     for outcome in result.decision.outcomes:
         assert outcome.rates.trivial.attempts == (
             held[outcome.family] * DECLARED_RULE.attempts_per_case
         )
-    assert held[Family.DATA_LEAKAGE] == 4
+    # The two families that hold a variant, and the counts are not equal any more:
+    # data leakage holds three plain records, one crescendo and one persona since
+    # 2026-09-07, so it reads n = 50 where halt defeat reads 40 (ADR-0055).
+    assert held[Family.DATA_LEAKAGE] == 5
     assert held[Family.HALT_DEFEAT] == 4
 
 
@@ -1034,7 +1040,7 @@ def test_the_entry_point_writes_the_document_rather_than_only_being_able_to(
     assert "The scored layer, which decides the gate" in written
     assert "The adaptive layer, which decides nothing" in written
     assert "the decision rule as applied" in written
-    assert "600 attempts recorded" in written and "600 attempts recorded" in printed
+    assert "630 attempts recorded" in written and "630 attempts recorded" in printed
     assert "A_break" in written
     # And no payload reached it, on either side (ADR-0008).
     for case in load_library(CASES_DIR):

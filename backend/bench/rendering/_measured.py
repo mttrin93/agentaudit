@@ -255,10 +255,109 @@ def _figures(
             "",
             *_not_run(measured["not_run"]),
             "",
+            "### The elective families this run asked for, and what they measured",
+            "",
+            *_elective_figures(measured["elective"]),
+            "",
+            "### The elective families this target could not be measured on",
+            "",
+            *_elective_not_measurable(measured["elective_not_measurable"]),
+            "",
             "### The elective families, requested and not",
             "",
             *_elective(elective),
         ),
+    )
+
+
+def _elective_figures(entries: Sequence[Mapping[str, Any]]) -> tuple[str, ...]:
+    """One block per elective family this run requested and measured.
+
+    **What is here is about the target; what is not here is about the bench**
+    ([ADR-0088](../../../docs/adr/0088-an-elective-familys-rate-against-a-target-is-a-fact-about-that-target.md)).
+    The rate, the interval and the band are this agent's, computed by the functions
+    that computed the six's — so a reader who read a family block above reads this one
+    the same way. What no line here prints is the tier's `D`: that is trivial minus
+    hardened over three agents of known construction, it is a claim about this bench,
+    and it prints in the gate run's own document (ADR-0018).
+
+    **Its own heading under the six and never among them**, on `landing.ts`'s reason
+    one surface along: the six are the denominator the gate is decided over
+    (ADR-0015), and a reader who met all nine in one list would be reading a
+    denominator this bench does not have.
+
+    No label line and no coverage note, unlike a family block above, and that is a
+    decision rather than an omission: an elective label makes no coverage claim, and
+    the published entry it names stays listed as untested in this document's own
+    negative-coverage section until a family with cases claims it (CONTEXT.md,
+    ADR-0044).
+    """
+    return _listed(
+        (line for entry in entries for line in _elective_block(entry)),
+        "- None. This run asked the elective tier for nothing, so its figures are the "
+        "six mandatory families and only those.",
+    )
+
+
+def _elective_block(entry: Mapping[str, Any]) -> tuple[str, ...]:
+    """One elective family: its counts, its interval, its band and its mix.
+
+    `_family_block`'s lines minus the ones an elective entry does not carry, written
+    out here rather than shared with it. Two writers because they print different
+    documents: a shared one would have to be *told* to omit the discrimination line,
+    and a renderer that prints a claim about the bench when somebody forgets to tell
+    it not to is the shape ADR-0018 refuses.
+
+    **And no discovery count**, which is the one omission that is not ADR-0018's. A
+    discovery count is per family per adaptive episode, and the layer's
+    `objectives_for` picks its objectives over the six — so no episode is ever opened
+    in the tier and the line could only ever print its own empty answer. A row that can
+    only say *none* says nothing, and a reader would take it for the search having
+    looked here and found nothing (ADR-0056, ADR-0010). It is the same refusal
+    `_not_run` already makes one block up, for the same reason.
+    """
+    interval = entry["interval"]
+    return (
+        f"### {entry['family']}",
+        "",
+        f"- **{entry['successes']} of {entry['attempts']} attempts succeeded** — "
+        f"rate {entry['rate']:.2f}. An attempt succeeding is this target's defence "
+        "not holding.",
+        f"- **Wilson interval at {entry['interval_confidence']:.0%}**: "
+        f"{interval['lower']:.3f} to {interval['upper']:.3f}. The interval and never "
+        "the point estimate is what the band is read from.",
+        f"- **Band — {entry['band']}**: "
+        f"{BAND_IN_A_TARGET_REPORT[Band(entry['band'])]}.",
+        f"- **Verdict class**: {entry['verdict_class']}.",
+        *_variants(entry["variants"]),
+        "- **What this figure is not** — it is this target's rate on a family the "
+        "bench holds beside the six and a run has to ask for. It moves no gate, it "
+        "is not read against the six, and how well this bench discriminates on this "
+        "family is a fact about the bench that is stated in the bench's own gate "
+        "document rather than here (ADR-0018, ADR-0035, ADR-0088).",
+        "",
+    )
+
+
+def _elective_not_measurable(gaps: Sequence[Mapping[str, Any]]) -> tuple[str, ...]:
+    """The elective families this run asked for and this target could not answer.
+
+    Memory poisoning against a target that carries no session state is what this is
+    for: the request named the family, no attempt was spent, and there is no rate. A
+    block of its own rather than silence, because a family named in the request and
+    absent from the figures with nothing beside it is a reader guessing which of the
+    absences it was (ADR-0088 §4).
+
+    No label line, on `_elective_figures`' terms.
+    """
+    return _listed(
+        (
+            f"- **{one['family']}**: {one['stated']}. This is not a rate of zero — no "
+            "attempt was made, so there is nothing to read."
+            for one in gaps
+        ),
+        "- None. Every elective family this run asked for was one this target could "
+        "answer.",
     )
 
 

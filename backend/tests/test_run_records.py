@@ -45,6 +45,7 @@ from backend.api.recorded import (
 )
 from backend.api.run_config import BenchConfig, plan_for
 from backend.api.runs import BenchRuns, RunRecord, RunsInFlight, RunStatus
+from backend.bench.elective import NOTHING_REQUESTED
 from backend.bench.library import Family, LibraryVersion, Transform
 from backend.bench.selection import (
     EVERY_CONSTRUCTION,
@@ -205,7 +206,7 @@ def test_no_declared_input_moves_while_a_run_is_holding_its_halt(
             transforms=frozenset({Transform.PLAIN}),
         )
         changes: tuple[Callable[[], None], ...] = (
-            lambda: bench.cover(frozenset({Family.DATA_LEAKAGE})),
+            lambda: bench.cover(frozenset({Family.DATA_LEAKAGE}), NOTHING_REQUESTED),
             lambda: bench.select(narrowed),
         )
         for change in changes:
@@ -524,7 +525,7 @@ def test_a_row_left_running_is_not_a_run_still_going(recorded: RecordedRuns) -> 
 
     # The consequence, asserted rather than argued: a settings change is not
     # refused on behalf of a run whose process has ended.
-    bench.cover(frozenset(Family))
+    bench.cover(frozenset(Family), NOTHING_REQUESTED)
     assert bench.config.families == frozenset(Family)
 
 

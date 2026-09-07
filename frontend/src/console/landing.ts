@@ -189,16 +189,18 @@ export const THE_FAMILIES: readonly FamilySays[] = [
  * reader who found them in one list of nine would be reading a denominator this bench
  * does not have (ADR-0035).
  *
- * **No tick beside any of them, and that is the honest shape rather than an omission.**
- * The switches above write `RunConfig.families`, which is typed on the six, so there is
- * nothing on this screen that could request an elective family and a box drawn here
- * would be a control that does nothing. Where one is asked for is a gate run — the
- * `--elective` flag of `scripts/gate.py` — and a target's report states each of them as
- * *not requested* until then, which is the fifth kind of nothing.
+ * **A tick beside each of them, since #171.** `BenchConfig` carries the tier's declared
+ * selection beside the six's switch, `PUT /bench/settings/families` takes both lists as
+ * one statement, and a requested family's rate against the target is on the signed
+ * report with its interval and its band
+ * ([ADR-0088](../../../docs/adr/0088-an-elective-familys-rate-against-a-target-is-a-fact-about-that-target.md)).
+ * A family left unticked is stated on that report as *not requested*, which is the
+ * fifth kind of nothing and never a rate of zero.
  *
- * **No figure in any of them**, on the same rule as the six: a sentence about what a
- * family is has nothing to do with how anything answered it. What these families
- * measured is a fact about the bench, and it is in the gate run's own document.
+ * **No figure in any of these sentences**, on the same rule as the six: a sentence about
+ * what a family *is* has nothing to do with how anything answered it. And what still
+ * never reaches a target's report is the bench's own `D` on the tier — that is a claim
+ * about the bench, and it is in the gate run's own document (ADR-0018).
  */
 export const THE_ELECTIVE_FAMILIES: readonly FamilySays[] = [
   {

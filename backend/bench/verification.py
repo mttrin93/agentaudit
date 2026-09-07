@@ -768,6 +768,18 @@ def _re_derive(body: Mapping[str, Any]) -> ReDerivation:
             _entry(f"measured.{section}[{index}]", entry, rule, cuts, comparisons)
     for index, one in enumerate(_sequence(measured, "withheld")):
         _withheld(f"measured.withheld[{index}]", one, rule, comparisons)
+    # The elective tier's figures, through the same `_entry` the six go through and
+    # deliberately not through a second implementation of it (ADR-0088, in
+    # `docs/adr/`, on an elective family's rate being a fact about the target).
+    # The claim these figures make is *measured the way the six were*, so a verifier
+    # that checked them some other way would be checking a different claim — the same
+    # reasoning that gives `scorer.separation` one implementation for both tiers
+    # (ADR-0035 §3). A block this loop did not read would be figures in a signed
+    # document nobody can check, which is why ADR-0088 §7 moved the artefact version:
+    # a version-1 verifier reads this document, re-derives every figure it knows
+    # about, re-derives nothing here, and reports it verified.
+    for index, entry in enumerate(_sequence(measured, "elective")):
+        _entry(f"measured.elective[{index}]", entry, rule, cuts, comparisons)
     return comparisons.outcome(figures=comparisons.checked - bar, departure=departure)
 
 

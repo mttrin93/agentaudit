@@ -48,6 +48,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import (
 from backend.bench.assembler import assemble, reported_episodes
 from backend.bench.calibration import CalibrationResult
 from backend.bench.declared_gap import DeclaredGap
+from backend.bench.elective import ElectiveSelection
 from backend.bench.fix_standing import FixStanding
 from backend.bench.library import Case, Family
 from backend.bench.payload import (
@@ -227,6 +228,7 @@ def payload_for(
     config: ReportConfig,
     selection: AttackSelection,
     gaps: Mapping[Family, DeclaredGap],
+    elective: ElectiveSelection,
 ) -> TargetPayload:
     """The unsigned, unbound payload for one completed run.
 
@@ -243,6 +245,15 @@ def payload_for(
     say is *this run narrowed nothing*, which was silently false for the whole of
     `scripts/bench.py`'s existence and is the hole ADR-0075 closes. An empty mapping
     is the statement that nothing was narrowed, and it is said out loud.
+
+    `elective` is the tier's declared selection — what this run asked the elective
+    families for, and so what it did not. **Required and not defaulted**, on `gaps`'
+    own terms: a default would say *this run asked for nothing*, which is a statement
+    about coverage and would be silently false for any entry point that grew the
+    lever and forgot this argument
+    ([ADR-0088](../../docs/adr/0088-an-elective-familys-rate-against-a-target-is-a-fact-about-that-target.md)
+    §8, ADR-0035 §5). The figures it produced are read off the run; this is the
+    declaration they are read against.
     """
     [target_run] = result.target_runs
     state = result.run_state
@@ -271,6 +282,11 @@ def payload_for(
             # reads no figure out of one section and into another, and a narrowing
             # recomputed here would be a second answer to which families ran.
             not_run=gaps,
+            # The declaration, beside the figures it asked for. `assemble` reads the
+            # rates off the run and this off the caller, which is the same parting
+            # `selection` and `library` already keep: what a run *did* is on its
+            # record, and what it was *asked* is a declared input (ADR-0025).
+            elective=elective,
         ),
         provenance=Provenance(
             # Read off the record that authorised the run rather than off the
@@ -353,6 +369,7 @@ def artefact_for(
     config: ReportConfig,
     selection: AttackSelection,
     gaps: Mapping[Family, DeclaredGap],
+    elective: ElectiveSelection,
 ) -> SignedArtefact | Unsigned:
     """The signed artefact for one completed run, or the reason there is none.
 
@@ -362,7 +379,9 @@ def artefact_for(
     key = config.signing_key
     if key is None:
         return Unsigned()
-    return signed(payload_for(result, cases, rule, config, selection, gaps), key)
+    return signed(
+        payload_for(result, cases, rule, config, selection, gaps, elective), key
+    )
 
 
 VERIFY_SCRIPT = "uv run python -m scripts.verify"

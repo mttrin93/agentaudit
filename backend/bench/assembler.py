@@ -71,6 +71,7 @@ from backend.bench.judge import Exposure
 from backend.bench.library import (
     AnyFamily,
     Case,
+    ElectiveFamily,
     ExternalId,
     Family,
     Transform,
@@ -475,6 +476,81 @@ class FamilyEntry:
 
 
 @dataclass(frozen=True)
+class ElectiveEntry:
+    """One **elective** family's measured result for one target, and no `D`.
+
+    A record of its own beside `FamilyEntry` and deliberately not a widening of it
+    ([ADR-0088](../../docs/adr/0088-an-elective-familys-rate-against-a-target-is-a-fact-about-that-target.md)).
+    ADR-0035 §2 names `FamilyEntry` in the list of records that may not be widened,
+    and that decision is unamended: `_entries` iterates `for family in Family`,
+    `unfit_to_report` returns `tuple[Family, ...]`, `payload._label` reads the six's
+    label table, and `bar._bands` builds a `Mapping[Family, Band]`. Widening the
+    family field opens all of them by default; this type opens none of them.
+
+    **What it carries is what a target's report is about**: successes over attempts
+    against this one agent, the Wilson interval at the rule's confidence, the band
+    read against the declared cut points, and the counts the rate was pooled from.
+    Every one of those is computed by the same function that computes one of the
+    six's, because it is the same question asked of the same target — *selectable is
+    not ungated* (ADR-0035 §3) has no second reading in which it becomes *selectable
+    is not reportable*.
+
+    **What it deliberately does not carry, and there is no field for any of it.**
+
+    * `discrimination`. The tier's `D` is trivial minus hardened over three agents of
+      known construction: a claim about *this bench*, printed where the bench's claims
+      are printed, which is the gate run's own document (ADR-0018, ADR-0035 §7 as
+      amended by ADR-0088 §2). This is the half of the old prohibition that stands.
+    * `reliability`. Every family in the tier reaches its verdict by canary check, by
+      construction, so there is no instrument for a κ to be about — which is why
+      `__post_init__` refuses a judged entry rather than defaulting one.
+    * `label` and `coverage`. An elective label makes no coverage claim and reaches no
+      report: the published entry it names stays listed as untested until a family
+      with cases claims it (CONTEXT.md, ADR-0044). So this section changes no coverage
+      statement in the document, which is a decision and not an omission.
+    """
+
+    family: ElectiveFamily
+    rate: Rate
+    verdict_class: VerdictClass
+    band: Band
+    variants: VariantBreakdown
+    """The counts, per transform, that `rate` was pooled from.
+
+    Required and not defaulted, and asserted against the rate below, on
+    `FamilyEntry.variants`' own terms: an entry whose breakdown does not add up to its
+    own rate is an entry over a denominator nothing in it accounts for (ADR-0055).
+    Every record in the tier is `plain` today, so every breakdown here has one line —
+    printed rather than assumed, because the document that travels may not be the one
+    that says less than the payload it is a view of.
+    """
+
+    def __post_init__(self) -> None:
+        if self.verdict_class is not VerdictClass.DETERMINISTIC:
+            raise ValueError(
+                f"{self.family} reports a judged verdict class. Every family in the "
+                "elective tier reaches its verdict by canary check on purpose, so "
+                "that no elective reading can be unfit and `minimum_fit_families` is "
+                "untouched (ADR-0035); an elective family that is ever judged is a "
+                "decision needing its own ADR, and a κ figure for it is the field "
+                "this record does not have"
+            )
+        if not self.variants.accounts_for(self.rate):
+            raise ValueError(
+                f"{self.family} reports {self.rate.successes} of "
+                f"{self.rate.attempts} attempts and a breakdown that does not "
+                f"account for it: {self.variants.mix_stated() or 'nothing at all'}. "
+                "A published rate over a denominator nothing in the document adds up "
+                "to is a figure no recipient can take apart (ADR-0055)"
+            )
+
+    @property
+    def interval(self) -> Interval:
+        """The Wilson interval around the rate, at the confidence the rule states."""
+        return self.rate.interval
+
+
+@dataclass(frozen=True)
 class MeasuredSection:
     """What the fixed suite measured, split by how each verdict was reached.
 
@@ -505,6 +581,41 @@ class MeasuredSection:
     Empty on a run that narrowed nothing, which is the honest reading rather than a
     missing field: every family the library holds was asked for, and the two figure
     lists above account for all of them.
+    """
+
+    elective: tuple[ElectiveEntry, ...] = ()
+    """What the **elective** families this run requested measured against this target.
+
+    A fifth field beside the four above and inside none of them
+    ([ADR-0088](../../docs/adr/0088-an-elective-familys-rate-against-a-target-is-a-fact-about-that-target.md)
+    §3). The rate, the interval, the band and the counts behind them are facts about
+    the operator's own agent, measured by the same functions the six's are; the
+    bench's own `D` on the tier is not here and `ElectiveEntry` has no field for it.
+
+    **Beside, and in neither**, which is what makes the split mechanical rather than
+    remembered: nothing in this record returns the six's entries and these together,
+    `unfit_to_report` is over `judged` alone, and the declared bar reads
+    `deterministic` and `judged` and never this — so a run that requested the tier
+    cannot turn somebody's pipeline red or green on a family their bar does not name
+    (ADR-0067).
+
+    Empty on every run that requested nothing, which is every run by default.
+    """
+
+    elective_not_measurable: Mapping[ElectiveFamily, NotMeasurable] = field(
+        default_factory=dict
+    )
+    """The elective families this run requested and this target could not answer.
+
+    The absences follow the figures (ADR-0088 §4): memory poisoning against a target
+    that carries no session state is a request that named a family, spent no attempt
+    and has no rate, and without this block it would be absent from the figures with
+    nothing beside it — the reader guessing that every absence in this document exists
+    to prevent (ADR-0004, ADR-0075).
+
+    Keyed on `ElectiveFamily` and a second mapping rather than a wider key on
+    `not_measurable`, which is the split ADR-0035 §2 asks for at every site keyed by
+    family: that one is what `gate.family_rates` reads.
     """
 
     cuts: BandCuts = DECLARED_BAND_CUTS
@@ -590,6 +701,20 @@ class MeasuredSection:
                 "declared away, and one that says both is a figure no reader can "
                 "place"
             )
+        # The same refusal one tier over, and a separate check because it is a
+        # separate pair: the two mappings are keyed on two enumerations, so no
+        # comparison between them is even expressible — which is the split working
+        # (ADR-0035 §2). What is expressible is an elective family holding a figure
+        # and a reason at once, and it is exactly as wrong here as it is above.
+        measured_elective = {entry.family for entry in self.elective}
+        contradicted = measured_elective & set(self.elective_not_measurable)
+        if contradicted:
+            raise ValueError(
+                f"{sorted(contradicted)} are reported not measurable and also carry "
+                "a rate. Not measurable is a distinct outcome from pass and from "
+                "fail, and a family cannot hold two of the three"
+            )
+
         both = set(self.not_measurable) & set(self.not_run)
         if both:
             raise ValueError(
@@ -1735,6 +1860,17 @@ def assemble(
             # no attempt, no rate and no precondition behind it, so it arrives as an
             # argument or it does not arrive at all (ADR-0075).
             not_run=dict(not_run or {}),
+            # The tier's own figures, off the run's second mapping and never off the
+            # first. This is the whole of what ADR-0088 admits into a target's report
+            # and it is admitted through the split ADR-0035 §2 already built: the
+            # attempts were counted by one walk, and which container each answer is
+            # allowed into is the type.
+            elective=_elective_entries(
+                target_run.elective_rates,
+                target_run.elective_variant_counts,
+                cuts,
+            ),
+            elective_not_measurable=dict(target_run.elective_not_measurable),
             cuts=cuts,
         ),
         declared=DeclaredSection(
@@ -1829,6 +1965,36 @@ def _entries(
             reliability=reliability.get(family),
         )
         for family in Family
+        if family in rates
+    )
+
+
+def _elective_entries(
+    rates: Mapping[ElectiveFamily, Rate],
+    variants: Mapping[ElectiveFamily, VariantBreakdown],
+    cuts: BandCuts,
+) -> tuple[ElectiveEntry, ...]:
+    """The tier's per-family entries, in the closed family order.
+
+    `ElectiveFamily`'s own order rather than the order the run measured in, so two
+    targets' blocks line up row for row — `_entries`' rule one tier over.
+
+    **No `gate` argument and no `reliability` argument, and that is the point.**
+    `_entries` takes both because a `FamilyEntry` carries a `D` and a κ; this function
+    has nothing to pass them to, so there is no call site at which somebody could hand
+    the bench's own discrimination to a document about a target (ADR-0018, ADR-0088
+    §2). The verdict class is read off nothing and stated: every family in the tier is
+    decided by canary check, and `ElectiveEntry` refuses anything else.
+    """
+    return tuple(
+        ElectiveEntry(
+            family=family,
+            rate=rates[family],
+            verdict_class=VerdictClass.DETERMINISTIC,
+            band=band_for(rates[family], cuts),
+            variants=variants[family],
+        )
+        for family in ElectiveFamily
         if family in rates
     )
 

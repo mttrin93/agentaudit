@@ -156,7 +156,7 @@ def test_every_section_states_its_own_reproducibility_and_four_read_the_payload(
 
 # --- The golden digest: one document, pinned to the byte ---------------------
 
-GOLDEN_ONE_FAMILY = "e16faf348d0f52ae3b8ac6368a4d9c132f4f6f81e2a838be31980ce0849d3e0d"
+GOLDEN_ONE_FAMILY = "5a8c2ea22a3489dd02f35636840a6f49ecc9f8a03ef43ee20969f53967520059"
 """The sha256 of `_one_family()`'s rendering, written down.
 
 **A tripwire, and it is deliberately a strict one.** Every other assertion in this
@@ -354,6 +354,20 @@ closed, and a target reached only over the network can carry nothing but *propos
 moved and no diff is in this document**: the fixture's result carries the `None`
 reading, so there is no fix here to label — what moved is the standing paragraph every
 rendering of this section carries, above the blocks rather than inside each one.
+
+Moved an eighteenth time, by #171, and this one is section 4 again and is the first
+move that comes with a **new artefact version**: the measured section can now carry
+an elective family's figures, so the section gained two headings — the elective
+families this run asked for and what they measured, and the ones this target could
+not be measured on — above the *requested and not* block #43 added
+([ADR-0088](../../docs/adr/0088-an-elective-familys-rate-against-a-target-is-a-fact-about-that-target.md)).
+**This fixture requested nothing**, so both new blocks print their empty answer and
+no figure in this document moved: what a reader sees is *this run asked the elective
+tier for nothing, so its figures are the six mandatory families and only those*. The
+empty answer is a sentence rather than a vanished heading, on the terms every other
+absence in this document is printed — a run that asked for nothing has to read
+differently from a report written before the block existed. The masthead moved too,
+because it prints the artefact version and the version is now 2.
 """
 
 

@@ -95,8 +95,12 @@ async function shrinkTheNextRun(request: APIRequestContext): Promise<void> {
     throw new Error('the bench named no attacker as the one it is currently set to')
   }
 
+  // Both lists, because this `PUT` is the whole statement of what the next run covers
+  // (ADR-0088). The tier is asked for nothing here: this walk is about one family of
+  // the six, and a run requesting an elective family would attack three more cases on
+  // a target this walk serves itself.
   const families = await request.put('/bench/settings/families', {
-    data: { families: [FAMILY] },
+    data: { families: [FAMILY], elective: [] },
   })
   expect(families.ok(), await families.text()).toBeTruthy()
 

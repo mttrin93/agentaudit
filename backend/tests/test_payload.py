@@ -37,6 +37,7 @@ from backend.bench.assembler import (
     AttributedCause,
     ControlStatus,
     DeclaredSection,
+    ElectiveEntry,
     FamilyEntry,
     FindingsReading,
     FindingsSection,
@@ -685,14 +686,68 @@ def test_no_elective_family_and_no_episode_carries_a_label() -> None:
         assert "label" not in episode
     assert "label" not in body["adaptive"]
 
-    # And no label reaches the document by any other route than a family the measured
-    # section names: the whole document holds exactly as many as it names families.
+    # And no label reaches the document by any other route than **one of the six** the
+    # measured section names: the whole document holds exactly as many as it names.
+    #
+    # The two elective keys are in this loop and not in the count, which is the whole
+    # of what #171 changed here (ADR-0088). A requested elective family now carries
+    # figures in `measured.elective` and a family this target could not answer carries
+    # a reason in `measured.elective_not_measurable` — and neither carries a label,
+    # because an elective label makes no coverage claim and reaches no report
+    # (ADR-0044, CONTEXT.md). So the two blocks are named here to be *excluded* from
+    # the count and asserted to hold none: a key left out of this list entirely would
+    # let a label arrive in it and this assertion would still pass.
     named = {
         entry["family"]
         for key in ("deterministic", "judged", "withheld", "not_measurable", "not_run")
         for entry in body["measured"][key]
     }
     assert len(_labels_in(body)) == len(named)
+
+    # The same count over a document that **carries** the two elective blocks, because
+    # the one above holds none and a rule asserted over an empty list is not asserted.
+    # A requested elective family carries figures and a family this target could not
+    # answer carries a reason, and neither carries a label: what prints beside a family
+    # name in a signed report is a claim about one of the six, and an elective label
+    # makes no coverage claim (ADR-0044, ADR-0088, CONTEXT.md).
+    with_the_tier = document(a_payload(result=_carrying_the_tier()))
+    measured = with_the_tier["measured"]
+    assert measured["elective"] and measured["elective_not_measurable"]
+    assert len(_labels_in(with_the_tier)) == len(named)
+
+
+def _carrying_the_tier() -> TargetResult:
+    """`a_result()` with one elective family measured and one it could not answer.
+
+    Built here rather than folded into `a_result` itself, because every other
+    assertion in this file is over a document whose figures are the six's — including
+    the one that drops a family and compares every other byte — and a fixture that
+    carried the tier by default would make those assertions about a different document
+    than the one they were written against.
+    """
+    result = a_result()
+    rate = failure_rate(4, 30, DECLARED_RULE)
+    return replace(
+        result,
+        measured=replace(
+            result.measured,
+            elective=(
+                ElectiveEntry(
+                    family=ElectiveFamily.PII_LEAKAGE,
+                    rate=rate,
+                    verdict_class=VerdictClass.DETERMINISTIC,
+                    band=band_for(rate, DECLARED_BAND_CUTS),
+                    variants=plain_breakdown(rate),
+                ),
+            ),
+            elective_not_measurable={
+                ElectiveFamily.MEMORY_POISONING: NotMeasurable.NO_SESSION_RETENTION
+            },
+        ),
+        elective=ElectiveSelection(
+            requested=(ElectiveFamily.PII_LEAKAGE, ElectiveFamily.MEMORY_POISONING)
+        ),
+    )
 
 
 def _labels_in(node: object) -> list[object]:

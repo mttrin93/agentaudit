@@ -57,6 +57,7 @@
 import { readFamily } from '../families'
 import type {
   AdaptiveSection,
+  ElectiveEntry,
   ElectiveSection,
   FamilyEntry,
   FindingsSection,
@@ -151,6 +152,27 @@ export interface ElectiveReading {
   stated: string
   /** One entry per family nobody asked for, with the bench's line for it. */
   absences: { family: string; stated: string }[]
+  /**
+   * What each requested family measured against **this target**.
+   *
+   * The half ADR-0088 admitted: a rate over this agent's own attempts, with the
+   * interval and the band a reader is given for every other family. There is still no
+   * `D` on this reading and no field for one — that is the bench's discriminating
+   * power on the tier, it is a claim about the bench, and it is stated in the gate
+   * run's own document (ADR-0018).
+   *
+   * Its own array and never merged into `rows`, which is keyed on the six the gate's
+   * denominator is fixed at (ADR-0015).
+   */
+  measured: ElectiveFigures[]
+  /** Each requested family this target could not answer, with the bench's line. */
+  notMeasurable: { family: string; stated: string }[]
+}
+
+/** One elective family's figures about this target, formatted for print. */
+export interface ElectiveFigures {
+  family: string
+  figures: Figures
 }
 
 /** What a family's cases test one case within, and what they do not test. */
@@ -326,7 +348,10 @@ function labelOf(label: FamilyLabel): LabelReading {
  * that already opens with it, so a reader matching `direct_prompt_injection` in the
  * signed document finds the same characters on the screen.
  */
-export function electiveReading(elective: ElectiveSection): ElectiveReading {
+export function electiveReading(
+  elective: ElectiveSection,
+  measured: MeasuredSection,
+): ElectiveReading {
   return {
     requested: elective.requested.map(readFamily),
     stated: elective.requested_stated,
@@ -334,6 +359,43 @@ export function electiveReading(elective: ElectiveSection): ElectiveReading {
       family: one.family,
       stated: one.stated,
     })),
+    // Read off the measured section rather than off the block above, because they
+    // answer different questions: that one is what the run was *asked*, this is what
+    // it *found*. Formatted by the same `electiveFigures` that formats the six's, so
+    // a reader who read a family card reads this one the same way — minus the four
+    // fields an elective entry does not carry (ADR-0088 §2).
+    measured: (measured.elective ?? []).map((entry) => ({
+      family: entry.family,
+      figures: electiveFigures(entry),
+    })),
+    notMeasurable: (measured.elective_not_measurable ?? []).map((one) => ({
+      family: one.family,
+      stated: one.stated,
+    })),
+  }
+}
+
+/**
+ * One elective entry's figures, in the shape a family card already prints.
+ *
+ * `Figures` is shared and the fields an elective entry does not have are absences the
+ * type already knows how to draw: `kappa` is `null` on every deterministic family, and
+ * `limits` is empty because an elective label makes no coverage claim and reaches no
+ * report (ADR-0044). There is no discrimination field on `Figures` at all — the six's
+ * `D` is drawn from the entry's own, which an elective entry does not have and this
+ * function cannot invent (ADR-0018).
+ */
+function electiveFigures(entry: ElectiveEntry): Figures {
+  return {
+    counts: `${entry.successes} of ${entry.attempts} attempts succeeded`,
+    rate: entry.rate.toFixed(2),
+    interval: `${entry.interval.lower.toFixed(3)} to ${entry.interval.upper.toFixed(3)}`,
+    intervalAt: `${(entry.interval_confidence * 100).toFixed(0)}% Wilson`,
+    band: entry.band,
+    bandReads: BAND_IN_A_TARGET_REPORT[entry.band] ?? entry.band,
+    verdictClass: entry.verdict_class,
+    kappa: null,
+    limits: [],
   }
 }
 
@@ -1413,6 +1475,6 @@ export function reportView(report: TargetReport): ReportView {
     rows: familyRows(report.measured, report.adaptive),
     findings: findingsReading(report.findings),
     adaptive: adaptiveReading(report.adaptive),
-    elective: electiveReading(report.elective),
+    elective: electiveReading(report.elective, report.measured),
   }
 }

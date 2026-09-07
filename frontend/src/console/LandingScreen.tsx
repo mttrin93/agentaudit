@@ -50,7 +50,7 @@
  * lives; this file is markup and is driven by hand, as every screen in this app is.
  */
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 
 import { readFamily, readName } from '../families'
@@ -112,6 +112,17 @@ export function LandingScreen() {
    * wait out rather than an error to work around.
    */
   const [families, setFamilies] = useState<FamilyCovered[] | null>(null)
+  /*
+   * The tier's switches and the bench's sentence about them, beside the six's state.
+   *
+   * Two pieces of state rather than nine rows in one, on the same terms as the two
+   * lists: `ElectiveFamily` is a closed set of its own and the six are the denominator
+   * the gate is decided over (ADR-0015, ADR-0035). The caveat is served rather than
+   * written here, because the sentence and the switch are one statement and a console
+   * holding its own copy would be a second answer to what the tick means.
+   */
+  const [elective, setElective] = useState<FamilyCovered[] | null>(null)
+  const [electiveSays, setElectiveSays] = useState('')
   const [refused, setRefused] = useState('')
   /*
    * What the next run sends, on its own state and its own refusal beside the families'.
@@ -182,6 +193,8 @@ export function LandingScreen() {
         const bench = await benchSettings()
         if (current) {
           setFamilies(bench.tuning.families)
+          setElective(bench.tuning.elective_families)
+          setElectiveSays(bench.tuning.elective_statement)
           setSends(selectionReading(bench.tuning))
         }
       } catch {
@@ -189,6 +202,8 @@ export function LandingScreen() {
         // settings read would be this section explaining somebody else's problem.
         if (current) {
           setFamilies(null)
+          setElective(null)
+          setElectiveSays('')
           setSends(null)
         }
       }
@@ -199,14 +214,29 @@ export function LandingScreen() {
     }
   }, [])
 
-  const cover = async (family: string, on: boolean) => {
-    const asked = (families ?? [])
-      .filter((one) => (one.family === family ? on : one.covered))
-      .map((one) => one.family)
+  /*
+   * One switch moved, and both lists sent.
+   *
+   * The tier and the six are one statement about what the next run covers, so the
+   * request carries both every time: a call that sent only the list the operator
+   * touched would clear the other one, because this `PUT` is the whole statement
+   * (ADR-0088 §8). Which list the switch was in decides which one is recomputed, and
+   * the two arrays never merge — the six are the gate's denominator and the tier is a
+   * second closed set (ADR-0015, ADR-0035).
+   */
+  const cover = async (family: string, on: boolean, tier: 'six' | 'elective') => {
+    const held = (rows: FamilyCovered[] | null, mine: boolean) =>
+      (rows ?? [])
+        .filter((one) => (mine && one.family === family ? on : one.covered))
+        .map((one) => one.family)
     setRefused('')
     try {
-      const bench = await coverFamilies(asked)
+      const bench = await coverFamilies(
+        held(families, tier === 'six'),
+        held(elective, tier === 'elective'),
+      )
       setFamilies(bench.tuning.families)
+      setElective(bench.tuning.elective_families)
     } catch (refusal: unknown) {
       setRefused(`${refusal}`)
     }
@@ -394,20 +424,15 @@ export function LandingScreen() {
                   family's cases and its report states the family as *not run*. A
                   family that was not asked is not a family that held.
                 */}
-                {families === null ? (
-                  <span className="tick on" role="img" aria-label="on by default" />
-                ) : (
-                  <input
-                    className="tick"
-                    type="checkbox"
-                    checked={
-                      families.find((held) => held.family === one.family)?.covered ??
-                      true
-                    }
-                    aria-label={readFamily(one.family)}
-                    onChange={(event) => void cover(one.family, event.target.checked)}
-                  />
-                )}
+                <FamilyTick
+                  rows={families}
+                  family={one.family}
+                  fallback
+                  unread={
+                    <span className="tick on" role="img" aria-label="on by default" />
+                  }
+                  onMove={(on) => void cover(one.family, on, 'six')}
+                />
                 {readFamily(one.family)}
               </dt>
               <dd>{one.says}</dd>
@@ -424,24 +449,49 @@ export function LandingScreen() {
         who met all nine in one list would be reading a denominator this bench does not
         have (ADR-0035).
 
-        **No tick, because there is nothing here one could turn on.** The switches above
-        write `RunConfig.families`, which is typed on the six; an elective family is
-        asked for on a gate run, with `--elective`. So this block says what the three
-        are and where they are requested, and a control that did nothing is exactly what
-        it does not draw.
+        **A tick beside each, since #171.** `BenchConfig` carries the tier's declared
+        selection beside the six's switch, `PUT /bench/settings/families` takes both
+        lists as one statement, and what a requested family measured against the target
+        is on the signed report with its interval and its band
+        ([ADR-0088](../../../docs/adr/0088-an-elective-familys-rate-against-a-target-is-a-fact-about-that-target.md)).
+        What is still not here and is still not on that report is the bench's own `D` on
+        the tier, which is stated in the gate run's document (ADR-0018).
+
+        **The caveat beside the switches is served rather than written here.** It is the
+        bench's sentence about what ticking one buys — including that the tier's
+        readings are thin, which is a fact about the bench an operator about to spend
+        money is owed and a reader of a signed report is not.
       */}
       <section>
         <h2>The elective tier</h2>
         <p className="aside">
-          Three more families this bench holds and can be asked for. A run has to ask:
-          they are requested on a gate run, they are measured on the gate’s own terms —
-          the same <code>D</code>, the same floor, the same intervals — and they decide
-          no gate. Until one is asked for, a target’s report states it as not requested.
+          Three more families this bench holds and a run has to ask for. They are
+          measured on the gate’s own terms — the same <code>D</code>, the same floor,
+          the same intervals — and they decide no gate. Tick one and the next run
+          attacks it and reports its rate, its interval and its band on the signed
+          report; leave it and the report states it as not requested, which is not a
+          rate of zero.
         </p>
+        {electiveSays ? <p className="aside">{electiveSays}</p> : null}
         <dl className="said">
           {THE_ELECTIVE_FAMILIES.map((one) => (
             <div key={one.family}>
-              <dt>{readFamily(one.family)}</dt>
+              <dt>
+                <FamilyTick
+                  rows={elective}
+                  family={one.family}
+                  fallback={false}
+                  unread={
+                    <span
+                      className="tick"
+                      role="img"
+                      aria-label="not requested by default"
+                    />
+                  }
+                  onMove={(on) => void cover(one.family, on, 'elective')}
+                />
+                {readFamily(one.family)}
+              </dt>
               <dd>{one.says}</dd>
             </div>
           ))}
@@ -546,6 +596,50 @@ export function LandingScreen() {
  * the list. How it settled is not on the line — the three results are on the screen the
  * name links to, all three named, on every artefact.
  */
+/**
+ * One family's switch, for either of the two closed sets this screen offers.
+ *
+ * One control and two lists, which is the split ADR-0035 asks for read at the right
+ * level: what may never be merged is the **arrays** — the six are the denominator the
+ * gate is decided over and the tier is a second closed set — and a tick box is a tick
+ * box. The caller says which array it is reading and what the switch means when it is
+ * moved, and nothing here knows about either tier.
+ *
+ * `fallback` is what a family the bench did not name is drawn as, and it differs by
+ * tier because the two defaults differ: every one of the six is covered unless it was
+ * switched off, and no elective family is requested unless it was asked for.
+ *
+ * `unread` is what is drawn when the settings could not be read at all — a state
+ * distinct from *off*, so it is a caller's node rather than a blank: the six draw the
+ * switch they are on by default, and the tier draws the one it is off by default.
+ */
+function FamilyTick({
+  rows,
+  family,
+  fallback,
+  unread,
+  onMove,
+}: {
+  rows: FamilyCovered[] | null
+  family: string
+  fallback: boolean
+  unread: ReactNode
+  onMove: (on: boolean) => void
+}) {
+  if (rows === null) {
+    return unread
+  }
+  return (
+    <input
+      className="tick"
+      type="checkbox"
+      checked={rows.find((held) => held.family === family)?.covered ?? fallback}
+      aria-label={readFamily(family)}
+      onChange={(event) => onMove(event.target.checked)}
+    />
+  )
+}
+
 function Artefacts({ reading }: { reading: ArtefactsReading }) {
   if (!reading.listed) {
     return (

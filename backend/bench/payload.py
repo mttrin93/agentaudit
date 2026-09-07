@@ -45,13 +45,21 @@ which they are looking at without reading a footnote.
 requested to test is `not_requested` under `elective` — the bench holds a tier for
 it, nothing was attempted, and nobody could not answer
 ([ADR-0035](../../docs/adr/0035-the-elective-family-tier-is-never-gate-deciding.md)).
-It travels beside the request it is the complement of, and the two together are the
-whole of what this document says about the tier: **a name and never a figure.** An
-elective family's `D` is a claim about the bench and this artefact is about a target
-(ADR-0018), and `MeasuredSection` is keyed on `Family`, so there is no field here one
-could arrive in — which is what makes "a family whose discriminating power was never
-measured may not print in a signed report" a property of the shape rather than a
-check somebody performs.
+It travels beside the request it is the complement of, because a run that asked for
+every elective family produces no absence and a document that then said nothing about
+the tier would be indistinguishable from one made before the tier existed.
+
+**A requested elective family carries its figures, and never the bench's**
+([ADR-0088](../../docs/adr/0088-an-elective-familys-rate-against-a-target-is-a-fact-about-that-target.md)).
+The rate, the interval, the band and the per-construction counts are what that family
+measured against *this target*, computed by the functions that computed the six's, and
+they are in `measured.elective` — beside the six's two lists and inside neither,
+because the six are the denominator the gate is decided over and nothing here reaches
+across the two tiers. What is **not** here and has no key to arrive in is the tier's
+`D`: that is trivial minus hardened over three agents of known construction, it is a
+claim about the bench, and it prints in the gate run's own document (ADR-0018). The
+prohibition is the shape and not a check somebody performs — `_elective_entry` writes
+no such key, and adding one would be a visible edit a test asserts against.
 
 **No payload text, anywhere** (ADR-0008). Attempts are not serialised, only the
 counts over them; episode transcripts and proposals are not serialised at all, only
@@ -81,6 +89,7 @@ from backend.bench.assembler import (
     AdaptiveSection,
     CoverageGap,
     DeclaredSection,
+    ElectiveEntry,
     FamilyEntry,
     FindingsSection,
     MeasuredSection,
@@ -101,7 +110,7 @@ from backend.bench.capability import (
 from backend.bench.declared_gap import DeclaredGap
 from backend.bench.elective import ElectiveSelection
 from backend.bench.labels import FamilyLabel, bears_stated, claims_stated, label_for
-from backend.bench.library import ExternalId, Family, LibraryVersion
+from backend.bench.library import ElectiveFamily, ExternalId, Family, LibraryVersion
 from backend.bench.measurability import NotMeasurable
 from backend.bench.planting import (
     NOTHING_WAS_PLANTED,
@@ -126,8 +135,22 @@ reading it, and `verify.py` refuses one of a kind it does not know rather than
 checking a signature over something else.
 """
 
-ARTEFACT_VERSION = 1
-"""The shape of this document, so a later shape is a different shape and says so."""
+ARTEFACT_VERSION = 2
+"""The shape of this document, so a later shape is a different shape and says so.
+
+**Moved 1 → 2 by
+[ADR-0088](../../docs/adr/0088-an-elective-familys-rate-against-a-target-is-a-fact-about-that-target.md)
+§7, and it is the first move.** Every earlier change to this document was a key added
+beside existing keys, and ADR-0044 §8 and ADR-0070 both declined to move the version
+for one — on the real cost that every previously issued artefact then reads as an
+older shape to a verifier that refuses a version it does not know. What changed here
+is not a key beside the others but **what the measured section is keyed on**: it
+carries the elective tier's figures as well as the six's. A version-1 verifier reads
+such a document, re-derives every figure it knows about, re-derives *nothing at all*
+for the tier's block, and reports the document verified — a clean reading over half a
+document, which is the one failure the verifier exists to make impossible. So the
+version moves and the recipient is told to get a verifier that reads this shape.
+"""
 
 CANONICAL_SEPARATORS = (",", ":")
 """No insignificant whitespace. Half of what makes the bytes stable; sorted keys
@@ -819,9 +842,14 @@ def _elective(selection: ElectiveSelection) -> dict[str, Any]:
     on the terms ADR-0025 states for every other one: the departure travels with the
     artefact rather than staying in the console that offered it.
 
-    **And no figure on either half.** What an elective family measured is a claim
-    about the bench and this artefact is about a target (ADR-0018), so what a
-    *requested* family gets here is its name and nothing else.
+    **And no figure on either half of *this block*, which is not the same claim it
+    used to be.** A requested family's figures are in `measured.elective` — its rate
+    against this target, with its interval and its band (ADR-0088). What this block
+    carries is the *declaration*: which families were asked for and which were not,
+    which is a declared input of the run and not something the run measured. The two
+    are apart for the reason `selection` and `library` are apart in the provenance
+    block: what a run did is on its record, and what it was asked is a statement its
+    caller made.
     """
     return {
         "requested": [family.value for family in selection.requested],
@@ -942,7 +970,71 @@ def _measured(section: MeasuredSection, rule: GateRule) -> dict[str, Any]:
         # second copy of the four keys would only have to drift once for one absence
         # to be described differently from the other (ADR-0005 D12).
         "not_run": _absences(section.not_run),
+        # The elective tier's own figures, beside the six's and in neither of their
+        # lists (ADR-0088 §3). A sixth key rather than entries in `deterministic`,
+        # because the two are read by different consumers for different purposes: the
+        # declared bar reads the six's lists and is per family over the six (ADR-0067),
+        # and a widened list would put a band nobody's bar names inside the block it
+        # reads.
+        "elective": [_elective_entry(entry, rule) for entry in section.elective],
+        # And the absence that follows those figures: a family this run asked for and
+        # this target could not answer. Its own list for the reason each of the four
+        # above has one — a reader owed a reason is owed the right one — and keyed on
+        # the tier, so `_absences` is not reachable from here (`labels.label_for` is
+        # over the six and this row carries no label).
+        "elective_not_measurable": _elective_absences(section.elective_not_measurable),
     }
+
+
+def _elective_entry(entry: ElectiveEntry, rule: GateRule) -> dict[str, Any]:
+    """One elective family's figures about this target, and nothing about this bench.
+
+    **The keys `_entry` writes for a figure, minus the four that are not this
+    document's to make** — `discrimination`, `reliability`, `label` and `coverage`, each
+    absent for a reason argued on `assembler.ElectiveEntry`, which is where the record
+    they would be fields of lives
+    ([ADR-0088](../../docs/adr/0088-an-elective-familys-rate-against-a-target-is-a-fact-about-that-target.md)
+    §2). The local consequence is that this is a second writer rather than `_entry`
+    with a flag: a shared builder would have to be *told* to leave them out, and a
+    serialiser that writes a claim about the bench when somebody forgets to tell it not
+    to is the shape ADR-0018 refuses.
+
+    Everything that *is* here is a fact about the operator's own agent, written with
+    the counts it came from so a recipient re-derives it rather than trusting it —
+    which is the same discipline, through the same functions, as any of the six.
+    """
+    return {
+        "family": entry.family.value,
+        "verdict_class": entry.verdict_class.value,
+        "successes": entry.rate.successes,
+        "attempts": entry.rate.attempts,
+        "rate": entry.rate.value,
+        "interval": _interval(entry.rate.interval),
+        "interval_confidence": rule.interval_confidence,
+        "band": entry.band.value,
+        "band_stated": entry.band.stated(),
+        "variants": [_variant(count) for count in entry.variants],
+    }
+
+
+def _elective_absences(
+    reasons: Mapping[ElectiveFamily, NotMeasurable],
+) -> list[dict[str, Any]]:
+    """The elective families this run asked for and this target could not answer.
+
+    Three keys and not `_absences`' four: the fourth is the **label**, which the six
+    carry whether or not anything was attempted against them and the tier does not
+    carry at all (ADR-0044). A row builder shared with the six would have to be told
+    to leave it out, which is a condition somebody has to remember; two builders that
+    write different keys cannot drift into writing the same one.
+
+    Sorted by family name, for `_absences`' reason: a mapping has no order and a
+    serialiser that printed one would make two identical sections two documents.
+    """
+    return [
+        {"family": family.value, "reason": reason.value, "stated": reason.stated()}
+        for family, reason in sorted(reasons.items(), key=lambda pair: pair[0].value)
+    ]
 
 
 Absence = DeclaredGap | NotMeasurable

@@ -209,7 +209,7 @@ from backend.bench.adaptive.budget import DECLARED_ADAPTIVE_BUDGET, AdaptiveBudg
 from backend.bench.adaptive.episode import AdaptiveEpisode, EpisodeOutcome
 from backend.bench.adaptive.scripted import SCRIPTED_ATTACKER
 from backend.bench.adjudication import Completion
-from backend.bench.admission import admitted_library
+from backend.bench.admission import admitted_elective, admitted_library
 from backend.bench.capability import (
     NO_REASONING_EFFORT_ACCEPTED,
     NO_TEMPERATURE_ACCEPTED,
@@ -233,6 +233,7 @@ from backend.bench.completion import (
     narrator_for,
 )
 from backend.bench.contract import NOT_A_SECURITY_RESULT, RetryPolicy, TargetConfig
+from backend.bench.elective import ElectiveSelection
 from backend.bench.evaluator import Verdict
 from backend.bench.gate_record import (
     CitedLibrary,
@@ -246,6 +247,7 @@ from backend.bench.library import (
     AnyFamily,
     Case,
     CaseStatus,
+    ElectiveFamily,
     Family,
     LibraryVersion,
     Transform,
@@ -2966,6 +2968,30 @@ class Tuning(BaseModel):
 
     families_off_statement: str
 
+    elective_families: list[FamilyCovered]
+    """The elective tier and whether each of it is requested, in the enum's own order.
+
+    A **second list rather than three more rows in the first**, for the reason
+    `library.ElectiveFamily` is a second closed set: the six are the denominator the
+    gate is decided over and fixed at six (ADR-0015), and a console that offered nine
+    rows in one list would be offering a denominator this bench does not have
+    (ADR-0035 §1).
+
+    Requested rather than *covered* in the prose beside it, and both may be off: a run
+    covering none of the six attacks the thing this bench is for and is refused, and a
+    run requesting no elective family is every run made before #171
+    ([ADR-0088](../../docs/adr/0088-an-elective-familys-rate-against-a-target-is-a-fact-about-that-target.md)
+    §8).
+    """
+
+    elective_statement: str
+    """What requesting one buys and what it does not, in the words the screen prints.
+
+    Served rather than written on the screen for `families_off_statement`'s reason:
+    the caveat and the switch are one statement, and a console holding its own copy
+    would be a second answer to what the tick means.
+    """
+
     layers: list[LayerSelected]
     """The three layers and whether each runs, in the enum's own order.
 
@@ -3071,6 +3097,28 @@ A_FAMILY_SWITCHED_OFF_IS_NOT_RUN = (
     "A family that was not asked is not a family that held (ADR-0004)"
 )
 
+AN_ELECTIVE_FAMILY_IS_ASKED_FOR = (
+    "an elective family is one the bench holds beside the six and a run has to ask "
+    "for. Requesting one is ten attempts per live case more on your endpoint, and it "
+    "reports its rate, its interval and its band on the signed report like any other "
+    "family — what it does not do is decide anything: the six are the denominator "
+    "the gate is decided over, and how well this bench discriminates on an elective "
+    "family is a fact about the bench that is stated in the bench's own gate document "
+    "and never on a target's report (ADR-0015, ADR-0018, ADR-0035). A family left "
+    "unasked is stated on the report as not requested, which is not a rate of zero. "
+    "And the tier's readings are thin: two of memory poisoning's three cases separate "
+    "nothing on either model this bench has measured, so a run that asks for it is "
+    "running one discriminating case and two that are not (docs/validation.md)"
+)
+"""What ticking one buys and what it does not, printed beside the tick.
+
+The last sentence is the one #171 asked for out loud. It is a fact about the
+**bench** rather than about anybody's target, which is why it belongs beside the
+switch and not in the report: a reader of a signed document is owed the rate the
+tier measured against their agent, and an operator about to spend money is owed the
+sentence saying how much that rate is worth.
+"""
+
 NO_TEMPERATURE_DECLARED = (
     "no temperature declared — the provider's own default, whatever that is. A "
     "number here is a choice this bench records; leaving it empty is the honest way "
@@ -3142,6 +3190,13 @@ def tuning(config: BenchConfig) -> Tuning:
             for family in Family
         ],
         families_off_statement=A_FAMILY_SWITCHED_OFF_IS_NOT_RUN,
+        elective_families=[
+            FamilyCovered(
+                family=str(family), covered=family in config.elective.requested
+            )
+            for family in ElectiveFamily
+        ],
+        elective_statement=AN_ELECTIVE_FAMILY_IS_ASKED_FOR,
         layers=[
             LayerSelected(
                 layer=str(layer),
@@ -3585,9 +3640,37 @@ covers*. A caller sending one has no business restating the other.
 
 
 class CoverRequest(BaseModel):
-    """The families the next run covers, by name. At least one."""
+    """What the next run covers: the six it attacks, and the tier it asks for.
+
+    **Two lists and one statement**, on `SelectRequest`'s reasoning: a caller that
+    could set the six without restating the tier would leave a bench whose coverage
+    was declared by two different requests, and what a run covers is one answer. So
+    the `PUT` is the whole statement every time — a request naming no elective family
+    is a request for none of them, which is every request made before #171
+    ([ADR-0088](../../docs/adr/0088-an-elective-familys-rate-against-a-target-is-a-fact-about-that-target.md)
+    §8).
+
+    **Two lists and never one of nine.** `Family` and `ElectiveFamily` are disjoint
+    closed sets and the six are the denominator the gate is decided over (ADR-0015,
+    ADR-0035 §1); a single list would be a wire shape in which an elective name could
+    arrive where one of the six is counted, and the resolver would have to be trusted
+    to sort them.
+    """
 
     families: list[str]
+    """The six the next run attacks, by name. At least one."""
+
+    elective: list[str]
+    """The elective families the next run asks for, by name. Possibly none.
+
+    **Required and not defaulted**, though it is the one list on this bench that may be
+    *empty*. The two are different questions: an empty list is the statement *the six
+    and only the six*, which is a real answer and the one every run gave before this
+    field existed, and an omitted field would be a caller silently clearing whatever
+    the bench is holding — a state drop nobody wrote down. So a request that leaves it
+    out is a `422` naming the field rather than a tier quietly switched off, which is
+    the same loudness `families` gets for being empty.
+    """
 
 
 BENCH_SELECTION_ROUTE = "/bench/settings/selection"
@@ -4383,6 +4466,14 @@ def deployed_bench() -> BenchConfig:
     models, adjudicator, attacker = deployed_models()
     return BenchConfig(
         cases=admitted_library(library),
+        # The whole tier, loaded and requested by nothing: the console asks for a
+        # family per run and `plan_for` selects out of this. Loaded here rather than
+        # folded into `cases` above so that a run requesting none of it plans exactly
+        # what it planned before the tier could be requested at all — the library
+        # version travels in every report's provenance, and a digest that moved for a
+        # run that asked for nothing would make two comparable runs incomparable
+        # (ADR-0035, ADR-0088 §8).
+        elective_cases=admitted_elective(library, list(ElectiveFamily)),
         adjudicator=adjudicator,
         attacker=attacker,
         # The pair above proves the declared strings build, at boot, where a model
@@ -5298,10 +5389,25 @@ def create_app(
                     "a registration probe per target. Leave at least one on"
                 ),
             )
+        # The tier, resolved off its own closed set and refused against its own list:
+        # `direct_prompt_injection` is not one of the six and `scope_creep` is not one
+        # of the three, and a resolver over one enumeration of nine would let either
+        # mistake land silently in the other tier (ADR-0035 §1).
+        requested = _members(
+            asked.elective,
+            ElectiveFamily,
+            "is not an elective family this bench holds. The three are",
+        )
         try:
-            bench.cover(frozenset(named))
+            bench.cover(frozenset(named), ElectiveSelection(requested=tuple(requested)))
         except RunsInFlight as busy:
             raise HTTPException(status_code=409, detail=str(busy)) from busy
+        except ValueError as refused:
+            # `ElectiveSelection` refuses a family named twice, because a family
+            # requested twice is a family whose attempts would be counted twice into
+            # one denominator. The type is where that refusal lives and this turns it
+            # into a 422 with the type's own sentence.
+            raise HTTPException(status_code=422, detail=str(refused)) from refused
         return bench_settings(bench.config)
 
     @app.put(BENCH_SELECTION_ROUTE)

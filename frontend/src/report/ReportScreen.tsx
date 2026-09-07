@@ -701,17 +701,20 @@ function TheClaimedEntries({ label }: { label: LabelReading }) {
  * sits after the search, with its own heading, and shares no column with anything
  * scored.
  *
- * **Names and the bench's own sentences, and no figure anywhere.** What an elective
- * family measured is a claim about *this bench* and this document is about a *target*
- * (ADR-0018), so there is nothing here for a rate to be drawn into: a requested family
- * gets its name, and a family nobody asked for gets the line saying nothing was
- * attempted. An operator who wants those families' `D` reads it where the bench states
- * its own figures, which is the gate run.
+ * **A requested family's figures are here; the bench's own are not.** What that family
+ * measured against *this target* is a fact about this target and is drawn the way a
+ * family card draws one — the rate, the interval, the band
+ * ([ADR-0088](../../../docs/adr/0088-an-elective-familys-rate-against-a-target-is-a-fact-about-that-target.md)).
+ * What is nowhere in this section, and has no field on the reading it is drawn from,
+ * is the bench's discriminating power on the tier: that is a claim about *this bench*
+ * and this document is about a *target* (ADR-0018), and an operator who wants it reads
+ * the gate run.
  *
- * **Both halves are drawn, including the empty one.** A run that asked for all three
- * produces no absences at all, and a screen that then drew nothing would be
+ * **All the halves are drawn, including the empty ones.** A run that asked for all
+ * three produces no absences at all, and a screen that then drew nothing would be
  * indistinguishable from one reading a document made before the tier existed. So the
- * request line is always here, and the absence list is what varies.
+ * request line is always here, and what varies is the figures, the families this
+ * target could not answer, and the absence list.
  */
 function TheElective({ elective }: { elective: ElectiveReading }) {
   return (
@@ -721,6 +724,48 @@ function TheElective({ elective }: { elective: ElectiveReading }) {
           the one place the reason there are no figures here is stated, and it is the
           bench's wording rather than this app's. */}
       <p className="consequence">{elective.stated}</p>
+      {/* The figures, in cards of their own under this heading and never in the grid
+          above: that grid is keyed on the six the gate's denominator is fixed at
+          (ADR-0015), and a seventh card in it would be a denominator this bench does
+          not have. Each card carries no label line and no coverage note, because an
+          elective label makes no coverage claim and reaches no report (ADR-0044). */}
+      {elective.measured.length > 0 ? (
+        <div className="families">
+          {elective.measured.map((one) => (
+            <div className="family" key={one.family}>
+              <h3>{readFamily(one.family)}</h3>
+              <div className="rate-line">
+                <p className="score">
+                  <span className="calls">{one.figures.rate}</span>
+                </p>
+                <p className="score">
+                  <span className="kind">band</span>{' '}
+                  <strong>{one.figures.band}</strong>
+                </p>
+              </div>
+              <ul className="rates">
+                <li>
+                  <span className="who">interval</span>{' '}
+                  <span className="rate">{one.figures.interval}</span>{' '}
+                  <span className="who">{one.figures.intervalAt}</span>
+                </li>
+                <li>
+                  <span className="who">verdicts</span>{' '}
+                  <span className="rate">{one.figures.verdictClass}</span>
+                </li>
+              </ul>
+              <p className="aside">{one.figures.counts}</p>
+            </div>
+          ))}
+        </div>
+      ) : null}
+      {elective.notMeasurable.length > 0 ? (
+        <ul className="absences">
+          {elective.notMeasurable.map((one) => (
+            <li key={one.family}>{one.stated}</li>
+          ))}
+        </ul>
+      ) : null}
       {elective.requested.length > 0 ? (
         <ul className="claimed requested">
           <li>

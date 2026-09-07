@@ -130,7 +130,6 @@ from backend.bench.scorer import (
     Rate,
     VariantBreakdown,
     VariantCounts,
-    failure_rate,
 )
 from backend.bench.selection import EVERY_CONSTRUCTION, AttackSelection
 from backend.bench.usage import LayerTotals, UsageLedger
@@ -456,11 +455,34 @@ class TargetRun:
         There is deliberately no property returning the two together, on the terms
         `judged_rates` states: a collection holding both would be the one place a
         figure that decides nothing could be read beside figures that decide.
+
+        **Pooled from the breakdown below, exactly as the six's are** (ADR-0055,
+        ADR-0088). Two independent walks over the same attempts would be two figures
+        that could drift, and `assembler.ElectiveEntry` would then be refusing a
+        breakdown this module had already built.
         """
-        counted = _by_family(self.attempts)
         return {
-            family: self._divide(grouped)
-            for family, grouped in counted.items()
+            family: breakdown.pooled(self.rule)
+            for family, breakdown in self.elective_variant_counts.items()
+        }
+
+    @property
+    def elective_variant_counts(self) -> dict[ElectiveFamily, VariantBreakdown]:
+        """Each elective family's attempts split by the transform that made them.
+
+        The counts that take the tier's rate apart again, keyed as `elective_rates` is
+        and never in the same mapping as the six's — the split ADR-0035 §2 asks for at
+        every site that groups attempts by family.
+
+        Every record in the tier is `plain` today, so every breakdown here holds one
+        line. It is built and printed anyway rather than assumed: a family that grows
+        a variant grows a second line here with no further edit, and the signed
+        document may not be the surface that says less than the payload it is a view
+        of (ADR-0055).
+        """
+        return {
+            family: breakdown
+            for family, breakdown in self._split(self.attempts).items()
             if isinstance(family, ElectiveFamily)
         }
 
@@ -511,18 +533,36 @@ class TargetRun:
         )
 
     def _variants(self, attempts: Iterable[Attempt]) -> dict[Family, VariantBreakdown]:
+        """The six's breakdowns, off the one walk below.
+
+        The narrowing is here and not in `_split`, which is the shape ADR-0035 §2
+        asks for: one walk so the two tiers are counted the same way and cannot
+        drift, and two projections so the containers stay parted by the type. What
+        `gate.family_rates` reads is what this returns.
+        """
+        return {
+            family: breakdown
+            for family, breakdown in self._split(attempts).items()
+            if isinstance(family, Family)
+        }
+
+    def _split(self, attempts: Iterable[Attempt]) -> dict[AnyFamily, VariantBreakdown]:
         """Group attempts by family and then by transform. The one place they split.
 
         The inner order is `IN_TRANSFORM_ORDER` — the enumeration's, so `PLAIN` comes
         first and two targets' breakdowns line up entry for entry — and never the
         order the run happened to attempt in.
+
+        Over **both** tiers, and the projections above are what keep them apart: an
+        elective attempt is an attempt in CONTEXT.md's sense, counted ten per case
+        into one denominator, and a second implementation of this counting for the
+        tier is how *held to the same bar* would stop being a property (ADR-0035 §3,
+        ADR-0088).
         """
-        split: dict[Family, dict[Transform, list[Attempt]]] = defaultdict(
+        split: dict[AnyFamily, dict[Transform, list[Attempt]]] = defaultdict(
             lambda: defaultdict(list)
         )
         for family, grouped in _by_family(attempts).items():
-            if not one_of_the_six(family):
-                continue
             for attempt in grouped:
                 split[family][attempt.transform].append(attempt)
         return {
@@ -559,20 +599,6 @@ class TargetRun:
             family: breakdown.pooled(self.rule)
             for family, breakdown in self._variants(attempts).items()
         }
-
-    def _divide(self, grouped: Sequence[Attempt]) -> Rate:
-        """Successes over attempts, at the rule these attempts were run under.
-
-        The elective tier's arithmetic, and the six's is `_rates` above, which pools a
-        breakdown. *Selectable is not ungated* still holds — this is the same division
-        — and what the tier does not yet carry is the per-variant counts beside it,
-        which no elective record has a variant to fill (ADR-0035, ADR-0055).
-        """
-        return failure_rate(
-            sum(1 for a in grouped if a.verdict is Verdict.SUCCEEDED),
-            len(grouped),
-            self.rule,
-        )
 
 
 def _explained(narrations: Narrations) -> TypeGuard[tuple[Narration, ...]]:

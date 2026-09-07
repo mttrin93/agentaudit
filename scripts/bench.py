@@ -87,6 +87,7 @@ from backend.bench.cited import the_citation, the_reliability
 from backend.bench.completion import DEFAULT_ADJUDICATOR_MODEL
 from backend.bench.contract import TargetConfig
 from backend.bench.declared_gap import DeclaredGap
+from backend.bench.elective import NOTHING_REQUESTED
 from backend.bench.evaluator import Verdict
 from backend.bench.fix_standing import FixStanding
 from backend.bench.library import AnyFamily, Case, Family, Plant, Precondition
@@ -483,6 +484,11 @@ def main(argv: Sequence[str] | None = None) -> int:
             ),
             EVERY_CONSTRUCTION,
             _declared_gaps(gaps, plan.gaps),
+            # This entry point offers no elective lever, so it asks for nothing —
+            # said out loud rather than defaulted, which is what makes the artefact's
+            # tier block a statement this workflow made rather than a field nobody
+            # filled in (ADR-0035 §5, ADR-0088 §8).
+            NOTHING_REQUESTED,
         ),
         Path(args.out),
         key,

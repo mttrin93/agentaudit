@@ -370,6 +370,17 @@ export interface Tuning {
   attempts_warning: string
   families: FamilyCovered[]
   families_off_statement: string
+  /**
+   * The elective tier and whether each of it is requested, in the enum's own order.
+   *
+   * A second array rather than three more rows in `families`, for the reason the bench
+   * holds two closed sets: the six are the denominator the gate is decided over
+   * (ADR-0015), and a screen offering nine rows in one list would be offering a
+   * denominator this bench does not have (ADR-0035).
+   */
+  elective_families: FamilyCovered[]
+  /** What requesting one buys and what it does not, in the bench's own words. */
+  elective_statement: string
   layers: LayerSelected[]
   transforms: TransformSelected[]
   /** What switching a construction off does, and what it does not. */
@@ -445,14 +456,29 @@ export const BENCH_FAMILIES_PATH = '/bench/settings/families'
  * The second write under `/bench` (ADR-0025, as amended by #57), and its own statement
  * rather than a field on the tuning request: that one is *how the instruments are set*
  * and takes all six settings every time; this is *what the next run covers*, sent from
- * a different screen. An empty list is refused — a run covering no family attacks
+ * a different screen. An empty `families` is refused — a run covering no family attacks
  * nothing.
+ *
+ * **Both lists every time, because they are one statement.** `elective` is the tier
+ * this run asks for beside the six it attacks, and a request that omitted it would
+ * clear whatever the bench is holding — this `PUT` is the whole statement of what the
+ * next run covers, on the terms `tune` and `select` are. Unlike `families` it may be
+ * empty: no elective family requested is the six and only the six, which is what every
+ * run asked for before #171
+ * ([ADR-0088](../../../docs/adr/0088-an-elective-familys-rate-against-a-target-is-a-fact-about-that-target.md)).
+ *
+ * Two arrays and never one of nine: the six are the denominator the gate is decided
+ * over (ADR-0015) and the tier is a second closed set, so a name in the wrong array is
+ * a `422` from the route rather than a family landing in the other tier's counts.
  */
-export async function coverFamilies(families: string[]): Promise<BenchSettings> {
+export async function coverFamilies(
+  families: string[],
+  elective: string[],
+): Promise<BenchSettings> {
   const response = await fetch(BENCH_FAMILIES_PATH, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ families }),
+    body: JSON.stringify({ families, elective }),
   })
   if (!response.ok) {
     throw new Error(`the bench did not take these families: ${await refusalIn(response)}`)

@@ -80,7 +80,7 @@ function verification(
     arithmetic === 'arithmetic_agrees'
   return {
     artefact: 'agentaudit.target-report',
-    artefact_version: 1,
+    artefact_version: 2,
     target: 'the-checkout-agent',
     signature: { outcome: signature, statement: `the signature check: ${signature}` },
     binding: { outcome: binding, statement: `the binding check: ${binding}` },

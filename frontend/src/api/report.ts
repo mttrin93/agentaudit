@@ -175,6 +175,51 @@ export interface MeasuredSection {
   judged: FamilyEntry[]
   withheld: WithheldFamily[]
   not_measurable: NotMeasurableFamily[]
+  /**
+   * What the elective families this run asked for measured against this target.
+   *
+   * Its own array beside the two above and inside neither, which is the shape of
+   * ADR-0088: the rate, the interval and the band are facts about the operator's own
+   * agent and belong on their report, and the bench's own `D` on the tier is not here
+   * and has no key to arrive in (ADR-0018). So this is a `FamilyEntry` minus the four
+   * fields that would be claims about the bench rather than about the target.
+   *
+   * Keyed on the tier and drawn under its own heading, never merged into the six's
+   * grid: those six are the denominator the gate is decided over (ADR-0015), and a
+   * seventh card in that row would be a denominator this bench does not have.
+   */
+  elective: ElectiveEntry[]
+  /** The elective families this run asked for and this target could not answer. */
+  elective_not_measurable: ElectiveNotMeasurable[]
+}
+
+/**
+ * One elective family's measured result, and no claim about the bench.
+ *
+ * The keys `FamilyEntry` carries for a figure, minus `discrimination`, `reliability`,
+ * `label` and `coverage` (ADR-0088 §2). Each is absent **from the wire** rather than
+ * merely unread here, which is why this is a second interface and not `FamilyEntry`
+ * with four optional fields: an optional field is one a screen has to remember not to
+ * draw.
+ */
+export interface ElectiveEntry {
+  family: string
+  verdict_class: string
+  successes: number
+  attempts: number
+  rate: number
+  interval: { lower: number; upper: number }
+  interval_confidence: number
+  band: string
+  band_stated: string
+  variants: VariantCount[]
+}
+
+/** An elective family this run asked for and this target could not be measured on. */
+export interface ElectiveNotMeasurable {
+  family: string
+  reason: string
+  stated: string
 }
 
 /** One declared control and what the attacks made of it. Case ids, no counts. */

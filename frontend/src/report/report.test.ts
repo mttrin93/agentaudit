@@ -322,13 +322,13 @@ describe('a family’s answer', () => {
 })
 
 describe('the elective tier on a target report', () => {
-  it('carries names and the bench’s sentences, and no figure at all', () => {
-    const reading = electiveReading(SERVED.elective)
+  it('carries names, the bench’s sentences, and the tier’s own figures', () => {
+    const reading = electiveReading(SERVED.elective, SERVED.measured)
 
     // The request, as words, and the payload's own line about it — which is where the
-    // reason there are no figures here is stated, in the bench's wording (ADR-0035).
+    // reason there is no `D` here is stated, in the bench's wording (ADR-0035).
     expect(reading.requested).toEqual(['memory poisoning'])
-    expect(reading.stated).toContain('a fact about this bench rather than about this')
+    expect(reading.stated).toContain('how well this bench discriminates')
 
     // One absence per family nobody asked for, each keeping its wire name beside the
     // sentence that opens with it, so a reader grepping the signed document finds the
@@ -341,14 +341,20 @@ describe('the elective tier on a target report', () => {
       expect(absence.stated.startsWith(`${absence.family}: not requested`)).toBe(true)
     }
 
-    // And no figure anywhere in it. A rate, an interval, a band or a `D` here would be
-    // the bench's own discriminating power printed on a customer's report (ADR-0018),
-    // so the assertion is over the whole record rather than field by field: a field
-    // added later cannot smuggle one in.
-    //
-    // The check is that no *value* is a number, and not that the prose lacks the word
-    // *rate* — the bench's own sentence says "it has no rate, no interval and no
-    // band", which is the absence being stated rather than a figure being carried.
+    // The requested family's figures against **this target**, which is the half
+    // ADR-0088 admitted: a rate, an interval and a band, formatted the way a family
+    // card's are, so a reader who read one reads this one the same way.
+    expect(reading.measured.map((one) => one.family)).toEqual(['memory_poisoning'])
+    const [figures] = reading.measured.map((one) => one.figures)
+    expect(figures.counts).toBe('11 of 30 attempts succeeded')
+    expect(figures.rate).toBe('0.37')
+    expect(figures.band).toBe('fails')
+
+    // And **no number anywhere else in the reading**, which is the half that stands.
+    // The bench's own discriminating power on the tier is a claim about the bench and
+    // never about a customer's agent (ADR-0018), so the assertion is over the whole
+    // record minus the figures block rather than field by field: a field added later
+    // cannot smuggle one in.
     const numbers = (value: unknown): number[] => {
       if (typeof value === 'number') return [value]
       if (Array.isArray(value)) return value.flatMap(numbers)
@@ -358,7 +364,10 @@ describe('the elective tier on a target report', () => {
       return []
     }
 
-    expect(numbers(reading)).toEqual([])
+    expect(numbers({ ...reading, measured: [] })).toEqual([])
+    // Every figure that *is* here is a formatted string off the payload's own counts,
+    // so nothing on this reading is a number this app computed.
+    expect(numbers(reading.measured)).toEqual([])
   })
 
   it('is beside the six families and never among them', () => {

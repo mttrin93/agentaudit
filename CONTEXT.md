@@ -72,6 +72,13 @@ A kind of failure the bench can be asked to test that is **not** one of the six.
 by the **gate** exactly as a **family** is — the three reference agents, a `D`, the same
 floor, a **decay series** on each of its cases — and never counted in the gate's
 decision ([ADR-0035](./docs/adr/0035-the-elective-family-tier-is-never-gate-deciding.md)).
+Selectable for a normal **run** too, and then it measures a **rate** against that
+**target** and reports it, with its interval and its band, in a block of the **signed
+report** beside the six's and inside neither: that rate is a fact about the operator's
+agent, and the `D` beside it in the gate document is a fact about the bench, and the two
+were one prohibition until
+[ADR-0088](./docs/adr/0088-an-elective-familys-rate-against-a-target-is-a-fact-about-that-target.md)
+separated them.
 Named apart from **family** for the reason an **episode** is named apart from an
 **attempt**: `Family` is the type both of the gate's counts are defined over, so a value
 that could be assigned into it would be a family in a denominator ADR-0015 fixed at six.
@@ -350,11 +357,14 @@ not answer and no case was missing: the tier holds the family and this run did n
 The **run** is what is *skipped* — *skipping is never advantageous* is a statement
 about runs — and the family is what is *not requested*; the two words are kept apart
 because one is about a gate run's scope and the other about a family's outcome in it.
-Carried as its own block in the artefact, never inside the measured figures, which are
-keyed on the six; printed in the **gate document** for a gate run and in the report's
+Carried as its own block in the artefact, never inside the measured figures the six
+are keyed on; printed in the **gate document** for a gate run and in the report's
 per-family section for a target run, beside the declared request it is the complement
-of. It and that request are the whole of what a target report says about the tier's
-**figures** — an elective family's `D` is a fact about the bench (ADR-0018). What may
+of. What a target report says about a *requested* elective family is that family's own
+**rate**, interval and band against that target, in a block beside the six's and inside
+neither — and what it never says is the tier's `D`, which is a fact about the bench
+([ADR-0018](./docs/adr/0018-the-report-is-about-a-target-the-gate-is-about-the-bench.md),
+[ADR-0088](./docs/adr/0088-an-elective-familys-rate-against-a-target-is-a-fact-about-that-target.md)). What may
 name one is a *boundary*: the reason beside a published entry that is still listed as
 untested, and the stated limit on a **case** whose family tests the other half of an
 entry. Both say a family exists and that this run's figures are not keyed on it, which

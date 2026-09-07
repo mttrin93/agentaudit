@@ -36,6 +36,7 @@ from backend.bench.adaptive.budget import DECLARED_ADAPTIVE_BUDGET, AdaptiveBudg
 from backend.bench.adaptive.scripted import SCRIPTED_ATTACKER
 from backend.bench.adjudication import Completion
 from backend.bench.capability import ReasoningEffort
+from backend.bench.elective import NOTHING_REQUESTED, ElectiveSelection
 from backend.bench.library import Case, Family, VerdictClass, one_of_the_six
 from backend.bench.narration import Narrator
 from backend.bench.payload import DeclaredModels
@@ -193,6 +194,53 @@ class BenchConfig:
     the layer opens no episode against it (`adaptive/layer.objectives_for`).
     """
 
+    elective_cases: Sequence[Case] = ()
+    """The whole of the elective tier's admitted library, loaded and not requested.
+
+    A second sequence beside `cases` rather than more entries in it, and the reason is
+    the library version: `LibraryVersion.of(plan.cases)` is what travels in every
+    report's provenance, so a bench that folded the tier into `cases` would move the
+    digest of every run — including the runs that asked for none of it. Loaded here
+    and asked for by `elective` below, so a run that requested nothing plans exactly
+    the cases it planned before the tier could be requested at all.
+
+    **A run that requested something does move its own digest, and that is the honest
+    reading rather than the cost this split failed to avoid.** It attempted more cases,
+    so it measured a different library, and CONTEXT.md's rule is that two runs are
+    comparable at equal library version **and equal selection** — the artefact carries
+    both, so a reader holding two documents checks both halves or neither (ADR-0055,
+    ADR-0058). What the split buys is that the digest does not move for a run that
+    asked for nothing, which is where a moved digest would have been a lie. The gate's
+    citation is the case that may not move either way, and `gate.cited_library` filters
+    the six out of whatever ran for exactly that reason (ADR-0023, ADR-0035).
+
+    Empty for a caller that builds its own bench and hands over no tier, which is a
+    bench that can be asked for no elective family rather than one that refuses the
+    request — `plan_for` selects out of what is here.
+    """
+
+    elective: ElectiveSelection = NOTHING_REQUESTED
+    """The elective families the next run tests, and so the ones it does not.
+
+    A **declared input** on the footing ADR-0025 sets for the other five, and the
+    third setting in the class that moves what a run measured: a family requested is
+    ten attempts per live case more on the operator's endpoint, which is the lever
+    spec story 12 asked for and until #171 had no door
+    ([ADR-0088](../../docs/adr/0088-an-elective-familys-rate-against-a-target-is-a-fact-about-that-target.md)
+    §8).
+
+    **Not `families` one tier down, and it may be empty where that one may not.** A
+    run covering none of the six attacks the thing this bench is for; a run requesting
+    no elective family is every run made before this one. The two are separate fields
+    for the reason ADR-0035 §1 gives — `Family` is the type both of the gate's counts
+    are defined over — and the type checker is what keeps a name out of the wrong one.
+
+    **A family requested here is *not requested* nowhere.**
+    `ElectiveSelection.not_requested`
+    is derived from this set, so the fifth kind of nothing cannot disagree with what
+    the run asked for (ADR-0035 §5).
+    """
+
     selection: AttackSelection = EVERY_CONSTRUCTION
     """Which layers the next run runs, and which constructions inside them.
 
@@ -302,7 +350,21 @@ def plan_for(
     instrument the run needed.
     """
     gaps: dict[Family, DeclaredGap] = {}
-    cases = list(config.cases)
+    # The six, and the elective families this run asked for. One list from here on,
+    # because an elective attempt is an **attempt** in CONTEXT.md's sense and a run
+    # that counted it any other way would not be measuring it the way the six are
+    # measured (ADR-0035, ADR-0088 §1). What stays parted is where the answers land:
+    # `TargetRun.elective_rates` is a second mapping and never a wider key.
+    #
+    # Selected here rather than at boot so that a run requesting nothing plans exactly
+    # what it planned before the tier could be requested at all — `LibraryVersion.of`
+    # is taken over `plan.cases`, so a tier folded into `config.cases` would move the
+    # digest in every report including the ones that asked for none of it.
+    cases = list(config.cases) + [
+        case
+        for case in config.elective_cases
+        if not one_of_the_six(case.family) and case.family in config.elective.requested
+    ]
 
     if config.adjudicator is None:
         judged = {
@@ -334,7 +396,16 @@ def plan_for(
     for family in off:
         if any(case.family is family for case in cases):
             gaps[family] = DeclaredGap.FAMILY_SWITCHED_OFF
-    cases = [case for case in cases if case.family in config.families]
+    # `config.families` is the six's switch and reaches the six alone: an elective
+    # family is asked for by `config.elective` and was already selected above, so a
+    # filter that dropped what is not in this frozenset would delete every case the
+    # request just admitted (ADR-0035 §1 — `Family` is the type both of the gate's
+    # counts are defined over, and the tier is not in it).
+    cases = [
+        case
+        for case in cases
+        if case.family in config.families or not one_of_the_six(case.family)
+    ]
 
     # The caller's other switch, one level below the family's, and last of the four
     # because it is the narrowest reason a family can be missing: a family nobody

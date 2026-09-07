@@ -196,6 +196,19 @@ const CONFIGURED: BenchSettings = {
       'a family switched off is not run: its cases are not attempted, no episode ' +
       'opens against it, and the report states it as not run rather than as a rate ' +
       'of zero.',
+    // The tier, in an array of its own for the reason the bench holds two closed
+    // sets: the six are the denominator the gate is decided over, and a fixture that
+    // put all nine in one array would be modelling a response this bench does not
+    // serve (ADR-0015, ADR-0035).
+    elective_families: [
+      { family: 'memory_poisoning', covered: false },
+      { family: 'pii_leakage', covered: true },
+    ],
+    elective_statement:
+      'an elective family is one the bench holds beside the six and a run has to ask ' +
+      'for. It reports its rate, its interval and its band like any other family, and ' +
+      'it decides nothing: how well this bench discriminates on it is stated in the ' +
+      'bench’s own gate document and never on a target’s report.',
     // The selection, on the reading this screen does not draw: the switches are on the
     // front door beside the family switches, and the fields are here because this is
     // one settings response. A block this screen offers no control for still has to be

@@ -331,6 +331,30 @@ def test_an_unsigned_payload_cannot_be_presented_as_signed(
     assert SignatureOutcome.UNSIGNED.value in capsys.readouterr().out
 
 
+def test_a_document_of_a_version_this_verifier_does_not_read_is_refused_not_checked(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A later shape is a different shape, and the recipient is told so.
+
+    The reason `ARTEFACT_VERSION` moved to 2 for #171: version 1 has no
+    `measured.elective`, so a version-1 verifier reading a version-2 document would
+    re-derive every figure it knew about, re-derive nothing at all for the tier, and
+    print *arithmetic agrees* over a document half of whose figures it never looked at
+    ([ADR-0088](../../docs/adr/0088-an-elective-familys-rate-against-a-target-is-a-fact-about-that-target.md)
+    §7). Refused rather than checked, and under `EXIT_UNREADABLE` rather than a failed
+    verification — the verifier does not know what it is holding, and a script that
+    reported that as tampering would call a version mismatch an attack.
+    """
+    published = _publish(tmp_path)
+    _doctor(tmp_path, published.key, lambda body: body.update(artefact_version=1))
+
+    code = main([str(tmp_path), "--pubkey", str(published.pubkey)])
+
+    printed = capsys.readouterr().out + capsys.readouterr().err
+    assert code == EXIT_UNREADABLE
+    assert ReDerivationOutcome.AGREES.value not in printed
+
+
 def test_the_arithmetic_is_re_derived_from_the_counts_and_is_never_corrected(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:

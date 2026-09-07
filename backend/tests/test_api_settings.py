@@ -1192,7 +1192,8 @@ def test_a_family_switched_off_is_dropped_and_stated_as_not_run(
     app = create_app(BenchConfig(cases=[leakage_case, scope_creep_case]))
     with TestClient(app) as client:
         answered = client.put(
-            BENCH_FAMILIES_ROUTE, json={"families": [str(leakage_case.family)]}
+            BENCH_FAMILIES_ROUTE,
+            json={"families": [str(leakage_case.family)], "elective": []},
         )
         bench = cast(BenchRuns, app.state.bench)
 
@@ -1217,7 +1218,9 @@ def test_a_run_covering_no_family_is_refused() -> None:
     """
     app = create_app(BenchConfig(cases=[]))
     with TestClient(app) as client:
-        answered = client.put(BENCH_FAMILIES_ROUTE, json={"families": []})
+        answered = client.put(
+            BENCH_FAMILIES_ROUTE, json={"families": [], "elective": []}
+        )
         after = client.get(BENCH_SETTINGS_ROUTE).json()["tuning"]["families"]
 
     assert answered.status_code == 422
@@ -1230,7 +1233,8 @@ def test_a_family_this_bench_does_not_have_is_refused_by_name() -> None:
     app = create_app(BenchConfig(cases=[]))
     with TestClient(app) as client:
         answered = client.put(
-            BENCH_FAMILIES_ROUTE, json={"families": ["sql_injection"]}
+            BENCH_FAMILIES_ROUTE,
+            json={"families": ["sql_injection"], "elective": []},
         )
 
     assert answered.status_code == 422

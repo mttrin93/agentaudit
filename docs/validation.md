@@ -200,20 +200,26 @@ What follows from that, and what does not:
   today.** No number in `rule.py` moved, and the printed rule says nothing about the
   tier — so a future gate run that requested an elective family stays comparable with
   these rather than being a different measurement wearing the same name.
-- **Every target report now carries the tier's declared selection and a fifth absence
-  naming three families no run has yet been able to request.** That is honest and it is
-  not a measurement: the block says what this run was asked of the tier and what it was
-  not. #48 gave one of the three cases and gave `scripts/gate.py` and `scripts/admit.py`
-  a `--elective` flag, and nothing on the *target* side asks for one — no console lever
-  and no API field — so on every target run the answer is still *nothing* and *all
-  three*, now that all three have cases to be asked for.
+- **Every target report carries the tier's declared selection and a fifth absence.**
+  That is honest and it is not a measurement: the block says what this run was asked of
+  the tier and what it was not. #48 gave one of the three cases and gave
+  `scripts/gate.py` and `scripts/admit.py` a `--elective` flag, and until #171 nothing
+  on the *target* side asked for one — no console lever and no API field — so on every
+  target run the answer was *nothing* and *all three*. **#171 gave it a door**: the
+  bench page has a tick per elective family, `PUT /bench/settings/families` takes the
+  tier beside the six, and a requested family is attacked and reported.
 - **"A family whose discriminating power was never measured may not print in a signed
-  report" holds because there is nowhere for any elective figure to print.**
-  `MeasuredSection` is keyed on `Family`, so a report carries a name and never a
-  reading — measured or not. That is stronger than the rule asks and it is why no
-  measurement-linked check exists that could be forgotten. Since #48 it is no longer
-  vacuous — there are three readings now, and there is still nowhere in a target report
-  for any of them to print.
+  report" was held by there being nowhere for any elective figure to print, and that is
+  no longer how it is held.** `MeasuredSection` gained a block keyed on
+  `ElectiveFamily` under
+  [ADR-0088](./adr/0088-an-elective-familys-rate-against-a-target-is-a-fact-about-that-target.md),
+  and what prints in it is the family's **rate against that target** — never the
+  bench's `D` on it, which still has no field anywhere in the artefact. So the rule as
+  written is now about the wrong figure and the honest statement is the one under
+  #171's entry below: a target's report may publish what an elective family did to
+  *that* agent, and how well this bench discriminates on that family is unmeasured on
+  the field and stated in the gate document. The operator is told so beside the tick,
+  which is where a person who has not yet spent the money can act on it.
 - **The promotion streak was never read on the field, and it is gone rather than
   answered.** It was read over a ledger of gate runs holding one family-level
   `ElectiveReading` each, and no gate run record *on disk* ever carried one: every run
@@ -5238,3 +5244,67 @@ stopped being held.
   `test_elective.py::test_the_promotion_streak_is_not_in_the_tier`, which fails if any
   of the seven deleted names returns or if the word *streak* returns to what the tier
   prints.
+
+### An elective family becomes selectable for a normal run, and the artefact's shape moves (#171, 2026-09-07)
+
+Nothing was measured for this one either. The entry is here because the **shape of the
+signed document changed** — the first change to it that is not additive — and because a
+prohibition this project has held since ADR-0035 was split in half.
+
+- **What was excluded, and what actually was.** ADR-0035 §7 said a target report carries
+  the tier's declared selection and its absences and *no figure at all*, on ADR-0018's
+  reasoning that an elective family's `D` is a claim about the bench. Two different
+  quantities were sharing that one sentence. `D` is trivial minus hardened over three
+  agents of known construction and has **no definition** when the subject is a single
+  target, which is ADR-0018's own argument. The **failure rate** an elective family
+  measures against the operator's own agent is successes over attempts at the declared
+  rule, computed by the function that computes `data_leakage`'s, and it is a fact about
+  that agent.
+  [ADR-0088](./adr/0088-an-elective-familys-rate-against-a-target-is-a-fact-about-that-target.md)
+  admits the second and keeps the first out. ADR-0018 is not edited; ADR-0035 §7 is
+  amended and says so.
+- **The shape, and why the version moved.** `MeasuredSection.elective` is a parallel
+  block of `ElectiveEntry`, keyed on `ElectiveFamily`, beside `deterministic` and
+  `judged` and inside neither. `FamilyEntry.family` did **not** widen —
+  `test_elective.py::test_the_deciding_records_are_annotated_over_the_six_and_not_over_both`
+  still asserts it names `Family` alone. `ARTEFACT_VERSION` is **2**, the first move:
+  every earlier addition was a key a version-1 verifier could ignore without failing to
+  check a figure, and this one is not — such a verifier would re-derive every figure it
+  knew about, re-derive nothing at all for the tier's block, and report the document
+  verified.
+- **What the verifier does with it.** `verification._re_derive` walks the elective
+  entries through the same `_entry` the six go through — one implementation, for the
+  reason `scorer.separation` is one. Asserted both ways in
+  `test_elective_on_a_target_report.py`: an honest document re-derives, and one whose
+  elective rate was moved to `0.01` disagrees with `measured.elective` named in the
+  reading. `scripts/verify` passes over a published directory carrying one.
+- **What an elective entry does not carry, and it is four fields.** No
+  `discrimination` — the half of the prohibition that stands. No `reliability`: every
+  family in the tier is decided by canary check, and the type refuses a judged verdict
+  class rather than defaulting a κ. No `label` and no `coverage`: an elective label
+  makes no coverage claim and reaches no report, so the published entry it names stays
+  listed as untested in the same document (ADR-0044, CONTEXT.md).
+- **What did not move.** Six families, 4 of 6, monotonicity on 5 of 6, an elective
+  family in neither count, `GateResult.elective` still beside `GateDecision` and not
+  inside it, and `gate.cited_library` still citing the six's version whatever else ran.
+  The **declared bar** reads `measured.deterministic` and `measured.judged` and does not
+  read this block, so a run that requested the tier cannot turn somebody's pipeline red
+  or green on a family their bar does not name (ADR-0067).
+- **The golden rendering digest moved once**, on purpose, to
+  `5a8c2ea22a3489dd02f35636840a6f49ecc9f8a03ef43ee20969f53967520059`. The fixture
+  requests nothing, so both new headings print their empty answer and no figure in it
+  moved; the masthead moved because it prints the artefact version.
+- **What an operator is told before they tick one, and it is a fact about the bench.**
+  The bench page's caveat carries the reading recorded under *2026-09-07, second run*:
+  two of memory poisoning's three cases separate nothing on either model measured so
+  far, so a run that asks for that family is running one discriminating case and two
+  that are not. That sentence belongs beside the switch and not on the report — a
+  reader of a signed document is owed the rate the tier measured against their agent,
+  and an operator about to spend money is owed the sentence saying how much it is
+  worth.
+- **Still never validated for this tier**: no gate run has ever measured an elective
+  family against the three reference agents on the field. The rates a target run now
+  publishes for one are measured the way the six's are and are read against a bench
+  whose discriminating power on that family is stated in the gate document — which,
+  for all three, is still unmeasured. That is the reading the caveat above exists to
+  put in front of an operator.

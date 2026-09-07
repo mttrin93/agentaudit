@@ -29,6 +29,7 @@ import pytest
 
 from backend.api.report import ReportConfig, payload_for
 from backend.bench.calibration import CalibrationResult, run_calibration
+from backend.bench.elective import NOTHING_REQUESTED
 from backend.bench.library import Case, Family, Plant
 from backend.bench.payload import document
 from backend.bench.planting import (
@@ -106,7 +107,13 @@ def _calibrate(
 
 def _planting_block(result: CalibrationResult, cases: list[Case]) -> dict[str, object]:
     payload = payload_for(
-        result, cases, DECLARED_RULE, ReportConfig(), EVERY_CONSTRUCTION, {}
+        result,
+        cases,
+        DECLARED_RULE,
+        ReportConfig(),
+        EVERY_CONSTRUCTION,
+        {},
+        NOTHING_REQUESTED,
     )
     block: dict[str, object] = document(payload)["provenance"]["planting"]
     return block

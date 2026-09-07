@@ -14,6 +14,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { nothingDeclared, registrationRequest } from '../register/declarations'
 import { issueNonce, startRun, type StartRunBody } from './bench'
+import { BENCH_FAMILIES_PATH, coverFamilies } from './settings'
 
 const NONCE = 'AGENTAUDIT-CANARY-0011AABB'
 
@@ -217,5 +218,38 @@ describe('issuing a nonce', () => {
     answering(500, { detail: 'no' })
 
     await expect(issueNonce()).rejects.toThrow('nothing to plant')
+  })
+})
+
+describe('what the next run covers', () => {
+  it('sends the six and the tier as one statement, in two arrays', async () => {
+    // `PUT /bench/settings/families` is the whole statement of what the next run
+    // covers, so a call that sent only the list the operator touched would clear the
+    // other one. Two arrays and never one of nine: the six are the denominator the
+    // gate is decided over and the tier is a second closed set, so a name in the
+    // wrong array is a 422 from the route rather than a family landing in the other
+    // tier's counts (ADR-0015, ADR-0035, ADR-0088).
+    const fetching = answering(200, { tuning: {} })
+
+    await coverFamilies(['data_leakage'], ['pii_leakage'])
+
+    const [path, init] = fetching.mock.calls[0]
+    expect(path).toBe(BENCH_FAMILIES_PATH)
+    expect(init?.method).toBe('PUT')
+    expect(JSON.parse(String(init?.body))).toEqual({
+      families: ['data_leakage'],
+      elective: ['pii_leakage'],
+    })
+  })
+
+  it('sends an empty tier rather than omitting it', async () => {
+    // The one list on this bench that may be empty, and it is a statement: the six
+    // and only the six, which is what every run asked for before #171.
+    const fetching = answering(200, { tuning: {} })
+
+    await coverFamilies(['data_leakage'], [])
+
+    const [, init] = fetching.mock.calls[0]
+    expect(JSON.parse(String(init?.body))).toHaveProperty('elective', [])
   })
 })

@@ -181,6 +181,15 @@ class ElectiveSelection:
         this sentence travels in an artefact about a target, and the vocabulary of the
         gate belongs to the bench. `stated()` below is the gate document's wording and
         names it freely, because there the subject *is* the bench.
+
+        **Reworded by
+        [ADR-0088](../../docs/adr/0088-an-elective-familys-rate-against-a-target-is-a-fact-about-that-target.md).**
+        It used to say that what an elective family measured is a fact about the bench
+        and is stated nowhere in this document. Half of that was always true and is
+        still printed here — the tier's `D` is the bench's own discriminating power and
+        belongs in the gate run's document — and the other half was two figures sharing
+        one prohibition: the rate a requested family measured against *this target* is
+        a fact about that target and is above, with its interval and its band.
         """
         if not self.requested:
             return (
@@ -189,10 +198,11 @@ class ElectiveSelection:
             )
         asked = ", ".join(str(family) for family in self.requested)
         return (
-            f"this run was asked to test {asked}. What an elective family measured "
-            "is a fact about this bench rather than about this target, so it is "
-            "stated where the bench states its own figures and never here "
-            "(ADR-0035, ADR-0018)"
+            f"this run was asked to test {asked}, and what each of them measured "
+            "against this target is reported above with its interval and its band. "
+            "What is not here is how well this bench discriminates on them: that is "
+            "a fact about the bench rather than about this target, and it is stated "
+            "where the bench states its own figures (ADR-0018, ADR-0035, ADR-0088)"
         )
 
     def stated(self) -> str:

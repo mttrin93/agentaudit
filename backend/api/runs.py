@@ -140,6 +140,7 @@ from backend.api.run_status import (
 from backend.bench.adaptive.attacker import AttackerCompletion
 from backend.bench.calibration import CalibrationResult, run_calibration
 from backend.bench.contract import TargetConfig, TargetUnreachable
+from backend.bench.elective import ElectiveSelection
 from backend.bench.library import Family, LibraryVersion
 from backend.bench.narration import NarrativeFailure
 from backend.bench.nonce import issue_nonce
@@ -295,17 +296,30 @@ class BenchRuns:
                 ),
             )
 
-    def cover(self, families: frozenset[Family]) -> None:
-        """Set the families the next run covers. The third named writer, same lock.
+    def cover(self, families: frozenset[Family], elective: ElectiveSelection) -> None:
+        """Set what the next run covers: the six, and the tier. Third writer, same lock.
 
         Refused while a run is going for the reason `instrument` is: a run awaiting
         approval was shown an estimate built from the families it was declared with,
         and narrowing them under that halt would make the confirmation a statement
         about a different run (ADR-0007).
+
+        **Both in one call, because they are one statement.** What the next run covers
+        has one answer, and a writer that could set the six without restating the tier
+        would leave the two halves declared by two different requests — the shape
+        `select` already refuses one level down
+        ([ADR-0088](../../docs/adr/0088-an-elective-familys-rate-against-a-target-is-a-fact-about-that-target.md)
+        §8). Two arguments and never one set of nine names: the two closed sets are
+        what keeps an elective family out of the counts the gate is decided over
+        (ADR-0035 §1).
+
+        It takes a constructed `ElectiveSelection` rather than a list of names, on
+        `select`'s terms: a selection naming a family twice is refused before it
+        reaches this bench, and the route turns that into a 422.
         """
         with self._lock:
             self._refuse_while_a_run_is_going()
-            self._config = replace(self._config, families=families)
+            self._config = replace(self._config, families=families, elective=elective)
 
     def select(self, selection: AttackSelection) -> None:
         """Set which layers the next run runs, and which constructions inside them.
@@ -942,6 +956,11 @@ def _published(
             # families this caller declared away reach the signed document rather
             # than only this run's own response (ADR-0075).
             record.plan.gaps,
+            # What this run asked the elective tier for, off the configuration it was
+            # started under and never re-derived from what it measured: a family
+            # requested and unmeasurable has to stay distinguishable from one nobody
+            # asked for (ADR-0035 §5, ADR-0088 §4).
+            config.elective,
         )
     except Exception as unpublished:
         return Unsigned(

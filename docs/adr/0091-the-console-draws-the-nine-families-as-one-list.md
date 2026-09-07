@@ -6,21 +6,30 @@ status: accepted
 
 [ADR-0015](./0015-the-gate-is-decided-over-families-fit-to-report.md) fixes the gate's
 denominator at six. [ADR-0035](./0035-the-elective-family-tier-is-never-gate-deciding.md)
-decided the elective tier beside it, and its decision 1 drew a consequence for the
-console:
+decided the elective tier beside it, and its decision 1 is about the **type**:
 
-> a screen offering nine rows in one list would be offering a denominator this bench
-> does not have.
+> The tier is a second closed set of family names. `library.ElectiveFamily` is a
+> `StrEnum` disjoint from `Family` […] `Family` stays six members and CONTEXT.md's
+> definition of **family** stays exactly as it is.
 
-The bench page followed that literally: two sections, two headings, two definition
-lists, and two paragraphs of prose explaining what the second one was. **This ADR
+ADR-0035 decided nothing about how a screen draws them. What did was a consequence
+three docstrings drew from it independently and in almost the same words —
+`Tuning.elective_families` in `backend/api/app.py`, `THE_ELECTIVE_FAMILIES` in
+`landing.ts`, and `_measured.py`'s heading, each saying some form of *a reader who met
+all nine in one list would be reading a denominator this bench does not have*. It was
+never an ADR's decision, which is why this one exists: to make it a decision, and then
+to reverse the half of it that applies to the console.
+
+The bench page had followed it literally: two sections, two headings, two definition
+lists, and two paragraphs of prose explaining what the second one was — with the boxes
+two to a row, so that the column of switches a reader scans was really two columns. **This ADR
 reverses the presentation half of that consequence and nothing else.** The console now
 draws one list of nine rows, undifferentiated — no second heading, no badge, no tier
 column, nothing on a row that says which of the two closed sets it came from.
 
 ## What the old arrangement actually cost
 
-The two-section split was argued as a protection against a reader inferring a
+The split was argued in those docstrings as a protection against a reader inferring a
 denominator of nine. What it produced was a screen on which the *tier* was the loudest
 thing in the region: a heading, a served caveat, and a hand-written paragraph, against
 six families that got one sentence each. An operator arriving to answer **which of
@@ -35,9 +44,10 @@ selection, and a selection of nine things from two sets is still a selection.
 
 ## Decision
 
-**One table, nine rows, no mark distinguishing the tier.** Four columns: the switch
-with the family's name, what the failure is in a sentence, the OWASP entries the family
-claims, and the EU AI Act articles it bears.
+**One list, nine boxes, no mark distinguishing the tier.** One family to a box and one
+box to a row, each holding four things: the switch with the family's name, what the
+failure is in a sentence, the OWASP entries the family claims, and the EU AI Act
+articles it bears.
 
 1. **The presentation merges and the types do not.** `Family` and `ElectiveFamily` stay
    two closed sets, `Tuning.families` and `Tuning.elective_families` stay two arrays,

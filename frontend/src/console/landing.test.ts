@@ -20,6 +20,7 @@ import { describe, expect, it } from 'vitest'
 
 import type { GateCitation } from '../api/bench'
 import type { FamilyCovered } from '../api/settings'
+import screen from './LandingScreen.tsx?raw'
 import {
   A_FACT_ABOUT_THE_BENCH,
   gateReading,
@@ -430,5 +431,53 @@ describe('the nine families the bench page draws as one list', () => {
       expect(one.says).not.toMatch(/\d/)
       expect(Object.keys(one)).not.toContain('rate')
     }
+  })
+})
+
+
+describe('the screen says nothing about which tier a row is in', () => {
+  it('draws no word an operator could read the elective tier off', () => {
+    // ADR-0091's whole content, asserted over the markup: the nine rows are drawn
+    // undifferentiated, so no cell, label or heading in the families region may name
+    // the tier. `tier` is read by the switch — which has to know where a move is
+    // written — and printed by nothing.
+    const region = screen.slice(
+      screen.indexOf('<h2>The families</h2>'),
+      screen.indexOf('What a run sends, under the families it sends it about'),
+    )
+    expect(region.length).toBeGreaterThan(0)
+
+    // What a reader sees: the quoted strings the markup passes as text or as an
+    // accessible name, and the text nodes between the tags. Never the identifiers —
+    // `one.tier` and the `elective` array are how the switch finds the list it writes
+    // to, and naming them is the mechanism rather than a mark on the screen.
+    const stripped = region
+      .replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
+      .replace(/\/\/[^\n]*/g, '')
+    const seen = [
+      ...(stripped.match(/'[^']*'/g) ?? []),
+      ...(stripped.match(/>[^<>{}]+</g) ?? []),
+    ]
+      .join(' ')
+      .toLowerCase()
+    for (const word of ['elective', 'tier', 'requested', 'optional', 'beside the six']) {
+      expect(seen).not.toContain(word)
+    }
+
+    // And the guard is worth something only if it is looking at the right text: the
+    // two words the boxes actually draw beside a family's codes are in what it
+    // collected. Without this the loop above would pass over an empty string.
+    expect(seen).toContain('owasp')
+    expect(seen).toContain('eu ai act')
+    expect(seen).toContain('the families')
+  })
+
+  it('keeps the tier out of the accessible name of every control it draws', () => {
+    // A screen reader is a reader. The unread box says which way the switch defaults
+    // and never why — `off by default`, the same words the six would use — because
+    // `not requested by default` named the tier out loud in the one state where that
+    // box is the only thing on the screen.
+    expect(screen).not.toContain('not requested by default')
+    expect(screen).toContain("'off by default'")
   })
 })

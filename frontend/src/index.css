@@ -816,72 +816,53 @@ button:disabled {
 }
 
 /*
- * The nine families, one to a row, with what each is read onto.
+ * The nine families, one to a box and one box to a row.
  *
- * A table because a family is four things here — the switch and its name, the failure
- * in a sentence, the OWASP entries it claims, the articles it bears — and four things
- * about one subject line up across a row or they line up nowhere. The boxes this
- * replaced put two families side by side, which read as a grid of cards and buried the
- * question the block exists to answer: which of these will the next run cover.
+ * The same paper-and-hairline box every other block on this page is made of, in a
+ * single column rather than the two the auto-fit grid gave them. Two to a row read as
+ * a grid of cards and buried the question the block exists to answer — which of these
+ * will the next run cover — which is a question a reader answers by running an eye
+ * down one column of switches.
  *
- * **Not one numeric column in it**, so the hazard `.runs` is written against — a table
- * of numbers has a foot, and a foot is where somebody adds an adaptive figure to a
- * scored one — cannot arise here. There is nothing in these cells to sum.
+ * The label footer is inside the box, under the sentence, because what a family
+ * claims is a fact about the family and not a fifth column: a box holds one subject.
  *
  * One list and not two: the tier is drawn undifferentiated (ADR-0091), and what stays
  * split is the pair of arrays the switches write to.
  */
-.wide {
-  overflow-x: auto;
-}
-
 .said.families {
-  display: table;
-  width: 100%;
-  border-collapse: collapse;
-  gap: 0;
+  grid-template-columns: 1fr;
+  gap: 0.6rem;
 }
 
-.said.families th,
-.said.families td {
-  padding: 0.7rem 0.9rem 0.7rem 0;
-  text-align: left;
-  vertical-align: top;
-  border-bottom: 1px solid var(--line);
+/* The published entries and the articles, at the foot of the box that names them. Each
+ * is set as what it is — a string a recipient matches against a stored copy, not prose
+ * — behind the word for the list it is on, because neither `ASI01:2026` nor `15` names
+ * its own register. A family claiming nothing on a list draws nothing: an empty run of
+ * codes, and never a dash, which would read as *not looked up*. */
+.said.families .claims {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.35rem 1.1rem;
+  margin-top: 0.55rem;
+  padding-top: 0.55rem;
+  border-top: 1px solid var(--line);
 }
 
-.said.families thead th {
-  font-size: 0.78rem;
+.said.families .claims > span {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.35rem;
+}
+
+.said.families .claims .of {
+  font-size: 0.72rem;
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--quiet);
-}
-
-/* The tick leads and the name follows, so the switches line up down the left edge —
- * which is what makes *which of these will run* readable at a glance instead of one
- * row at a time. */
-.said.families tbody th[scope='row'] {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  font-weight: 600;
-  white-space: nowrap;
-}
-
-.said.families td {
-  font-size: 0.9rem;
-  color: var(--quiet);
-}
-
-/* The published entries and the articles, each set as what it is: a string a recipient
- * matches against a stored copy, not prose. Wrapped, so a family carrying two of either
- * stacks rather than widening the column. */
-.said.families .claims {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.3rem;
-  white-space: nowrap;
 }
 
 .said.families .claims code {

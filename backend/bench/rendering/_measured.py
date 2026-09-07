@@ -283,10 +283,13 @@ def _elective_figures(
     hardened over three agents of known construction, it is a claim about this bench,
     and it prints in the gate run's own document (ADR-0018).
 
-    **Its own heading under the six and never among them**, on `landing.ts`'s reason
-    one surface along: the six are the denominator the gate is decided over
-    (ADR-0015), and a reader who met all nine in one list would be reading a
-    denominator this bench does not have.
+    **Its own heading under the six and never among them**, and this is the surface
+    where that still holds. The console stopped drawing the two apart in
+    [ADR-0091](../../../docs/adr/0091-the-console-draws-the-nine-families-as-one-list.md)
+    — but a bench page states a *selection*, and this document states *figures* against
+    a denominator (ADR-0015). A rate under the same heading as the six is a rate a
+    reader counts into the gate's arithmetic, and that is the reading ADR-0035 and
+    ADR-0088 §4 keep out of a signed report. The two surfaces diverge on purpose.
 
     No label line and no coverage note, unlike a family block above, and that is a
     decision rather than an omission: an elective label makes no coverage claim, and

@@ -115,13 +115,14 @@ export function LandingScreen() {
    */
   const [families, setFamilies] = useState<FamilyCovered[] | null>(null)
   /*
-   * The tier's switches and the bench's sentence about them, beside the six's state.
+   * The tier's switches, beside the six's state.
    *
-   * Two pieces of state rather than nine rows in one, on the same terms as the two
-   * lists: `ElectiveFamily` is a closed set of its own and the six are the denominator
-   * the gate is decided over (ADR-0015, ADR-0035). The caveat is served rather than
-   * written here, because the sentence and the switch are one statement and a console
-   * holding its own copy would be a second answer to what the tick means.
+   * Two pieces of state and one table: `familyRows` joins them for drawing, and the
+   * screen shows no mark saying which row came from which
+   * ([ADR-0091](../../../docs/adr/0091-the-console-draws-the-nine-families-as-one-list.md)).
+   * They stay two here because `ElectiveFamily` is a closed set of its own, the route
+   * answers with two arrays, and a moved switch has to be written back into the one it
+   * came from (ADR-0015, ADR-0035).
    */
   const [elective, setElective] = useState<FamilyCovered[] | null>(null)
   const [refused, setRefused] = useState('')
@@ -377,7 +378,7 @@ export function LandingScreen() {
       </section>
 
       {/*
-        The six families, each in a sentence, where the questionnaire region was.
+        The nine families, one to a row, where the questionnaire region was.
 
         That region answered a questionnaire out of the most recent signed report — a
         family per question, its rate over its own denominator, its interval and its
@@ -388,7 +389,8 @@ export function LandingScreen() {
 
         What is here instead is what this page was missing: an operator meets
         `indirect prompt injection` on four screens before anything says what one is.
-        Six sentences, no figure in any of them, and the names read as words.
+        Nine sentences, no figure in any of them, and the names read as words — and
+        beside each, the published entries it claims and the articles it bears.
       */}
       {/* No form on this screen or the one below it, and that is the decision rather
           than the omission (#120). Every input here is a tick that writes on change:
@@ -408,92 +410,103 @@ export function LandingScreen() {
           </div>
         ) : null}
         {/*
-          A table, where this was a definition list — and then two of them.
+          One family to a box, one box to a row.
 
-          The columns are what forced it: a name, what the failure is, the published
-          entries it claims and the articles it bears is four things about one family,
-          and four things per row is a table. Nothing numeric is in any column, so the
-          hazard the runs table is written against does not arise here: there is no
-          cell anybody could sum, and so no `tfoot` to put a total in.
+          The boxes are the idiom every other block on this page is made of — paper, a
+          hairline, the same radius — and they were two to a row before, which read as
+          a grid of cards and buried the question the block exists to answer: which of
+          these will the next run cover. One to a row answers it down a single column.
 
-          **One table and not two.** The six and the elective three are drawn in one
-          list with no mark saying which is which
+          Four things in each box: the switch with the family's name, what the failure
+          is in a sentence, the OWASP entries it claims and the EU AI Act articles it
+          bears. The labels sit in a footer rather than in columns of their own, so a
+          box stays a box and the two published claims read as what they are — what
+          this family is *read onto*, under the sentence saying what it is.
+
+          **Nine boxes and not six and three.** The six and the elective tier are drawn
+          in one list with nothing marking them apart
           ([ADR-0091](../../../docs/adr/0091-the-console-draws-the-nine-families-as-one-list.md)).
           What that decision moved is the presentation and nothing else: the two arrays
           are still two, `PUT /bench/settings/families` still takes them as one
           statement of two lists, the tier still defaults off and still decides no gate,
           and a family left unticked is still stated on the report as *not requested*
           rather than as a rate of zero (ADR-0015, ADR-0035, ADR-0088).
-        */}
-        <div className="wide">
-          <table className="said families">
-            <thead>
-              <tr>
-                <th scope="col">Family</th>
-                <th scope="col">What the failure is</th>
-                {/* Both OWASP lists under one heading, which is what `familyRows`
-                    folds them for: the agentic list and the GenAI LLM list are two
-                    published tables and one question — what is this read onto. */}
-                <th scope="col">OWASP</th>
-                <th scope="col">EU AI Act</th>
-              </tr>
-            </thead>
-            <tbody>
-              {familyRows(families, elective).map((one) => (
-                <tr key={one.family}>
-                  <th scope="row">
-                    {/*
-                      The tick box first and the name after it, which is the order a
-                      reader scans: the question this block answers is *which of these
-                      will run*, and a control at the end of the line is one the eye
-                      finds last. A checkbox, so a keyboard lands on it and a screen
-                      reader reads it as what it is, with the family's own name as its
-                      label.
 
-                      Switching one off is not measuring it at zero: the bench drops
-                      that family's cases and its report states the family as *not
-                      run*. A family that was not asked is not a family that held.
-                    */}
-                    <FamilyTick
-                      rows={one.tier === 'six' ? families : elective}
-                      family={one.family}
-                      fallback={one.tier === 'six'}
-                      unread={
-                        <span
-                          className={one.tier === 'six' ? 'tick on' : 'tick'}
-                          role="img"
-                          aria-label={
-                            one.tier === 'six'
-                              ? 'on by default'
-                              : 'not requested by default'
-                          }
-                        />
+          No figure in any box. Not a rate, not an interval, not a band, not a `D`: an
+          article number and an entry's edition year are the only digits here.
+        */}
+        <dl className="said families">
+          {familyRows(families, elective).map((one) => (
+            <div key={one.family}>
+              <dt>
+                {/*
+                  The tick box first and the name after it, which is the order a reader
+                  scans: the question this block answers is *which of these will run*,
+                  and a control at the end of the line is one the eye finds last. A
+                  checkbox, so a keyboard lands on it and a screen reader reads it as
+                  what it is, with the family's own name as its label.
+
+                  Switching one off is not measuring it at zero: the bench drops that
+                  family's cases and its report states the family as *not run*. A
+                  family that was not asked is not a family that held.
+                */}
+                <FamilyTick
+                  rows={one.tier === 'six' ? families : elective}
+                  family={one.family}
+                  fallback={one.tier === 'six'}
+                  unread={
+                    // The settings could not be read, so the box draws the default the
+                    // next run would use — filled for the six, empty for the three. It
+                    // says *this switch is on* and never *this family is elective*:
+                    // the two words the label used to differ by named the tier out
+                    // loud, which is the one thing a row may not do (ADR-0091). The
+                    // state still differs, because it differs — a family drawn ticked
+                    // that the next run will not attack is a lie about the run, and
+                    // the normal path shows the same difference just as plainly.
+                    <span
+                      className={one.tier === 'six' ? 'tick on' : 'tick'}
+                      role="img"
+                      aria-label={
+                        one.tier === 'six' ? 'on by default' : 'off by default'
                       }
-                      onMove={(on) => void cover(one.family, on, one.tier)}
                     />
-                    {readFamily(one.family)}
-                  </th>
-                  <td>{one.says}</td>
-                  {/* An empty cell where a family claims nothing on either OWASP list,
-                      and that is the honest answer rather than a gap: data leakage
-                      claims none of the agentic entries, and halt defeat and
-                      disclosure denial none of the LLM ones. A dash would read as
-                      *not looked up*. */}
-                  <td className="claims">
+                  }
+                  onMove={(on) => void cover(one.family, on, one.tier)}
+                />
+                {readFamily(one.family)}
+              </dt>
+              <dd>{one.says}</dd>
+              {/*
+                What the family is read onto, under what it is.
+
+                Each list labelled, because `ASI01:2026` and `15` are not self-naming
+                and a reader who has not met the agentic list needs the word. An empty
+                list draws nothing at all — not a dash, which would read as *not looked
+                up*: data leakage claims none of the agentic entries, and halt defeat
+                and disclosure denial none of the LLM ones, and those are refusals
+                `labels.py` argues for rather than gaps.
+              */}
+              <dd className="claims">
+                {one.owasp.length > 0 ? (
+                  <span>
+                    <span className="of">OWASP</span>
                     {one.owasp.map((entry) => (
                       <code key={entry}>{entry}</code>
                     ))}
-                  </td>
-                  <td className="claims">
+                  </span>
+                ) : null}
+                {one.articles.length > 0 ? (
+                  <span>
+                    <span className="of">EU AI Act</span>
                     {one.articles.map((article) => (
                       <code key={article}>{article}</code>
                     ))}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+                  </span>
+                ) : null}
+              </dd>
+            </div>
+          ))}
+        </dl>
       </section>
 
       {/*

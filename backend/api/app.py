@@ -3025,11 +3025,15 @@ class Tuning(BaseModel):
     elective_families: list[FamilyCovered]
     """The elective tier and whether each of it is requested, in the enum's own order.
 
-    A **second list rather than three more rows in the first**, for the reason
-    `library.ElectiveFamily` is a second closed set: the six are the denominator the
-    gate is decided over and fixed at six (ADR-0015), and a console that offered nine
-    rows in one list would be offering a denominator this bench does not have
-    (ADR-0035 §1).
+    A **second list rather than three more rows in the first**, because
+    `library.ElectiveFamily` is a second closed set and the six are the denominator the
+    gate is decided over, fixed at six (ADR-0015, ADR-0035 §1). The reason this
+    docstring used to give — that a console offering nine rows in one list would be
+    offering a denominator this bench does not have — was reversed in
+    [ADR-0091](../../docs/adr/0091-the-console-draws-the-nine-families-as-one-list.md):
+    the bench page draws exactly those nine rows, undifferentiated. What stays two is
+    the pair of arrays, because `PUT /bench/settings/families` takes them as one
+    statement of two lists and a switch has to know which of them it writes to.
 
     Requested rather than *covered* in the prose beside it, and both may be off: a run
     covering none of the six attacks the thing this bench is for and is refused, and a
@@ -3039,11 +3043,18 @@ class Tuning(BaseModel):
     """
 
     elective_statement: str
-    """What requesting one buys and what it does not, in the words the screen prints.
+    """What requesting one buys and what it does not, in the bench's own words.
 
-    Served rather than written on the screen for `families_off_statement`'s reason:
-    the caveat and the switch are one statement, and a console holding its own copy
-    would be a second answer to what the tick means.
+    Served rather than composed by a console for `families_off_statement`'s reason: the
+    caveat and the switch are one statement, and a console holding its own copy would be
+    a second answer to what the tick means.
+
+    **Printed by nothing since ADR-0091**, which took the tier's section off the bench
+    page and with it both paragraphs that stood above the switches. On
+    `families_off_statement`'s terms again — that one has been served and drawn by
+    nothing all along. The sentence is the bench's answer to what requesting a family
+    buys, it is still built and still tested, and this screen is not the only surface
+    that could ever ask.
     """
 
     layers: list[LayerSelected]

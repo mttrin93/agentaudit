@@ -1333,6 +1333,99 @@ select option {
   margin-bottom: 0.6rem;
 }
 
+/*
+ * The published entries as chips, under the sentence that claims them.
+ *
+ * In the identifier face and not the reading face, which is the whole point of the
+ * row: `ASI01:2026` is a key an operator matches against a list open in another tab,
+ * and the sentence above it is the prose. The same monospace the `.rates` line uses,
+ * because both are strings a reader compares character by character rather than reads.
+ *
+ * No hue and no border: the label rule of this stylesheet is that colour never carries
+ * a reading, and a chip drawn as a badge would read as a severity on a project that
+ * publishes no severities (ADR-0005). What separates a chip from its neighbour is the
+ * gap and the name of its list, so the row degrades to plain text if this rule never
+ * loads.
+ *
+ * `margin-bottom` matches the `.label + .label` above it, so a card carrying chips and
+ * a card carrying none open their figures at the same height and the grid's two
+ * columns stay level.
+ */
+.family > .claimed {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  margin: 0 0 0.6rem;
+  padding: 0;
+  list-style: none;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.78rem;
+}
+
+.family > .claimed li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 0.5rem;
+}
+
+/* The list's name at the size of the card's quiet text and in its colour: it says
+ * which published list the entries beside it are on, and it is not itself an entry. */
+.family > .claimed .list {
+  color: var(--quiet);
+  font-family: inherit;
+}
+
+.family > .claimed .entry {
+  font-variant-numeric: tabular-nums;
+}
+
+/*
+ * The elective tier's own two lists, borrowing the chip row above and nothing else.
+ *
+ * `.claimed.requested` is the same row outside a `.family` card, so the selectors it
+ * needs are repeated here rather than the card rule being widened: the card rule is
+ * `.family > .claimed` on purpose — a chip row inside a figure card is spaced against
+ * that card's figures — and a section heading is not a card.
+ *
+ * The absences are prose and are set as prose: they are the bench's own sentences,
+ * each one long enough to be read rather than scanned, so they get the reading face
+ * and the quiet colour and no bullet — a list marker in front of a paragraph reads as
+ * an item in a checklist, and none of these is a thing anybody does.
+ */
+.claimed.requested {
+  display: flex;
+  gap: 0 0.5rem;
+  margin: 0 0 0.8rem;
+  padding: 0;
+  list-style: none;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.78rem;
+}
+
+.claimed.requested li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 0.5rem;
+}
+
+.claimed.requested .list {
+  color: var(--quiet);
+}
+
+.absences {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.85rem;
+  color: var(--quiet);
+}
+
+.absences li + li {
+  margin-top: 0.5rem;
+}
+
 /* The verdict under the card, at the size of the legend above it: one word, and the
  * figures it was reached from are what the card is for. */
 .family > .kind {

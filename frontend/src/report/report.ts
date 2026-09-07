@@ -54,8 +54,10 @@
  * Markdown describes them, and the cut points are printed beside every band.
  */
 
+import { readFamily } from '../families'
 import type {
   AdaptiveSection,
+  ElectiveSection,
   FamilyEntry,
   FindingsSection,
   FamilyLabel,
@@ -109,6 +111,46 @@ export const BAND_IN_A_TARGET_REPORT: Record<string, string> = {
 export interface LabelReading {
   bears: string
   claims: string
+  /**
+   * The published entries themselves, verbatim, in the order the payload declares.
+   *
+   * The two sentences above are the rendering, and these are the keys inside them.
+   * They are carried separately because an identifier is what a reader matches
+   * against a published list — `ASI01:2026` against the OWASP Top 10 for Agentic
+   * Applications, `LLM01:2025` against the GenAI LLM list — and a sentence is not
+   * something you can scan a column of. Nothing is derived from them and nothing is
+   * reworded: the screen prints the strings the bench sent, so a chip on a card and
+   * a key in the signed document are the same characters (ADR-0044).
+   *
+   * Either may be empty. Disclosure denial claims no agentic entry — the list has no
+   * disclosure category and ADR-0002 refused the nearest one rather than stretching
+   * it — and an empty tuple prints as no chip rather than as a chip saying none.
+   */
+  agentic: string[]
+  llm: string[]
+}
+
+/**
+ * The elective tier as a report screen reads it: names, and the bench's sentences.
+ *
+ * **No figure, and there is none to have.** What an elective family measured is a
+ * claim about the bench and this document is about a target (ADR-0018), so a requested
+ * family carries its name and a family nobody asked for carries the line that says
+ * nothing was attempted. A screen that put a `D` here would be printing the bench's
+ * own discriminating power on a customer's report (ADR-0035).
+ *
+ * **Both halves, because either alone lies by omission.** A run that asked for all
+ * three produces no absences, and a screen that then drew nothing at all would be
+ * indistinguishable from one reading a document made before the tier existed. So the
+ * request is a reading of its own and it is present even when the absences are not.
+ */
+export interface ElectiveReading {
+  /** Each requested family, as the screen says it. Empty where none was asked for. */
+  requested: string[]
+  /** The payload's own sentence about the request, whichever way it went. */
+  stated: string
+  /** One entry per family nobody asked for, with the bench's line for it. */
+  absences: { family: string; stated: string }[]
 }
 
 /** What a family's cases test one case within, and what they do not test. */
@@ -259,13 +301,40 @@ function goldSetCounts(
 /**
  * One label as a card reads it, off the payload's own sentences.
  *
- * A rename and nothing else: both fields are whole sentences the payload carries,
- * and this app adds no word to either. Nothing is derived from `agentic`, `llm` or
- * `articles` — those are on the wire so a recipient can match an identifier as a
- * key, and the sentence a reader reads is the bench's own.
+ * A rename and nothing else: the two sentences are whole sentences the payload
+ * carries, and this app adds no word to either. Nothing is *derived* from `agentic`,
+ * `llm` or `articles`: the first two travel through verbatim so a card can print the
+ * identifiers a recipient matches against a published list, and `articles` stays off
+ * this reading because the article's claim is already in `bears` — a screen that
+ * rebuilt either sentence from the identifiers beside it would hold a second copy of
+ * a legal mapping in TypeScript (ADR-0044).
  */
 function labelOf(label: FamilyLabel): LabelReading {
-  return { bears: label.bears_stated, claims: label.claims_stated }
+  return {
+    bears: label.bears_stated,
+    claims: label.claims_stated,
+    agentic: label.agentic,
+    llm: label.llm,
+  }
+}
+
+/**
+ * The elective block, renamed and read for print, and nothing derived.
+ *
+ * `readFamily` is applied to the requested names because they are printed as words and
+ * this is the point of print; the absences keep their wire name beside the sentence
+ * that already opens with it, so a reader matching `direct_prompt_injection` in the
+ * signed document finds the same characters on the screen.
+ */
+export function electiveReading(elective: ElectiveSection): ElectiveReading {
+  return {
+    requested: elective.requested.map(readFamily),
+    stated: elective.requested_stated,
+    absences: elective.not_requested.map((one) => ({
+      family: one.family,
+      stated: one.stated,
+    })),
+  }
 }
 
 export function familyAnswers(measured: MeasuredSection): FamilyAnswer[] {
@@ -1319,6 +1388,15 @@ export interface ReportView {
    */
   findings: FindingsView
   adaptive: AdaptiveReading
+  /**
+   * The elective tier: what this run was asked for, and what it therefore was not.
+   *
+   * Beside the six and never among them. `rows` above is keyed on the six families
+   * ADR-0015 fixed the gate's denominator at, and an elective family in that array
+   * would be a seventh row in a column of figures — which is the reading ADR-0035
+   * exists to prevent, arriving through a screen rather than through arithmetic.
+   */
+  elective: ElectiveReading
 }
 
 /**
@@ -1335,5 +1413,6 @@ export function reportView(report: TargetReport): ReportView {
     rows: familyRows(report.measured, report.adaptive),
     findings: findingsReading(report.findings),
     adaptive: adaptiveReading(report.adaptive),
+    elective: electiveReading(report.elective),
   }
 }

@@ -460,6 +460,19 @@ export interface ReportProvenance {
  * a reader who wants a single number will build one out of whatever is on the
  * page, so the page does not offer one (ADR-0005).
  */
+/** One elective family this run was not asked to test, and the line that says so. */
+export interface NotRequested {
+  family: string
+  stated: string
+}
+
+/** The elective tier: what was asked for, and what therefore was not. */
+export interface ElectiveSection {
+  requested: string[]
+  requested_stated: string
+  not_requested: NotRequested[]
+}
+
 export interface TargetReport {
   artefact: string
   artefact_version: number
@@ -476,6 +489,21 @@ export interface TargetReport {
    */
   findings: FindingsSection
   adaptive: AdaptiveSection
+  /**
+   * The elective tier as a target report carries it: a declared input, and absences.
+   *
+   * **Names and sentences, and no figure on either half.** What an elective family
+   * measured is a claim about the *bench* and this artefact is about a *target*
+   * (ADR-0018), so a requested family arrives here with its name and nothing else,
+   * and a family nobody asked for arrives as the fifth kind of nothing — none of the
+   * other four, because nothing was attempted and nobody could not answer (ADR-0035).
+   *
+   * Both halves are on the wire because either alone lies by omission: a run that
+   * requested every elective family produces no absences at all, and a document that
+   * then said nothing about the tier would be indistinguishable from one made before
+   * the tier existed.
+   */
+  elective: ElectiveSection
   coverage_gaps: CoverageGap[]
   provenance: ReportProvenance
   rendered_sha256: string | null

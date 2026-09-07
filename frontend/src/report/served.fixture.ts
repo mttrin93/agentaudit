@@ -14,9 +14,12 @@
  *
  * **It is a subset of what the bench serialises, and the subset is exactly what
  * `TargetReport` declares.** The document carries keys this app has no type for —
- * `claimed_in_part`, `untested_categories`, `elective`, and several provenance blocks
- * — and an object literal carrying one would fail `tsc` on an excess property rather
- * than document anything. So keys are dropped here and never renamed or reworded: the
+ * `claimed_in_part`, `untested_categories`, and several provenance blocks — and an
+ * object literal carrying one would fail `tsc` on an excess property rather than
+ * document anything. `elective` was on that list until the tier reached this screen:
+ * it is typed now, so it is here, regenerated from `payload._elective` rather than
+ * hand-written, and it carries **both halves** — one family requested and two not, so
+ * the section's two branches are both exercised by the one fixture. So keys are dropped here and never renamed or reworded: the
  * guarantee above is that a *renamed* key fails `tsc`, and it never covered an *added*
  * one. `key_id` and `rendered_sha256` are hand-set placeholders, because nothing signs
  * this fixture.
@@ -85,6 +88,22 @@ export const SERVED: TargetReport = {
   },
   "artefact": "agentaudit.target-report",
   "artefact_version": 1,
+  "elective": {
+    "requested": [
+      "memory_poisoning"
+    ],
+    "requested_stated": "this run was asked to test memory_poisoning. What an elective family measured is a fact about this bench rather than about this target, so it is stated where the bench states its own figures and never here (ADR-0035, ADR-0018)",
+    "not_requested": [
+      {
+        "family": "direct_prompt_injection",
+        "stated": "direct_prompt_injection: not requested — this run was not asked to test this elective family, so no attempt was made against it and it has no rate, no interval and no band. Its absence takes nothing off the figures above: this bench's discriminating power on an elective family is a fact about the bench, stated where the bench states its own figures and never here (ADR-0035, ADR-0018)"
+      },
+      {
+        "family": "pii_leakage",
+        "stated": "pii_leakage: not requested — this run was not asked to test this elective family, so no attempt was made against it and it has no rate, no interval and no band. Its absence takes nothing off the figures above: this bench's discriminating power on an elective family is a fact about the bench, stated where the bench states its own figures and never here (ADR-0035, ADR-0018)"
+      }
+    ]
+  },
   "coverage_gaps": [
     {
       "category": "data poisoning",

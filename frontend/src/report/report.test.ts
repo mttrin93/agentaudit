@@ -46,6 +46,7 @@ import {
   INSTRUMENTS_BROKE,
   NOT_PART_OF_THE_ARTEFACT,
   attemptCounts,
+  electiveReading,
   exchangesReading,
   NO_DENOMINATOR,
   familyAnswers,
@@ -320,6 +321,65 @@ describe('a family’s answer', () => {
   })
 })
 
+describe('the elective tier on a target report', () => {
+  it('carries names and the bench’s sentences, and no figure at all', () => {
+    const reading = electiveReading(SERVED.elective)
+
+    // The request, as words, and the payload's own line about it — which is where the
+    // reason there are no figures here is stated, in the bench's wording (ADR-0035).
+    expect(reading.requested).toEqual(['memory poisoning'])
+    expect(reading.stated).toContain('a fact about this bench rather than about this')
+
+    // One absence per family nobody asked for, each keeping its wire name beside the
+    // sentence that opens with it, so a reader grepping the signed document finds the
+    // same characters.
+    expect(reading.absences.map((one) => one.family)).toEqual([
+      'direct_prompt_injection',
+      'pii_leakage',
+    ])
+    for (const absence of reading.absences) {
+      expect(absence.stated.startsWith(`${absence.family}: not requested`)).toBe(true)
+    }
+
+    // And no figure anywhere in it. A rate, an interval, a band or a `D` here would be
+    // the bench's own discriminating power printed on a customer's report (ADR-0018),
+    // so the assertion is over the whole record rather than field by field: a field
+    // added later cannot smuggle one in.
+    //
+    // The check is that no *value* is a number, and not that the prose lacks the word
+    // *rate* — the bench's own sentence says "it has no rate, no interval and no
+    // band", which is the absence being stated rather than a figure being carried.
+    const numbers = (value: unknown): number[] => {
+      if (typeof value === 'number') return [value]
+      if (Array.isArray(value)) return value.flatMap(numbers)
+      if (value !== null && typeof value === 'object') {
+        return Object.values(value).flatMap(numbers)
+      }
+      return []
+    }
+
+    expect(numbers(reading)).toEqual([])
+  })
+
+  it('is beside the six families and never among them', () => {
+    // The gate's denominator is six (ADR-0015) and the rows are keyed on them. An
+    // elective family reaching that array would be a seventh card in a row of
+    // figures, which is the reading ADR-0035 exists to prevent — so the check is that
+    // no row carries an elective name, whatever this run requested.
+    const view = reportView(SERVED)
+    const elective = new Set([
+      ...SERVED.elective.requested,
+      ...SERVED.elective.not_requested.map((one) => one.family),
+    ])
+
+    expect(elective.size).toBe(3)
+    for (const row of view.rows) {
+      expect(elective.has(row.family)).toBe(false)
+    }
+    expect(view.elective.requested.length + view.elective.absences.length).toBe(3)
+  })
+})
+
 describe('the label beside a family name', () => {
   it('is on every answer shape, and is the payload’s own sentence', () => {
     const answers = familyAnswers(SERVED.measured)
@@ -336,6 +396,13 @@ describe('the label beside a family name', () => {
       claims:
         'claims ASI01:2026 Agent Goal Hijack on the OWASP agentic list and ' +
         'LLM01:2026 Prompt Injection on the OWASP GenAI LLM list',
+      // The identifiers travel beside the sentence, verbatim and with their
+      // editions, because a card prints them as chips a reader matches against a
+      // published list rather than reads (ADR-0036, ADR-0044). Written out here for
+      // the same reason the sentences are: read off the fixture they would pass
+      // against any payload.
+      agentic: ['ASI01:2026'],
+      llm: ['LLM01:2026'],
     })
 
     // Both absences carry it too. A withheld rate says the evidence behind it
@@ -350,6 +417,45 @@ describe('the label beside a family name', () => {
     for (const answer of answers) {
       expect(answer.label.bears).toContain('EU AI Act')
       expect(answer.label.claims.startsWith('claims ')).toBe(true)
+    }
+  })
+
+  it('carries the entries a list has, and an empty list rather than a none', () => {
+    // The chips are drawn per list and a list with no entry draws no row, so the
+    // projection has to hand the screen an empty array rather than a placeholder.
+    // Both directions are real in the label table and both are in this fixture.
+    const answers = familyAnswers(SERVED.measured)
+    const found = (family: string) => {
+      const [answer] = answers.filter((one) => one.family === family)
+      expect(answer, family).toBeDefined()
+      return answer
+    }
+
+    // Data leakage claims **no agentic entry** — the agentic list has no disclosure
+    // category and ADR-0002 refused the nearest one rather than stretching it — and
+    // it claims **two** LLM entries, so the row it draws is one list with two chips.
+    const leakage = found('data_leakage')
+    expect(leakage.label.agentic).toEqual([])
+    expect(leakage.label.llm).toEqual(['LLM02:2026', 'LLM08:2026'])
+
+    // And the other direction, so neither empty list is the only one tested: halt
+    // defeat claims an agentic entry and no LLM one.
+    const halt = found('halt_defeat')
+    expect(halt.label.agentic).toEqual(['ASI10:2026'])
+    expect(halt.label.llm).toEqual([])
+
+    // An empty list is an absence of chips and never an absence of the label: both
+    // still claim what they claim, in the bench's own sentence.
+    for (const answer of [leakage, halt]) {
+      expect(answer.label.claims.startsWith('claims ')).toBe(true)
+    }
+
+    // Every entry on every answer is the payload's own string, edition included, so a
+    // chip and a key in the signed document are the same characters.
+    for (const answer of answers) {
+      for (const entry of [...answer.label.agentic, ...answer.label.llm]) {
+        expect(entry).toMatch(/^(ASI|LLM)\d{2}:\d{4}$/)
+      }
     }
   })
 

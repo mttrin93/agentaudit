@@ -98,6 +98,7 @@ import {
   type FamilyRow,
   type FindingReading,
   type FindingsView,
+  type ElectiveReading,
   type LabelReading,
   type ReportView,
   type RouteReading,
@@ -354,6 +355,8 @@ function TheReport({
       </section>
 
       {episodes ? <TheRoute route={routeReading(episodes)} /> : null}
+
+      <TheElective elective={view.elective} />
 
       {/* The three files under the names a verifier already knows, and nothing
           beside them: what a recipient does with them is `scripts/verify` over the
@@ -631,7 +634,118 @@ function TheLabel({ label }: { label: LabelReading }) {
     <>
       <p className="label">{label.bears}</p>
       <p className="label">{label.claims}</p>
+      <TheClaimedEntries label={label} />
     </>
+  )
+}
+
+/**
+ * The published entries as chips, under the sentence that already claims them.
+ *
+ * **The identifiers and not a second sentence.** `claims` above is the bench's own
+ * rendering and says everything a reader needs in prose; what it cannot do is be
+ * scanned. An operator holding the OWASP Top 10 for Agentic Applications open in
+ * another tab is matching `ASI01:2026` as a key, and finding it inside a paragraph on
+ * every card is the thing this row spares them (ADR-0044, ADR-0036).
+ *
+ * Each list is named where its chips are, because the two vocabularies are two
+ * published lists and a column of bare identifiers would leave a reader deciding from
+ * the prefix which list `ASI01:2026` is on. The strings are printed exactly as the
+ * payload sent them, edition included: the edition is part of the identifier, and a
+ * chip reading `ASI01` against a list that reissues yearly is a claim about no
+ * particular year.
+ *
+ * **A list with no entries draws nothing at all.** Disclosure denial claims no
+ * agentic entry — the agentic list has no disclosure category, and ADR-0002 refused
+ * the nearest one rather than stretching it — so the absence is the absence of a row
+ * and never a chip saying *none*, which would read as a claim that the list was
+ * consulted and answered.
+ */
+function TheClaimedEntries({ label }: { label: LabelReading }) {
+  if (label.agentic.length === 0 && label.llm.length === 0) {
+    return null
+  }
+  return (
+    <ul className="claimed">
+      {label.agentic.length > 0 ? (
+        <li>
+          <span className="list">OWASP ASI</span>
+          {label.agentic.map((entry) => (
+            <span className="entry" key={entry}>
+              {entry}
+            </span>
+          ))}
+        </li>
+      ) : null}
+      {label.llm.length > 0 ? (
+        <li>
+          <span className="list">OWASP LLM</span>
+          {label.llm.map((entry) => (
+            <span className="entry" key={entry}>
+              {entry}
+            </span>
+          ))}
+        </li>
+      ) : null}
+    </ul>
+  )
+}
+
+/**
+ * The elective tier, beside the six families and never among them.
+ *
+ * **A section of its own, and that is the whole design.** The grid above is keyed on
+ * the six families ADR-0015 fixed the gate's denominator at; an elective family drawn
+ * into it would be a seventh card in a row of figures, which is the reading ADR-0035
+ * exists to prevent — arriving through a screen rather than through arithmetic. So it
+ * sits after the search, with its own heading, and shares no column with anything
+ * scored.
+ *
+ * **Names and the bench's own sentences, and no figure anywhere.** What an elective
+ * family measured is a claim about *this bench* and this document is about a *target*
+ * (ADR-0018), so there is nothing here for a rate to be drawn into: a requested family
+ * gets its name, and a family nobody asked for gets the line saying nothing was
+ * attempted. An operator who wants those families' `D` reads it where the bench states
+ * its own figures, which is the gate run.
+ *
+ * **Both halves are drawn, including the empty one.** A run that asked for all three
+ * produces no absences at all, and a screen that then drew nothing would be
+ * indistinguishable from one reading a document made before the tier existed. So the
+ * request line is always here, and the absence list is what varies.
+ */
+function TheElective({ elective }: { elective: ElectiveReading }) {
+  return (
+    <section>
+      <h2>The elective tier, which decides nothing on this report</h2>
+      {/* The payload's own sentence about the request, whichever way it went: it is
+          the one place the reason there are no figures here is stated, and it is the
+          bench's wording rather than this app's. */}
+      <p className="consequence">{elective.stated}</p>
+      {elective.requested.length > 0 ? (
+        <ul className="claimed requested">
+          <li>
+            <span className="list">requested</span>
+            {elective.requested.map((family) => (
+              <span className="entry" key={family}>
+                {family}
+              </span>
+            ))}
+          </li>
+        </ul>
+      ) : null}
+      {elective.absences.length > 0 ? (
+        <ul className="absences">
+          {elective.absences.map((absence) => (
+            <li key={absence.family}>{absence.stated}</li>
+          ))}
+        </ul>
+      ) : (
+        <p className="aside">
+          Every elective family this bench holds was requested on this run, so there
+          is no absence to state.
+        </p>
+      )}
+    </section>
   )
 }
 

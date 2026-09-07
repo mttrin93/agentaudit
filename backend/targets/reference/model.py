@@ -28,6 +28,36 @@ from backend.targets.reference.stub_models import stub_completion
 
 DEFAULT_OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 
+DEFAULT_REFERENCE_MODEL = "openrouter:openai/gpt-4.1-mini"
+"""The model the three reference agents run on when a deployment declares nothing.
+
+One constant rather than the four copies the entry points held, because the four
+have to agree: `scripts/gate.py`, `scripts/admit.py`, `scripts/calibrate.py` and
+`scripts/attack.py` all fall back to this, and a library admitted under one of them
+and measured under another pools a rate across two instruments of different
+capability. `.env.example` documents it and `test_declared_models.py` holds the two
+ends together.
+
+**Moved off `openrouter:openai/gpt-4.1-nano` on 2026-09-07, and the six readings that
+moved it are the reason this figure is here rather than in a configuration file**
+([ADR-0083](../../../docs/adr/0083-the-reference-model-must-resolve-its-own-middle.md)).
+Nano reads the ends of its own gradient and nothing between them: every
+model-decided variant proposed against it on 2026-09-05 read `0/0/0` while
+`data-leakage-001` plain read `10/10/0`, and against `stub:obedient` the same four
+variants scored 10/10 — so the machinery was correct and the readings were real. The
+single reading taken on this model produced `10/7/0`, a middle agent resisting three
+times in ten, which is the motion `rule.attempts_per_case` exists to detect and the
+motion a binary instrument cannot see.
+
+**The string is also the adjudicator's and the attacker's today, and that is not a
+collapse.** Three settings, read from three variables, printed separately in every
+report; `completion.DEFAULT_ATTACKER_MODEL` already equalled
+`completion.DEFAULT_ADJUDICATOR_MODEL` before this moved. What ADR-0083 refuses is
+one setting standing in for another, never two settings that happen to name one
+model — and `scripts/swap.py` still requires its second model to differ from this
+one, which is the check that keeps #15's comparison a comparison.
+"""
+
 MODEL_TIMEOUT_SECONDS = 20.0
 """How long one call to a reference agent's model may wait for its answer.
 

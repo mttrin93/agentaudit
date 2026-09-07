@@ -143,7 +143,11 @@ from backend.bench.rule import DECLARED_RULE
 from backend.bench.scorer import GateOutcome
 from backend.graph.budget import BudgetExceeded, Layer, RunBudget
 from backend.targets.reference.hardened import HARDENED
-from backend.targets.reference.model import ModelConfig, measures_the_field
+from backend.targets.reference.model import (
+    DEFAULT_REFERENCE_MODEL,
+    ModelConfig,
+    measures_the_field,
+)
 from backend.targets.reference.operator import (
     described_agents,
     namespace_dropper,
@@ -176,12 +180,15 @@ CASES_DIR = Path(__file__).resolve().parents[1] / "backend" / "cases"
 GOLDSET_DIR = Path(__file__).resolve().parents[1] / "backend" / "goldset"
 GATE_RUNS_DIR = Path(__file__).resolve().parents[1] / "docs" / "gate-runs"
 
-DEFAULT_MODEL = "openrouter:openai/gpt-4.1-nano"
+DEFAULT_MODEL = DEFAULT_REFERENCE_MODEL
 """The reference agents' model, chosen as test equipment and recorded as such.
 
-A model that refuses the trivial agent's payloads reports its own defences rather
-than the agent's absent ones, which is the confound #15 exists to measure. See
-`docs/validation.md`.
+The string and the readings that licensed it are on `DEFAULT_REFERENCE_MODEL`, which
+all four entry points name so that a library cannot be admitted on one model and
+gated on another. What is local here: this is the model whose two consecutive low
+readings can retire a case, and `window_of` filters the series by it — so a run made
+after this moved starts every case's window again, and the first such run retires
+nothing (ADR-0022, ADR-0083).
 """
 
 EXIT_GATE_FAILED = 6

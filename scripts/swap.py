@@ -171,6 +171,14 @@ been.
 
 SWAP_RUNS_DIR = Path(__file__).resolve().parents[1] / "docs" / "swap-runs"
 
+SECOND_REFERENCE_MODEL_ENV = "AGENTAUDIT_SECOND_REFERENCE_MODEL"
+"""Where a deployment declares the model the library is re-run on.
+
+This script's own variable and not one of the three `completion.py` names, because
+nothing else in the bench has a second reference model: a gate run, an admission and
+an adaptive run each measure one, and only a swap measures two.
+"""
+
 DEFAULT_SECOND_MODEL = "openrouter:openai/gpt-4o-mini"
 """The second model, and it is a deliberate choice rather than a spare string.
 
@@ -240,9 +248,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     parser.add_argument(
         "--second-model",
-        default=os.environ.get(
-            "AGENTAUDIT_SECOND_REFERENCE_MODEL", DEFAULT_SECOND_MODEL
-        ),
+        default=os.environ.get(SECOND_REFERENCE_MODEL_ENV, DEFAULT_SECOND_MODEL),
         help=(
             "the model the library is re-run on. The one setting that moves between "
             "the two runs, and it has to be a different model: two runs of one model "

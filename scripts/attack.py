@@ -81,7 +81,7 @@ from backend.graph.approval import ApprovalOutcome, run_under_approval
 from backend.graph.budget import BudgetExceeded, CallPrice, Layer, RunBudget
 from backend.graph.runstate import RunState
 from backend.targets.reference.hardened import HARDENED
-from backend.targets.reference.model import ModelConfig
+from backend.targets.reference.model import DEFAULT_REFERENCE_MODEL, ModelConfig
 from backend.targets.reference.operator import (
     described_agents,
     namespace_dropper,
@@ -110,10 +110,11 @@ from scripts.console import (
 )
 
 CASES_DIR = Path(__file__).resolve().parents[1] / "backend" / "cases"
-DEFAULT_MODEL = "openrouter:openai/gpt-4.1-nano"
-# The same default as `calibrate.py`, and for the same reason: the reference agents
+DEFAULT_MODEL = DEFAULT_REFERENCE_MODEL
+# The same default as `calibrate.py`, and now the same constant: the reference agents
 # need a model that will run them as built, because a model that refuses the trivial
-# agent's payloads is reporting its own defences rather than the agent's absent ones.
+# agent's payloads is reporting its own defences rather than the agent's absent ones
+# (ADR-0083).
 
 
 def declared_budget(

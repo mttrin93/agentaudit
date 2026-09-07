@@ -78,7 +78,7 @@ from backend.bench.registration import Attestation
 from backend.bench.rule import DECLARED_RULE
 from backend.graph.approval import Approve
 from backend.graph.budget import BudgetExceeded, CallPrice, RunBudget
-from backend.targets.reference.model import ModelConfig
+from backend.targets.reference.model import DEFAULT_REFERENCE_MODEL, ModelConfig
 from backend.targets.reference.operator import (
     described_agents,
     namespace_dropper,
@@ -101,12 +101,12 @@ from scripts.console import (
 )
 
 CASES_DIR = Path(__file__).resolve().parents[1] / "backend" / "cases"
-DEFAULT_MODEL = "openrouter:openai/gpt-4.1-nano"
-"""The reference agents' model, and the same default `calibrate.py` runs on.
+DEFAULT_MODEL = DEFAULT_REFERENCE_MODEL
+"""The reference agents' model, and the same default every other entry point runs on.
 
 A reading is a reading *on a model*, so the model is recorded on the record beside
-the counts. Which one is a choice about test equipment and is argued in
-docs/validation.md, not here.
+the counts, and a record admitted here carries whichever model this named at the
+time. Which model, and why it moved, is `DEFAULT_REFERENCE_MODEL` and ADR-0083.
 """
 
 EXIT_REJECTED = 5

@@ -32,10 +32,13 @@
  * of it cost that (ADR-0007, ADR-0010). There is no totals row on this screen and
  * the view model has no field for one.
  *
- * **The last region is the six families**, one sentence each: what the failure *is*,
- * the agent doing the thing, with no figure anywhere in it. An operator meets
- * `indirect prompt injection` on four screens before anything on any of them says what
- * one is, and this is where it is said.
+ * **The last region is the nine families**, one to a row: what the failure *is*, the
+ * agent doing the thing, then the OWASP entries it claims and the EU AI Act articles it
+ * bears, with no figure anywhere in it. An operator meets `indirect prompt injection` on
+ * four screens before anything on any of them says what one is, and this is where it is
+ * said. The six and the elective three are one undifferentiated table
+ * ([ADR-0091](../../../docs/adr/0091-the-console-draws-the-nine-families-as-one-list.md));
+ * what stays split is the pair of arrays the switches write to.
  *
  * **Where the security questionnaire was.** That region answered a questionnaire out of
  * the most recent signed report — a family per question, its rate over that family's
@@ -70,8 +73,7 @@ import {
   WHAT_THIS_INSTRUMENT_IS,
   type ConsoleDoes,
   type SelectionReading,
-  THE_FAMILIES,
-  THE_ELECTIVE_FAMILIES,
+  familyRows,
 } from './landing'
 import {
   runsReading,
@@ -122,7 +124,6 @@ export function LandingScreen() {
    * holding its own copy would be a second answer to what the tick means.
    */
   const [elective, setElective] = useState<FamilyCovered[] | null>(null)
-  const [electiveSays, setElectiveSays] = useState('')
   const [refused, setRefused] = useState('')
   /*
    * What the next run sends, on its own state and its own refusal beside the families'.
@@ -194,7 +195,6 @@ export function LandingScreen() {
         if (current) {
           setFamilies(bench.tuning.families)
           setElective(bench.tuning.elective_families)
-          setElectiveSays(bench.tuning.elective_statement)
           setSends(selectionReading(bench.tuning))
         }
       } catch {
@@ -203,7 +203,6 @@ export function LandingScreen() {
         if (current) {
           setFamilies(null)
           setElective(null)
-          setElectiveSays('')
           setSends(null)
         }
       }
@@ -408,94 +407,93 @@ export function LandingScreen() {
             <p>{refused}</p>
           </div>
         ) : null}
-        <dl className="said">
-          {THE_FAMILIES.map((one) => (
-            <div key={one.family}>
-              <dt>
-                {/*
-                  The tick box first and the name after it, which is the order a
-                  reader scans: the question this block answers is *which of these
-                  will run*, and a control at the end of the line is one the eye
-                  finds last. A checkbox, so a keyboard lands on it and a screen
-                  reader reads it as what it is, with the family's own name as its
-                  label.
+        {/*
+          A table, where this was a definition list — and then two of them.
 
-                  Switching one off is not measuring it at zero: the bench drops that
-                  family's cases and its report states the family as *not run*. A
-                  family that was not asked is not a family that held.
-                */}
-                <FamilyTick
-                  rows={families}
-                  family={one.family}
-                  fallback
-                  unread={
-                    <span className="tick on" role="img" aria-label="on by default" />
-                  }
-                  onMove={(on) => void cover(one.family, on, 'six')}
-                />
-                {readFamily(one.family)}
-              </dt>
-              <dd>{one.says}</dd>
-            </div>
-          ))}
-        </dl>
-      </section>
+          The columns are what forced it: a name, what the failure is, the published
+          entries it claims and the articles it bears is four things about one family,
+          and four things per row is a table. Nothing numeric is in any column, so the
+          hazard the runs table is written against does not arise here: there is no
+          cell anybody could sum, and so no `tfoot` to put a total in.
 
-      {/*
-        The tier the bench holds and a run has to ask for.
+          **One table and not two.** The six and the elective three are drawn in one
+          list with no mark saying which is which
+          ([ADR-0091](../../../docs/adr/0091-the-console-draws-the-nine-families-as-one-list.md)).
+          What that decision moved is the presentation and nothing else: the two arrays
+          are still two, `PUT /bench/settings/families` still takes them as one
+          statement of two lists, the tier still defaults off and still decides no gate,
+          and a family left unticked is still stated on the report as *not requested*
+          rather than as a rate of zero (ADR-0015, ADR-0035, ADR-0088).
+        */}
+        <div className="wide">
+          <table className="said families">
+            <thead>
+              <tr>
+                <th scope="col">Family</th>
+                <th scope="col">What the failure is</th>
+                {/* Both OWASP lists under one heading, which is what `familyRows`
+                    folds them for: the agentic list and the GenAI LLM list are two
+                    published tables and one question — what is this read onto. */}
+                <th scope="col">OWASP</th>
+                <th scope="col">EU AI Act</th>
+              </tr>
+            </thead>
+            <tbody>
+              {familyRows(families, elective).map((one) => (
+                <tr key={one.family}>
+                  <th scope="row">
+                    {/*
+                      The tick box first and the name after it, which is the order a
+                      reader scans: the question this block answers is *which of these
+                      will run*, and a control at the end of the line is one the eye
+                      finds last. A checkbox, so a keyboard lands on it and a screen
+                      reader reads it as what it is, with the family's own name as its
+                      label.
 
-        Its own section under the six and never nine rows in one list: the six are the
-        gate's denominator (ADR-0015), and these three are selectable per run — a reader
-        who met all nine in one list would be reading a denominator this bench does not
-        have (ADR-0035).
-
-        **A tick beside each, since #171.** `BenchConfig` carries the tier's declared
-        selection beside the six's switch, `PUT /bench/settings/families` takes both
-        lists as one statement, and what a requested family measured against the target
-        is on the signed report with its interval and its band
-        ([ADR-0088](../../../docs/adr/0088-an-elective-familys-rate-against-a-target-is-a-fact-about-that-target.md)).
-        What is still not here and is still not on that report is the bench's own `D` on
-        the tier, which is stated in the gate run's document (ADR-0018).
-
-        **The caveat beside the switches is served rather than written here.** It is the
-        bench's sentence about what ticking one buys — including that the tier's
-        readings are thin, which is a fact about the bench an operator about to spend
-        money is owed and a reader of a signed report is not.
-      */}
-      <section>
-        <h2>The elective tier</h2>
-        <p className="aside">
-          Three more families this bench holds and a run has to ask for. They are
-          measured on the gate’s own terms — the same <code>D</code>, the same floor,
-          the same intervals — and they decide no gate. Tick one and the next run
-          attacks it and reports its rate, its interval and its band on the signed
-          report; leave it and the report states it as not requested, which is not a
-          rate of zero.
-        </p>
-        {electiveSays ? <p className="aside">{electiveSays}</p> : null}
-        <dl className="said">
-          {THE_ELECTIVE_FAMILIES.map((one) => (
-            <div key={one.family}>
-              <dt>
-                <FamilyTick
-                  rows={elective}
-                  family={one.family}
-                  fallback={false}
-                  unread={
-                    <span
-                      className="tick"
-                      role="img"
-                      aria-label="not requested by default"
+                      Switching one off is not measuring it at zero: the bench drops
+                      that family's cases and its report states the family as *not
+                      run*. A family that was not asked is not a family that held.
+                    */}
+                    <FamilyTick
+                      rows={one.tier === 'six' ? families : elective}
+                      family={one.family}
+                      fallback={one.tier === 'six'}
+                      unread={
+                        <span
+                          className={one.tier === 'six' ? 'tick on' : 'tick'}
+                          role="img"
+                          aria-label={
+                            one.tier === 'six'
+                              ? 'on by default'
+                              : 'not requested by default'
+                          }
+                        />
+                      }
+                      onMove={(on) => void cover(one.family, on, one.tier)}
                     />
-                  }
-                  onMove={(on) => void cover(one.family, on, 'elective')}
-                />
-                {readFamily(one.family)}
-              </dt>
-              <dd>{one.says}</dd>
-            </div>
-          ))}
-        </dl>
+                    {readFamily(one.family)}
+                  </th>
+                  <td>{one.says}</td>
+                  {/* An empty cell where a family claims nothing on either OWASP list,
+                      and that is the honest answer rather than a gap: data leakage
+                      claims none of the agentic entries, and halt defeat and
+                      disclosure denial none of the LLM ones. A dash would read as
+                      *not looked up*. */}
+                  <td className="claims">
+                    {one.owasp.map((entry) => (
+                      <code key={entry}>{entry}</code>
+                    ))}
+                  </td>
+                  <td className="claims">
+                    {one.articles.map((article) => (
+                      <code key={article}>{article}</code>
+                    ))}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </section>
 
       {/*

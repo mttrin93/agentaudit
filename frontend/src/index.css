@@ -800,12 +800,13 @@ button:disabled {
  * this screen, and the order of the cards is what says which to open first.
  */
 /*
- * The six families, each in a sentence: two columns of three on a page, one on a phone.
+ * The idiom the two switch blocks share: a tick, a name, and what it means.
  *
- * A definition list and not cards, because a card is a door and none of these is one —
- * the region says what the six words on every other screen mean, and a reader passes
- * through it once. The name is set in the ink and the sentence under it in the quiet,
- * so the six names read as a column even where the sentences run to two lines.
+ * `.said` carries the tick and its hover, and the two blocks that use it lay themselves
+ * out differently under it — the nine families are a table (below), the constructions a
+ * grid of boxes. What is shared is the control, which is the thing that must not drift:
+ * the same square box in both, so a reader who has learned what one means on one block
+ * has learned it on the other.
  */
 .said {
   display: grid;
@@ -814,8 +815,82 @@ button:disabled {
   margin: 0;
 }
 
-/* One family to a box, in the idiom every other block on the page is made of: paper,
- * a hairline, and the same radius. */
+/*
+ * The nine families, one to a row, with what each is read onto.
+ *
+ * A table because a family is four things here — the switch and its name, the failure
+ * in a sentence, the OWASP entries it claims, the articles it bears — and four things
+ * about one subject line up across a row or they line up nowhere. The boxes this
+ * replaced put two families side by side, which read as a grid of cards and buried the
+ * question the block exists to answer: which of these will the next run cover.
+ *
+ * **Not one numeric column in it**, so the hazard `.runs` is written against — a table
+ * of numbers has a foot, and a foot is where somebody adds an adaptive figure to a
+ * scored one — cannot arise here. There is nothing in these cells to sum.
+ *
+ * One list and not two: the tier is drawn undifferentiated (ADR-0091), and what stays
+ * split is the pair of arrays the switches write to.
+ */
+.wide {
+  overflow-x: auto;
+}
+
+.said.families {
+  display: table;
+  width: 100%;
+  border-collapse: collapse;
+  gap: 0;
+}
+
+.said.families th,
+.said.families td {
+  padding: 0.7rem 0.9rem 0.7rem 0;
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid var(--line);
+}
+
+.said.families thead th {
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--quiet);
+}
+
+/* The tick leads and the name follows, so the switches line up down the left edge —
+ * which is what makes *which of these will run* readable at a glance instead of one
+ * row at a time. */
+.said.families tbody th[scope='row'] {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.said.families td {
+  font-size: 0.9rem;
+  color: var(--quiet);
+}
+
+/* The published entries and the articles, each set as what it is: a string a recipient
+ * matches against a stored copy, not prose. Wrapped, so a family carrying two of either
+ * stacks rather than widening the column. */
+.said.families .claims {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  white-space: nowrap;
+}
+
+.said.families .claims code {
+  font-size: 0.8rem;
+  color: var(--ink);
+}
+
+/* One construction to a box, in the idiom every other block on the page is made of:
+ * paper, a hairline, and the same radius. */
 .said > div {
   padding: 0.9rem 1rem;
   background: var(--paper);

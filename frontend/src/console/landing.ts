@@ -185,11 +185,14 @@ export const THE_FAMILIES: readonly FamilySays[] = [
 /**
  * The elective tier, each in one sentence, in the enum's own order.
  *
- * The same shape as `THE_FAMILIES` and deliberately a **second list rather than three
- * more entries in the first**. The six are the gate's denominator, fixed at six
- * (ADR-0015); these three are a tier the bench holds and a run has to ask for, and a
- * reader who found them in one list of nine would be reading a denominator this bench
- * does not have (ADR-0035).
+ * The same shape as `THE_FAMILIES` and still a **second list**, though no longer for the
+ * reason it was written: the six are the gate's denominator, fixed at six (ADR-0015),
+ * and these three are a tier the bench holds and a run has to ask for. What kept the two
+ * apart on the *screen* was reversed in
+ * [ADR-0091](../../../docs/adr/0091-the-console-draws-the-nine-families-as-one-list.md)
+ * — `familyRows` joins them into one undifferentiated table — and what keeps them apart
+ * here is that they mirror two closed enumerations and two arrays on the wire, which a
+ * switch has to tell apart to know where a move is written.
  *
  * **A tick beside each of them, since #171.** `BenchConfig` carries the tier's declared
  * selection beside the six's switch, `PUT /bench/settings/families` takes both lists as

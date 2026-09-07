@@ -391,13 +391,21 @@ export interface Tuning {
   /**
    * The elective tier and whether each of it is requested, in the enum's own order.
    *
-   * A second array rather than three more rows in `families`, for the reason the bench
-   * holds two closed sets: the six are the denominator the gate is decided over
-   * (ADR-0015), and a screen offering nine rows in one list would be offering a
-   * denominator this bench does not have (ADR-0035).
+   * A second array rather than three more rows in `families`, because the bench holds
+   * two closed sets and the six are the denominator the gate is decided over (ADR-0015,
+   * ADR-0035). The console draws all nine as one undifferentiated table (ADR-0091);
+   * that is a presentation and it did not merge these two — `PUT
+   * /bench/settings/families` takes them as one statement of two lists, and a switch
+   * has to know which of them it writes to.
    */
   elective_families: FamilyCovered[]
-  /** What requesting one buys and what it does not, in the bench's own words. */
+  /**
+   * What requesting one buys and what it does not, in the bench's own words.
+   *
+   * Served and drawn by nothing since ADR-0091, on `families_off_statement`'s terms:
+   * the bench's own sentence is still built and still tested, and the screen that used
+   * to print it above the tier's own heading no longer has one.
+   */
   elective_statement: string
   layers: LayerSelected[]
   transforms: TransformSelected[]

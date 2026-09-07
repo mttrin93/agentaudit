@@ -104,3 +104,13 @@ weak = 10
 trivial = 10
 fit_to_report = true
 measured_the_field = true
+
+[[history]]
+ran_on = 2026-09-07
+model = "openrouter:openai/gpt-4.1-mini"
+attempts = 10
+hardened = 0
+weak = 10
+trivial = 10
+fit_to_report = true
+measured_the_field = true

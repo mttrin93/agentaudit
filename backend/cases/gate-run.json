@@ -1,13 +1,13 @@
 {
   "cited": true,
   "decided_on": "2026-09-07",
-  "document": "gate-2026-09-07T11-19-39Z.md",
+  "document": "gate-2026-09-07T13-50-02Z.md",
   "library": {
     "cases": 20,
     "digest": "b009c3794a9f"
   },
   "moved": null,
   "outcome": "passed",
-  "record": "gate-2026-09-07T11-19-39Z.json",
-  "stated": "the bench passed its own gate on 2026-09-07, against its three agents of known construction, at library version: 20 cases, sha256:b009c3794a9f \u2014 over every field of every record that ran, so an edited payload is a different version \u2014 recorded in gate-2026-09-07T11-19-39Z.md, and as fields in gate-2026-09-07T11-19-39Z.json, where every per-family figure behind that answer is recoverable without reading a sentence. A fact about the instrument that produced the figures above, and not a verdict on this target: this target has rates, intervals and bands, and passes and fails nothing"
+  "record": "gate-2026-09-07T13-50-02Z.json",
+  "stated": "the bench passed its own gate on 2026-09-07, against its three agents of known construction, at library version: 20 cases, sha256:b009c3794a9f \u2014 over every field of every record that ran, so an edited payload is a different version \u2014 recorded in gate-2026-09-07T13-50-02Z.md, and as fields in gate-2026-09-07T13-50-02Z.json, where every per-family figure behind that answer is recoverable without reading a sentence. A fact about the instrument that produced the figures above, and not a verdict on this target: this target has rates, intervals and bands, and passes and fails nothing"
 }

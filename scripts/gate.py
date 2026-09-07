@@ -112,9 +112,12 @@ from backend.bench.calibration import CalibrationResult, run_calibration
 from backend.bench.capability import temperature_for
 from backend.bench.cited import cite
 from backend.bench.completion import (
+    ADJUDICATOR_MODEL_ENV,
+    ATTACKER_MODEL_ENV,
     DEFAULT_ADJUDICATOR_MODEL,
     DEFAULT_ATTACKER_MODEL,
     DEFAULT_ATTACKER_TEMPERATURE,
+    REFERENCE_MODEL_ENV,
     attacker_completion_for,
     completion_for,
     declared_reasoning_effort,
@@ -143,7 +146,11 @@ from backend.bench.rule import DECLARED_RULE
 from backend.bench.scorer import GateOutcome
 from backend.graph.budget import BudgetExceeded, Layer, RunBudget
 from backend.targets.reference.hardened import HARDENED
-from backend.targets.reference.model import ModelConfig, measures_the_field
+from backend.targets.reference.model import (
+    DEFAULT_REFERENCE_MODEL,
+    ModelConfig,
+    measures_the_field,
+)
 from backend.targets.reference.operator import (
     described_agents,
     namespace_dropper,
@@ -176,12 +183,15 @@ CASES_DIR = Path(__file__).resolve().parents[1] / "backend" / "cases"
 GOLDSET_DIR = Path(__file__).resolve().parents[1] / "backend" / "goldset"
 GATE_RUNS_DIR = Path(__file__).resolve().parents[1] / "docs" / "gate-runs"
 
-DEFAULT_MODEL = "openrouter:openai/gpt-4.1-nano"
+DEFAULT_MODEL = DEFAULT_REFERENCE_MODEL
 """The reference agents' model, chosen as test equipment and recorded as such.
 
-A model that refuses the trivial agent's payloads reports its own defences rather
-than the agent's absent ones, which is the confound #15 exists to measure. See
-`docs/validation.md`.
+The string and the readings that licensed it are on `DEFAULT_REFERENCE_MODEL`, which
+all four entry points name so that a library cannot be admitted on one model and
+gated on another. What is local here: this is the model whose two consecutive low
+readings can retire a case, and `window_of` filters the series by it — so a run made
+after this moved starts every case's window again, and the first such run retires
+nothing (ADR-0022, ADR-0083).
 """
 
 EXIT_GATE_FAILED = 6
@@ -205,14 +215,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--model",
-        default=os.environ.get("AGENTAUDIT_REFERENCE_MODEL", DEFAULT_MODEL),
+        default=os.environ.get(REFERENCE_MODEL_ENV, DEFAULT_MODEL),
         help="the reference agents' underlying model, as '<provider>:<model>'",
     )
     parser.add_argument(
         "--adjudicator-model",
-        default=os.environ.get(
-            "AGENTAUDIT_ADJUDICATOR_MODEL", DEFAULT_ADJUDICATOR_MODEL
-        ),
+        default=os.environ.get(ADJUDICATOR_MODEL_ENV, DEFAULT_ADJUDICATOR_MODEL),
         help=(
             "the bench's own model, which decides the two judged families and is "
             "the instrument κ is measured on. Never a reference agent's model"
@@ -220,7 +228,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     parser.add_argument(
         "--attacker-model",
-        default=os.environ.get("AGENTAUDIT_ATTACKER_MODEL", DEFAULT_ATTACKER_MODEL),
+        default=os.environ.get(ATTACKER_MODEL_ENV, DEFAULT_ATTACKER_MODEL),
         help=(
             "the model the adaptive attacker runs on. A third setting, and it "
             "decides nothing about the gate"

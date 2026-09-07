@@ -1,7 +1,7 @@
 """Runs the multi-model validity check. The same library, twice, on two models.
 
     uv run python -m scripts.swap --identity "your name" \\
-        --model openrouter:openai/gpt-4.1-nano \\
+        --model openrouter:openai/gpt-4.1-mini \\
         --second-model openrouter:openai/gpt-4o-mini
     uv run python -m scripts.swap --identity "your name" \\
         --model stub:obedient --second-model stub:cooperative
@@ -96,8 +96,11 @@ from backend.bench.admission import (
 )
 from backend.bench.calibration import CalibrationResult, run_calibration
 from backend.bench.completion import (
+    ADJUDICATOR_MODEL_ENV,
+    ATTACKER_MODEL_ENV,
     DEFAULT_ADJUDICATOR_MODEL,
     DEFAULT_ATTACKER_MODEL,
+    REFERENCE_MODEL_ENV,
     attacker_completion_for,
     completion_for,
 )
@@ -171,6 +174,14 @@ been.
 
 SWAP_RUNS_DIR = Path(__file__).resolve().parents[1] / "docs" / "swap-runs"
 
+SECOND_REFERENCE_MODEL_ENV = "AGENTAUDIT_SECOND_REFERENCE_MODEL"
+"""Where a deployment declares the model the library is re-run on.
+
+This script's own variable and not one of the three `completion.py` names, because
+nothing else in the bench has a second reference model: a gate run, an admission and
+an adaptive run each measure one, and only a swap measures two.
+"""
+
 DEFAULT_SECOND_MODEL = "openrouter:openai/gpt-4o-mini"
 """The second model, and it is a deliberate choice rather than a spare string.
 
@@ -235,14 +246,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     parser.add_argument(
         "--model",
-        default=os.environ.get("AGENTAUDIT_REFERENCE_MODEL", DEFAULT_MODEL),
+        default=os.environ.get(REFERENCE_MODEL_ENV, DEFAULT_MODEL),
         help="the reference agents' first underlying model, as '<provider>:<model>'",
     )
     parser.add_argument(
         "--second-model",
-        default=os.environ.get(
-            "AGENTAUDIT_SECOND_REFERENCE_MODEL", DEFAULT_SECOND_MODEL
-        ),
+        default=os.environ.get(SECOND_REFERENCE_MODEL_ENV, DEFAULT_SECOND_MODEL),
         help=(
             "the model the library is re-run on. The one setting that moves between "
             "the two runs, and it has to be a different model: two runs of one model "
@@ -251,9 +260,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     parser.add_argument(
         "--adjudicator-model",
-        default=os.environ.get(
-            "AGENTAUDIT_ADJUDICATOR_MODEL", DEFAULT_ADJUDICATOR_MODEL
-        ),
+        default=os.environ.get(ADJUDICATOR_MODEL_ENV, DEFAULT_ADJUDICATOR_MODEL),
         help=(
             "the bench's own model, which decides the two judged families and is the "
             "instrument κ is measured on. Never a reference agent's model, and "
@@ -262,7 +269,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     parser.add_argument(
         "--attacker-model",
-        default=os.environ.get("AGENTAUDIT_ATTACKER_MODEL", DEFAULT_ATTACKER_MODEL),
+        default=os.environ.get(ATTACKER_MODEL_ENV, DEFAULT_ATTACKER_MODEL),
         help=(
             "the model the adaptive attacker runs on, in both runs. A third setting, "
             "and it decides nothing here"

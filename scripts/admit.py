@@ -60,7 +60,12 @@ from backend.bench.admission import (
     decide,
 )
 from backend.bench.calibration import TargetRun, run_calibration
-from backend.bench.completion import DEFAULT_ADJUDICATOR_MODEL, completion_for
+from backend.bench.completion import (
+    ADJUDICATOR_MODEL_ENV,
+    DEFAULT_ADJUDICATOR_MODEL,
+    REFERENCE_MODEL_ENV,
+    completion_for,
+)
 from backend.bench.entry import admission_block
 from backend.bench.evaluator import Verdict
 from backend.bench.library import (
@@ -78,7 +83,7 @@ from backend.bench.registration import Attestation
 from backend.bench.rule import DECLARED_RULE
 from backend.graph.approval import Approve
 from backend.graph.budget import BudgetExceeded, CallPrice, RunBudget
-from backend.targets.reference.model import ModelConfig
+from backend.targets.reference.model import DEFAULT_REFERENCE_MODEL, ModelConfig
 from backend.targets.reference.operator import (
     described_agents,
     namespace_dropper,
@@ -101,12 +106,12 @@ from scripts.console import (
 )
 
 CASES_DIR = Path(__file__).resolve().parents[1] / "backend" / "cases"
-DEFAULT_MODEL = "openrouter:openai/gpt-4.1-nano"
-"""The reference agents' model, and the same default `calibrate.py` runs on.
+DEFAULT_MODEL = DEFAULT_REFERENCE_MODEL
+"""The reference agents' model, and the same default every other entry point runs on.
 
 A reading is a reading *on a model*, so the model is recorded on the record beside
-the counts. Which one is a choice about test equipment and is argued in
-docs/validation.md, not here.
+the counts, and a record admitted here carries whichever model this named at the
+time. Which model, and why it moved, is `DEFAULT_REFERENCE_MODEL` and ADR-0083.
 """
 
 EXIT_REJECTED = 5
@@ -132,7 +137,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     parser.add_argument(
         "--model",
-        default=os.environ.get("AGENTAUDIT_REFERENCE_MODEL", DEFAULT_MODEL),
+        default=os.environ.get(REFERENCE_MODEL_ENV, DEFAULT_MODEL),
         help="the reference agents' underlying model, as '<provider>:<model>'",
     )
     parser.add_argument(
@@ -146,9 +151,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     parser.add_argument(
         "--adjudicator-model",
-        default=os.environ.get(
-            "AGENTAUDIT_ADJUDICATOR_MODEL", DEFAULT_ADJUDICATOR_MODEL
-        ),
+        default=os.environ.get(ADJUDICATOR_MODEL_ENV, DEFAULT_ADJUDICATOR_MODEL),
         help=(
             "the bench's own model, which decides the two judged families. Recorded "
             "on a judged case's reading, because a judged count is a count that "

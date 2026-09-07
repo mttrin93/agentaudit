@@ -50,8 +50,11 @@ from backend.bench.admission import (
 )
 from backend.bench.calibration import CalibrationResult, TargetRun, run_calibration
 from backend.bench.completion import (
+    ADJUDICATOR_MODEL_ENV,
+    ATTACKER_MODEL_ENV,
     DEFAULT_ADJUDICATOR_MODEL,
     DEFAULT_ATTACKER_MODEL,
+    REFERENCE_MODEL_ENV,
     attacker_completion_for,
     completion_for,
     narrator_for,
@@ -62,7 +65,7 @@ from backend.bench.scorer import discrimination
 from backend.bench.usage import UsageLedger
 from backend.graph.budget import BudgetExceeded, Layer, RunBudget
 from backend.targets.reference.hardened import HARDENED
-from backend.targets.reference.model import ModelConfig
+from backend.targets.reference.model import DEFAULT_REFERENCE_MODEL, ModelConfig
 from backend.targets.reference.operator import (
     described_agents,
     namespace_dropper,
@@ -95,7 +98,9 @@ CASES_DIR = Path(__file__).resolve().parents[1] / "backend" / "cases"
 # The reference agents need a model that will actually run them as built. A model
 # that refuses the trivial agent's payloads is reporting its own defences, not the
 # agent's absent ones — the confound #15 exists to measure. See docs/validation.md.
-DEFAULT_MODEL = "openrouter:openai/gpt-4.1-nano"
+DEFAULT_MODEL = DEFAULT_REFERENCE_MODEL
+# The one declared default, named in `backend/targets/reference/model.py` so that the
+# four entry points cannot disagree about it (ADR-0083).
 
 # The attestation, the approval interrupt, the exit codes and the rate format live
 # in `scripts.console`, shared with `probe_target.py`. One consent mechanism, asked
@@ -107,14 +112,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--model",
-        default=os.environ.get("AGENTAUDIT_REFERENCE_MODEL", DEFAULT_MODEL),
+        default=os.environ.get(REFERENCE_MODEL_ENV, DEFAULT_MODEL),
         help="the reference agents' underlying model, as '<provider>:<model>'",
     )
     parser.add_argument(
         "--adjudicator-model",
-        default=os.environ.get(
-            "AGENTAUDIT_ADJUDICATOR_MODEL", DEFAULT_ADJUDICATOR_MODEL
-        ),
+        default=os.environ.get(ADJUDICATOR_MODEL_ENV, DEFAULT_ADJUDICATOR_MODEL),
         help=(
             "the bench's own model, which decides the two judged families. Not the "
             "reference agents' model and deliberately a separate setting: one is "
@@ -123,7 +126,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     parser.add_argument(
         "--attacker-model",
-        default=os.environ.get("AGENTAUDIT_ATTACKER_MODEL", DEFAULT_ATTACKER_MODEL),
+        default=os.environ.get(ATTACKER_MODEL_ENV, DEFAULT_ATTACKER_MODEL),
         help=(
             "the model the adaptive attacker runs on. A third setting, separate "
             "from the agents' and from the adjudicator's, and named here rather "

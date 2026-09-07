@@ -62,7 +62,9 @@ from backend.bench.admission import NotAdmitted, admitted_library
 from backend.bench.applicability import applicable
 from backend.bench.calibration import DropNamespace, PlantNonce
 from backend.bench.completion import (
+    ATTACKER_MODEL_ENV,
     DEFAULT_ATTACKER_MODEL,
+    REFERENCE_MODEL_ENV,
     attacker_completion_for,
 )
 from backend.bench.contract import TargetConfig
@@ -81,7 +83,7 @@ from backend.graph.approval import ApprovalOutcome, run_under_approval
 from backend.graph.budget import BudgetExceeded, CallPrice, Layer, RunBudget
 from backend.graph.runstate import RunState
 from backend.targets.reference.hardened import HARDENED
-from backend.targets.reference.model import ModelConfig
+from backend.targets.reference.model import DEFAULT_REFERENCE_MODEL, ModelConfig
 from backend.targets.reference.operator import (
     described_agents,
     namespace_dropper,
@@ -110,10 +112,11 @@ from scripts.console import (
 )
 
 CASES_DIR = Path(__file__).resolve().parents[1] / "backend" / "cases"
-DEFAULT_MODEL = "openrouter:openai/gpt-4.1-nano"
-# The same default as `calibrate.py`, and for the same reason: the reference agents
+DEFAULT_MODEL = DEFAULT_REFERENCE_MODEL
+# The same default as `calibrate.py`, and now the same constant: the reference agents
 # need a model that will run them as built, because a model that refuses the trivial
-# agent's payloads is reporting its own defences rather than the agent's absent ones.
+# agent's payloads is reporting its own defences rather than the agent's absent ones
+# (ADR-0083).
 
 
 def declared_budget(
@@ -186,12 +189,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--model",
-        default=os.environ.get("AGENTAUDIT_REFERENCE_MODEL", DEFAULT_MODEL),
+        default=os.environ.get(REFERENCE_MODEL_ENV, DEFAULT_MODEL),
         help="the reference agents' underlying model, as '<provider>:<model>'",
     )
     parser.add_argument(
         "--attacker-model",
-        default=os.environ.get("AGENTAUDIT_ATTACKER_MODEL", DEFAULT_ATTACKER_MODEL),
+        default=os.environ.get(ATTACKER_MODEL_ENV, DEFAULT_ATTACKER_MODEL),
         help=(
             "the model the adaptive attacker runs on. The instrument under test "
             "here, and named rather than defaulted inside the run"

@@ -67,6 +67,21 @@ export interface TargetBody extends RuleOfTwoDeclared {
    * *false*, which is the narrower run (ADR-0041).
    */
   retains_session_state: boolean
+  /**
+   * Whether the endpoint holds records about people who are not the operator.
+   *
+   * Every case of the tier's PII leakage family requires it, so a body that leaves
+   * it false is a body that family is withdrawn against — before an attempt is
+   * spent, and whatever the tier was asked for. Sent as a `boolean` on the same
+   * terms as `retains_session_state` above: the bench reads it as a capability that
+   * decides measurability, its absent state is *false*, and that is the run where
+   * the family is refused rather than reported a clean zero (ADR-0043).
+   *
+   * Not `reaches_private_data` in `RuleOfTwoDeclared`, which is what this agent can
+   * *reach* and is read only by the Rule of Two: this is what is there to be
+   * disclosed, and neither is derived from the other (ADR-0038 §3).
+   */
+  holds_personal_records: boolean
   declared_tools: string[]
   sends: number
 }

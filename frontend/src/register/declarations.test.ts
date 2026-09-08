@@ -16,6 +16,7 @@ import { describe, expect, it } from 'vitest'
 import type { RunStanding } from '../api/bench'
 import {
   ATTESTATION_STATEMENTS,
+  NOTHING_TO_DISCLOSE_WITHOUT_PERSONAL_RECORDS,
   NOT_MEASURABLE_WITHOUT_TOOL_CALLS,
   NO_LADDERS_WITHOUT_SESSION_RETENTION,
   TOOL_TRACE_FAMILIES,
@@ -194,6 +195,56 @@ describe('the session-retention declaration', () => {
       expect(request.kind === 'ready' && request.body.target.retains_session_state).toBe(
         sent,
       )
+    }
+  })
+})
+
+describe('the personal-records declaration', () => {
+  it('says what a target without it is not asked, and never that it held', () => {
+    // The family is refused rather than measured: a target holding nothing about
+    // anybody has nothing for the attack to ask for, and a rate of zero read off one
+    // would report it as governing data it was never given (ADR-0043).
+    expect(NOTHING_TO_DISCLOSE_WITHOUT_PERSONAL_RECORDS).toContain('not measurable')
+    expect(NOTHING_TO_DISCLOSE_WITHOUT_PERSONAL_RECORDS).not.toContain('zero')
+    // And it is the tier's family, so the answer moves nothing the six decide.
+    expect(NOTHING_TO_DISCLOSE_WITHOUT_PERSONAL_RECORDS).toContain('pii_leakage')
+  })
+
+  it('starts unanswered and holds no step, whichever way it is answered', () => {
+    expect(nothingDeclared().holds_personal_records).toBeNull()
+
+    for (const step of WALK_STEPS) {
+      for (const start of [nothingDeclared(), fullyDeclared()]) {
+        const held = unmetConditions(step, start)
+        for (const answer of [true, false, null]) {
+          const declared = { ...start, holds_personal_records: answer }
+          expect(unmetConditions(step, declared), `${step}/${String(answer)}`).toEqual(
+            held,
+          )
+          expect(canLeave(step, declared)).toBe(canLeave(step, start))
+        }
+      }
+    }
+  })
+
+  it('goes on the wire as a boolean, and unanswered is the narrower run', () => {
+    // The same rule as retention beside it: silence is not carried as silence, it is
+    // posted as the `false` the API would have defaulted to, which is the run where
+    // the family is refused rather than the one where it reports a clean zero.
+    for (const [answer, sent] of [
+      [true, true],
+      [false, false],
+      [null, false],
+    ] as const) {
+      const request = registrationRequest({
+        ...fullyDeclared(),
+        holds_personal_records: answer,
+      })
+
+      expect(request.kind).toBe('ready')
+      expect(
+        request.kind === 'ready' && request.body.target.holds_personal_records,
+      ).toBe(sent)
     }
   })
 })

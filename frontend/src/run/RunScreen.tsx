@@ -595,21 +595,6 @@ function Progress({
           </div>
         </div>
 
-        {/*
-          And the reason a requested elective family's bar cannot fill. The bench's
-          own sentence, unedited: it says the gap is in the library this run was
-          planned against and not in the target, which is the one thing an operator
-          would otherwise get wrong — an empty bar reads as their agent, and this one
-          is ours (ADR-0094).
-        */}
-        {electiveRows(progress)
-          .filter((row) => row.notRun)
-          .map((row) => (
-            <p className="aside" key={row.family}>
-              <strong>{row.name}</strong>: {row.notRun}
-            </p>
-          ))}
-
         {/* The call it is on, under both columns and at the width of the page: an
             exchange is a paragraph of somebody's traffic and it reads badly in half
             a column. */}
@@ -674,10 +659,14 @@ function FamilyBar({ row }: { row: FamilyRow }) {
           {row.notRun ? 'not run' : `${row.attempted} / ${row.of}`}
         </span>
       </p>
-      {/* The empty track is drawn for a family that is not run as well, so the six
-          rows here and the six beside them stay level with each other. Which of the
-          two kinds of empty it is, is the word in the slot above — `not run` rather
-          than `0 / 30` — and the reason is under both columns, said once. */}
+      {/* The empty track is drawn for a family that is not run as well, so the rows
+          here and the rows beside them stay level with each other. Which of the two
+          kinds of empty it is, is the word in the slot above — `not run` rather than
+          `0 / 30`. **Why** it was not run is not on this screen: the reasons are one
+          sentence per family and there are nine families, so a run in flight would
+          carry a page of prose about the attempts it is not making. They are in the
+          report, which is the document that has to account for every family
+          (ADR-0035, ADR-0094). */}
       <div className="track">
         <span className="segment scored" style={{ width: row.done }} />
       </div>

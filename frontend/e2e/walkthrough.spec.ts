@@ -223,6 +223,13 @@ test('an operator registers a target, is blocked, confirms, and reads the report
   await page
     .getByRole('radio', { name: /a later turn sees what an earlier one did/ })
     .check()
+  // And the third, answered *no* — the reference agent this walk attacks holds
+  // nothing about anybody, so the tier's PII leakage family is refused against it
+  // rather than measured. Answered rather than left silent because the two produce
+  // the same run and only one of them is a statement (ADR-0043, ADR-0095).
+  await page
+    .getByRole('radio', { name: /nothing about anybody but its operator/ })
+    .check()
 
   // ── The Agents Rule of Two: four declarations, and the reading printed back ─────
   //

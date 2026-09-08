@@ -896,6 +896,7 @@ def _target(
                 agent_type=args.agent_type,
                 exposes_tool_calls=args.exposes_tool_calls,
                 retains_session_state=args.retains_session_state,
+                holds_personal_records=args.holds_personal_records,
                 declared_tools=tuple(args.declared_tools),
             ),
             None,
@@ -912,6 +913,11 @@ def _target(
             # does with it is the operator's statement wherever the agent lives
             # (ADR-0059 §2).
             retains_session_state=args.retains_session_state,
+            # Forwarded for the same reason retention is, and it is the same kind of
+            # statement: what a callback holds about other people is the operator's
+            # to declare wherever the agent lives, and the shim reads it off nothing
+            # (ADR-0059 §2).
+            holds_personal_records=args.holds_personal_records,
             declared_tools=tuple(args.declared_tools),
         )
     )
@@ -1083,6 +1089,11 @@ def _parser() -> argparse.ArgumentParser:
     # selection says. A callback declares it by implementing the contract and
     # never here (ADR-0059).
     parser.add_argument("--retains-session-state", action="store_true")
+    # Every case of the tier's PII leakage family requires `PERSONAL_RECORDS_HELD`
+    # (`library.py`), so a target run without this flag is one that family is
+    # withdrawn against before an attempt is spent, whatever the tier was asked for
+    # (ADR-0043, ADR-0095).
+    parser.add_argument("--holds-personal-records", action="store_true")
     parser.add_argument("--declared-tools", nargs="*", default=[])
     return parser
 

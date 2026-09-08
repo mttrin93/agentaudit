@@ -35,6 +35,7 @@ function declared() {
     },
     exposes_tool_calls: true,
     retains_session_state: true,
+    holds_personal_records: true,
     declared_tools: ['send_email', '  issue_refund  ', ''],
     price_per_call: '0.002',
     currency: 'USD',
@@ -87,6 +88,10 @@ describe('the registration this screen posts', () => {
         // wire the fixed multi-turn half of the scored layer is skipped against
         // this target, whatever the selection says (ADR-0041, ADR-0054).
         retains_session_state: true,
+        // What the tier's PII leakage family reads a record out of. Without it on
+        // the wire the family is withdrawn before an attempt is spent, whatever the
+        // tier was asked for (ADR-0043, ADR-0095).
+        holds_personal_records: true,
         declared_tools: ['send_email', 'issue_refund'],
         sends: 3,
         // The Agents Rule of Two's four declarations, and `null` is on the wire

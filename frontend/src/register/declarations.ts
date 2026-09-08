@@ -120,6 +120,27 @@ export const RETENTION_IS_A_DECLARATION_LIKE_THE_OTHERS =
   'rather skip a construction than read a ladder against a target that cannot ' +
   'carry one.'
 
+/**
+ * What a target holding no third-party records is not asked, named for the screen.
+ *
+ * Every case of the tier's PII leakage family requires `PERSONAL_RECORDS_HELD`, so a
+ * target that holds nothing about anybody is one the family is withdrawn against
+ * before an attempt is spent. The family reports **not measurable** and not a rate
+ * of zero: an agent with nothing about a person to give away has not been shown to
+ * govern data it was never given (ADR-0043). It is an elective family, so the answer
+ * moves nothing the six decide (ADR-0035).
+ */
+export const NOTHING_TO_DISCLOSE_WITHOUT_PERSONAL_RECORDS =
+  'pii_leakage reads a record about a third party leaving your agent. Against a ' +
+  'target that holds none, every case of it is withdrawn before an attempt is ' +
+  'spent and the family reports not measurable — it is an elective family either ' +
+  'way, and decides nothing the six decide.'
+
+export const RECORDS_ARE_A_DECLARATION_LIKE_THE_OTHERS =
+  'Left unanswered this reads as no, which is the narrower run: the bench would ' +
+  'rather refuse the family than ask a target for a record about somebody it was ' +
+  'never given.'
+
 export const A_DECLARATION_THE_BENCH_CANNOT_VERIFY =
   'This tool list is a declaration and the bench cannot verify it. Nothing here ' +
   'is discovered, sniffed or confirmed against your agent — the bench reads scope ' +
@@ -249,6 +270,22 @@ export interface Declarations {
    * decided in [ADR-0093](../../../docs/adr/0093-session-retention-is-declared-on-the-register-walk-and-the-bar-counts-what-the-target-can-answer.md) §3.
    */
   retains_session_state: boolean | null
+  /**
+   * Whether the target holds records about people who are not the operator.
+   *
+   * `null` until answered and holding no step, on exactly the terms
+   * `retains_session_state` above holds none: unanswered posts as `false`, which is
+   * the bench's own default and the narrower run. What it decides is whether the
+   * tier's PII leakage family is asked at all —
+   * `NOTHING_TO_DISCLOSE_WITHOUT_PERSONAL_RECORDS` is the sentence the step prints
+   * about it ([ADR-0095](../../../docs/adr/0095-what-a-target-holds-about-other-people-is-declared-on-the-register-walk.md)).
+   *
+   * Deliberately not read off `reaches_private_data` beside it: that answer is one
+   * of the four the Agents Rule of Two is read over and says what this agent can
+   * reach, and deriving one from the other would be a family gated on a reading
+   * ADR-0038 §3 keeps sharing no function with one.
+   */
+  holds_personal_records: boolean | null
   declared_tools: string[]
   /** The empty string means *not priced*, which is a declaration and not a zero. */
   price_per_call: string
@@ -311,6 +348,7 @@ export function nothingDeclared(): Declarations {
     },
     exposes_tool_calls: null,
     retains_session_state: null,
+    holds_personal_records: null,
     declared_tools: [],
     price_per_call: '',
     currency: 'USD',
@@ -586,6 +624,11 @@ function startRunBody(declarations: Declarations): StartRunBody {
       // the conservative direction is the one where nothing is read against a target
       // that cannot carry it (ADR-0041).
       retains_session_state: declarations.retains_session_state === true,
+      // The same rule, over the other capability: unanswered goes as `false`, which
+      // is the run where the tier's PII leakage family is refused rather than the
+      // one where it reports a clean zero against a target holding nothing about
+      // anybody (ADR-0043).
+      holds_personal_records: declarations.holds_personal_records === true,
       declared_tools:
         declarations.exposes_tool_calls === true ? declaredTools(declarations) : [],
       sends: declarations.sends,

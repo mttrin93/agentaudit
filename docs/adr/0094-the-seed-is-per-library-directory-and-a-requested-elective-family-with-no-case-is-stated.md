@@ -87,6 +87,13 @@ for *you asked, and there was no case to attempt*.
    points a recipient at the provenance block, and a person watching their own run has
    no document in front of them yet.
 
+   The screen's *sentence* is superseded by
+   [ADR-0095](./0095-what-a-target-holds-about-other-people-is-declared-on-the-register-walk.md)
+   decision 4, which records why: the field carries one of the reasons a bar can be
+   empty and not the other, and it is one paragraph per family over nine families. The
+   row keeps `no_case`, and what it decides on the screen is the `not run` in the
+   count slot.
+
 6. **The artefact version does not move.** This is a key added beside existing keys,
    carrying no figure and nothing for a verifier to re-derive — the case ADR-0044 §8
    and ADR-0070 both declined to move the version for, and not the case ADR-0088 §7

@@ -315,6 +315,7 @@ def a_request(
     nonce_planted: bool = True,
     echo_waived: bool = False,
     retains_session_state: bool = False,
+    holds_personal_records: bool = False,
 ) -> dict[str, Any]:
     """One start request, with any one of the three statements withheld.
 
@@ -333,6 +334,7 @@ def a_request(
             "agent_type": target.agent_type,
             "exposes_tool_calls": True,
             "retains_session_state": retains_session_state,
+            "holds_personal_records": holds_personal_records,
             "declared_tools": list(DECLARED_TOOL_NAMES),
             "sends": target.retry.sends,
         },
@@ -1584,6 +1586,50 @@ def test_a_case_asking_for_a_capability_this_target_did_not_declare_is_out_of_th
     assert row["of"] == runnable_cases * DECLARED_RULE.attempts_per_case
     # The bar fills, which is the whole claim: a denominator counting a case this
     # target cannot answer is one no run can ever reach.
+    assert row["attempted"] == row["of"]
+    assert row["resisted"] + row["succeeded"] == row["attempted"]
+
+
+@pytest.mark.parametrize("declared", [False, True])
+def test_a_target_that_holds_records_about_people_can_say_so_and_be_asked(
+    declared: bool, halt_defeat_case: Case
+) -> None:
+    """The second capability nobody could declare, on the same terms as the first.
+
+    `PERSONAL_RECORDS_HELD` is what every PII leakage case in the elective tier asks
+    for, and there was no field on `TargetRequest` to answer it with: the property
+    defaulted to false for every target ever registered through this API, so the
+    family was withdrawn before an attempt was spent whatever the tier was asked for
+    (ADR-0095). The case here is one of the six with the precondition added, because
+    what is under test is the declaration reaching `measurable` and not the tier's
+    own arithmetic.
+
+    Asserted the way the retention test above asserts it: that the field reaches
+    `TargetConfig` is worth nothing unless a case gated on it then runs, and that the
+    bar is honest is worth nothing unless the same run's `attempted` fills it.
+    """
+    records_case = replace(
+        halt_defeat_case,
+        id=f"{halt_defeat_case.id}-records",
+        requires=(*halt_defeat_case.requires, Precondition.PERSONAL_RECORDS_HELD),
+    )
+    cases = [halt_defeat_case, records_case]
+    with watched_reference() as watched, api(cases) as (client, bench):
+        nonce = registered(client, watched)
+        started = client.post(
+            "/runs",
+            json=a_request(watched.target, nonce, holds_personal_records=declared),
+        ).json()
+        record = _record(bench, started)
+        _approve(client, started["run_id"])
+        settled(record)
+        body = _progress(client, started["run_id"])
+
+    row = next(
+        one for one in body["families"] if one["family"] == str(halt_defeat_case.family)
+    )
+    runnable_cases = 2 if declared else 1
+    assert row["of"] == runnable_cases * DECLARED_RULE.attempts_per_case
     assert row["attempted"] == row["of"]
     assert row["resisted"] + row["succeeded"] == row["attempted"]
 

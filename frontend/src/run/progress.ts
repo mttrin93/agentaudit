@@ -403,19 +403,22 @@ export function familyRows(progress: RunProgress): readonly FamilyRow[] {
  *
  * A second function over the second list and never a widening of the one above: the
  * two lists describe two closed sets, this app concatenates them nowhere, and the
- * screen draws them under two headings (ADR-0035 §2, ADR-0094). What they share is
- * the row shape, which holds three widths and no arithmetic the gate reads — a length
- * is not a figure, and the reason `FamilyRow` is safe to share is the same reason
- * nothing on this screen is a rate.
+ * screen draws the tier's rows after the six's by mapping twice (ADR-0035 §2,
+ * ADR-0094). What they share is the row shape, which holds three widths and no
+ * arithmetic the gate reads — a length is not a figure, and the reason `FamilyRow` is
+ * safe to share is the same reason nothing on this screen is a rate.
  *
  * Empty for a run that asked the tier for nothing, and empty for a run made before
  * the tier could be asked for: the field is absent on the older one, and both are
  * runs whose figures are the six.
  *
- * `notRun` carries `no_case` — the bench's sentence for a requested family the
- * library holds no case in. The row shape's one field for *why this bar cannot fill*
- * takes whichever of the two reasons the row has, because a screen with two such
- * fields would be a screen that could print both.
+ * `notRun` carries `no_case`, and on this screen it decides one word: the count slot
+ * reads `not run` instead of `0 / 30`. The **sentence** is not drawn. It is one
+ * paragraph per family over nine families, it is served for one of the reasons a bar
+ * can be empty and not the other — a family withdrawn as not measurable against this
+ * target reaches this field as an empty string, and the run screen would have said
+ * *the library holds none* about it — and the document that has to account for every
+ * family is the report (ADR-0095).
  */
 export function electiveRows(progress: RunProgress): readonly FamilyRow[] {
   return (progress.elective_families ?? []).map((family: ElectiveFamilyRun) => ({

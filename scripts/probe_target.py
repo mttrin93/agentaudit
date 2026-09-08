@@ -232,6 +232,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         ),
     )
     parser.add_argument(
+        "--holds-personal-records",
+        action="store_true",
+        help=(
+            "the endpoint holds records about people other than the operator. "
+            "Without it the tier's PII leakage family is withdrawn before an "
+            "attempt is spent: there is nothing here about a person to ask for"
+        ),
+    )
+    parser.add_argument(
         "--declared-tools",
         nargs="*",
         default=[],
@@ -338,6 +347,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         agent_type=args.agent_type,
         exposes_tool_calls=args.exposes_tool_calls,
         retains_session_state=args.retains_session_state,
+        holds_personal_records=args.holds_personal_records,
         declared_tools=tuple(args.declared_tools),
     )
 

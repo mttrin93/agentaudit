@@ -55,8 +55,10 @@ import {
   ATTESTATION_STATEMENTS,
   A_DECLARATION_THE_BENCH_CANNOT_VERIFY,
   NOTHING_HERE_HOLDS_THIS_STEP,
+  NOTHING_TO_DISCLOSE_WITHOUT_PERSONAL_RECORDS,
   NOT_MEASURABLE_WITHOUT_TOOL_CALLS,
   NO_LADDERS_WITHOUT_SESSION_RETENTION,
+  RECORDS_ARE_A_DECLARATION_LIKE_THE_OTHERS,
   RETENTION_IS_A_DECLARATION_LIKE_THE_OTHERS,
   NOT_STATED,
   RULE_OF_TWO_DECLARATIONS,
@@ -1339,6 +1341,42 @@ function ToolVisibilityStep({ declarations, declare, refusals }: RefusableProps)
         </label>
         {declarations.retains_session_state === null ? (
           <p className="aside">{RETENTION_IS_A_DECLARATION_LIKE_THE_OTHERS}</p>
+        ) : null}
+      </fieldset>
+      {/*
+        The third capability on this step, and the last of the three.
+
+        Here for the reason the one above it is here — it is the same kind of question
+        and it decides the same kind of thing: not a rate, but whether a family is
+        asked at all. It sits *above* the Rule of Two's four deliberately, because the
+        answer under it about reaching private data is the one this could be mistaken
+        for: that is what the agent can reach and is read by the scanner alone, this is
+        what is there to be disclosed and is read by one family's measurability, and
+        ADR-0038 §3 keeps them sharing no function (ADR-0043, ADR-0095).
+      */}
+      <fieldset>
+        <legend>Does this target hold records about other people?</legend>
+        <p className="aside">{NOTHING_TO_DISCLOSE_WITHOUT_PERSONAL_RECORDS}</p>
+        <label className="declaration">
+          <input
+            type="radio"
+            name="holds_personal_records"
+            checked={declarations.holds_personal_records === true}
+            onChange={() => declare({ holds_personal_records: true })}
+          />
+          <span>Yes — it holds records about people other than me.</span>
+        </label>
+        <label className="declaration">
+          <input
+            type="radio"
+            name="holds_personal_records"
+            checked={declarations.holds_personal_records === false}
+            onChange={() => declare({ holds_personal_records: false })}
+          />
+          <span>No — it holds nothing about anybody but its operator.</span>
+        </label>
+        {declarations.holds_personal_records === null ? (
+          <p className="aside">{RECORDS_ARE_A_DECLARATION_LIKE_THE_OTHERS}</p>
         ) : null}
       </fieldset>
       {/* The four declarations, at the foot of the step that already asks what the

@@ -494,6 +494,30 @@ class TargetRequest(RuleOfTwoDeclarations):
     attempt was spent on them, whatever the selection said.
     """
 
+    holds_personal_records: bool = False
+    """Whether this endpoint holds records about people who are not the operator.
+
+    Declared on the same terms as `retains_session_state` above, defaulted the same
+    way and for the same reason, and asked on the same step of the walk: false is the
+    conservative direction for a capability nobody claimed, so a caller who says
+    nothing is one the family is refused against rather than reported a clean zero
+    for (ADR-0043).
+
+    **The tier's PII leakage family is unreachable without it.** Every case in it
+    requires `PERSONAL_RECORDS_HELD`, and until this field existed the property
+    defaulted to false for every target this API ever registered: the family was
+    withdrawn by `measurable` before an attempt was spent, whatever the elective tier
+    was asked for, and the row said so in the wrong words —
+    [ADR-0095](../../docs/adr/0095-what-a-target-holds-about-other-people-is-declared-on-the-register-walk.md).
+
+    Not `reaches_private_data`, one of the four the Agents Rule of Two is read over:
+    that one is a statement about what this agent *can reach* and is read by the
+    scanner alone (ADR-0038 §3). This one is about what is there to be disclosed, it
+    decides measurability and no figure, and neither is derived from the other —
+    `TargetConfig.holds_personal_records` argues the same separation at the field the
+    two arrive at.
+    """
+
     declared_tools: list[str] = Field(default_factory=list)
     """The tools the operator states their target has. Scope creep is a call
     outside this list, so against an empty one every call would be a finding —
@@ -519,6 +543,7 @@ class TargetRequest(RuleOfTwoDeclarations):
             retry=RetryPolicy(sends=self.sends),
             exposes_tool_calls=self.exposes_tool_calls,
             retains_session_state=self.retains_session_state,
+            holds_personal_records=self.holds_personal_records,
             declared_tools=tuple(self.declared_tools),
             # Passed through one for one and derived from nothing here. A capability
             # read off `declared_tools` above would be a measurement wearing a

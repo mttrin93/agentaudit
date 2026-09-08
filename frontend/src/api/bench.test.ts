@@ -34,6 +34,7 @@ function declared() {
       accepts_provider_policy_and_cost: true,
     },
     exposes_tool_calls: true,
+    retains_session_state: true,
     declared_tools: ['send_email', '  issue_refund  ', ''],
     price_per_call: '0.002',
     currency: 'USD',
@@ -82,6 +83,10 @@ describe('the registration this screen posts', () => {
         auth_token: 'bearer-token',
         agent_type: 'customer support',
         exposes_tool_calls: true,
+        // The capability every scripted construction requires. Without it on the
+        // wire the fixed multi-turn half of the scored layer is skipped against
+        // this target, whatever the selection says (ADR-0041, ADR-0054).
+        retains_session_state: true,
         declared_tools: ['send_email', 'issue_refund'],
         sends: 3,
         // The Agents Rule of Two's four declarations, and `null` is on the wire

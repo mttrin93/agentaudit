@@ -216,6 +216,13 @@ test('an operator registers a target, is blocked, confirms, and reads the report
   await page
     .getByPlaceholder('send_email')
     .fill(['send_email', 'lookup_order', 'issue_refund'].join('\n'))
+  // The second capability on this step, answered because the reference agent this
+  // walk attacks does carry a session — and because a walk that left it unanswered
+  // would register a target every scripted construction is skipped against, which is
+  // the state this question exists to end (ADR-0041, ADR-0093).
+  await page
+    .getByRole('radio', { name: /a later turn sees what an earlier one did/ })
+    .check()
 
   // ── The Agents Rule of Two: four declarations, and the reading printed back ─────
   //

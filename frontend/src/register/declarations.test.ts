@@ -17,6 +17,7 @@ import type { RunStanding } from '../api/bench'
 import {
   ATTESTATION_STATEMENTS,
   NOT_MEASURABLE_WITHOUT_TOOL_CALLS,
+  NO_LADDERS_WITHOUT_SESSION_RETENTION,
   TOOL_TRACE_FAMILIES,
   WALK_STEPS,
   canLeave,
@@ -144,6 +145,56 @@ describe('the tool-visibility declaration', () => {
       exposes_tool_calls: false,
       declared_tools: [],
     })
+  })
+})
+
+describe('the session-retention declaration', () => {
+  it('says what a target without it is not sent, and never that a family held', () => {
+    // The one thing an operator has to be told before answering: what the answer
+    // costs. Not a rate and not a family — the families keep their single-turn cases
+    // — but the constructions inside them (ADR-0041, ADR-0054).
+    expect(NO_LADDERS_WITHOUT_SESSION_RETENTION).toContain('skipped')
+    expect(NO_LADDERS_WITHOUT_SESSION_RETENTION).toContain('single-turn')
+    expect(NO_LADDERS_WITHOUT_SESSION_RETENTION).not.toContain('zero')
+  })
+
+  it('starts unanswered and holds no step, whichever way it is answered', () => {
+    expect(nothingDeclared().retains_session_state).toBeNull()
+
+    for (const step of WALK_STEPS) {
+      for (const start of [nothingDeclared(), fullyDeclared()]) {
+        const held = unmetConditions(step, start)
+        for (const answer of [true, false, null]) {
+          const declared = { ...start, retains_session_state: answer }
+          expect(unmetConditions(step, declared), `${step}/${String(answer)}`).toEqual(
+            held,
+          )
+          expect(canLeave(step, declared)).toBe(canLeave(step, start))
+        }
+      }
+    }
+  })
+
+  it('goes on the wire as a boolean, and unanswered is the narrower run', () => {
+    // Unlike the four above, silence is not carried as silence: the bench reads this
+    // as a capability whose absent state is *false*, and a run that read a ladder
+    // against a target nobody said retains anything is the reading ADR-0041 refuses.
+    // So the console posts the same `false` the API would have defaulted to.
+    for (const [answer, sent] of [
+      [true, true],
+      [false, false],
+      [null, false],
+    ] as const) {
+      const request = registrationRequest({
+        ...fullyDeclared(),
+        retains_session_state: answer,
+      })
+
+      expect(request.kind).toBe('ready')
+      expect(request.kind === 'ready' && request.body.target.retains_session_state).toBe(
+        sent,
+      )
+    }
   })
 })
 

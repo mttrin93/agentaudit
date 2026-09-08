@@ -56,6 +56,8 @@ import {
   A_DECLARATION_THE_BENCH_CANNOT_VERIFY,
   NOTHING_HERE_HOLDS_THIS_STEP,
   NOT_MEASURABLE_WITHOUT_TOOL_CALLS,
+  NO_LADDERS_WITHOUT_SESSION_RETENTION,
+  RETENTION_IS_A_DECLARATION_LIKE_THE_OTHERS,
   NOT_STATED,
   RULE_OF_TWO_DECLARATIONS,
   THE_AGENTS_RULE_OF_TWO,
@@ -1303,6 +1305,42 @@ function ToolVisibilityStep({ declarations, declare, refusals }: RefusableProps)
           )}
         </Field>
       ) : null}
+      {/*
+        The second capability this step asks about, under the first.
+
+        Here rather than on a step of its own, because it is the same kind of question
+        as the one above it — what can the bench *see* of this endpoint — and the
+        answer decides the same kind of thing: not a rate, but whether a construction
+        is sent at all. Two radios and no third, like the question above, and unlike it
+        **this one holds nothing**: unanswered posts as no, which is the bench's own
+        default and the narrower run, so a walk stopped here would stop over silence
+        the API accepts (ADR-0041).
+      */}
+      <fieldset>
+        <legend>Does this target carry a session from one turn to the next?</legend>
+        <p className="aside">{NO_LADDERS_WITHOUT_SESSION_RETENTION}</p>
+        <label className="declaration">
+          <input
+            type="radio"
+            name="retains_session_state"
+            checked={declarations.retains_session_state === true}
+            onChange={() => declare({ retains_session_state: true })}
+          />
+          <span>Yes — a later turn sees what an earlier one did.</span>
+        </label>
+        <label className="declaration">
+          <input
+            type="radio"
+            name="retains_session_state"
+            checked={declarations.retains_session_state === false}
+            onChange={() => declare({ retains_session_state: false })}
+          />
+          <span>No — it answers each turn from nothing.</span>
+        </label>
+        {declarations.retains_session_state === null ? (
+          <p className="aside">{RETENTION_IS_A_DECLARATION_LIKE_THE_OTHERS}</p>
+        ) : null}
+      </fieldset>
       {/* The four declarations, at the foot of the step that already asks what the
           bench will be able to *see*. These ask what the agent can *do*: both are
           declarations, neither is measured, and CONTEXT.md keeps declared capability

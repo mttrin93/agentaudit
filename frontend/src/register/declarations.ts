@@ -99,6 +99,27 @@ export const NOT_MEASURABLE_WITHOUT_TOOL_CALLS =
   `Without visible tool calls, ${TOOL_TRACE_FAMILIES.join(' and ')} report as ` +
   'not measurable rather than as defended.'
 
+/**
+ * What a target without session retention is not sent, named for the screen.
+ *
+ * Every scripted construction in the library requires the capability — `Case.script`
+ * may only be set on a case that asks for it — so a target that answers turn one
+ * every time is one the fixed multi-turn ladders are skipped against, before an
+ * attempt is spent on them. The families keep their single-turn cases and their rate:
+ * what is lost is the variant, and the report prints it absent rather than at zero
+ * (ADR-0041, ADR-0054).
+ */
+export const NO_LADDERS_WITHOUT_SESSION_RETENTION =
+  'A ladder needs a later turn for the stop to survive into. Against a target ' +
+  'that answers turn one every time, every fixed multi-turn construction is ' +
+  'skipped before an attempt is spent on it, and the families it belongs to are ' +
+  'measured on their single-turn cases alone.'
+
+export const RETENTION_IS_A_DECLARATION_LIKE_THE_OTHERS =
+  'Left unanswered this reads as no, which is the narrower run: the bench would ' +
+  'rather skip a construction than read a ladder against a target that cannot ' +
+  'carry one.'
+
 export const A_DECLARATION_THE_BENCH_CANNOT_VERIFY =
   'This tool list is a declaration and the bench cannot verify it. Nothing here ' +
   'is discovered, sniffed or confirmed against your agent — the bench reads scope ' +
@@ -215,6 +236,19 @@ export interface Declarations {
   attested: Attested
   /** `null` until the operator declares one way or the other. Never defaulted. */
   exposes_tool_calls: boolean | null
+  /**
+   * Whether the target carries one turn of a session into the next.
+   *
+   * `null` until answered, like `exposes_tool_calls` above and unlike it in what
+   * that buys: **this one holds no step.** Unanswered posts as `false`, which is the
+   * bench's own default and the narrower run, so a walk that refused to go on would
+   * refuse it over a declaration the API is content to take as silence
+   * (ADR-0041). What it decides is whether the fixed multi-turn ladders are sent —
+   * `NO_LADDERS_WITHOUT_SESSION_RETENTION` is the sentence the step prints about it,
+   * and why it holds nothing where the tool-visibility answer beside it does is
+   * decided in [ADR-0093](../../../docs/adr/0093-session-retention-is-declared-on-the-register-walk-and-the-bar-counts-what-the-target-can-answer.md) §3.
+   */
+  retains_session_state: boolean | null
   declared_tools: string[]
   /** The empty string means *not priced*, which is a declaration and not a zero. */
   price_per_call: string
@@ -276,6 +310,7 @@ export function nothingDeclared(): Declarations {
       accepts_provider_policy_and_cost: false,
     },
     exposes_tool_calls: null,
+    retains_session_state: null,
     declared_tools: [],
     price_per_call: '',
     currency: 'USD',
@@ -546,6 +581,11 @@ function startRunBody(declarations: Declarations): StartRunBody {
       auth_token: declarations.auth_token,
       agent_type: declarations.agent_type.trim(),
       exposes_tool_calls: declarations.exposes_tool_calls === true,
+      // Unanswered goes as `false`, which is what the API would have defaulted an
+      // absent field to: the capability decides whether a construction is sent, and
+      // the conservative direction is the one where nothing is read against a target
+      // that cannot carry it (ADR-0041).
+      retains_session_state: declarations.retains_session_state === true,
       declared_tools:
         declarations.exposes_tool_calls === true ? declaredTools(declarations) : [],
       sends: declarations.sends,

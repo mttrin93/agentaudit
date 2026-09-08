@@ -55,6 +55,17 @@ export interface TargetBody extends RuleOfTwoDeclared {
   auth_token: string
   agent_type: string
   exposes_tool_calls: boolean
+  /**
+   * Whether the endpoint carries one turn of a session into the next.
+   *
+   * Every scripted construction in the library requires it, so a body that leaves
+   * it false is a body the fixed multi-turn half of the scored layer is skipped
+   * against — before an attempt is spent, and whatever the selection says. Sent as a
+   * `boolean` and not the three answers the Rule of Two carries, because the bench
+   * reads it as a capability that decides measurability and its absent state is
+   * *false*, which is the narrower run (ADR-0041).
+   */
+  retains_session_state: boolean
   declared_tools: string[]
   sends: number
 }

@@ -216,6 +216,7 @@ from backend.bench.adaptive.episode import AdaptiveEpisode, EpisodeOutcome
 from backend.bench.adaptive.scripted import SCRIPTED_ATTACKER
 from backend.bench.adjudication import Completion
 from backend.bench.admission import admitted_elective, admitted_library
+from backend.bench.applicability import applicable
 from backend.bench.capability import (
     NO_REASONING_EFFORT_ACCEPTED,
     NO_TEMPERATURE_ACCEPTED,
@@ -259,6 +260,7 @@ from backend.bench.library import (
     LibraryVersion,
     Transform,
 )
+from backend.bench.measurability import runnable
 from backend.bench.payload import DeclaredModels, GateCitation, citation
 from backend.bench.registration import ECHO_PROBE, Attestation
 from backend.bench.rendering import REPORT_MARKDOWN, REPORT_PAYLOAD
@@ -474,6 +476,24 @@ class TargetRequest(RuleOfTwoDeclarations):
     """Declared, never sniffed. Two families are read from a tool trace, and a
     target that returns none reports them *not measurable* rather than defended."""
 
+    retains_session_state: bool = False
+    """Whether this endpoint carries one turn of a session into the next.
+
+    Declared on the same terms as `exposes_tool_calls` above and defaulted the way
+    `TargetConfig` defaults it, which is why this one has a default and that one does
+    not: false is the conservative direction for a capability nobody claimed
+    (ADR-0041), and a caller who says nothing gets the narrower run rather than a
+    ladder read against a target that answers turn one every time. Why this one is a
+    `bool` where the Rule of Two's four are `bool | None` is decided in
+    [ADR-0093](../../docs/adr/0093-session-retention-is-declared-on-the-register-walk-and-the-bar-counts-what-the-target-can-answer.md).
+
+    **The scored layer's fixed multi-turn half is unreachable without it.**
+    `Case.script` may only be set on a case that requires `SESSION_RETENTION`
+    (`library.py`), so every scripted construction in the library asks for this
+    capability: a body that omitted the field left the ladders skipped before an
+    attempt was spent on them, whatever the selection said.
+    """
+
     declared_tools: list[str] = Field(default_factory=list)
     """The tools the operator states their target has. Scope creep is a call
     outside this list, so against an empty one every call would be a finding —
@@ -498,6 +518,7 @@ class TargetRequest(RuleOfTwoDeclarations):
             agent_type=self.agent_type,
             retry=RetryPolicy(sends=self.sends),
             exposes_tool_calls=self.exposes_tool_calls,
+            retains_session_state=self.retains_session_state,
             declared_tools=tuple(self.declared_tools),
             # Passed through one for one and derived from nothing here. A capability
             # read off `declared_tools` above would be a measurement wearing a
@@ -1051,6 +1072,21 @@ def _run_families(record: RunRecord, rule: GateRule) -> list[FamilyRun]:
     library: a family whose cases were dropped by a declaration is a family this run
     will make no attempt in, and a denominator taken off the library would leave a bar
     that can never fill.
+
+    **The plan read as this target can answer it**, which is the same sentence one
+    filter further on. `plan_for` knows the config and not the endpoint, so the two
+    target-shaped filters are applied where the run applies them — `applicable` on the
+    agent type and `measurable` on the preconditions, both ahead of the first attempt
+    (`calibration.py`, ADR-0004) — and a case they withdraw is one no attempt will
+    ever be spent on. Counting it here put `3 / 4` on a family whose fourth case asked
+    for a capability this target never declared, with nothing beside it saying so —
+    decision 4 of
+    [ADR-0093](../../docs/adr/0093-session-retention-is-declared-on-the-register-walk-and-the-bar-counts-what-the-target-can-answer.md).
+
+    What is *not* subtracted is the third withdrawal, the one the registration probe
+    makes when a reply contradicts a declaration: it is read inside the run against a
+    reply this function cannot see. A row over-counting there is a bar that stops
+    short, which is the direction this used to fail in everywhere.
     """
     made: dict[str, int] = {}
     held: dict[str, int] = {}
@@ -1059,10 +1095,11 @@ def _run_families(record: RunRecord, rule: GateRule) -> list[FamilyRun]:
         made[name] = made.get(name, 0) + 1
         if attempt.verdict is Verdict.RESISTED:
             held[name] = held.get(name, 0) + 1
+    answerable = runnable(applicable(record.plan.cases, record.target), record.target)
     rows: list[FamilyRun] = []
     for family in Family:
         name = str(family)
-        cases = sum(1 for case in record.plan.cases if case.family is family)
+        cases = sum(1 for case in answerable if case.family is family)
         attempted = made.get(name, 0)
         gap = record.plan.gaps.get(family)
         rows.append(

@@ -895,6 +895,7 @@ def _target(
                 auth_token=args.token,
                 agent_type=args.agent_type,
                 exposes_tool_calls=args.exposes_tool_calls,
+                retains_session_state=args.retains_session_state,
                 declared_tools=tuple(args.declared_tools),
             ),
             None,
@@ -906,6 +907,11 @@ def _target(
             callback,
             name=args.name,
             agent_type=args.agent_type,
+            # Forwarded, because retention is not one of the properties the shim
+            # reads off the callback: a callback is handed a session id and what it
+            # does with it is the operator's statement wherever the agent lives
+            # (ADR-0059 §2).
+            retains_session_state=args.retains_session_state,
             declared_tools=tuple(args.declared_tools),
         )
     )
@@ -1071,6 +1077,12 @@ def _parser() -> argparse.ArgumentParser:
         help="what the page calls the upload the three files were attached to",
     )
     parser.add_argument("--exposes-tool-calls", action="store_true")
+    # Every scripted construction in the library requires `SESSION_RETENTION`
+    # (`library.py`), so a URL target run without this flag is one the fixed
+    # multi-turn half of the scored layer is skipped against, whatever the
+    # selection says. A callback declares it by implementing the contract and
+    # never here (ADR-0059).
+    parser.add_argument("--retains-session-state", action="store_true")
     parser.add_argument("--declared-tools", nargs="*", default=[])
     return parser
 

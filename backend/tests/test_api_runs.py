@@ -21,7 +21,7 @@ import threading
 import time
 from collections.abc import Iterator
 from contextlib import contextmanager
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, cast
 
@@ -57,7 +57,7 @@ from backend.bench.completion import (
     TURNS_PER_EPISODE_ENV,
 )
 from backend.bench.contract import TargetConfig, TargetFailure
-from backend.bench.library import Case, Family, LibraryVersion
+from backend.bench.library import Case, Family, LibraryVersion, Precondition
 from backend.bench.registration import Attestation
 from backend.bench.rule import DECLARED_RULE
 from backend.bench.signing import (
@@ -314,8 +314,14 @@ def a_request(
     note_planted: bool = False,
     nonce_planted: bool = True,
     echo_waived: bool = False,
+    retains_session_state: bool = False,
 ) -> dict[str, Any]:
-    """One start request, with any one of the three statements withheld."""
+    """One start request, with any one of the three statements withheld.
+
+    `retains_session_state` defaults to the API's own default rather than to what the
+    served reference agent can do, because that is the body most of these tests are
+    about: a caller who says nothing gets the narrower run (ADR-0041).
+    """
     attestation = dict.fromkeys(STATEMENT_FIELDS, True)
     if withheld is not None:
         attestation[withheld] = False
@@ -326,6 +332,7 @@ def a_request(
             "auth_token": target.auth_token,
             "agent_type": target.agent_type,
             "exposes_tool_calls": True,
+            "retains_session_state": retains_session_state,
             "declared_tools": list(DECLARED_TOOL_NAMES),
             "sends": target.retry.sends,
         },
@@ -1535,6 +1542,50 @@ def test_a_run_reports_each_family_over_its_own_denominator_while_it_goes(
     # not a gap the caller declared, it is a family this run has nothing to attempt.
     unwritten = families[str(Family.HALT_DEFEAT)]
     assert (unwritten["of"], unwritten["not_run"]) == (0, "")
+
+
+@pytest.mark.parametrize("declared", [False, True])
+def test_a_case_asking_for_a_capability_this_target_did_not_declare_is_out_of_the_bar(
+    declared: bool, halt_defeat_case: Case
+) -> None:
+    """The declaration reaches the run, and the denominator is what it left runnable.
+
+    Two cases in one family, and the second asks for session retention — which is
+    every scripted construction in the library, since `Case.script` may only be set on
+    a case that requires it. A caller who declares the capability is attacked with
+    both; a caller who says nothing is attacked with one, and this is the row that
+    used to read `10 / 20` against a case no attempt would ever be spent on.
+
+    Two things asserted together on purpose. That the field reaches `TargetConfig` is
+    only worth something if a case gated on it then runs, and that the bar is honest
+    is only worth something if the same run's `attempted` fills it.
+    """
+    retention_case = replace(
+        halt_defeat_case,
+        id=f"{halt_defeat_case.id}-retained",
+        requires=(*halt_defeat_case.requires, Precondition.SESSION_RETENTION),
+    )
+    cases = [halt_defeat_case, retention_case]
+    with watched_reference() as watched, api(cases) as (client, bench):
+        nonce = registered(client, watched)
+        started = client.post(
+            "/runs",
+            json=a_request(watched.target, nonce, retains_session_state=declared),
+        ).json()
+        record = _record(bench, started)
+        _approve(client, started["run_id"])
+        settled(record)
+        body = _progress(client, started["run_id"])
+
+    row = next(
+        one for one in body["families"] if one["family"] == str(halt_defeat_case.family)
+    )
+    runnable_cases = 2 if declared else 1
+    assert row["of"] == runnable_cases * DECLARED_RULE.attempts_per_case
+    # The bar fills, which is the whole claim: a denominator counting a case this
+    # target cannot answer is one no run can ever reach.
+    assert row["attempted"] == row["of"]
+    assert row["resisted"] + row["succeeded"] == row["attempted"]
 
 
 def test_a_run_carries_the_last_exchange_and_never_the_log(leakage_case: Case) -> None:

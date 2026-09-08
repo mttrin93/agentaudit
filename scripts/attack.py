@@ -267,6 +267,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         ),
     )
     parser.add_argument(
+        "--retains-session-state",
+        action="store_true",
+        help=(
+            "the endpoint carries one turn of a session into the next. It is "
+            "read the same way here as on a scored run: a family whose every "
+            "case asks for it holds no objective, so no episode opens"
+        ),
+    )
+    parser.add_argument(
         "--declared-tools",
         nargs="*",
         default=[],
@@ -372,6 +381,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             auth_token=args.token,
             agent_type=args.agent_type,
             exposes_tool_calls=args.exposes_tool_calls,
+            retains_session_state=args.retains_session_state,
             declared_tools=tuple(args.declared_tools),
         )
         # Asked before the approval interrupt and after the attestation, on

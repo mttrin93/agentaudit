@@ -4786,9 +4786,21 @@ rather than a figure moved.
   member's entry in `FRAMINGS` is **empty**, every family is refused, and the refusal
   carries the disclosure reason rather than *nobody wrote the words*. Nothing breaks —
   no type asserts a `Transform` member has a record and `VariantCounts` refuses an entry
-  at zero attempts — and the words themselves are gone from `transforms.py`, which
-  changes no history and only means no code path can put them in a record. **Restoring
-  the pairing is a disclosure decision**, and the message says so.
+  at zero attempts. **Restoring the pairing is a disclosure decision**, and the message
+  says so.
+- **Part of it was restored, for the adaptive layer alone, and the decision is
+  [ADR-0098](./adr/0098-the-adaptive-layer-may-attack-in-a-framing-and-its-words-are-declared-once.md).**
+  An override frame in this repository's wording is back in `transforms.py`, as
+  `_ADAPTIVE_OVERRIDE`, and the adaptive layer may wrap a probe it composed at runtime
+  in it. What has **not** changed: the member's entry in `FRAMINGS` is still empty, so
+  `framing_for` still refuses every family and **no case record of it can be written**,
+  the library still holds no record anywhere, and the frame reaches no signed artefact —
+  an episode's payload is not in the document (ADR-0056 §1, ADR-0057 §4) and transcripts
+  are never committed. What is accepted is stated rather than hidden: **the words ship in
+  this repository's source**, which is the half of ADR-0008's amendment that a runtime-only
+  frame does not answer, and the operator asked for the search those words buy against
+  their own target. A reader deciding whether this repository publishes a reusable
+  override should read `_ADAPTIVE_OVERRIDE` and decide about that string.
 - **The comment's argument for per-base framings is answered by its own reason.** It
   observes that a framing per base case is what would give the wrapper a base it could
   vary; what ADR-0008 withholds is the frame's words, so a per-base override framing is

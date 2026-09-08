@@ -3407,8 +3407,8 @@ class Tuning(BaseModel):
     A second list rather than more rows on `transforms`: the same member means two
     different things in the two lists — a case sent in base64 and scored on its own
     attempts, and a composed probe respelled on its way out — and one list would put a
-    switch for the second where a console reads the first. Three members are absent,
-    and `transforms.ADAPTIVE_SPELLINGS` is where the absence is argued.
+    switch for the second where a console reads the first. One member is absent, and
+    `transforms.ADAPTIVE_SPELLINGS` is where the absence is argued.
     """
 
     adaptive_constructions_statement: str
@@ -3500,22 +3500,25 @@ a claim about the attacker the reference agents faced, which is the line.
 """
 
 A_SPELLING_IS_ITS_OWN_EPISODE_SET = (
-    "the adaptive attacker composes its own probes, and a spelling is what the harness "
-    "does to them on the way out: base64, rot13 or leetspeak, applied to every probe "
-    "of an episode as it is sent. Each spelling selected is its own episode set — k "
-    "episodes per family in it — so the layer's ceiling multiplies and the figure you "
-    "confirm before a run starts multiplies with it. Nothing here is scored: an "
-    "episode is a summand of nothing, so what a spelling buys is the search run "
-    "against a target that may answer one spelling and refuse another. The four here "
-    "are the constructions that need no words of ours — a framing is written per "
-    "family and a crescendo is a ladder, and neither is a spelling of the attacker's "
-    "own sentence"
+    "the adaptive attacker composes its own probes, and a construction here is what "
+    "the harness does to them on the way out: an encoding respells the attacker's own "
+    "sentence, and a framing puts a persona or a claim of prior approval in front of "
+    "it — applied to every probe of an episode as it is sent, with the request itself "
+    "passing through verbatim. Each one selected is its own episode set — k episodes "
+    "per family in it — so the layer's ceiling multiplies and the figure you confirm "
+    "before a run starts multiplies with it. Nothing here is scored: an episode is a "
+    "summand of nothing, so what a construction buys is the search run against a "
+    "target that may answer one and refuse another. The framings' words are this "
+    "bench's own and are declared once for the layer rather than per family, because "
+    "no figure here is compared with a base case's. Six of the seven: the crescendo is "
+    "a ladder computed from a case record and the fixed script is the only multi-turn "
+    "approach this bench has, so a probe cannot be composed in it"
 )
-"""What a second spelling buys and what it costs (ADR-0074, ADR-0097).
+"""What a second construction buys and what it costs (ADR-0074, ADR-0097, ADR-0098).
 
 Beside the schedules' sentence and written here for its reason: the switch and its
-caveat are one statement. The last clause is the one an operator cannot work out —
-why the list is four members and not seven.
+caveat are one statement. The last two clauses are the ones an operator cannot work
+out — where the framings' words come from, and why the list is six and not seven.
 """
 
 A_CONSTRUCTION_SWITCHED_OFF_IS_NOT_SENT = (

@@ -233,17 +233,20 @@ under the line, so a run under the tree is read against a citation the line earn
 _Avoid_: strategy, mode, adaptive construction, multi-turn attack
 
 **Spelling**:
-Which **construction** the adaptive layer's own composed probes are respelled by on
-their way to the wire: the identity, base64, rot13 or leetspeak. The attacker composes
-in plain words and the harness respells — the brief says so, and a model that encoded
-its own probe would encode it twice. **One spelling per episode, and each selected
-spelling is its own episode set**: `k` episodes per family in it, so the ceiling
-multiplies exactly as a second **schedule** multiplies it. Four members and not seven,
-because the other three need words of ours: a **framing** is written per family and
-withheld entirely for the override wrapper, and a crescendo is a ladder computed from a
-case record — neither is a spelling of a sentence the attacker wrote a moment ago. The
-same member in the scored layer is a case *sent* in that construction and scored on its
-own attempts; here nothing is scored.
+Which **construction** the adaptive layer's own composed probes are sent under: the
+identity, the three encodings, or one of the two **framings** — a persona, or a claim of
+prior approval. The attacker composes in plain words and the harness composes round
+them; the brief says which, and never quotes the frame's own words, because a model told
+the wording would write a second copy of it. **One spelling per episode, and each
+selected spelling is its own episode set**: `k` episodes per family in it, so the
+ceiling multiplies exactly as a second **schedule** multiplies it. Six members and not
+seven: a crescendo is a ladder computed from a case record and the fixed script is the
+only multi-turn approach implemented, so no probe can be composed in it. The framings'
+words are declared **once for the layer** and not per family — that grain belongs to a
+committed variant whose rate is compared with its base case's, and nothing here carries
+a rate. The same member in the scored layer is a case *sent* in that construction and
+scored on its own attempts; here nothing is scored, and the override frame has a record
+in no library.
 _Avoid_: encoding strategy, adaptive transform, variant
 
 **Turn**:

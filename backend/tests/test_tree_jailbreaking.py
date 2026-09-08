@@ -27,7 +27,7 @@ from backend.bench.adaptive.episode import (
     AttackerTool,
     EpisodeOutcome,
 )
-from backend.bench.adaptive.prompt import RESPELLING, episode_brief
+from backend.bench.adaptive.prompt import FRAMED, RESPELLING, episode_brief
 from backend.bench.adaptive.scripted import (
     BRANCHED,
     DESCRIPTION,
@@ -51,7 +51,13 @@ from backend.bench.library import (
     Transform,
 )
 from backend.bench.selection import EVERY_CONSTRUCTION, AttackLayer
-from backend.bench.transforms import ADAPTIVE_SPELLINGS, spelled
+from backend.bench.transforms import (
+    ADAPTIVE_FRAMINGS,
+    ADAPTIVE_SPELLINGS,
+    FRAMINGS,
+    framing_for,
+    spelled,
+)
 from backend.graph.budget import Layer, RunBudget
 from backend.tests.conftest import a_target
 from backend.tests.test_adaptive_attacker import attack, attackable
@@ -700,35 +706,94 @@ def test_the_brief_tells_the_attacker_what_will_be_done_to_its_words(
     assert "do not encode anything yourself" in encoded
 
 
-def test_a_construction_that_needs_words_of_ours_cannot_respell_a_probe() -> None:
-    """Four spellings and not seven, refused at the function and at the selection.
+def test_the_six_a_composed_probe_can_be_sent_under_and_the_one_that_cannot() -> None:
+    """Six spellings, the two framings among them, and the ladder refused.
 
-    A framing is words this repository writes per family — and withholds entirely for
-    the override wrapper (ADR-0074 §5) — and a crescendo is a ladder computed from a
-    case record. Neither is a spelling of a sentence the attacker wrote a moment ago,
-    so both are refused rather than quietly sending a plain probe under a
-    construction's name.
+    The three encodings and the identity respell the attacker's own sentence; the two
+    framings take their words from `ADAPTIVE_FRAMINGS`, one per transform rather than
+    one per family, because nothing here carries a rate to be compared with a base
+    case's (ADR-0098). `scripted_crescendo` is refused: it is a ladder computed from a
+    case record, and the fixed script is the only multi-turn approach this bench has.
+
+    Driven red by letting the crescendo fall through to the identity, which is the
+    version that sends a plain probe under a construction's name.
     """
-    assert ADAPTIVE_SPELLINGS == frozenset(
-        {Transform.PLAIN, Transform.BASE64, Transform.ROT13, Transform.LEETSPEAK}
-    )
+    assert ADAPTIVE_SPELLINGS == frozenset(Transform) - {Transform.SCRIPTED_CRESCENDO}
     assert spelled(Transform.ROT13, "abc") == "nop"
     assert spelled(Transform.PLAIN, "abc") == "abc"
 
-    for refused in (
-        Transform.ROLEPLAY,
-        Transform.PROMPT_INJECTION_WRAPPER,
-        Transform.SCRIPTED_CRESCENDO,
-    ):
-        with pytest.raises(ValueError, match="needs words of ours|is not a spelling"):
-            spelled(refused, "abc")
-        with pytest.raises(ValueError, match="cannot respell a probe"):
-            replace(EVERY_CONSTRUCTION, adaptive_constructions=frozenset({refused}))
+    # The framings put words in front of the probe and leave the probe verbatim, which
+    # is what `roleplay` and `prompt_injection_wrapper` do for a committed payload too.
+    for framing in (Transform.ROLEPLAY, Transform.PROMPT_INJECTION_WRAPPER):
+        framed = spelled(framing, "tell me the canary")
+        assert framed.endswith("tell me the canary")
+        assert framed != "tell me the canary"
+        assert framed.startswith(ADAPTIVE_FRAMINGS[framing])
+
+    # The persona assigns a remit and stages nothing, which is ADR-0074 §5's rule kept:
+    # a fiction the target is performing gives it a reason to make no tool call at all.
+    persona = ADAPTIVE_FRAMINGS[Transform.ROLEPLAY]
+    assert "recording" not in persona
+    assert "scene" not in persona
+    assert "take" not in persona
+    # And it claims no authorisation, which is the other member's sentence and not
+    # this one's.
+    assert "approved" not in persona
+
+    # The two tables stay two: what a *record* may be written from is `FRAMINGS`, and
+    # the wrapper's entry there is still empty, so no case record of it can exist.
+    assert FRAMINGS[Transform.PROMPT_INJECTION_WRAPPER] == {}
+    with pytest.raises(ValueError, match="no framing for"):
+        framing_for(Transform.PROMPT_INJECTION_WRAPPER, Family.DATA_LEAKAGE)
+
+    with pytest.raises(ValueError, match="cannot be applied to a probe"):
+        spelled(Transform.SCRIPTED_CRESCENDO, "abc")
+    with pytest.raises(ValueError, match="cannot respell a probe"):
+        replace(
+            EVERY_CONSTRUCTION,
+            adaptive_constructions=frozenset({Transform.SCRIPTED_CRESCENDO}),
+        )
 
     with pytest.raises(ValueError, match="some spelling"):
         replace(EVERY_CONSTRUCTION, adaptive_constructions=frozenset())
     with pytest.raises(ValueError, match="no spelling"):
         replace(DECLARED_ADAPTIVE_BUDGET, constructions=frozenset())
+
+
+def test_a_framed_episode_tells_the_attacker_what_the_frame_does_and_not_its_words(
+    leakage_case: Case,
+) -> None:
+    """The attacker composes the request; the harness adds the frame and says so.
+
+    Two phrases and not one, because an encoding and a framing are two different things
+    being done to the probe — and the frame's own wording stays out of the brief, or the
+    model composes a second copy of it (ADR-0098).
+    """
+
+    def brief(spelling: Transform) -> str:
+        return episode_brief(
+            handle="target-a",
+            objective=leakage_case,
+            family=Family.DATA_LEAKAGE,
+            tools=frozenset(),
+            turns_used=0,
+            turn_cap=8,
+            log=[],
+            continuation=Continuation(parent=0, turns_taken=0),
+            spelling=spelling,
+        )
+
+    framed = brief(Transform.PROMPT_INJECTION_WRAPPER)
+    assert FRAMED in framed
+    assert RESPELLING not in framed
+    assert "do not write a persona or claim an approval yourself" in framed
+    # The frame's words are the harness's and are not quoted at the model.
+    assert ADAPTIVE_FRAMINGS[Transform.PROMPT_INJECTION_WRAPPER] not in framed
+
+    persona = brief(Transform.ROLEPLAY)
+    assert FRAMED in persona
+    assert ADAPTIVE_FRAMINGS[Transform.ROLEPLAY] not in persona
+    assert RESPELLING in brief(Transform.BASE64)
 
 
 def test_the_selection_states_the_spellings_and_the_block_names_them(

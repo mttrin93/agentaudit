@@ -1480,9 +1480,10 @@ def test_the_console_reads_the_layers_and_the_constructions_it_may_select() -> N
     assert "two episode sets" in tuning["schedules_statement"]
     assert "doubles" in tuning["schedules_statement"]
 
-    # And the layer's other switch: the spellings its probes may be composed in. Four
-    # of the seven constructions, because the other three need words this repository
-    # writes per family or a ladder computed from a record (ADR-0074, ADR-0097).
+    # And the layer's other switch: the constructions its probes may be composed in.
+    # Six of the seven — the encodings respell the attacker's own words and the two
+    # framings take theirs from `ADAPTIVE_FRAMINGS`, declared once for the layer rather
+    # than per family (ADR-0074, ADR-0097, ADR-0098).
     assert [row["transform"] for row in tuning["adaptive_constructions"]] == [
         str(one) for one in Transform if one in ADAPTIVE_SPELLINGS
     ]
@@ -1491,11 +1492,13 @@ def test_the_console_reads_the_layers_and_the_constructions_it_may_select() -> N
     }
     assert {
         row["transform"]: row["selected"] for row in tuning["adaptive_constructions"]
-    } == {
-        str(Transform.PLAIN): True,
-        str(Transform.BASE64): False,
-        str(Transform.ROT13): False,
-        str(Transform.LEETSPEAK): False,
+    } == {str(one): one is Transform.PLAIN for one in ADAPTIVE_SPELLINGS}
+    # And the one member that is not offered: a probe cannot be composed in a ladder
+    # computed from a case record, and the fixed script is the only multi-turn approach
+    # this bench has implemented.
+    assert Transform.SCRIPTED_CRESCENDO not in ADAPTIVE_SPELLINGS
+    assert str(Transform.SCRIPTED_CRESCENDO) not in {
+        row["transform"] for row in tuning["adaptive_constructions"]
     }
     assert "its own episode set" in tuning["adaptive_constructions_statement"]
 
@@ -1605,10 +1608,8 @@ def test_the_spellings_the_adaptive_layer_composes_in_can_be_set() -> None:
     assert {
         row["transform"]: row["selected"] for row in after["adaptive_constructions"]
     } == {
-        str(Transform.PLAIN): True,
-        str(Transform.BASE64): True,
-        str(Transform.ROT13): False,
-        str(Transform.LEETSPEAK): False,
+        str(one): one in {Transform.PLAIN, Transform.BASE64}
+        for one in ADAPTIVE_SPELLINGS
     }
     # Two spellings is two episode sets per family, so the layer's ceiling doubles.
     selection = bench.config.selection
@@ -1621,16 +1622,25 @@ def test_the_spellings_the_adaptive_layer_composes_in_can_be_set() -> None:
     assert "plain, base64" in selection.constructions_stated()
 
 
-def test_a_spelling_that_needs_words_of_ours_is_refused_by_the_route() -> None:
-    """Four spellings, and the other three are a `422` carrying the type's sentence.
+def test_a_construction_a_composed_probe_cannot_be_sent_under_is_refused() -> None:
+    """Six constructions, and the ladder is a `422` carrying the type's sentence.
 
-    A framing is written per family and withheld entirely for the override wrapper
-    (ADR-0074 §5), and a crescendo is a ladder computed from a case record: neither is
-    a spelling of a probe the attacker composed at runtime, and the refusal says which
-    of the two it is rather than sending a plain probe under the member's name.
+    A crescendo is computed from a case record and changes how many turns there are, so
+    a probe the attacker composed cannot be sent in it — and it is refused rather than
+    falling through to a plain probe under the member's name. A **framing** is
+    selectable, which is ADR-0098: its words are the layer's own, declared once for it,
+    and no case record of them is written.
     """
     app = create_app(BenchConfig(cases=[]))
     with TestClient(app) as client:
+        ladder = client.put(
+            BENCH_SELECTION_ROUTE,
+            json={
+                "layers": [str(layer) for layer in AttackLayer],
+                "transforms": [str(Transform.PLAIN)],
+                "adaptive_constructions": [str(Transform.SCRIPTED_CRESCENDO)],
+            },
+        )
         framing = client.put(
             BENCH_SELECTION_ROUTE,
             json={
@@ -1656,8 +1666,9 @@ def test_a_spelling_that_needs_words_of_ours_is_refused_by_the_route() -> None:
         )
         bench = cast(BenchRuns, app.state.bench)
 
-    assert framing.status_code == 422
-    assert "cannot respell a probe" in framing.json()["detail"]
+    assert ladder.status_code == 422
+    assert "cannot respell a probe" in ladder.json()["detail"]
+    assert framing.status_code == 200
     assert empty.status_code == 422
     assert "some spelling" in empty.json()["detail"]
     assert omitted.status_code == 200

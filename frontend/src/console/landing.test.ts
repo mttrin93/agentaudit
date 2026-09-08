@@ -279,6 +279,8 @@ describe('what the next run sends', () => {
         does: 'escalated over a fixed script',
       },
     ],
+    // Both served by the route and read by nothing: the projection drops them, and
+    // they are on the fixture so that stays a fact this test would notice changing.
     selection_off_statement:
       'a construction switched off is not sent, and is not measured rather than ' +
       'measured at zero.',
@@ -316,23 +318,17 @@ describe('what the next run sends', () => {
     expect(single.constructions.map((one) => one.sent)).toEqual([true, false])
   })
 
-  it('says a construction switched off is not measured, and carries no figure', () => {
+  it('is the switches and nothing else — no document prose, and no figure', () => {
     const reading = selectionReading(OFFERED)
 
-    // The distinction the whole selection exists to keep: a construction that was not
-    // sent has no line in any family's mix, so *not measured* is what the screen has
-    // to say and *zero* is what it must never let a reader infer.
-    expect(reading.caveat).toMatch(/not measured/)
-    expect(reading.caveat).not.toMatch(/[0-9]/)
-    // And what a run made now would print in its provenance, read off the wire: the
-    // artefact's own wording, so an operator narrowing a run sees what a recipient
-    // will read.
-    expect(reading.stated).toBe(OFFERED.selection_stated)
-    // No rate, no count and no denominator in the switches themselves. A selection is
-    // what a run was asked to send and never a measurement of anything, and the only
-    // two sentences here that may name a figure at all are the bench's own two — the
-    // caveat, whose whole job is to say *not* a rate of zero, and the wording the
-    // artefact will carry.
+    // The two sentences the route serves beside the switches are both dropped: one
+    // says what switching a construction off does, the other is what a run made now
+    // would carry into its provenance, and both are written for a reader holding a
+    // document rather than for an operator holding a switch. `families_off_statement`
+    // is not read on this page either.
+    expect(Object.keys(reading)).toEqual(['layers'])
+    // No rate, no count and no denominator in the switches themselves: a selection is
+    // what a run was asked to send and never a measurement of anything.
     // A digit is not banned here the way it is on the six families' sentences: one
     // construction is *named* `base64`, and a screen renaming it would be a screen
     // whose switch and the record's `transform` field are two different words.
@@ -443,7 +439,7 @@ describe('the screen says nothing about which tier a row is in', () => {
     // written — and printed by nothing.
     const region = screen.slice(
       screen.indexOf('<h2>The families</h2>'),
-      screen.indexOf('What a run sends, under the families it sends it about'),
+      screen.indexOf('How a run attacks, under the families it attacks them about'),
     )
     expect(region.length).toBeGreaterThan(0)
 

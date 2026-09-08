@@ -840,9 +840,9 @@ button:disabled {
 /*
  * The idiom the two switch blocks share: a tick, a name, and what it means.
  *
- * `.said` carries the tick and its hover, and the two blocks that use it lay themselves
- * out differently under it — the nine families are a table (below), the constructions a
- * grid of boxes. What is shared is the control, which is the thing that must not drift:
+ * `.said` carries the tick and its hover, and the two blocks that use it both lay
+ * themselves out as one box to a row under it — nine boxes of families, then three of
+ * layers. What is shared is the control, which is the thing that must not drift:
  * the same square box in both, so a reader who has learned what one means on one block
  * has learned it on the other.
  */
@@ -906,6 +906,48 @@ button:disabled {
 .said.families .claims code {
   font-size: 0.8rem;
   color: var(--ink);
+}
+
+/*
+ * The three layers, one to a box and one box to a row.
+ *
+ * The families' shape read one level down, and for the families' reason: three boxes
+ * in the auto-fit grid came out as unequal columns — one tall with the encodings, one
+ * short with the ladders, one all but empty — which read as a set of cards and buried
+ * the question the block asks, which of the three will the next run send. Down one
+ * column the three switches line up under each other, and the constructions wrap into
+ * as many columns as the box is wide rather than into one tall stack.
+ */
+.said.layers {
+  grid-template-columns: 1fr;
+  gap: 0.6rem;
+}
+
+/* The constructions at the foot of the box whose switch schedules them, behind the
+ * word for what they are — the same footer a family's published claims sit in, because
+ * the two blocks are the same idiom one level apart. */
+.said.layers .sends {
+  margin-top: 0.55rem;
+  padding-top: 0.55rem;
+  border-top: 1px solid var(--line);
+}
+
+.said.layers .sends .of {
+  display: block;
+  margin-bottom: 0.45rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--quiet);
+}
+
+/* The adaptive layer's footer, which holds no switch. Set as prose and not as a
+ * label, because it is a sentence about the layer and not the name of a list: what
+ * the layer would hold are the two loops the closed set of constructions deliberately
+ * does not name, so the switch above is the whole of what there is to ask. */
+.said.layers .sends .none {
+  font-style: italic;
 }
 
 /* One construction to a box, in the idiom every other block on the page is made of:
@@ -999,10 +1041,14 @@ button:disabled {
  */
 .said .sent {
   list-style: none;
-  margin: 0.5rem 0 0;
+  margin: 0;
   padding: 0;
+  /* As many columns as the box is wide, so a layer scheduling eight constructions is
+   * a block of ticks the eye reads across rather than a column the box has to grow
+   * to. `auto-fit` and not a fixed count: the same rule at every width. */
   display: grid;
-  gap: 0.35rem;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  gap: 0.35rem 1.2rem;
 }
 
 .said .sent label {

@@ -331,25 +331,25 @@ export interface LayerOffered {
  * would be a console that could disagree with the bench about which switch turns a
  * construction off.
  *
- * **No figure in any of it.** A selection is what a run was asked to send, and a rate,
- * a count or a denominator here would be read as a reading about a target. The only
- * two sentences are the bench's own — what switching a construction off does, and what
- * a run made now would print in its provenance.
+ * **No figure in any of it, and no prose either.** A selection is what a run was asked
+ * to send, and a rate, a count or a denominator here would be read as a reading about
+ * a target. The two sentences the route serves beside the switches — the paragraph
+ * about what switching one off does, and the wording a run made now would carry into
+ * its provenance — are deliberately not read here, on the terms
+ * `families_off_statement` is not: both are written for a reader holding a *document*,
+ * where a sentence about comparability and library versions sits beside a rate, and an
+ * operator holding a switch is answering *which of these will the next run send*. The
+ * distinction neither is lost — the artefact states both, in the artefact, and this
+ * screen's switches are what a reader consults before there is one.
  */
 export interface SelectionReading {
   layers: LayerOffered[]
-  /** What switching a construction off does, and what it does not. */
-  caveat: string
-  /** What a run made now would print in its artefact about what it sent. */
-  stated: string
 }
 
 /** What the bench's tuning reading says about what the next run sends. */
 interface Offered {
   layers: readonly LayerSelected[]
   transforms: readonly TransformSelected[]
-  selection_off_statement: string
-  selection_stated: string
 }
 
 /**
@@ -375,8 +375,6 @@ export function selectionReading(offered: Offered): SelectionReading {
           sent: one.selected,
         })),
     })),
-    caveat: offered.selection_off_statement,
-    stated: offered.selection_stated,
   }
 }
 

@@ -510,7 +510,7 @@ export function LandingScreen() {
       </section>
 
       {/*
-        What a run sends, under the families it sends it about.
+        How a run attacks, under the families it attacks them about.
 
         The same switches in the same idiom, one level down: the families say *which
         failures are asked about* and these say *how they are attacked*. Three layers,
@@ -518,20 +518,34 @@ export function LandingScreen() {
         question is answered by the layers — do I want the encodings, the ladders, or
         the agent — and the list inside is the finer grain.
 
-        **Switching one off is not measuring it at zero.** A construction that was not
-        sent has no line in any family's mix on the signed report, so the bench's own
-        caveat is printed here and the sentence the artefact will carry is printed
-        beside it: an operator narrowing a run sees what a recipient will read.
+        **One layer to a box, one box to a row**, which is the families block's own
+        shape read one level down. Three boxes in an auto-fit grid came out as unequal
+        columns — one tall with the encodings, one short with the ladders, one all but
+        empty — and read as a set of cards rather than as the question the block asks:
+        which of the three will the next run send. One to a row answers it down a
+        single column, and the constructions wrap into as many columns as the box is
+        wide instead of into one tall stack.
 
-        The adaptive layer holds no construction, and the empty list is the shape: what
-        it would hold are the two loops the bench's closed set of constructions
-        deliberately does not name, so its switch is the whole of what there is to ask
-        about it.
+        The constructions sit in a footer under the layer's sentence, behind the word
+        for what they are, exactly as a family's published claims do: a box holds one
+        subject, and these are the finer grain of the switch above them rather than a
+        second block.
+
+        The adaptive layer holds no construction, and the box says so rather than
+        ending early: what it would hold are the two loops the bench's closed set of
+        constructions deliberately does not name, so its switch is the whole of what
+        there is to ask about it.
+
+        No figure in any of it, and no paragraph either. The two sentences the route
+        serves beside these switches — what switching a construction off does, and what
+        a run made now would carry into its provenance — are both written for a reader
+        holding a document, and neither is printed here: what an operator on this
+        screen is answering is which of the three the next run will send, and the boxes
+        answer it. The artefact still states both, in the artefact.
       */}
       {sends === null ? null : (
         <section>
-          <h2>What a run sends</h2>
-          <p className="aside">{sends.caveat}</p>
+          <h2>How a run attacks</h2>
           {/* Assertive, on the same terms as the families block above (ADR-0080):
               this is the answer to a layer's own switch. */}
           {refusedSelection ? (
@@ -540,7 +554,7 @@ export function LandingScreen() {
               <p>{refusedSelection}</p>
             </div>
           ) : null}
-          <dl className="said">
+          <dl className="said layers">
             {sends.layers.map((layer) => (
               <div key={layer.layer}>
                 <dt>
@@ -556,34 +570,41 @@ export function LandingScreen() {
                   {readName(layer.layer)}
                 </dt>
                 <dd>{layer.sends}</dd>
-                {layer.constructions.length === 0 ? null : (
-                  <dd>
-                    <ul className="sent">
-                      {layer.constructions.map((one) => (
-                        <li key={one.transform}>
-                          <label>
-                            <input
-                              className="tick"
-                              type="checkbox"
-                              checked={one.sent}
-                              onChange={(event) =>
-                                void selectConstruction(
-                                  one.transform,
-                                  event.target.checked,
-                                )
-                              }
-                            />
-                            {readName(one.transform)}
-                          </label>
-                        </li>
-                      ))}
-                    </ul>
-                  </dd>
-                )}
+                <dd className="sends">
+                  {layer.constructions.length === 0 ? (
+                    <span className="none">
+                      Nothing to choose inside this layer — the switch above is the
+                      whole of it.
+                    </span>
+                  ) : (
+                    <>
+                      <span className="of">Constructions</span>
+                      <ul className="sent">
+                        {layer.constructions.map((one) => (
+                          <li key={one.transform}>
+                            <label>
+                              <input
+                                className="tick"
+                                type="checkbox"
+                                checked={one.sent}
+                                onChange={(event) =>
+                                  void selectConstruction(
+                                    one.transform,
+                                    event.target.checked,
+                                  )
+                                }
+                              />
+                              {readName(one.transform)}
+                            </label>
+                          </li>
+                        ))}
+                      </ul>
+                    </>
+                  )}
+                </dd>
               </div>
             ))}
           </dl>
-          <p className="aside">{sends.stated}</p>
         </section>
       )}
     </main>

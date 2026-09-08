@@ -79,6 +79,29 @@ export interface CostBody {
   currency: string
 }
 
+/**
+ * The four declarations the Agents Rule of Two is read over, three answers each.
+ *
+ * Here rather than on `TargetBody` alone because two areas name it: a registration
+ * carries the four, and `POST /rule-of-two` reads a candidate set of them while the
+ * register walk is still collecting them (ADR-0092).
+ *
+ * `boolean | null` and never `boolean`. *Nobody said* is a third answer the report
+ * prints, and `false` — a declared absence — is the **profitable** claim, since three
+ * capabilities declared away is a target reported as sitting inside a published rule
+ * that nothing ever read it against
+ * ([ADR-0038](../../../docs/adr/0038-the-rule-of-two-is-a-declared-property.md)).
+ * Nothing in this app infers one of them from `declared_tools`: a capability read off
+ * a tool name is a measurement wearing a declaration's name.
+ */
+export interface RuleOfTwoDeclared {
+  processes_untrusted_input: boolean | null
+  reaches_private_data: boolean | null
+  changes_state_or_communicates: boolean | null
+  /** Whether a human confirms what this agent does inside one session. */
+  under_human_supervision: boolean | null
+}
+
 /** Where the scored layer is: family, case and attempt. */
 export interface ScoredPosition {
   family: string

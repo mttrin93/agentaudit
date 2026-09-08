@@ -29,6 +29,7 @@
 
 export * from './contracts'
 export * from './nonces'
+export * from './ruleOfTwo'
 export * from './runs'
 export * from './attempts'
 export * from './report'

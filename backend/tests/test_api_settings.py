@@ -65,6 +65,7 @@ from backend.api.app import (
     GATE_RUNS_ROUTE,
     NO_EFFORT_HELD_FOR_THIS_INSTRUMENT,
     NOT_HELD_BY_THIS_BENCH,
+    RULE_OF_TWO_ROUTE,
     TEMPERATURE_RANGE,
     create_app,
 )
@@ -634,9 +635,9 @@ def test_three_routes_under_the_bench_prefix_write_and_all_are_declared_inputs()
         (BENCH_SELECTION_ROUTE, "PUT"),
     }
 
-    # And nothing anywhere on this bench takes a key: the two setting routes take the
-    # declared inputs of a run and nothing else, and the rest take an attestation, an
-    # approval, or a nonce request.
+    # And nothing anywhere on this bench takes a key: the three setting routes take
+    # the declared inputs of a run and nothing else, and the rest take an attestation,
+    # an approval, a nonce request, or four declarations that are read and not stored.
     writes = {
         route.path
         for route in app.routes
@@ -646,6 +647,13 @@ def test_three_routes_under_the_bench_prefix_write_and_all_are_declared_inputs()
     }
     assert writes == {
         "/nonces",
+        # A `POST` that stores nothing, and named here because it is one: the reading
+        # of four declarations against the Agents Rule of Two records no run, spends
+        # no nonce, sets nothing and takes no bench in its closure. It is a `POST`
+        # for its body — four tri-state answers about somebody's agent do not belong
+        # in a query string, a URL or a log (ADR-0092) — so it lands in this set and
+        # is admitted by name rather than by widening the filter above.
+        RULE_OF_TWO_ROUTE,
         "/runs",
         "/runs/{run_id}/approval",
         # The first of the two settings a console may write, since ADR-0025: the

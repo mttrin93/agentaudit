@@ -90,6 +90,7 @@ from backend.api.app import (
     GATE_RUN_APPROVAL_ROUTE,
     GATE_RUN_ROUTE,
     GATE_RUNS_ROUTE,
+    RULE_OF_TWO_ROUTE,
     create_app,
 )
 from backend.api.report import ReportConfig
@@ -404,13 +405,21 @@ def test_only_the_two_settings_routes_write_under_the_bench_prefix() -> None:
         (BENCH_SELECTION_ROUTE, "PUT"),
     }
 
-    # And the writes on this bench are the eight that are named — five `POST`s and
-    # the three settings `PUT`s. Two of the five start something that spends — a run
-    # and a gate run — and each is behind an attestation that cannot be constructed
-    # incomplete and a halt in front of the figures (ADR-0007). The count is asserted
-    # by naming every pair rather than by its length, because a **ninth** is either
-    # a spend nobody declared or a setting no ADR admitted, and the failure has to
-    # name which route it is.
+    # And the not-`GET` routes on this bench are the nine that are named — six
+    # `POST`s and the three settings `PUT`s. Two of the six start something that
+    # spends — a run and a gate run — and each is behind an attestation that cannot
+    # be constructed incomplete and a halt in front of the figures (ADR-0007). The
+    # count is asserted by naming every pair rather than by its length, because a
+    # **tenth** is either a spend nobody declared or a setting no ADR admitted, and
+    # the failure has to name which route it is.
+    #
+    # **One of the six writes nothing at all, and it is named here for that reason.**
+    # `POST /rule-of-two` reads four declarations against a published rule and
+    # records none of them: no run, no nonce, no setting, and no bench in its
+    # closure. It is a `POST` for its body rather than for a change — four tri-state
+    # answers about somebody's agent in a query string would be a declaration in a
+    # URL and in a log (ADR-0092) — so it arrives in this set and has to be admitted
+    # by name, which is this test working rather than an exception to it.
     writes = {
         (route.path, method)
         for route in app.routes
@@ -420,6 +429,7 @@ def test_only_the_two_settings_routes_write_under_the_bench_prefix() -> None:
     }
     assert writes == {
         ("/nonces", "POST"),
+        (RULE_OF_TWO_ROUTE, "POST"),
         ("/runs", "POST"),
         ("/runs/{run_id}/approval", "POST"),
         (GATE_RUNS_ROUTE, "POST"),

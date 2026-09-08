@@ -41,18 +41,24 @@ import {
   benchSettings,
   issueNonce,
   notesToPlant,
+  readRuleOfTwo,
   runStanding,
   startRun,
   type FieldRefusal,
   type Refusal,
   type NoteToPlant,
   type NonceIssued,
+  type RuleOfTwoRead,
   type StartOutcome,
 } from '../api/bench'
 import {
   ATTESTATION_STATEMENTS,
   A_DECLARATION_THE_BENCH_CANNOT_VERIFY,
+  NOTHING_HERE_HOLDS_THIS_STEP,
   NOT_MEASURABLE_WITHOUT_TOOL_CALLS,
+  NOT_STATED,
+  RULE_OF_TWO_DECLARATIONS,
+  THE_AGENTS_RULE_OF_TWO,
   TOOL_TRACE_FAMILIES,
   WALK_STEPS,
   canLeave,
@@ -157,8 +163,8 @@ function retire(refusal: Refusal, field: string): Refusal {
  * `backend/api/app.py`'s models: a field renamed there is renamed here, and a
  * refusal about a name nothing draws is drawn over the form instead of lost.
  *
- * **The last four are declarations rather than fields, and they are listed anyway.**
- * A tick and a pair of radios carry no `id` a message could be hung under, but the
+ * **The last eight are declarations rather than fields, and they are listed anyway.**
+ * A tick and a set of radios carry no `id` a message could be hung under, but the
  * API can refuse any of them, and `stepShowing` below has to know which step to send
  * the operator to. Listing them is what keeps that routing matching *these* strings
  * exactly rather than a prefix of them.
@@ -178,6 +184,10 @@ const FIELDS = {
   nonce: 'body.nonce',
   nonce_planted: 'body.nonce_planted',
   echo_waived: 'body.echo_waived',
+  processes_untrusted_input: 'body.target.processes_untrusted_input',
+  reaches_private_data: 'body.target.reaches_private_data',
+  changes_state_or_communicates: 'body.target.changes_state_or_communicates',
+  under_human_supervision: 'body.target.under_human_supervision',
 } as const
 
 /**
@@ -188,11 +198,24 @@ const FIELDS = {
  * step, and a `Record<Step, …>` will not compile the day a fourth step is added
  * without saying where its fields are.
  *
- * `target` is empty and is the default — all but five of the fields are on it, and
- * listing them would be a second copy of `FIELDS` to keep in step with the first.
+ * `target` is empty and is the default — every field this table does not name is on
+ * it, and listing them would be a second copy of `FIELDS` to keep in step with the
+ * first.
  */
 const STEP_DRAWING: Record<Step, readonly string[]> = {
-  tools: [FIELDS.declared_tools, FIELDS.exposes_tool_calls],
+  tools: [
+    FIELDS.declared_tools,
+    FIELDS.exposes_tool_calls,
+    // The Rule of Two fieldset, at the foot of the same step. It holds nothing on
+    // the walk, and the API can still refuse one of the four — so the walk goes back
+    // to *this* step for one, which is the whole of what this table is for. Like the
+    // tick and the tool radios above, a radio carries no `id` for the sentence to be
+    // hung under; the refusal shows over the form, where it already was.
+    FIELDS.processes_untrusted_input,
+    FIELDS.reaches_private_data,
+    FIELDS.changes_state_or_communicates,
+    FIELDS.under_human_supervision,
+  ],
   plant: [FIELDS.nonce, FIELDS.nonce_planted, FIELDS.echo_waived],
   target: [],
 }
@@ -203,9 +226,9 @@ const STEP_DRAWING: Record<Step, readonly string[]> = {
  * A message bound to an input two steps back is a message nobody reads: this walk
  * is one step at a time, so a `422` naming a field lands on a screen the operator
  * is not on unless the walk returns to it. The default is the endpoint step because
- * that is where all but five of the fields are, and a name the API grows that this
- * file has not met still sends the operator to the start of the walk with the
- * bench's own sentence over it rather than nowhere.
+ * that is where every field the table above does not name is drawn, and a name the
+ * API grows that this file has not met still sends the operator to the start of the
+ * walk with the bench's own sentence over it rather than nowhere.
  *
  * **Every name is matched whole**, which is ADR-0076's *nothing translates* read one
  * step on: a `startsWith('body.nonce')` here would silently claim the next field the
@@ -1279,6 +1302,123 @@ function ToolVisibilityStep({ declarations, declare, refusals }: RefusableProps)
             />
           )}
         </Field>
+      ) : null}
+      {/* The four declarations, at the foot of the step that already asks what the
+          bench will be able to *see*. These ask what the agent can *do*: both are
+          declarations, neither is measured, and CONTEXT.md keeps declared capability
+          apart from declared control for the reason they print in one section
+          (ADR-0092, decision 1). */}
+      <RuleOfTwoFieldset declarations={declarations} declare={declare} />
+    </section>
+  )
+}
+
+/**
+ * What this agent can do, read against a published rule while it is being declared.
+ *
+ * **Four questions, three answers each, and no checkboxes** (ADR-0092, decision 2).
+ * The local consequence is the third radio on every group: an answer the operator has
+ * not given is a state this fieldset can be in and can be left in.
+ *
+ * **Nothing here holds the step**, and the fieldset says so out loud, because a form
+ * that asks four questions and refuses nothing reads as four fields the operator
+ * forgot. `unmetConditions` names none of them.
+ *
+ * **The reading is fetched and never derived** (`api/ruleOfTwo.ts` says why). What is
+ * local to this call site is where it prints: under the fieldset, in the bench's own
+ * words with `NOT_A_MEASUREMENT` in them, which on *this* screen does more work than
+ * it does in the report — here the arm that reads most like a finding prints before a
+ * single attempt exists to contrast it with.
+ *
+ * **Its own state, and not the walk's.** The reading is not a declaration: it is what
+ * the bench makes of one, so it does not belong in the record a registration is posted
+ * from. Held here, mounted with the step, and gone when the operator walks back — and
+ * asked for again on the four answers they walk forward with.
+ */
+function RuleOfTwoFieldset({ declarations, declare }: StepProps) {
+  const [read, setRead] = useState<RuleOfTwoRead | null>(null)
+  /*
+   * One request per answer, which is this fieldset's own granularity.
+   *
+   * There is no keystroke here to debounce — four radio groups, and one click is one
+   * complete answer — and *on step exit* was the shape first reached for and means
+   * never on this walk: `tools` is the last step, and what it exits into is the
+   * registration, so a reading printed on exit would arrive after the walk it exists
+   * to inform (ADR-0092, decision 6). The route is stateless, records nothing and
+   * sends nothing to anybody, so four requests is the whole cost.
+   *
+   * The four values are named one by one rather than handed over as
+   * `ruleOfTwoDeclared(declarations)`, and the reason is the dependency array: an object rebuilt on every render is a new dependency on every
+   * render, which is a request per render. The literal is `RuleOfTwoDeclared`, so a
+   * field renamed on the wire shape is a type error here and not a dropped answer.
+   */
+  useEffect(() => {
+    let current = true
+    void readRuleOfTwo({
+      processes_untrusted_input: declarations.processes_untrusted_input,
+      reaches_private_data: declarations.reaches_private_data,
+      changes_state_or_communicates: declarations.changes_state_or_communicates,
+      under_human_supervision: declarations.under_human_supervision,
+    })
+      .then((reading) => {
+        if (current) {
+          setRead(reading)
+        }
+      })
+      .catch(() => {
+        // Nothing to say and nothing to do. A reading the bench could not serve is
+        // one an operator never sees, rather than an error over a step that holds
+        // none of these four and registers perfectly well without the sentence.
+      })
+    return () => {
+      current = false
+    }
+  }, [
+    declarations.processes_untrusted_input,
+    declarations.reaches_private_data,
+    declarations.changes_state_or_communicates,
+    declarations.under_human_supervision,
+  ])
+  return (
+    <section className="rule-of-two">
+      <h2>What this agent can do</h2>
+      <p>{THE_AGENTS_RULE_OF_TWO}</p>
+      <p className="aside">{NOTHING_HERE_HOLDS_THIS_STEP}</p>
+      {RULE_OF_TWO_DECLARATIONS.map((asked) => (
+        <fieldset key={asked.field}>
+          <legend>{asked.question}</legend>
+          {/* Three answers, in one order on all four questions: what is declared,
+              what is declared absent, and the silence that is neither. */}
+          {[
+            { answer: true, wording: asked.held },
+            { answer: false, wording: asked.absent },
+            { answer: null, wording: NOT_STATED },
+          ].map(({ answer, wording }) => (
+            <label className="declaration" key={String(answer)}>
+              <input
+                type="radio"
+                name={asked.field}
+                checked={declarations[asked.field] === answer}
+                onChange={() => declare({ [asked.field]: answer })}
+              />
+              <span>{wording}</span>
+            </label>
+          ))}
+        </fieldset>
+      ))}
+      {/* Nothing until the bench has answered. A heading with no sentence under it
+          would be a reading the operator is waiting for, and the one thing this block
+          must not do is look like a result that is still being computed. */}
+      {read ? (
+        <p className="standing" role="status">
+          {/* The name, and then the sentence. Both, because they are two different
+              things to a reader: the sentence is what this target's shape means, and
+              the name is the word `declared.rule_of_two.standing` carries in the
+              signed payload — so the operator reads here the same word the recipient
+              of the document will. Neither is edited and neither is chosen: they came
+              off the wire together (ADR-0092, decision 4). */}
+          <code>{read.standing}</code> — {read.stated}
+        </p>
       ) : null}
     </section>
   )

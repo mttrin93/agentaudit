@@ -18,7 +18,7 @@
  * wire. What is left to a person is whether the page reads like the guard it is.
  */
 
-import type { StartRunBody } from '../api/bench'
+import type { RuleOfTwoDeclared, StartRunBody } from '../api/bench'
 import { REGISTRATION_REFUSED, type RunStanding } from '../api/bench'
 
 /**
@@ -106,6 +106,104 @@ export const A_DECLARATION_THE_BENCH_CANNOT_VERIFY =
   'legitimately has will score its use as a finding, and a list that invents one ' +
   'will hide the finding it should have produced.'
 
+/**
+ * The published rule, stated above the four questions that are read against it.
+ *
+ * The first sentence of `rendering/_declared.PUBLISHED_RULE_OF_TWO`, verbatim — the
+ * wording the report prints the rule in, copied rather than paraphrased on the
+ * precedent the attestation statements set above. An operator answering four
+ * questions is owed the rule they are being asked about, and a screen that reworded
+ * it would state a published rule twice for somebody to reword a third time.
+ *
+ * The rest of that constant is not copied because it arrives anyway: everything it
+ * says about nothing having been sent is in `NOT_A_MEASUREMENT`, which the bench
+ * appends to the reading this screen prints under the fieldset.
+ */
+export const THE_AGENTS_RULE_OF_TWO =
+  'The published rule says an agent should not, in one session and without human ' +
+  'supervision, hold more than two of — processes untrusted input, reaches private ' +
+  'data or sensitive systems, changes state or communicates outward.'
+
+/** One of the four declarations, by the name it is recorded and refused under. */
+export type RuleOfTwoField =
+  | 'processes_untrusted_input'
+  | 'reaches_private_data'
+  | 'changes_state_or_communicates'
+  | 'under_human_supervision'
+
+/**
+ * One question, and the two answers that are not silence.
+ *
+ * `held` and `absent` are worded per question rather than shared, because the fourth
+ * is not a capability: three of them ask what this agent *can do* and the fourth asks
+ * whether a human confirms it, and *held* would read as a capability for the one
+ * declaration that is not one. The third answer is `NOT_STATED` below and is the same
+ * words every time — it is the same absence on all four.
+ */
+export interface CapabilityQuestion {
+  field: RuleOfTwoField
+  question: string
+  held: string
+  absent: string
+}
+
+/**
+ * The four, in the order `AgentCapability` lists them with supervision last.
+ *
+ * Listed rather than generated for `ATTESTATION_STATEMENTS`' reason, and in the
+ * enumeration's order for the report's: two targets' blocks are read down the same
+ * column, so the screen asks in the order the record prints.
+ */
+export const RULE_OF_TWO_DECLARATIONS: readonly CapabilityQuestion[] = [
+  {
+    field: 'processes_untrusted_input',
+    question: 'Does it process untrusted input?',
+    held: 'Yes — it handles content you do not control.',
+    absent: 'No — everything it reads is content you control.',
+  },
+  {
+    field: 'reaches_private_data',
+    question: 'Does it reach private data or sensitive systems?',
+    held: 'Yes — it can read private data or reach sensitive systems.',
+    absent: 'No — it reaches neither.',
+  },
+  {
+    field: 'changes_state_or_communicates',
+    question: 'Does it change state or communicate outward?',
+    held: 'Yes — it can write, pay, send or publish.',
+    absent: 'No — it answers and changes nothing.',
+  },
+  {
+    field: 'under_human_supervision',
+    question: 'Does a human confirm what it does inside the session?',
+    held: 'Yes — a human confirms its actions.',
+    absent: 'No — it acts without human confirmation.',
+  },
+]
+
+/**
+ * The third answer, on all four questions: the one that is neither of the other two.
+ *
+ * Why it is a radio and not an unticked box is ADR-0092 decision 2. CONTEXT.md
+ * already has the three words, and this is the third of them.
+ */
+export const NOT_STATED = 'Not stated.'
+
+/**
+ * That the four questions hold nothing, said on the screen that asks them.
+ *
+ * This is the first declaration on the walk an operator can leave wholly unanswered
+ * and still register — correct, per ADR-0038 decision 2, and on a form that reads as
+ * a field they forgot unless the fieldset says otherwise. The last clause is the one
+ * that matters: silence buys nothing, because the standing carries no figure for an
+ * under-declaration to move.
+ */
+export const NOTHING_HERE_HOLDS_THIS_STEP =
+  'None of these four is required: this step can be left with all of them unanswered ' +
+  'and the target still registers. Silence is not a denial — it is reported as ' +
+  'silence, and it buys nothing, because the reading below carries no figure for an ' +
+  'under-declaration to move.'
+
 /** Everything the register screen collects, in one record it can be resumed from. */
 export interface Declarations {
   name: string
@@ -125,6 +223,25 @@ export interface Declarations {
   nonce: string
   /** Whether the operator says the nonce is in the target's live configuration. */
   nonce_planted: boolean
+  /**
+   * What this agent can do, as three answers each, and what confirms it.
+   *
+   * The four declarations the Agents Rule of Two is read over — a **declared
+   * capability** and never a declared control (CONTEXT.md) — typed and defaulted as
+   * `contracts.RuleOfTwoDeclared` carries them, which is where the three answers and
+   * their default are argued.
+   *
+   * **These four hold no step**, which is the local consequence here: they are the
+   * only declaration on this walk `unmetConditions` below names none of, so the walk
+   * cannot come to depend on one of them being answered. `declarations.test.ts`
+   * asserts that negative for every field, every answer and every step
+   * ([ADR-0092](../../../docs/adr/0092-the-rule-of-two-is-declared-on-the-register-walk-and-the-reading-is-the-backends.md)).
+   */
+  processes_untrusted_input: boolean | null
+  reaches_private_data: boolean | null
+  changes_state_or_communicates: boolean | null
+  /** Whether a human confirms what this agent does inside one session. */
+  under_human_supervision: boolean | null
   /**
    * The operator has read what starting without the echo costs, and is doing it.
    *
@@ -165,6 +282,10 @@ export function nothingDeclared(): Declarations {
     note_planted: false,
     nonce: '',
     nonce_planted: false,
+    processes_untrusted_input: null,
+    reaches_private_data: null,
+    changes_state_or_communicates: null,
+    under_human_supervision: null,
     proof_waived: false,
   }
 }
@@ -384,6 +505,23 @@ export function registrationRequest(
   return { kind: 'ready', body: startRunBody(declarations) }
 }
 
+/**
+ * The four declarations alone, for the route that reads them against the rule.
+ *
+ * A projection and not a second record: `POST /rule-of-two` is asked about a
+ * candidate declaration and about nothing else — no name, no URL, no token — and
+ * `RuleOfTwoDeclared` is the shape a registration carries them in, so the reading is
+ * asked about exactly the values the registration will post.
+ */
+export function ruleOfTwoDeclared(declarations: Declarations): RuleOfTwoDeclared {
+  return {
+    processes_untrusted_input: declarations.processes_untrusted_input,
+    reaches_private_data: declarations.reaches_private_data,
+    changes_state_or_communicates: declarations.changes_state_or_communicates,
+    under_human_supervision: declarations.under_human_supervision,
+  }
+}
+
 /** The declared tools, trimmed and without the blanks a textarea leaves behind. */
 export function declaredTools(declarations: Declarations): string[] {
   return declarations.declared_tools
@@ -411,6 +549,14 @@ function startRunBody(declarations: Declarations): StartRunBody {
       declared_tools:
         declarations.exposes_tool_calls === true ? declaredTools(declarations) : [],
       sends: declarations.sends,
+      // Sent whatever they are, `null` included, and spread from the same projection
+      // the reading route is asked about — so the standing the operator was shown on
+      // the last step is a reading of the values this body carries. The API defaults
+      // an absent field to *unstated* too, so omitting the nulls would post the same
+      // registration; what it would lose is the difference between a screen that
+      // asked and got silence and one that never asked. Nothing here is derived from
+      // `declared_tools` above (ADR-0038 §2).
+      ...ruleOfTwoDeclared(declarations),
     },
     attestation: {
       identity: declarations.identity.trim(),

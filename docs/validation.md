@@ -338,6 +338,17 @@ the same rates, intervals, bands and `D` whatever is declared.
   that no reader has been asked about. A partly-declared standing is what the scan
   reports when they cannot, and how often that will be the answer in practice is
   unknown.
+- **The console asks the four questions now, and that changes what this section is
+  about (#177).** Until
+  [ADR-0092](./adr/0092-the-rule-of-two-is-declared-on-the-register-walk-and-the-reading-is-the-backends.md)
+  nothing on the HTTP surface accepted the four declarations, so *no operator has
+  ever declared any of it* was a fact about the bench: every target registered
+  through the API read `not_declared` because there was no field to say anything in.
+  The register walk asks them now, as three answers each, and prints the backend's
+  own reading beside `NOT_A_MEASUREMENT` while they are being answered. The sentence
+  above stays true and its subject has moved — it is now a fact about operators, and
+  the first target that declares anything is the reading to revisit this whole
+  section against.
 - **The rule's *within one session* is not measured and is not claimed to be.** The
   declaration is a property of the target; nothing here observes a session. An agent
   that holds the three properties across different sessions and never in one is

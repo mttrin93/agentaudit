@@ -524,6 +524,44 @@ legend {
 }
 
 /*
+ * The Agents Rule of Two, at the foot of the step that asks what the bench will see.
+ *
+ * Ruled off, because it is a second subject on one step and not four more fields of
+ * the first: above the rule the operator declares what the bench can *see*, below it
+ * what their agent can *do*. The heading and the line are the whole of the separation
+ * — a box around it would make a block that holds nothing look like the one thing on
+ * the step that does.
+ */
+.rule-of-two {
+  margin-top: 2rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--line);
+}
+
+/*
+ * The standing, printed while the four answers are still being given.
+ *
+ * Quiet on purpose, and quiet is a decision rather than a default. This is the one
+ * sentence on the register screen that reads like a finding — *all three,
+ * unsupervised* arrives before a single attempt has been made — so it is set as
+ * prose the operator reads, and never as a verdict panel with a colour. The sentence
+ * itself carries `NOT_A_MEASUREMENT`; nothing in the styling may imply otherwise.
+ */
+.standing code {
+  font-size: 0.85rem;
+  color: var(--ink);
+}
+
+.standing {
+  margin-top: 1.25rem;
+  padding: 0.75rem 1rem;
+  border-left: 3px solid var(--line);
+  font-size: 0.9rem;
+  line-height: 1.6;
+  color: var(--quiet);
+}
+
+/*
  * The content to plant, folded away under the box that declares it is in place.
  *
  * Shut by default and shut is the point: it is three documents on a form of eight

@@ -40,6 +40,10 @@ function declared() {
     note_planted: true,
     nonce: NONCE,
     nonce_planted: true,
+    // Two of the four answered and two left at *not stated*, so the body below pins
+    // all three answers rather than only the two a boolean could carry.
+    processes_untrusted_input: true,
+    reaches_private_data: false,
   }
 }
 
@@ -80,6 +84,15 @@ describe('the registration this screen posts', () => {
         exposes_tool_calls: true,
         declared_tools: ['send_email', 'issue_refund'],
         sends: 3,
+        // The Agents Rule of Two's four declarations, and `null` is on the wire
+        // rather than omitted: the API defaults an absent field to *unstated* too,
+        // so dropping it would post the same registration and would make a screen
+        // that asked and got silence indistinguishable from one that never asked
+        // (ADR-0038, ADR-0092).
+        processes_untrusted_input: true,
+        reaches_private_data: false,
+        changes_state_or_communicates: null,
+        under_human_supervision: null,
       },
       attestation: {
         identity: 'operator',

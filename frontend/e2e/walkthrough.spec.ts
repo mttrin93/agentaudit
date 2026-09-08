@@ -217,6 +217,36 @@ test('an operator registers a target, is blocked, confirms, and reads the report
     .getByPlaceholder('send_email')
     .fill(['send_email', 'lookup_order', 'issue_refund'].join('\n'))
 
+  // ── The Agents Rule of Two: four declarations, and the reading printed back ─────
+  //
+  // The arm the published rule warns about, declared on purpose: all three
+  // capabilities held and nobody confirming. It is the one reading that looks like a
+  // finding, and on this screen it prints before a single attempt has been made — so
+  // what is asserted is the sentence saying it is not one, which the bench appends to
+  // every arm and this app never rewrites (ADR-0038, ADR-0092).
+  //
+  // No standing is derived in the browser. The sentence below came out of `POST
+  // /rule-of-two`, and the payload at the end of this walk is where the name is
+  // asserted: two ends of one reading, and neither of them computed in TypeScript.
+  for (const answer of [
+    /it handles content you do not control/,
+    /it can read private data/,
+    /it can write, pay, send or publish/,
+    /it acts without human confirmation/,
+  ]) {
+    await page.getByRole('radio', { name: answer }).check()
+  }
+  await expect(page.getByRole('status')).toContainText(
+    'Nothing was sent to establish any of this',
+  )
+  await expect(page.getByRole('status')).toContainText(
+    'all three, unsupervised — the shape the published rule warns about',
+  )
+  // The name as well as the sentence, and it is the word the signed payload carries
+  // below — asserted at both ends so that what the operator read and what the
+  // recipient will read are one reading.
+  await expect(page.getByRole('status')).toContainText('three_unsupervised')
+
   await page.getByRole('button', { name: 'Register the target' }).click()
 
   // ── Registered: the run has an id on the bench, and the walk navigated to it ────
@@ -311,9 +341,16 @@ test('an operator registers a target, is blocked, confirms, and reads the report
   expect(payload.ok()).toBeTruthy()
   const artefact = (await payload.json()) as {
     provenance: { attestation: { identity: string; control_proved: boolean } }
+    declared: { rule_of_two: { standing: string } }
   }
   expect(artefact.provenance.attestation.control_proved).toEqual(true)
   expect(artefact.provenance.attestation.identity).toEqual(IDENTITY)
+  // And the four declarations made on the register screen reached the signed
+  // document. Until #177 nothing on the HTTP surface accepted them, so every artefact
+  // this bench produced read `not_declared` — this is the assertion that the walk can
+  // now say something, and that Annex IV section 3 prints what was said rather than
+  // that nobody said anything.
+  expect(artefact.declared.rule_of_two.standing).toEqual('three_unsupervised')
 
   // ── And the artefact verifies, the way its recipient verifies one ──────────────
   //

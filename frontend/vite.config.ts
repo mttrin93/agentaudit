@@ -6,7 +6,7 @@
  * **The cross-origin problem is solved in dev tooling rather than in the API.**
  * `create_app` installs no CORS middleware, and adding one would be a change to
  * the deployed surface — a header the bench sends to every caller forever — bought
- * to make one developer's browser happy. So the dev server proxies the five
+ * to make one developer's browser happy. So the dev server proxies the seven
  * prefixes this app calls to the API instead, and the app fetches same-origin paths
  * with no base URL anywhere in it. In a deployment the built assets are served
  * from the same origin as the API and the same paths keep working, which is the
@@ -14,7 +14,10 @@
  *
  * The proxied prefixes are named one by one rather than proxying everything, so
  * that a route this app has no business calling does not silently start working
- * through it. `/runs` can be proxied wholesale, screens and all, because the
+ * through it. `/rule-of-two` is the newest and the narrowest: one stateless route
+ * that reads four declarations against a published rule, records nothing and sends
+ * nothing to anybody, which the register walk calls while an operator is still
+ * answering the questions (ADR-0092). `/runs` can be proxied wholesale, screens and all, because the
  * screens are behind a `#` and no document request ever carries one (`main.tsx`).
  * `/bench` is the one prefix whose subject is the instrument rather than a run: the
  * landing screen reads the gate citation from it, and there is nothing under it that
@@ -38,7 +41,7 @@
  * files under `e2e/` are Playwright's.
  *
  * **The dev server below is what that walkthrough serves the app with**, and the
- * proxy is why. A previewed build would answer nothing under `/runs`: the six
+ * proxy is why. A previewed build would answer nothing under `/runs`: the seven
  * prefixes are proxied for `server` and there is no `preview.proxy` beside them,
  * and adding one to make a test's life easier is the shape of change this docstring
  * spends its first paragraph arguing against.
@@ -90,6 +93,7 @@ export default defineConfig({
   server: {
     proxy: {
       '/nonces': BENCH,
+      '/rule-of-two': BENCH,
       '/runs': BENCH,
       '/report': BENCH,
       '/artefacts': BENCH,

@@ -342,6 +342,41 @@ def _named(capabilities: tuple[AgentCapability, ...]) -> str:
     return ", ".join(str(one) for one in capabilities)
 
 
+def rule_of_two_declared(
+    processes_untrusted_input: bool | None,
+    reaches_private_data: bool | None,
+    changes_state_or_communicates: bool | None,
+    under_human_supervision: bool | None,
+) -> RuleOfTwo:
+    """The four answers as a record. The derivation, and the only one there is.
+
+    Here as well as under `read_rule_of_two` below because the register walk asks
+    these four questions and prints the reading back while they are being answered,
+    and a screen collecting a declaration has no target: no name, no URL, no token,
+    and none of them owed
+    ([ADR-0092](../../docs/adr/0092-the-rule-of-two-is-declared-on-the-register-walk-and-the-reading-is-the-backends.md),
+    decision 5). Satisfying `read_rule_of_two`'s signature from that caller would
+    mean inventing a `TargetConfig` with a blank URL inside a route that sends
+    nothing — a target record standing for a target that does not exist.
+
+    So this is one derivation with two entry points and never two derivations: the
+    partition, the ordering and the five arms stay in `RuleOfTwo` above, and the
+    function a registered target is read through is written in terms of this one.
+    Nothing here is a widening — neither signature accepts what the other takes.
+    """
+    stated = {
+        AgentCapability.PROCESSES_UNTRUSTED_INPUT: processes_untrusted_input,
+        AgentCapability.REACHES_PRIVATE_DATA: reaches_private_data,
+        AgentCapability.CHANGES_STATE_OR_COMMUNICATES: changes_state_or_communicates,
+    }
+    return RuleOfTwo(
+        held=tuple(one for one in AgentCapability if stated[one] is True),
+        not_held=tuple(one for one in AgentCapability if stated[one] is False),
+        unstated=tuple(one for one in AgentCapability if stated[one] is None),
+        supervision=Supervision.declared(under_human_supervision),
+    )
+
+
 def read_rule_of_two(target: TargetConfig) -> RuleOfTwo:
     """Read one target's four Rule-of-Two declarations. Sends nothing, like the scan.
 
@@ -349,18 +384,11 @@ def read_rule_of_two(target: TargetConfig) -> RuleOfTwo:
     makes the partition above a property rather than something four call sites agree
     about.
     """
-    stated = {
-        AgentCapability.PROCESSES_UNTRUSTED_INPUT: target.processes_untrusted_input,
-        AgentCapability.REACHES_PRIVATE_DATA: target.reaches_private_data,
-        AgentCapability.CHANGES_STATE_OR_COMMUNICATES: (
-            target.changes_state_or_communicates
-        ),
-    }
-    return RuleOfTwo(
-        held=tuple(one for one in AgentCapability if stated[one] is True),
-        not_held=tuple(one for one in AgentCapability if stated[one] is False),
-        unstated=tuple(one for one in AgentCapability if stated[one] is None),
-        supervision=Supervision.declared(target.under_human_supervision),
+    return rule_of_two_declared(
+        processes_untrusted_input=target.processes_untrusted_input,
+        reaches_private_data=target.reaches_private_data,
+        changes_state_or_communicates=target.changes_state_or_communicates,
+        under_human_supervision=target.under_human_supervision,
     )
 
 

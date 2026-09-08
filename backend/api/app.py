@@ -1,20 +1,26 @@
 """The HTTP surface: a nonce, a run, the answer to the run's interrupt, and the
 artefact it produced.
 
-Twenty-two routes, in three families. `POST /nonces` issues the value an operator
-plants to prove they control the endpoint; `POST /runs` records the attestation,
-declares the estimate and halts; `POST /runs/{id}/approval` answers the halt; `GET
-/runs` lists the runs on the record; `GET /runs/{id}` says where the run has got to;
-`GET /runs/{id}/episodes` serves the probes that run's own episodes sent and `GET
-/runs/{id}/attempts` the exchanges behind its scored layer's successes, both out of
-this process's memory and out of no document; four under `/report/{id}` — three that
-serve the files one signed run leaves, the payload, the rendering and the detached
-signature, and a fourth that says what a verifier makes of them; `GET /artefacts`
-lists every signed artefact with that same reading beside it; six under `/bench`,
-whose subject is the bench rather than any run — `GET /bench/gate`, `GET
-/bench/gate/record`, `GET /bench/settings` and `GET /bench/notes`, plus the two that
-declare the next run's inputs, `PUT /bench/settings/tuning` and `PUT
-/bench/settings/families` (ADR-0025, as amended by #57); and four under
+Twenty-four routes, in four families. `POST /nonces` issues the value an operator
+plants to prove they control the endpoint; `POST /rule-of-two` is the fourth family
+and its only member, a stateless reading of the four declarations the Agents Rule of
+Two is read over — it records nothing, reaches no bench and sends nothing to anybody,
+because the register walk shows an operator the standing while they are still
+answering the questions
+([ADR-0092](../../docs/adr/0092-the-rule-of-two-is-declared-on-the-register-walk-and-the-reading-is-the-backends.md));
+`POST /runs` records the attestation, declares the estimate and halts; `POST
+/runs/{id}/approval` answers the halt; `GET /runs` lists the runs on the record;
+`GET /runs/{id}` says where the run has got to; `GET /runs/{id}/episodes` serves the
+probes that run's own episodes sent and `GET /runs/{id}/attempts` the exchanges
+behind its scored layer's successes, both out of this process's memory and out of no
+document; four under `/report/{id}` — three that serve the files one signed run
+leaves, the payload, the rendering and the detached signature, and a fourth that says
+what a verifier makes of them; `GET /artefacts` lists every signed artefact with that
+same reading beside it; seven under `/bench`, whose subject is the bench rather than
+any run — `GET /bench/gate`, `GET /bench/gate/record`, `GET /bench/settings` and `GET
+/bench/notes`, plus the three that declare the next run's inputs, `PUT
+/bench/settings/tuning`, `PUT /bench/settings/families` and `PUT
+/bench/settings/selection` (ADR-0025, as amended by #57 and #79); and four under
 `/gate-runs`, which are the newest and the only ones on this surface that spend money
 on the bench's own behalf.
 
@@ -258,6 +264,7 @@ from backend.bench.registration import ECHO_PROBE, Attestation
 from backend.bench.rendering import REPORT_MARKDOWN, REPORT_PAYLOAD
 from backend.bench.retirement import retired_cases
 from backend.bench.rule import DECLARED_RULE, GateRule
+from backend.bench.scanner import rule_of_two_declared
 from backend.bench.selection import AttackLayer, AttackSelection, layer_of
 from backend.bench.signing import (
     SIGNATURE_FILE,
@@ -412,8 +419,52 @@ def _cannot(refused: CannotRunAGate) -> dict[str, str]:
     return {"outcome": str(refused.refusal), "statement": str(refused)}
 
 
-class TargetRequest(BaseModel):
-    """How a caller describes the endpoint they are asking the bench to attack."""
+class RuleOfTwoDeclarations(BaseModel):
+    """The four declarations the Agents Rule of Two is read over, over HTTP.
+
+    A model of its own, inherited by `TargetRequest` below and taken whole as the body
+    of `POST /rule-of-two`, because two surfaces ask for exactly these four: a
+    registration carries them, and the register walk has them read against the rule
+    while an operator is still answering them
+    ([ADR-0092](../../docs/adr/0092-the-rule-of-two-is-declared-on-the-register-walk-and-the-reading-is-the-backends.md)).
+    Written once so that the shape a target is registered with and the shape a reading
+    is asked about cannot become two shapes with one name — the arrangement
+    `contracts.RuleOfTwoDeclared` makes on the console's side of the wire.
+
+    **None of the four was on this surface until #177.** `TargetRequest` had no fields
+    for them, so every target registered over HTTP read `not_declared` whatever its
+    operator would have said, and the report printed — correctly — that nobody said
+    anything.
+    """
+
+    processes_untrusted_input: bool | None = None
+    """Whether this agent handles content the operator does not control. The first.
+
+    Three states and not two, defaulting to unstated, exactly as `TargetConfig`
+    carries it: a `bool` here would make *nobody said* unsayable over the wire, and
+    the value it would be said as is the profitable one (ADR-0038, decision 1).
+    """
+
+    reaches_private_data: bool | None = None
+    """Whether this agent can reach private data or sensitive systems. The second."""
+
+    changes_state_or_communicates: bool | None = None
+    """Whether this agent can change state or communicate outward. The third."""
+
+    under_human_supervision: bool | None = None
+    """Whether a human confirms what this agent does inside one session. The fourth,
+    and the one that decides whether all three held is the shape the rule warns
+    about."""
+
+
+class TargetRequest(RuleOfTwoDeclarations):
+    """How a caller describes the endpoint they are asking the bench to attack.
+
+    `RuleOfTwoDeclarations` extended rather than its four fields written again here,
+    for the reason `TargetBody` extends `RuleOfTwoDeclared` on the console's side: the
+    four a registration carries and the four a reading is asked about are the same
+    four, and two declarations of them would be two shapes to keep in step.
+    """
 
     name: str
     url: str
@@ -448,7 +499,66 @@ class TargetRequest(BaseModel):
             retry=RetryPolicy(sends=self.sends),
             exposes_tool_calls=self.exposes_tool_calls,
             declared_tools=tuple(self.declared_tools),
+            # Passed through one for one and derived from nothing here. A capability
+            # read off `declared_tools` above would be a measurement wearing a
+            # declaration's name, and this is the call site where that shortcut is
+            # available (ADR-0038, decision 2).
+            processes_untrusted_input=self.processes_untrusted_input,
+            reaches_private_data=self.reaches_private_data,
+            changes_state_or_communicates=self.changes_state_or_communicates,
+            under_human_supervision=self.under_human_supervision,
         )
+
+
+RULE_OF_TWO_ROUTE = "/rule-of-two"
+"""Where a candidate declaration is read against the published rule.
+
+Neither under `/runs` nor under `/bench`, and that is the whole of why it is its own
+path. It is not about a run — nothing is recorded, nothing is planned and no nonce is
+spent — and `/bench` is the prefix whose subject is the instrument, while the subject
+here is somebody's agent. A reading of four declarations is a third kind of question,
+and it gets a third path
+([ADR-0092](../../docs/adr/0092-the-rule-of-two-is-declared-on-the-register-walk-and-the-reading-is-the-backends.md)).
+
+`POST` for a body and not for a change: there is nothing on the far side of this route
+to change. A `GET` carrying four tri-state answers would put a declaration about
+somebody's agent in a query string, in a URL, in a log.
+"""
+
+
+class RuleOfTwoReading(BaseModel):
+    """What the published rule makes of one declaration: a name, and the sentence.
+
+    Two fields, and there is no third for a figure to arrive in — no count of the
+    capabilities held, which is the one number this block is a line away from and the
+    number that ranks two targets the moment two of them are on one desk (ADR-0038,
+    decision 4).
+
+    `stated` carries `scanner.NOT_A_MEASUREMENT` because `RuleOfTwo.stated()` appends
+    it, so a caller cannot be handed the reading without the sentence saying nothing
+    was sent to establish it.
+    """
+
+    standing: str
+    stated: str
+
+
+def rule_of_two_reading(request: RuleOfTwoDeclarations) -> RuleOfTwoReading:
+    """One declaration, read. Derives nothing: `scanner.py` is the sole author.
+
+    Takes the four declarations and not a `TargetRequest`: a reading is owed no name,
+    no URL and no token, and a route that took the registration model would be a route
+    a caller could hand a target to. The five arms and their ordering exist once, in
+    `scanner.RuleOfTwo.standing`, and the whole content of this function is that it
+    does not have a copy of them (ADR-0092, decision 4).
+    """
+    read = rule_of_two_declared(
+        processes_untrusted_input=request.processes_untrusted_input,
+        reaches_private_data=request.reaches_private_data,
+        changes_state_or_communicates=request.changes_state_or_communicates,
+        under_human_supervision=request.under_human_supervision,
+    )
+    return RuleOfTwoReading(standing=str(read.standing), stated=read.stated())
 
 
 class AttestationRequest(BaseModel):
@@ -4919,6 +5029,33 @@ def create_app(
         return NonceIssued(
             nonce=bench.issue(), echo_probe=ECHO_PROBE, statement=PLANT_STATEMENT
         )
+
+    @app.post(RULE_OF_TWO_ROUTE)
+    def read_a_declaration_against_the_rule_of_two(
+        request: Annotated[RuleOfTwoDeclarations, Body()],
+    ) -> RuleOfTwoReading:
+        """What the published rule makes of four declarations. Stateless, and a name.
+
+        The register walk asks the four questions and shows this reading back while
+        they are being answered, so that the one person who could act on a standing —
+        by changing what their agent *is* — sees it before the run rather than after
+        it, in the document a recipient reads (ADR-0092, decision 3).
+
+        **It reaches no bench and touches no record.** There is no run here, no
+        target, no nonce and nothing to spend: the route takes four answers and
+        returns the reading `scanner.py` derives from them, so a caller may ask it
+        as often as a screen has answers to send. That is why it takes neither
+        `bench` nor `gates` from the closure above, which every other route on this
+        surface does.
+
+        **It sends nothing to anybody**, which is the boundary `scanner.py` states
+        for itself: a scan that probed an endpoint would be a measurement wearing a
+        declaration's name. The reading carries `NOT_A_MEASUREMENT` in its own
+        sentence, and on a register screen that line does more work than it does in
+        the report — here the arm that reads most like a finding prints before a
+        single attempt exists to contrast it with.
+        """
+        return rule_of_two_reading(request)
 
     @app.post("/runs", status_code=status.HTTP_202_ACCEPTED)
     def start_a_run(request: Annotated[StartRunRequest, Body()]) -> RunResponse:

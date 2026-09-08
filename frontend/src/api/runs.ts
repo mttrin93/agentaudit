@@ -31,6 +31,7 @@ import type {
   FamilyRun,
   Refusal,
   ReportLocation,
+  RuleOfTwoDeclared,
   ScoredProgress,
 } from './contracts'
 import {
@@ -41,8 +42,14 @@ import {
 } from './http'
 
 
-/** The endpoint the bench is being asked to attack, as the operator declares it. */
-export interface TargetBody {
+/**
+ * The endpoint the bench is being asked to attack, as the operator declares it.
+ *
+ * `RuleOfTwoDeclared` extended rather than its four fields written again, so that the
+ * declarations a registration carries and the declarations the reading route is asked
+ * about cannot drift into two shapes with one name.
+ */
+export interface TargetBody extends RuleOfTwoDeclared {
   name: string
   url: string
   auth_token: string

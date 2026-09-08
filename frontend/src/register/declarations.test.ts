@@ -345,3 +345,79 @@ describe('what a step is still waiting for', () => {
     }
   })
 })
+
+describe('the four Rule of Two declarations', () => {
+  it('start unstated, because silence is not a denial', () => {
+    // Three answers and not two, on every one of them, and the default is the one
+    // ADR-0038 decision 1 argues for: a `false` default would put a claim in an
+    // operator's mouth, and it is the profitable claim.
+    const nothing = nothingDeclared()
+
+    expect(nothing.processes_untrusted_input).toBeNull()
+    expect(nothing.reaches_private_data).toBeNull()
+    expect(nothing.changes_state_or_communicates).toBeNull()
+    expect(nothing.under_human_supervision).toBeNull()
+  })
+
+  it('hold no step of the walk, whichever way each of them is answered', () => {
+    // **The assertion this fieldset exists to make.** ADR-0038 decision 2 refuses no
+    // combination of the four, so an operator who answers none of them still
+    // registers — which is why the questions are a fieldset on a step the tool list
+    // already holds rather than a fourth step nothing would hold
+    // (ADR-0092, decision 1).
+    //
+    // Every field, every answer, every step: what a step is waiting for does not
+    // move when one of these changes, and neither does whether it may be left.
+    const fields = [
+      'processes_untrusted_input',
+      'reaches_private_data',
+      'changes_state_or_communicates',
+      'under_human_supervision',
+    ] as const
+
+    for (const step of WALK_STEPS) {
+      for (const start of [nothingDeclared(), fullyDeclared()]) {
+        const held = unmetConditions(step, start)
+        for (const field of fields) {
+          for (const answer of [true, false, null]) {
+            const declared = { ...start, [field]: answer }
+            expect(unmetConditions(step, declared), `${step}/${field}`).toEqual(held)
+            expect(canLeave(step, declared), `${step}/${field}`).toBe(
+              canLeave(step, start),
+            )
+          }
+        }
+      }
+    }
+  })
+
+  it('register unanswered, which no other declaration on this walk does', () => {
+    // The four left at *not stated* and the registration is ready: the first
+    // declaration on the walk an operator can leave wholly unanswered. The screen
+    // says so under the fieldset, because otherwise it reads as a field they forgot.
+    const unanswered = fullyDeclared()
+
+    expect(unanswered.processes_untrusted_input).toBeNull()
+    expect(registrationRequest(unanswered).kind).toBe('ready')
+  })
+
+  it('go on the wire as the three answers they were given, and not as booleans', () => {
+    // `null` is a value this body carries rather than a field it omits: the API
+    // defaults an absent field to `None` too, but a body that dropped *not stated*
+    // would make silence indistinguishable from a screen that never asked.
+    const request = registrationRequest({
+      ...fullyDeclared(),
+      processes_untrusted_input: true,
+      reaches_private_data: false,
+    })
+
+    expect(request.kind).toBe('ready')
+    if (request.kind !== 'ready') {
+      return
+    }
+    expect(request.body.target.processes_untrusted_input).toBe(true)
+    expect(request.body.target.reaches_private_data).toBe(false)
+    expect(request.body.target.changes_state_or_communicates).toBeNull()
+    expect(request.body.target.under_human_supervision).toBeNull()
+  })
+})

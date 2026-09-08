@@ -29,6 +29,8 @@ from __future__ import annotations
 from collections import Counter
 from collections.abc import Sequence
 from dataclasses import dataclass
+from enum import StrEnum
+from typing import assert_never
 
 
 @dataclass(frozen=True)
@@ -112,6 +114,71 @@ LINEAR_CHAIN = BranchPolicy()
 Not switched to a tree, for the gate-citation reason in ADR-0057 §2. This record at
 its defaults, so the line is not a special case in the code below.
 """
+
+DECLARED_TREE = BranchPolicy(breadth=3, frontier_cap=3)
+"""The tree an operator selects, when they select one. Declared, not asked for.
+
+**The breadth is the bench's and never the caller's**, which is the same refusal
+ADR-0057 §1 makes of the attacker: a number chosen per run is a number chosen after
+the reading, and breadth is bought out of the turn budget — eight turns at breadth
+three reach four deep, eight on a line reach eight. So the operator's question is
+*which schedules do I want*, answered by `BranchSchedule`, and not *how wide*. Three
+and three are the values `backend/tests/test_tree_jailbreaking.py` drove the
+scheduling and pruning rules red against, so they are the ones a report's `A_break`
+sentence has ever been read against
+([ADR-0096](../../../docs/adr/0096-the-adaptive-schedule-is-selected-and-both-schedules-are-two-episodes.md)).
+"""
+
+
+class BranchSchedule(StrEnum):
+    """The schedules an operator may put the adaptive layer on. A closed set of two.
+
+    **An enumeration and not a `BranchPolicy` on the wire.** A policy is two numbers,
+    and two numbers a caller could set are two numbers a caller could set at hour 30 —
+    the tuning ADR-0057 §2 refuses. These are the two names the catalogues carry
+    (deepteam's *linear jailbreaking* and *tree jailbreaking*, ADR-0057's citation),
+    each standing for one declared policy, so what an operator selects is a schedule
+    the bench has a stated rule for and never a search width.
+
+    **Not a `Transform`, for the reason `AttackLayer.ADAPTIVE` carries none.** A
+    construction is an operation on the payload a case commits and it is scored on its
+    own attempts (ADR-0051 §2, ADR-0055); a schedule is how the harness spends an
+    episode's turns, and an episode is a summand of nothing (ADR-0010). Selecting both
+    is two episodes and never a wider one — a third member here would be a third
+    episode per family, which is why this set is closed and small.
+    """
+
+    LINEAR = "linear_jailbreak"
+    """Every probe continues from the turn before it, and nothing is pruned."""
+
+    TREE = "tree_jailbreak"
+    """Probes fork, the harness continues from the shallowest live turn, and pruning
+    is by turn number (ADR-0057 §3)."""
+
+    @property
+    def policy(self) -> BranchPolicy:
+        """The declared policy this name stands for. The only join of the two.
+
+        Exhaustive with no fallback, on `selection.layer_of`'s terms: a schedule no
+        policy claimed would be a selection the layer could not run, and a default
+        branch here would run the line under a name that promised a tree.
+        """
+        match self:
+            case BranchSchedule.LINEAR:
+                return LINEAR_CHAIN
+            case BranchSchedule.TREE:
+                return DECLARED_TREE
+            case _ as unreached:
+                assert_never(unreached)
+
+    def stated(self) -> str:
+        """This schedule's rule, in the words a report prints beside `A_effort`.
+
+        The policy's own sentence, carried rather than reworded: the rule a reader is
+        owed is the one the harness followed, and a second wording here would be a
+        second answer to what `A_break` was read against (ADR-0057 §3).
+        """
+        return self.policy.stated()
 
 
 def deepest_path(parents: Sequence[int]) -> int:

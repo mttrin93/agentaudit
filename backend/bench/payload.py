@@ -1632,6 +1632,19 @@ def _provenance(payload: TargetPayload) -> dict[str, Any]:
             "transforms": sorted(
                 str(transform) for transform in provenance.selection.transforms
             ),
+            # The adaptive layer's own half of the selection, in its own keys beside
+            # the other two and with its own sentence. Not folded into `stated`, which
+            # a version-2 verifier re-derives from the two lists above: a wording that
+            # grew a clause would make every document produced after this change
+            # report a disagreement to a verifier that reads this version, which is a
+            # false tampering claim about a document nothing tampered with. A key
+            # added beside the others is one an older verifier skips while re-deriving
+            # every figure it knows — and there is no figure here, because the layer
+            # these name is scored on nothing (ADR-0044 §8, ADR-0070, ADR-0096 §8).
+            "schedules": sorted(
+                str(schedule) for schedule in provenance.selection.schedules
+            ),
+            "schedules_stated": provenance.selection.schedules_stated(),
             "whole_library": provenance.selection == EVERY_CONSTRUCTION,
             "stated": provenance.selection.stated(),
         },

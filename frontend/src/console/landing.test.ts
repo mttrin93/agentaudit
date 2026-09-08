@@ -269,6 +269,25 @@ describe('what the next run sends', () => {
       },
       { layer: 'adaptive', selected: false, sends: 'the model-driven attacker' },
     ],
+    // The adaptive layer's own two switches, each naming the layer it is switched
+    // under for the reason a construction row does: the grouping is the wire's.
+    schedules: [
+      {
+        schedule: 'linear_jailbreak',
+        layer: 'adaptive',
+        selected: true,
+        does: 'scheduling: one line',
+      },
+      {
+        schedule: 'tree_jailbreak',
+        layer: 'adaptive',
+        selected: false,
+        does: 'scheduling: a tree',
+      },
+    ],
+    schedules_statement:
+      'both selected is two episode sets per family rather than one wider search, ' +
+      'so the ceiling doubles.',
     transforms: [
       { transform: 'plain', layer: 'single_turn', selected: true, does: 'as committed' },
       { transform: 'base64', layer: 'single_turn', selected: false, does: 'encoded' },
@@ -298,11 +317,32 @@ describe('what the next run sends', () => {
     expect(
       reading.layers.map((one) => one.constructions.map((sent) => sent.transform)),
     ).toEqual([['plain', 'base64'], ['scripted_crescendo'], []])
-    // The adaptive layer holds none, and that is the point rather than an omission:
-    // what it would hold are the two loops the bench's closed set of constructions
-    // deliberately does not name, so the operator's question about it is whether the
-    // agent runs at all.
+    // The adaptive layer holds none, and that is still the point rather than an
+    // omission: what it would hold are the two loops the bench's closed set of
+    // constructions deliberately does not name. What it holds instead is its two
+    // schedules, grouped the same way and off the same field (ADR-0096).
     expect(reading.layers.at(-1)?.constructions).toEqual([])
+  })
+
+  it('groups the schedules under the layer the bench says switches them', () => {
+    const reading = selectionReading(OFFERED)
+
+    expect(reading.layers.map((one) => one.schedules.map((on) => on.schedule))).toEqual([
+      [],
+      [],
+      ['linear_jailbreak', 'tree_jailbreak'],
+    ])
+    // Only the line is selected on a bench nobody has narrowed: a second schedule is a
+    // second attacker rather than more of the same library, and the reference agents
+    // were gated under the line.
+    expect(reading.layers.at(-1)?.schedules.map((one) => one.selected)).toEqual([
+      true,
+      false,
+    ])
+    // The caveat the route serves about what the second tick costs, which this screen
+    // *does* print — unlike the two document sentences below. It is what an operator
+    // is answering: the tick is turns on their own endpoint (ADR-0096).
+    expect(reading.schedulesCost).toContain('two episode sets')
   })
 
   it('draws each switch from the bench’s answer and never from a local default', () => {
@@ -326,7 +366,7 @@ describe('what the next run sends', () => {
     // would carry into its provenance, and both are written for a reader holding a
     // document rather than for an operator holding a switch. `families_off_statement`
     // is not read on this page either.
-    expect(Object.keys(reading)).toEqual(['layers'])
+    expect(Object.keys(reading)).toEqual(['layers', 'schedulesCost'])
     // No rate, no count and no denominator in the switches themselves: a selection is
     // what a run was asked to send and never a measurement of anything.
     // A digit is not banned here the way it is on the six families' sentences: one

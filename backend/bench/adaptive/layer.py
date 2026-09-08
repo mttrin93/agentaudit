@@ -51,6 +51,7 @@ from backend.bench.adaptive.blinding import Blinding
 from backend.bench.adaptive.budget import DECLARED_ADAPTIVE_BUDGET, AdaptiveBudget
 from backend.bench.adaptive.episode import AdaptiveEpisode, EpisodeOutcome
 from backend.bench.adaptive.precedent import DURABLE_PRECEDENT, PrecedentStore
+from backend.bench.adaptive.tree import BranchSchedule
 from backend.bench.applicability import applicable
 from backend.bench.contract import TargetConfig, TargetUnreachable
 from backend.bench.library import AnyFamily, Case, ElectiveFamily, Family, VerdictClass
@@ -144,7 +145,23 @@ def run_adaptive_layer(
     precedent: PrecedentStore = DURABLE_PRECEDENT,
     rng: random.Random | None = None,
 ) -> tuple[AdaptiveEpisode, ...]:
-    """Run `k` episodes per family per target, and record every one of them."""
+    """Run `k` episodes per family per target per schedule, and record every one.
+
+    **The schedules are a loop and not a parameter of one episode.** `budget.scheduled`
+    is what the operator selected, in the enum's own order, and an episode set is
+    opened under each: a run that selected both attacks every family under the line and
+    under the tree, which is `k` episodes each and a ceiling that says so
+    ([ADR-0096](../../../docs/adr/0096-the-adaptive-schedule-is-selected-and-both-schedules-are-two-episodes.md)).
+    A single episode gets one policy, handed to `run_episode`, because an episode has
+    one shape.
+
+    The schedule is the innermost loop, so the two episodes for one family against one
+    target are adjacent: the position `/runs` reports walks families in
+    `ATTACKED_IN_ORDER` and the targets inside a family in the order ADR-0011
+    randomises, and a schedule loop wrapped around those would make a run's second
+    half a repeat of its first — a reader watching one would see every family twice
+    with nothing on the screen saying which pass they were in.
+    """
     draw = rng if rng is not None else random.Random()
     blinding = Blinding.over([entry.target for entry in attackable], rng=draw)
     objectives = {
@@ -160,46 +177,83 @@ def run_adaptive_layer(
             objective = objectives[entry.target.name].get(family)
             if objective is None:
                 continue
-            for _ in range(budget.episodes_per_family):
-                with traced(Span.EPISODE, {Field.FAMILY: family}) as span:
-                    started = time.monotonic()
-                    try:
-                        episode = run_episode(
-                            target=entry.target,
-                            objective=Objective(
-                                family=family, case=objective, canary=entry.canary
-                            ),
-                            run_state=run_state,
-                            attacker=attacker,
-                            blinding=blinding,
-                            budget=budget,
-                            precedent=precedent,
-                        )
-                    except EPISODE_FAILURES as broke:
-                        episode = AdaptiveEpisode.against(
-                            target=entry.target,
-                            family=family,
-                            outcome=EpisodeOutcome.FAILED,
-                            turns=0,
-                            failure=f"{type(broke).__name__}: {broke}",
-                            started_at=started,
-                        )
-                        # Filed on the run state as well, the way `run_episode`
-                        # files the ones it completes: the run state is what the
-                        # report and `/runs` read, and an episode recorded only in
-                        # the return value would be a failure the document does not
-                        # carry.
-                        run_state.record_episode(episode)
-                    episodes.append(episode)
-                    # Read off the run state rather than counted here. The position
-                    # is the run's own and the run is the authority for it — a second
-                    # counter beside it would be a figure that could come to disagree
-                    # with the one `/runs` reports (ADR-0026). An ordinal and not a
-                    # denominator: an episode has none (ADR-0010, CONTEXT.md).
-                    position = run_state.episode_position
-                    if position is not None:
-                        span.record({Field.EPISODE_INDEX: position.index})
+            for schedule in budget.scheduled:
+                for _ in range(budget.episodes_per_family):
+                    _open_episode(
+                        family=family,
+                        entry=entry,
+                        objective=objective,
+                        schedule=schedule,
+                        run_state=run_state,
+                        attacker=attacker,
+                        blinding=blinding,
+                        budget=budget,
+                        precedent=precedent,
+                        episodes=episodes,
+                    )
     return tuple(episodes)
+
+
+def _open_episode(
+    *,
+    family: AnyFamily,
+    entry: AttackableTarget,
+    objective: Case,
+    schedule: BranchSchedule,
+    run_state: RunState,
+    attacker: AttackerCompletion,
+    blinding: Blinding,
+    budget: AdaptiveBudget,
+    precedent: PrecedentStore,
+    episodes: list[AdaptiveEpisode],
+) -> None:
+    """One episode, under one schedule, recorded however it ended.
+
+    Lifted out of the loop above when the schedule loop went inside it, and for that
+    reason alone: four levels of `for` around a `try` whose except clause files a
+    record is a body nobody can read the ordering claims off. The claims are unchanged
+    — the failure is filed on the run state as well as returned, and the position is
+    read off the run state rather than counted here.
+    """
+    with traced(Span.EPISODE, {Field.FAMILY: family}) as span:
+        started = time.monotonic()
+        try:
+            episode = run_episode(
+                target=entry.target,
+                objective=Objective(family=family, case=objective, canary=entry.canary),
+                run_state=run_state,
+                attacker=attacker,
+                blinding=blinding,
+                budget=budget,
+                precedent=precedent,
+                # This episode's shape, and the whole of what the schedule decides
+                # here: the turn cap, the tool cap and the layer ceiling are the
+                # budget's and are the same under either schedule (ADR-0057 §2).
+                branching=schedule.policy,
+            )
+        except EPISODE_FAILURES as broke:
+            episode = AdaptiveEpisode.against(
+                target=entry.target,
+                family=family,
+                outcome=EpisodeOutcome.FAILED,
+                turns=0,
+                failure=f"{type(broke).__name__}: {broke}",
+                started_at=started,
+            )
+            # Filed on the run state as well, the way `run_episode` files the ones
+            # it completes: the run state is what the report and `/runs` read, and
+            # an episode recorded only in the return value would be a failure the
+            # document does not carry.
+            run_state.record_episode(episode)
+        episodes.append(episode)
+        # Read off the run state rather than counted here. The position is the run's
+        # own and the run is the authority for it — a second counter beside it would
+        # be a figure that could come to disagree with the one `/runs` reports
+        # (ADR-0026). An ordinal and not a denominator: an episode has none
+        # (ADR-0010, CONTEXT.md).
+        position = run_state.episode_position
+        if position is not None:
+            span.record({Field.EPISODE_INDEX: position.index})
 
 
 def objectives_for(

@@ -74,6 +74,7 @@ from backend.api.runs import BenchConfig, BenchRuns, DeclaredGap, plan_for
 from backend.bench.adaptive.budget import DECLARED_ADAPTIVE_BUDGET, AdaptiveBudget
 from backend.bench.adaptive.episode import AttackerTool
 from backend.bench.adaptive.tools import ToolInvocation
+from backend.bench.adaptive.tree import BranchSchedule
 from backend.bench.capability import (
     NO_REASONING_EFFORT_ACCEPTED,
     NO_TEMPERATURE_ACCEPTED,
@@ -1456,6 +1457,28 @@ def test_the_console_reads_the_layers_and_the_constructions_it_may_select() -> N
     assert "not measured" in tuning["selection_off_statement"]
     assert tuning["selection_stated"] == EVERY_CONSTRUCTION.stated()
 
+    # The adaptive layer's own two switches, which are what the box for it holds: the
+    # layer names no construction, so before ADR-0096 the switch above them was the
+    # whole of it. Only the line is selected on a bench nobody has narrowed — the
+    # default is the schedule the reference agents were gated under (ADR-0023).
+    assert [row["schedule"] for row in tuning["schedules"]] == [
+        str(schedule) for schedule in BranchSchedule
+    ]
+    assert {row["schedule"]: row["selected"] for row in tuning["schedules"]} == {
+        str(BranchSchedule.LINEAR): True,
+        str(BranchSchedule.TREE): False,
+    }
+    assert all(
+        row["does"] == BranchSchedule(row["schedule"]).stated()
+        for row in tuning["schedules"]
+    )
+    # And the layer each is switched under, so the console groups them under the box
+    # that turns them off without a mapping of its own — `transforms` above carries
+    # the same field for the same reason.
+    assert {row["layer"] for row in tuning["schedules"]} == {str(AttackLayer.ADAPTIVE)}
+    assert "two episode sets" in tuning["schedules_statement"]
+    assert "doubles" in tuning["schedules_statement"]
+
 
 def test_the_layers_and_constructions_the_next_run_sends_can_be_set() -> None:
     """The third write under `/bench`, on ADR-0025's four conditions (ADR-0058).
@@ -1492,6 +1515,86 @@ def test_the_layers_and_constructions_the_next_run_sends_can_be_set() -> None:
     }
     assert after["selection_stated"] == bench.config.selection.stated()
     assert "not measured" in after["selection_stated"]
+
+
+def test_the_schedules_the_adaptive_layer_attacks_under_can_be_set() -> None:
+    """Both schedules selected, and the bench holds both (ADR-0096).
+
+    The switch the adaptive box never had. What it changes is not a narrower run but a
+    second episode set per family, so the assertion pairs the stored selection with the
+    ceiling the next run would be priced against — a selection a screen can set and an
+    estimate cannot see would be the doubling arriving after the approval.
+    """
+    app = create_app(BenchConfig(cases=[]))
+    with TestClient(app) as client:
+        answered = client.put(
+            BENCH_SELECTION_ROUTE,
+            json={
+                "layers": [str(layer) for layer in AttackLayer],
+                "transforms": [str(transform) for transform in Transform],
+                "schedules": [str(schedule) for schedule in BranchSchedule],
+            },
+        )
+        bench = cast(BenchRuns, app.state.bench)
+        after = client.get(BENCH_SETTINGS_ROUTE).json()["tuning"]
+
+    assert answered.status_code == 200
+    assert bench.config.selection.schedules == frozenset(BranchSchedule)
+    assert all(row["selected"] for row in after["schedules"])
+    # And the provenance sentence says which, and that both is two episode sets rather
+    # than one wider search: the selection is half the comparability claim. Its own
+    # sentence and not a clause of `selection_stated`, which the verifier re-derives
+    # from the layers and constructions beside it (ADR-0096 §8).
+    assert "both schedules" in bench.config.selection.schedules_stated()
+    assert "schedule" not in after["selection_stated"]
+    assert (
+        bench.config.adaptive.under(bench.config.selection.schedules).turn_ceiling
+        == 2 * bench.config.adaptive.turn_ceiling
+    )
+
+
+def test_a_run_under_no_schedule_is_refused_and_the_field_may_be_omitted() -> None:
+    """An empty list is a `422`; an absent one is the line.
+
+    The one defaulted field on this request, and the asymmetry is deliberate: a caller
+    written before the field existed asks for the run this bench has always made, and
+    a caller who sends `[]` is asking for an adaptive layer that opens no episode —
+    which is what switching the layer off already says, so it is refused with the
+    type's own sentence rather than quietly stored (ADR-0096).
+    """
+    app = create_app(BenchConfig(cases=[]))
+    with TestClient(app) as client:
+        empty = client.put(
+            BENCH_SELECTION_ROUTE,
+            json={
+                "layers": [str(layer) for layer in AttackLayer],
+                "transforms": [str(Transform.PLAIN)],
+                "schedules": [],
+            },
+        )
+        unknown = client.put(
+            BENCH_SELECTION_ROUTE,
+            json={
+                "layers": [str(layer) for layer in AttackLayer],
+                "transforms": [str(Transform.PLAIN)],
+                "schedules": ["crescendo"],
+            },
+        )
+        omitted = client.put(
+            BENCH_SELECTION_ROUTE,
+            json={
+                "layers": [str(layer) for layer in AttackLayer],
+                "transforms": [str(Transform.PLAIN)],
+            },
+        )
+        bench = cast(BenchRuns, app.state.bench)
+
+    assert empty.status_code == 422
+    assert "has to attack under a schedule" in empty.json()["detail"]
+    assert unknown.status_code == 422
+    assert "is not a schedule this bench attacks under" in unknown.json()["detail"]
+    assert omitted.status_code == 200
+    assert bench.config.selection.schedules == frozenset({BranchSchedule.LINEAR})
 
 
 def test_a_selection_the_bench_has_no_member_for_is_refused_by_name() -> None:

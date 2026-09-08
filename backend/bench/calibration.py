@@ -889,6 +889,14 @@ def run_calibration(
         # failure the operator should never pay to discover.
         raise NoAdjudicator(unscorable)
 
+    # The schedules the operator selected, carried onto the budget the layer spends.
+    # Through `under`, which is the one join, and here rather than at the layer call
+    # below so that the ceiling `RunBudget.declare` prices and the episodes the layer
+    # opens are read off one answer: a layer running under both schedules against a
+    # ceiling priced for one is ADR-0007's guarantee enforced against the wrong figure
+    # (ADR-0096). A gate run passes no selection and gets the default, which is the
+    # line the reference agents were gated under (ADR-0023).
+    adaptive = adaptive.under(selection.schedules)
     declared = budget or RunBudget.declare(
         cases=cases, targets=targets, rule=rule, adaptive=adaptive, selection=selection
     )

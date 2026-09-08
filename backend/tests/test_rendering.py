@@ -156,7 +156,7 @@ def test_every_section_states_its_own_reproducibility_and_four_read_the_payload(
 
 # --- The golden digest: one document, pinned to the byte ---------------------
 
-GOLDEN_ONE_FAMILY = "8cf9b3861ed6000eb2f18d16b1c84d4e8782e87c457bc8a1e1e6022406213927"
+GOLDEN_ONE_FAMILY = "945df7474af443e7f0b5f3f7cdcedc5ad01b923775940b41d678bcf4c4fe1118"
 """The sha256 of `_one_family()`'s rendering, written down.
 
 **A tripwire, and it is deliberately a strict one.** Every other assertion in this
@@ -379,6 +379,22 @@ that is the state a mounted bench was in for as long as the seed copied only the
 level of the library. **The artefact version does not move**: this is a key added
 beside existing keys, carrying no figure and nothing for a verifier to re-derive,
 which is the case ADR-0044 §8 and ADR-0070 both declined to move it for.
+
+Moved a twentieth time, by the adaptive schedule becoming selectable, and it is
+section 2's selection block gaining one sentence: which schedules the adaptive layer
+attacked under, beside the sentence about the constructions
+([ADR-0096](../../docs/adr/0096-the-adaptive-schedule-is-selected-and-both-schedules-are-two-episodes.md)).
+**This fixture is the declared selection**, so the sentence says the layer attacked
+under one schedule, the line — every report gains it, including this one, because a
+sentence that appeared only when somebody selected the tree would be
+indistinguishable from a report made before the switch existed. **The artefact version
+does not move**, and the sentence is its own key rather than a clause of the
+selection's: `stated` is re-derived by the verifier from the layers and constructions
+beside it, so a wording that grew a clause would make every document issued after
+this change report a disagreement to a version-2 verifier — a false tampering claim,
+where a key beside the others is one an older verifier skips while re-deriving every
+figure it knows. There is no figure in it either: the layer these name is scored on
+nothing.
 """
 
 
@@ -646,10 +662,22 @@ def test_the_document_says_which_constructions_this_run_sent(  # noqa: D103
     assert "not measured" not in EVERY_CONSTRUCTION.stated()
     assert "**not measured**" in narrowed
     assert "single_turn" in narrowed
-    assert (
-        "adaptive"
-        not in narrowed.split("The constructions this run sent")[1].split("###")[0]
-    )
+    block = narrowed.split("The constructions this run sent")[1].split("###")[0]
+    # The layers this run sent are the bulleted list, and the adaptive layer is not
+    # among them: what the block names is what was sent. The layer is *mentioned*
+    # below them, in the schedules sentence ADR-0096 added, and it is mentioned to say
+    # it was switched off and that no schedule ran — which is the same distinction the
+    # rest of this block draws, over the one layer whose selection is not a
+    # construction.
+    assert [line for line in block.splitlines() if line.startswith("- **")] == [
+        "- **single_turn**"
+    ]
+    assert "no episode was opened and no schedule ran" in block
+
+    # And a run that did attack adaptively says under which schedules, in the
+    # selection's own wording and never the renderer's.
+    assert EVERY_CONSTRUCTION.schedules_stated() in whole
+    assert "one schedule, linear_jailbreak" in whole
 
 
 def test_the_document_prints_both_claims_and_scopes_re_derivability_to_the_scored() -> (

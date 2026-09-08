@@ -270,6 +270,13 @@ def _how_the_run_was_made(body: Mapping[str, Any]) -> Section:
             "",
             f"{selection['stated']}",
             "",
+            # The adaptive layer's schedules, under the same heading and after the
+            # sentence about the constructions: they are the other half of what this
+            # run attacked with, and a run under both schedules opened twice the
+            # episodes of one under the line. Printed from the payload's own string,
+            # like everything else in this block (ADR-0096).
+            f"{selection['schedules_stated']}",
+            "",
             "### What this run spent, per layer",
             "",
             *(

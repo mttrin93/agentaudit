@@ -390,6 +390,13 @@ class RunBudget:
                 {case.family for case in cases if not one_of_the_six(case.family)}
             ),
         )
+        # The schedules are **not** taken off the selection here, unlike the tier
+        # above, and the asymmetry is the point: the tier is derived from cases this
+        # function was handed, while the schedules arrive already on the budget —
+        # `AdaptiveBudget.under` is applied by the caller that knows the operator's
+        # selection (`runs.start`), so a caller pricing a hand-built budget prices the
+        # schedule it names. Reading the selection here would overwrite that with the
+        # default and price a tree run as a line (ADR-0096).
         per_target_turns = covering.turn_ceiling if selection.adaptive else 0
         adaptive_figure = CallFigure(
             calls=len(targets) * per_target_turns,
@@ -397,7 +404,9 @@ class RunBudget:
             basis=(
                 f"{covering.families_attacked} families × "
                 f"T={covering.turns_per_episode}"
-                f" × k={covering.episodes_per_family},"
+                f" × k={covering.episodes_per_family}"
+                f" × {_count(len(covering.schedules), 'schedule')}"
+                f" ({', '.join(str(one) for one in covering.scheduled)}),"
                 f" × {_count(len(targets), 'target')}"
                 if selection.adaptive
                 else (

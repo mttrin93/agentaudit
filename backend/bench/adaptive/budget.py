@@ -20,10 +20,10 @@ the layer ceiling is enforced by the run budget, which cannot see inside an
 episode and does not need to.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from backend.bench.adaptive.episode import AttackerTool
-from backend.bench.adaptive.tree import LINEAR_CHAIN, BranchPolicy
+from backend.bench.adaptive.tree import BranchSchedule
 from backend.bench.library import Family
 
 
@@ -95,18 +95,41 @@ class AdaptiveBudget:
     this one, because a step that is not a probe puts nothing on their wire.
     """
 
-    branching: BranchPolicy = LINEAR_CHAIN
-    """How the harness schedules the next probe: a line, or a tree (ADR-0057).
+    schedules: frozenset[BranchSchedule] = frozenset({BranchSchedule.LINEAR})
+    """Which schedules the layer runs an episode set under: a line, a tree, or both.
 
-    Here rather than anywhere else because a tree spends `turns_per_episode` across
-    its branches rather than on top of them, so the thing that decides how wide the
-    search goes belongs with the cap it spends under — and because it is declared on
-    exactly the terms `T` and `k` are, for the reason the module header gives. It
-    moves no ceiling: see `turn_ceiling`. The default is the line, and ADR-0057 §2
-    says why it stays one.
+    Here rather than anywhere else because a schedule spends `turns_per_episode`
+    across its branches rather than on top of them, so the thing that decides how wide
+    the search goes belongs with the cap it spends under — and because it is declared
+    on exactly the terms `T` and `k` are, for the reason the module header gives.
+
+    **A set, and each member costs its own `k` episodes per family.** ADR-0057 §2 left
+    the policy with no selection path and one value; this field is that path's landing
+    place, and the arithmetic is `episode_count` below: two schedules is two episode
+    sets and not one wider search, so it **moves the ceiling** and the operator
+    confirms the doubled figure before anything is sent
+    ([ADR-0096](../../../docs/adr/0096-the-adaptive-schedule-is-selected-and-both-schedules-are-two-episodes.md)).
+    A single episode's own policy is `BranchSchedule.policy`, handed to `run_episode`
+    per episode, so nothing here is a per-episode setting.
+
+    **Filled from `AttackSelection.schedules` by `under` below**, on the terms
+    `elective_families` is filled: the operator's selection is the one statement of
+    what a run attacks with, and a second one here could disagree with it. The default
+    is the line alone — deliberately *not* both, which is where this parts from the
+    over-measuring defaults elsewhere on this bench: a schedule the reference agents
+    were never gated under is a different attacker rather than a wider reading of the
+    same one, and defaulting it on would change what a citation means without a gate
+    run saying so (ADR-0023, ADR-0057 §2).
     """
 
     def __post_init__(self) -> None:
+        if not self.schedules:
+            raise ValueError(
+                "an adaptive layer with no schedule opens no episode, which is what "
+                "switching the layer off already says: a budget cannot carry the "
+                "layer running under nothing. Name at least one schedule, or switch "
+                "the adaptive layer off"
+            )
         for name in (
             "turns_per_episode",
             "episodes_per_family",
@@ -127,9 +150,26 @@ class AdaptiveBudget:
         return self.family_count + self.elective_families
 
     @property
+    def scheduled(self) -> tuple[BranchSchedule, ...]:
+        """The selected schedules in the enum's own order, which is the run order.
+
+        Read off `BranchSchedule` rather than off the set, so the order an episode set
+        is opened in is the declaration order and not a hash: a run whose episodes
+        came back in a different order per process would be a run nobody could read
+        against another (`layer.ATTACKED_IN_ORDER` is ordered for the same reason).
+        """
+        return tuple(one for one in BranchSchedule if one in self.schedules)
+
+    @property
     def episode_count(self) -> int:
-        """How many episodes the layer runs against one target."""
-        return self.families_attacked * self.episodes_per_family
+        """How many episodes the layer runs against one target.
+
+        `k` per family **per schedule**: two schedules is two episode sets, so this is
+        the figure that doubles when an operator selects both, and `turn_ceiling`
+        below doubles with it. An episode is a summand of nothing either way — what
+        this counts is spending and never a denominator (ADR-0010).
+        """
+        return self.families_attacked * self.episodes_per_family * len(self.schedules)
 
     @property
     def steps_per_episode(self) -> int:
@@ -145,14 +185,32 @@ class AdaptiveBudget:
         *average* instead would be worse than showing nothing, because it invites
         a run to exceed what was agreed to (ADR-0007).
 
-        **The same number under any `branching` policy**, because a turn is one
-        probe on the wire wherever it sits in the tree: a tree spends this budget
-        across its branches and never alongside them (ADR-0057). A per-branch cap
-        would multiply this figure by the breadth and bill the operator three times
+        **The same number per schedule, whichever schedule it is**, because a turn is
+        one probe on the wire wherever it sits in the tree: a tree spends its episode's
+        budget across its branches and never alongside them (ADR-0057). A per-branch
+        cap would multiply this figure by the breadth and bill the operator three times
         over for a run they approved once, which is the failure mode
         `backend/tests/test_tree_jailbreaking.py` was driven red against.
+
+        What *does* move it is how many schedules were selected, and it moves through
+        `episode_count`: selecting both is a second episode per family, which is a
+        second set of turns on the operator's wire and a figure they are shown before
+        they confirm it (ADR-0096).
         """
         return self.episode_count * self.turns_per_episode
+
+    def under(self, schedules: frozenset[BranchSchedule]) -> "AdaptiveBudget":
+        """This budget as the operator's selection asks for it. The only join.
+
+        A method rather than a `replace` at each call site, for the reason
+        `selection.layer_of` is a function: the rule that *the schedules a run attacks
+        under are the ones it selected* is one rule, and the two callers that need it
+        — the estimate that prices the ceiling and the layer that spends it — must
+        read one answer. `selection.py` is not imported here and this takes the set
+        rather than the selection, so the two modules stay unaware of each other
+        (ADR-0096).
+        """
+        return replace(self, schedules=schedules)
 
 
 DECLARED_ADAPTIVE_BUDGET = AdaptiveBudget()

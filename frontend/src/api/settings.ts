@@ -317,6 +317,28 @@ export interface TransformSelected {
   does: string
 }
 
+/**
+ * One adaptive schedule, the layer that switches it, and whether the next run
+ * attacks under it.
+ *
+ * Two of them — the line and the tree — and they are what the adaptive box holds
+ * where the other two layers hold constructions: the layer names no construction, so
+ * until the bench had this switch the layer's own tick was the whole of what there
+ * was to ask about it.
+ *
+ * **Selecting both is two episode sets per family and not one wider search**, so the
+ * second tick doubles the layer's ceiling. `does` is the scheduling and pruning rule
+ * in the bench's own words, because it is the rule `A_break` is read against, and
+ * `layer` is read off the wire for `TransformSelected`'s reason: the grouping is the
+ * bench's answer and a console holding a second copy of it could disagree.
+ */
+export interface ScheduleSelected {
+  schedule: string
+  layer: string
+  selected: boolean
+  does: string
+}
+
 /** One model this console offers as the attacker, and what it is for. */
 export interface ModelChoice {
   identifier: string
@@ -409,6 +431,15 @@ export interface Tuning {
   elective_statement: string
   layers: LayerSelected[]
   transforms: TransformSelected[]
+  schedules: ScheduleSelected[]
+  /**
+   * What selecting both schedules buys and what it costs, in the bench's own words.
+   *
+   * Read and drawn, unlike the two sentences below it: those are written for a reader
+   * holding a document, and this is what the operator's second tick costs in turns on
+   * their own endpoint before they tick it.
+   */
+  schedules_statement: string
   /** What switching a construction off does, and what it does not. */
   selection_off_statement: string
   /** What a run made now would print in its provenance about what it sent. */
@@ -522,9 +553,11 @@ export const BENCH_SELECTION_PATH = '/bench/settings/selection'
  * instruments are set*, the families one is *what the next run covers*, and this is
  * *how it attacks what it covers*.
  *
- * Both lists go every time, because they are one statement — a request that sent the
- * layers alone would leave the constructions declared by an earlier one, and the pair
- * is what decides whether anything is sent at all.
+ * All three lists go every time, because they are one statement — a request that sent
+ * the layers alone would leave the constructions declared by an earlier one, and the
+ * three together are what decides whether anything is sent at all. The schedules are
+ * the adaptive layer's half of it: an empty list is refused, because a layer running
+ * under no schedule is what the layer's own switch already says (ADR-0096).
  *
  * A selection under which nothing would be scored is refused rather than widened: the
  * run would measure nothing and still spend a registration probe per target. A `409`
@@ -533,11 +566,12 @@ export const BENCH_SELECTION_PATH = '/bench/settings/selection'
 export async function selectConstructions(
   layers: string[],
   transforms: string[],
+  schedules: string[],
 ): Promise<BenchSettings> {
   const response = await fetch(BENCH_SELECTION_PATH, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ layers, transforms }),
+    body: JSON.stringify({ layers, transforms, schedules }),
   })
   if (!response.ok) {
     throw new Error(`the bench did not take this selection: ${await refusalIn(response)}`)

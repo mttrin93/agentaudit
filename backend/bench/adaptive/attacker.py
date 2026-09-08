@@ -80,7 +80,12 @@ from backend.bench.adaptive.tools import (
     retrieve_precedent,
     run_probe,
 )
-from backend.bench.adaptive.tree import Continuation, EpisodeTree
+from backend.bench.adaptive.tree import (
+    LINEAR_CHAIN,
+    BranchPolicy,
+    Continuation,
+    EpisodeTree,
+)
 from backend.bench.contract import TargetConfig, Transcript
 from backend.bench.evaluator import Verdict
 from backend.bench.library import AnyFamily, Case
@@ -180,12 +185,20 @@ def run_episode(
     blinding: Blinding,
     budget: AdaptiveBudget = DECLARED_ADAPTIVE_BUDGET,
     precedent: PrecedentStore = DURABLE_PRECEDENT,
+    branching: BranchPolicy = LINEAR_CHAIN,
 ) -> AdaptiveEpisode:
     """Run one episode and record it on the run state, however it ended.
 
     The episode is recorded on every path, the abort included: an episode that
     vanished when the layer ceiling was reached would leave a reader unable to tell
     a target the attacker never got to from one it failed to break (ADR-0011).
+
+    `branching` is **this episode's** schedule and is an argument rather than a field
+    of `budget`, because the two are different grains: the budget declares which
+    schedules the layer runs an episode set under and how many turns each may spend,
+    and one episode runs under exactly one of them. The layer reads the set and hands
+    a policy down per episode, which is the only way a run under both schedules can be
+    two episodes rather than one episode nobody can say the shape of (ADR-0096).
     """
     return _Episode(
         target=target,
@@ -195,6 +208,7 @@ def run_episode(
         blinding=blinding,
         budget=budget,
         precedent=precedent,
+        branching=branching,
     ).run()
 
 
@@ -216,6 +230,7 @@ class _Episode:
         blinding: Blinding,
         budget: AdaptiveBudget,
         precedent: PrecedentStore,
+        branching: BranchPolicy = LINEAR_CHAIN,
     ) -> None:
         self.target = target
         self.objective = objective
@@ -236,7 +251,7 @@ class _Episode:
         else — so a turn number indexes both."""
         self.proposals: list[ProposedRoute] = []
         self.declined: list[str] = []
-        self.tree = EpisodeTree(budget.branching)
+        self.tree = EpisodeTree(branching)
         """Which turn the next probe continues from, and which turns are closed.
 
         The schedule, and never the model's: `_step` asks the tree where the next

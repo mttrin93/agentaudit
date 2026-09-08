@@ -212,11 +212,25 @@ how many turns stay live before it stops continuing from the oldest of them. The
 harness's and never the attacker's — there is no sixth tool, and a model-invoked tool
 that chose how wide to search would be one that chose how much of the operator's
 endpoint to spend. Declared beside `T` and `k`, printed beside `A_effort`, and the
-declared default is the line. A **pruning** rule is a choice about what the attacker is
+declared default is the line. Which policies a run attacks under is a **schedule**
+selection, below. A **pruning** rule is a choice about what the attacker is
 allowed to forget, so it is stated: pruning by age can discard the branch that was
 working, which is the second reading a negative `A_break` has beside a blinding
 failure.
 _Avoid_: search strategy, beam, the attacker's plan, tree budget
+
+**Schedule**:
+One of the two **branch policies** an operator may put the adaptive layer on, by the
+names the catalogues carry: *linear jailbreak* and *tree jailbreak*. A selection and
+not a width — the breadth and the pruning cap are the bench's, and what is selected is
+a policy the bench has a stated rule for. **Both selected is two episode sets per
+family and never one wider search**: `k` episodes under each, so the layer's ceiling
+doubles and the operator confirms the doubled figure before anything is sent. A
+schedule is not a **construction** — a construction is an operation on the payload a
+case commits and is scored on its own attempts; a schedule is how an episode's turns
+are spent, and an episode is a summand of nothing. The reference agents were gated
+under the line, so a run under the tree is read against a citation the line earned.
+_Avoid_: strategy, mode, adaptive construction, multi-turn attack
 
 **Turn**:
 One exchange inside an episode — the attacker composes, the target replies. **One

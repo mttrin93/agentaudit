@@ -696,7 +696,15 @@ class AdaptiveDiscrimination:
                 # claim a reader needs is what a turn *is*, and a block that said
                 # so only when the search branched would leave the linear reading
                 # to be inferred.
-                f"  {self.budget.branching.stated()}",
+                #
+                # One line per selected schedule, named: a run under both opened an
+                # episode set under each, and a block that printed one rule for a
+                # median taken over two schedules' turns would be a reader told the
+                # wrong thing about the number above it (ADR-0096).
+                *(
+                    f"  {schedule}: {schedule.stated()}"
+                    for schedule in self.budget.scheduled
+                ),
                 *(f"  {line}" for line in self.separation.stated().splitlines()),
                 *(f"  {effort.stated()}" for effort in self.effort),
                 f"  {self.sign_test.stated()}",

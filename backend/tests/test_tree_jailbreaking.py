@@ -34,14 +34,17 @@ from backend.bench.adaptive.scripted import (
     scripted_attacker,
 )
 from backend.bench.adaptive.tree import (
+    DECLARED_TREE,
     LINEAR_CHAIN,
     BranchPolicy,
+    BranchSchedule,
     Continuation,
     EpisodeTree,
     deepest_path,
 )
 from backend.bench.evaluator import Verdict
 from backend.bench.library import Case, Family
+from backend.bench.selection import EVERY_CONSTRUCTION, AttackLayer
 from backend.graph.budget import Layer, RunBudget
 from backend.tests.conftest import a_target
 from backend.tests.test_adaptive_attacker import attack, attackable
@@ -55,7 +58,25 @@ declared schedule is the line, because the reference agents were gated under it
 reading in the bench was produced under.
 """
 
-TREE_BUDGET = replace(DECLARED_ADAPTIVE_BUDGET, branching=BRANCHING)
+TREE_BUDGET = replace(
+    DECLARED_ADAPTIVE_BUDGET, schedules=frozenset({BranchSchedule.TREE})
+)
+"""The declared budget put on the tree alone, which is `BRANCHING`'s policy.
+
+`BranchSchedule.TREE` stands for `DECLARED_TREE`, and `BRANCHING` above is that
+record written out: the tests below read the schedule off the episodes, so the two
+have to be the same policy or the worked-through parents would be a schedule nothing
+ran. Asserted rather than assumed, in
+`test_the_tree_an_operator_selects_is_the_policy_these_tests_read`.
+"""
+
+BOTH_BUDGET = replace(
+    DECLARED_ADAPTIVE_BUDGET,
+    schedules=frozenset({BranchSchedule.LINEAR, BranchSchedule.TREE}),
+    episodes_per_family=1,
+)
+"""Both schedules, and `k` of one so that the two episodes per family are the two
+schedules and not four episodes a reader has to sort (ADR-0096)."""
 
 THE_SCHEDULE = (0, 1, 1, 1, 2, 3, 4, 5)
 """The parent of each of eight turns under `BRANCHING`, worked through by hand.
@@ -153,7 +174,17 @@ def test_the_estimate_and_the_ceiling_are_the_same_under_a_branching_policy(
     assert TREE_BUDGET.turn_ceiling == DECLARED_ADAPTIVE_BUDGET.turn_ceiling
     assert tree.ceiling(Layer.ADAPTIVE) == linear.ceiling(Layer.ADAPTIVE)
     assert tree.estimate.adaptive.calls == linear.estimate.adaptive.calls
-    assert tree.estimate.adaptive.basis == linear.estimate.adaptive.basis
+    # The basis names which schedule the figure was priced under and is otherwise the
+    # same sentence: one schedule at one k, and the ceiling above says the figure did
+    # not move. It has to name it — two runs at the same ceiling under different
+    # schedules are not the same run, and the estimate is what an operator confirms
+    # (ADR-0096).
+    assert "1 schedule (tree_jailbreak)" in tree.estimate.adaptive.basis
+    assert "1 schedule (linear_jailbreak)" in linear.estimate.adaptive.basis
+    assert (
+        tree.estimate.adaptive.basis.replace("tree_jailbreak", "linear_jailbreak")
+        == linear.estimate.adaptive.basis
+    )
 
 
 # --- The record: indices resolve, and a line is still a line ----------------
@@ -398,3 +429,166 @@ def test_a_proposed_route_says_whether_the_harness_branched(
     assert on_a_tree.tool is AttackerTool.PROPOSE_CASE
     assert on_a_line.argument == DESCRIPTION
     assert on_a_tree.argument == DESCRIPTION + BRANCHED
+
+
+# --- Both schedules: two episode sets, and a ceiling that says so -----------
+
+
+def test_the_tree_an_operator_selects_is_the_policy_these_tests_read() -> None:
+    """`BranchSchedule.TREE` and `BRANCHING` are one policy, not two.
+
+    The one assertion that keeps this file honest after the schedule became
+    selectable: every worked-through parent list below is read off episodes the layer
+    opened under `BranchSchedule.TREE`, so a `DECLARED_TREE` edited to some other
+    breadth would leave these tests passing against a schedule nobody selected.
+    """
+    assert BranchSchedule.TREE.policy == DECLARED_TREE == BRANCHING
+    assert BranchSchedule.LINEAR.policy.branches is False
+
+
+def test_selecting_both_schedules_opens_one_episode_set_under_each(
+    leakage_case: Case,
+) -> None:
+    """Two episodes per family per target, one on the line and one in the tree.
+
+    The whole of what selecting both means (ADR-0096): not a wider search, but a
+    second episode set. Read off the shapes rather than off a label, because the shape
+    is what the record carries — a linear episode's `parents` is empty and a tree's is
+    the schedule worked through by hand at the top of this file.
+
+    Driven red by looping the schedules outside `k` and taking only the first, which
+    is the shape a run that quietly attacked under one selection while reporting two
+    would have.
+    """
+    with attackable(names=("hardened",)) as targets:
+        _, episodes = attack(targets, [leakage_case], budget=BOTH_BUDGET)
+
+    assert len(episodes) == 2
+    line, tree = sorted(episodes, key=lambda episode: len(episode.parents))
+    assert line.parents == ()
+    assert line.branched is False
+    assert tree.parents == THE_SCHEDULE
+    assert tree.branched
+    # And the same family, against the same target: the schedule is the innermost
+    # loop, so the two readings of one family are adjacent.
+    assert line.family == tree.family == leakage_case.family
+    assert line.target_name == tree.target_name
+
+
+def test_selecting_both_schedules_doubles_the_episodes_and_the_ceiling(
+    library: list[Case],
+) -> None:
+    """The figure an operator confirms carries the second schedule's turns.
+
+    `k` per family **per schedule**, so both selected is twice the episodes and twice
+    the ceiling — and the basis names the schedules, because a doubled figure with no
+    reason beside it is the one an operator would read as a bug in the estimate.
+
+    Driven red by counting the schedules nowhere in `episode_count`, which is the
+    version that opens two episode sets against a ceiling priced for one and stops the
+    run at the counter halfway through its second (ADR-0007).
+    """
+    one = replace(DECLARED_ADAPTIVE_BUDGET, episodes_per_family=1)
+    both = replace(one, schedules=frozenset(BranchSchedule))
+
+    assert both.episode_count == 2 * one.episode_count
+    assert both.turn_ceiling == 2 * one.turn_ceiling
+    assert both.scheduled == (BranchSchedule.LINEAR, BranchSchedule.TREE)
+
+    targets = [a_target(name="trivial")]
+    asked = replace(EVERY_CONSTRUCTION, schedules=frozenset(BranchSchedule))
+    # Priced through the one join, which is how `runs.start` prices a run: the
+    # selection is the operator's answer and `under` is where it reaches the budget.
+    priced = RunBudget.declare(
+        cases=library, targets=targets, adaptive=one.under(asked.schedules)
+    )
+    narrow = RunBudget.declare(cases=library, targets=targets, adaptive=one)
+
+    assert priced.ceiling(Layer.ADAPTIVE) == 2 * narrow.ceiling(Layer.ADAPTIVE)
+    assert priced.estimate.adaptive.calls == 2 * narrow.estimate.adaptive.calls
+    assert (
+        "2 schedules (linear_jailbreak, tree_jailbreak)"
+        in priced.estimate.adaptive.basis
+    )
+
+
+def test_the_selection_is_what_the_layer_attacks_under(leakage_case: Case) -> None:
+    """The operator's selection reaches the episodes, through one join and not two.
+
+    `AdaptiveBudget.under` is the join, and this is the claim that makes it worth
+    having: a budget declared on the line and a selection asking for the tree produce
+    tree episodes, so the ceiling `RunBudget.declare` prices and the episodes the layer
+    opens are read off one answer.
+    """
+    asked = replace(EVERY_CONSTRUCTION, schedules=frozenset({BranchSchedule.TREE}))
+
+    with attackable(names=("hardened",)) as targets:
+        _, episodes = attack(
+            targets,
+            [leakage_case],
+            budget=DECLARED_ADAPTIVE_BUDGET.under(asked.schedules),
+        )
+
+    assert episodes
+    assert all(episode.parents == THE_SCHEDULE for episode in episodes)
+
+
+def test_a_layer_with_no_schedule_is_refused_at_both_records() -> None:
+    """An empty set is refused where it is constructed, and says why.
+
+    Two records, one refusal each, because either one could be built by a caller that
+    never touched the other: a budget carrying the layer running under nothing, and a
+    selection that named no schedule. The layer switch is how the layer is turned off,
+    and a second way of saying it is a second thing a reader has to reconcile.
+    """
+    with pytest.raises(ValueError, match="opens no episode"):
+        replace(DECLARED_ADAPTIVE_BUDGET, schedules=frozenset())
+
+    with pytest.raises(ValueError, match="has to attack under a schedule"):
+        replace(EVERY_CONSTRUCTION, schedules=frozenset())
+
+
+def test_the_selection_states_which_schedules_ran_and_not_a_wider_search() -> None:
+    """The provenance sentence: both is twice the episodes, not one bigger one.
+
+    Part of the comparability claim `VARIANTS_STATED` makes — two runs are comparable
+    at equal library version and equal selection — so a document that named the
+    constructions and not the schedules would state half of its own condition.
+    """
+    both = replace(EVERY_CONSTRUCTION, schedules=frozenset(BranchSchedule))
+    one = EVERY_CONSTRUCTION
+    off = replace(
+        EVERY_CONSTRUCTION,
+        layers=frozenset(EVERY_CONSTRUCTION.layers - {AttackLayer.ADAPTIVE}),
+    )
+
+    assert "twice the episodes" in both.schedules_stated()
+    assert "both schedules" in both.schedules_stated()
+    assert "one schedule, linear_jailbreak" in one.schedules_stated()
+    assert "switched off" in off.schedules_stated()
+    # And it is its own sentence rather than a clause of `stated()`: that one is
+    # re-derived by the verifier from the layers and constructions beside it, so a
+    # wording that grew a schedules clause would report every document issued after
+    # ADR-0096 as a disagreement. The artefact carries both strings.
+    assert both.schedules_stated() not in both.stated()
+    assert "schedule" not in one.stated()
+
+
+def test_the_adaptive_block_states_one_rule_per_selected_schedule(
+    leakage_case: Case,
+) -> None:
+    """A_effort's median is over turns, so every schedule those turns came from is
+    named.
+
+    A block that printed one rule for a median taken over two schedules' turns would
+    tell a reader the wrong thing about the number above it (ADR-0057 §3, ADR-0096).
+    """
+    with attackable(names=("trivial", "hardened")) as targets:
+        _, episodes = attack(targets, [leakage_case], budget=BOTH_BUDGET)
+
+    reading = measure(
+        episodes, trivial="trivial", hardened="hardened", budget=BOTH_BUDGET
+    ).stated()
+
+    assert "linear_jailbreak: scheduling: one line" in reading
+    assert "tree_jailbreak: scheduling: a tree" in reading

@@ -59,6 +59,7 @@
 import type {
   GateCitation,
   LayerSelected,
+  ScheduleSelected,
   TransformSelected,
 } from '../api/bench'
 
@@ -306,14 +307,35 @@ export interface ConstructionOffered {
 }
 
 /**
+ * One schedule the adaptive layer may attack under, and whether the next run does.
+ *
+ * The line and the tree. `sent` is `selected` read out in this module's own word for
+ * it, on `ConstructionOffered`'s terms — what a switch answers here is *will the next
+ * run send this* — and `does` is the harness's scheduling and pruning rule verbatim,
+ * because it is the rule a report's `A_break` sentence is read against.
+ */
+export interface ScheduleOffered {
+  /** The wire name, as every record spells it. */
+  schedule: string
+  /** The scheduling and pruning rule, in the bench's own words. */
+  does: string
+  selected: boolean
+}
+
+/**
  * One layer, whether the next run runs it, and the constructions inside it.
  *
  * The grouping the operator's question has: *do I want the encodings, the ladders, or
  * the agent?* — the layers answer it, and the list under each is the finer grain
  * inside. `constructions` is **empty on the adaptive layer**, and that is the shape
  * rather than an omission: what it would hold are the two loops the bench's closed set
- * of constructions deliberately does not name, so its switch is the whole of what
- * there is to ask about it.
+ * of constructions deliberately does not name.
+ *
+ * `schedules` is where those two loops are, and it is empty on the other two layers
+ * for the mirror-image reason: a schedule is how the adaptive attacker spends an
+ * episode's turns, and the layers that carry constructions have nothing to schedule
+ * (ADR-0096). Both lists are grouped off the `layer` field the wire puts on every row,
+ * so this module holds no mapping of its own either way.
  */
 export interface LayerOffered {
   layer: string
@@ -321,6 +343,7 @@ export interface LayerOffered {
   sends: string
   runs: boolean
   constructions: ConstructionOffered[]
+  schedules: ScheduleOffered[]
 }
 
 /**
@@ -344,12 +367,26 @@ export interface LayerOffered {
  */
 export interface SelectionReading {
   layers: LayerOffered[]
+  /**
+   * What selecting both schedules costs, in the bench's own words.
+   *
+   * **The one served sentence this reading keeps**, and the exception is argued rather
+   * than an oversight: the two it drops are about a document — comparability, library
+   * versions, what a reading absent from a page means — and this one is about the
+   * switch beside it. A second schedule is a second episode set per family, so the
+   * tick doubles the turns the next run may put on the operator's own endpoint, and
+   * that is the fact an operator needs *before* answering rather than after
+   * (ADR-0007, ADR-0096).
+   */
+  schedulesCost: string
 }
 
 /** What the bench's tuning reading says about what the next run sends. */
 interface Offered {
   layers: readonly LayerSelected[]
   transforms: readonly TransformSelected[]
+  schedules: readonly ScheduleSelected[]
+  schedules_statement: string
 }
 
 /**
@@ -374,7 +411,15 @@ export function selectionReading(offered: Offered): SelectionReading {
           does: one.does,
           sent: one.selected,
         })),
+      schedules: offered.schedules
+        .filter((one) => one.layer === layer.layer)
+        .map((one) => ({
+          schedule: one.schedule,
+          does: one.does,
+          selected: one.selected,
+        })),
     })),
+    schedulesCost: offered.schedules_statement,
   }
 }
 

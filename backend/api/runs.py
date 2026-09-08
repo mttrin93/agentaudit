@@ -493,7 +493,13 @@ class BenchRuns:
             cases=plan.cases,
             targets=[target],
             rule=self._config.rule,
-            adaptive=self._config.adaptive,
+            # The declared budget under the schedules this bench is set to, through
+            # the one join: selecting both is two episode sets per family, so the
+            # ceiling doubles and the figure an operator confirms doubles with it. The
+            # same `under` call is made where the layer spends it (`run_calibration`),
+            # off the same selection, so what is priced and what runs are one answer
+            # (ADR-0096).
+            adaptive=self._config.adaptive.under(self._config.selection.schedules),
             price=price,
             # The estimate moves when the selection moves: a layer switched off is
             # nothing on the wire, and the operator sees the price of what they just

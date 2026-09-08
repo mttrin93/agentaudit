@@ -214,6 +214,7 @@ from backend.bench.adaptive.attacker import AttackerCompletion
 from backend.bench.adaptive.budget import DECLARED_ADAPTIVE_BUDGET, AdaptiveBudget
 from backend.bench.adaptive.episode import AdaptiveEpisode, EpisodeOutcome
 from backend.bench.adaptive.scripted import SCRIPTED_ATTACKER
+from backend.bench.adaptive.tree import BranchSchedule
 from backend.bench.adjudication import Completion
 from backend.bench.admission import admitted_elective, admitted_library
 from backend.bench.applicability import applicable
@@ -3373,6 +3374,26 @@ class Tuning(BaseModel):
     switch turns this off*.
     """
 
+    schedules: list[ScheduleSelected]
+    """The two adaptive schedules and whether each runs, in the enum's own order.
+
+    Served beside the layers rather than inside the adaptive layer's row, because a
+    row that carried its own list would be a `LayerSelected` shape only one of the
+    three could fill — the same shape `transforms` has for the same reason, and each
+    row names the layer it is switched under
+    ([ADR-0096](../../docs/adr/0096-the-adaptive-schedule-is-selected-and-both-schedules-are-two-episodes.md)).
+    """
+
+    schedules_statement: str
+    """What selecting both buys and what it costs, in the bench's own words.
+
+    Served on `families_off_statement`'s terms — the caveat and the switch are one
+    statement, and a console holding its own copy would be a second answer to what the
+    tick means. Here the caveat is the one an operator most needs before they tick:
+    both schedules is two episode sets per family and twice the layer's ceiling, and
+    it is a second attacker rather than a wider search.
+    """
+
     selection_off_statement: str
     selection_stated: str
     """What a run made now would print in its provenance about what it sent.
@@ -3393,6 +3414,33 @@ class LayerSelected(BaseModel):
     sends: str
 
 
+class ScheduleSelected(BaseModel):
+    """One adaptive schedule, whether the next run attacks under it, and its rule.
+
+    Its own model beside `TransformSelected` and deliberately not a row of it: a
+    construction is scored on its own attempts and a schedule is scored on nothing
+    (ADR-0010, ADR-0051 §2), so one list of both would be a wire shape in which a
+    schedule could arrive where a construction's variant counts are read. The layer is
+    not a field here either — every schedule is the adaptive layer's, and a field
+    saying so on every row would be a join a console could get wrong (ADR-0096).
+
+    `layer` is carried on every row for `TransformSelected`'s reason and not because a
+    schedule could belong to another layer: **the grouping is the wire's.** A console
+    that knew by itself that schedules go in the adaptive box would hold a second copy
+    of a mapping this bench already owns, and the two would only have to disagree once
+    for a switch to be drawn under the wrong heading.
+
+    `does` is `BranchSchedule.stated()` verbatim, on `TransformSelected.does`' terms:
+    it is the scheduling and pruning rule `A_break` is read against, and a console that
+    reworded it would describe a rule the harness does not follow.
+    """
+
+    schedule: str
+    layer: str
+    selected: bool
+    does: str
+
+
 class TransformSelected(BaseModel):
     """One construction, whether the next run sends it, and what it does.
 
@@ -3407,6 +3455,24 @@ class TransformSelected(BaseModel):
     selected: bool
     does: str
 
+
+BOTH_SCHEDULES_IS_TWO_EPISODE_SETS = (
+    "a schedule is how the adaptive attacker spends an episode's turns, and both "
+    "selected is two episode sets per family rather than one wider search: k episodes "
+    "under the line and k under the tree, so the layer's ceiling doubles and the "
+    "figure you confirm before a run starts doubles with it. Neither schedule scores "
+    "anything — an episode is a summand of nothing — and the tree reaches shallower "
+    "on each branch because breadth is bought out of the same turn budget. The "
+    "reference agents were gated under the line, so a run under the tree is read "
+    "against a citation the line earned"
+)
+"""What selecting a second schedule buys and what it costs (ADR-0057, ADR-0096).
+
+Written here beside the construction sentence rather than in the console, for that
+sentence's own reason: the switch and its caveat are one statement, and the last
+clause is the one an operator cannot be expected to work out — the gate's citation is
+a claim about the attacker the reference agents faced, which is the line.
+"""
 
 A_CONSTRUCTION_SWITCHED_OFF_IS_NOT_SENT = (
     "a construction switched off is not sent: no case that attacks by it is "
@@ -3584,6 +3650,16 @@ def tuning(config: BenchConfig) -> Tuning:
             )
             for transform in Transform
         ],
+        schedules=[
+            ScheduleSelected(
+                schedule=str(schedule),
+                layer=str(AttackLayer.ADAPTIVE),
+                selected=schedule in config.selection.schedules,
+                does=schedule.stated(),
+            )
+            for schedule in BranchSchedule
+        ],
+        schedules_statement=BOTH_SCHEDULES_IS_TWO_EPISODE_SETS,
         selection_off_statement=A_CONSTRUCTION_SWITCHED_OFF_IS_NOT_SENT,
         selection_stated=config.selection.stated(),
         statement=THE_CONSOLE_MAY_SET_THESE,
@@ -4065,6 +4141,18 @@ class SelectRequest(BaseModel):
 
     layers: list[str]
     transforms: list[str]
+    schedules: list[str] = Field(default_factory=lambda: [str(BranchSchedule.LINEAR)])
+    """The adaptive schedules the next run attacks under. At least one.
+
+    **Defaulted where the other two are required**, which is the one asymmetry on this
+    request. The pair above is one statement because either without the other leaves a
+    bench whose halves were declared by two requests; this list is defaulted because a
+    caller written before the field existed is a caller asking for the run this bench
+    has always made — the line — and a required field would refuse it. What it may not
+    be is *empty*: an empty list is a layer running under no schedule, which is what
+    the layer switch already says, so it is a `422` carrying the type's own sentence
+    (ADR-0096).
+    """
 
 
 BENCH_NOTES_ROUTE = "/bench/notes"
@@ -5850,9 +5938,16 @@ def create_app(
             Transform,
             "is not a construction this bench performs. The seven are",
         )
+        schedules = _members(
+            asked.schedules,
+            BranchSchedule,
+            "is not a schedule this bench attacks under. The two are",
+        )
         try:
             selection = AttackSelection(
-                layers=frozenset(layers), transforms=frozenset(transforms)
+                layers=frozenset(layers),
+                transforms=frozenset(transforms),
+                schedules=frozenset(schedules),
             )
         except ValueError as nothing:
             raise HTTPException(status_code=422, detail=str(nothing)) from nothing

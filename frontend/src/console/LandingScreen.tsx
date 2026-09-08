@@ -257,15 +257,27 @@ export function LandingScreen() {
    * per target — so the switches stay where they were and the refusal says why.
    */
   const switches = sends?.layers ?? []
-  const sent = async (layers: string[], transforms: string[]) => {
+  const sent = async (
+    layers: string[],
+    transforms: string[],
+    schedules: string[],
+  ) => {
     setRefusedSelection('')
     try {
-      const bench = await selectConstructions(layers, transforms)
+      const bench = await selectConstructions(layers, transforms, schedules)
       setSends(selectionReading(bench.tuning))
     } catch (refusal: unknown) {
       setRefusedSelection(`${refusal}`)
     }
   }
+
+  /** Every schedule left where the operator put it, for the two writes that are not
+      about them. Read off the switches rather than remembered, on `held`'s terms. */
+  const scheduled = () =>
+    switches
+      .flatMap((one) => one.schedules)
+      .filter((one) => one.selected)
+      .map((one) => one.schedule)
 
   /** One layer switched, and every construction left where the operator put it. */
   const selectLayer = (layer: string, on: boolean) =>
@@ -277,6 +289,7 @@ export function LandingScreen() {
         .flatMap((one) => one.constructions)
         .filter((one) => one.sent)
         .map((one) => one.transform),
+      scheduled(),
     )
 
   /** One construction switched, and every layer left where the operator put it. */
@@ -287,6 +300,31 @@ export function LandingScreen() {
         .flatMap((one) => one.constructions)
         .filter((one) => (one.transform === transform ? on : one.sent))
         .map((one) => one.transform),
+      scheduled(),
+    )
+
+  /**
+   * One schedule switched, and everything else left where the operator put it.
+   *
+   * A third handler on the two above's reasoning — exactly one of the three switches
+   * is ever the thing that moved — and the one whose answer is not a narrower run:
+   * ticking the second schedule opens a second episode set per family, so the bench
+   * answers with a doubled adaptive ceiling and the next run is priced against it. The
+   * last schedule cannot be unticked: the bench refuses a layer running under none,
+   * because that is what the layer's own switch says, and the refusal arrives in the
+   * bench's own sentence above the boxes (ADR-0096).
+   */
+  const selectSchedule = (schedule: string, on: boolean) =>
+    sent(
+      switches.filter((one) => one.runs).map((one) => one.layer),
+      switches
+        .flatMap((one) => one.constructions)
+        .filter((one) => one.sent)
+        .map((one) => one.transform),
+      switches
+        .flatMap((one) => one.schedules)
+        .filter((one) => (one.schedule === schedule ? on : one.selected))
+        .map((one) => one.schedule),
     )
 
   useScreenTitle(THE_BENCH)
@@ -531,17 +569,22 @@ export function LandingScreen() {
         subject, and these are the finer grain of the switch above them rather than a
         second block.
 
-        The adaptive layer holds no construction, and the box says so rather than
-        ending early: what it would hold are the two loops the bench's closed set of
-        constructions deliberately does not name, so its switch is the whole of what
-        there is to ask about it.
+        The adaptive layer holds no construction — what it would hold are the two loops
+        the bench's closed set of constructions deliberately does not name — and it
+        holds **its two schedules** instead, in the footer the constructions would have
+        been in and behind the word for what they are. Both ticked is two episode sets
+        per family rather than one wider search, which is why the sentence about what
+        the tick costs is printed under them: the second schedule doubles the turns the
+        next run may put on the operator's own endpoint, and that is a figure they
+        confirm rather than discover (ADR-0057, ADR-0096). A layer whose footer holds
+        neither says so rather than ending early.
 
-        No figure in any of it, and no paragraph either. The two sentences the route
-        serves beside these switches — what switching a construction off does, and what
-        a run made now would carry into its provenance — are both written for a reader
-        holding a document, and neither is printed here: what an operator on this
-        screen is answering is which of the three the next run will send, and the boxes
-        answer it. The artefact still states both, in the artefact.
+        No figure in any of it. The two sentences the route serves beside these
+        switches — what switching a construction off does, and what a run made now
+        would carry into its provenance — are both written for a reader holding a
+        document, and neither is printed here: what an operator on this screen is
+        answering is which of the three the next run will send, and the boxes answer
+        it. The artefact still states both, in the artefact.
       */}
       {sends === null ? null : (
         <section>
@@ -571,12 +614,14 @@ export function LandingScreen() {
                 </dt>
                 <dd>{layer.sends}</dd>
                 <dd className="sends">
-                  {layer.constructions.length === 0 ? (
+                  {layer.constructions.length === 0 &&
+                  layer.schedules.length === 0 ? (
                     <span className="none">
                       Nothing to choose inside this layer — the switch above is the
                       whole of it.
                     </span>
-                  ) : (
+                  ) : null}
+                  {layer.constructions.length === 0 ? null : (
                     <>
                       <span className="of">Constructions</span>
                       <ul className="sent">
@@ -599,6 +644,45 @@ export function LandingScreen() {
                           </li>
                         ))}
                       </ul>
+                    </>
+                  )}
+                  {/*
+                    The adaptive layer's own two switches, in the footer its
+                    constructions would have been in and behind the word for what they
+                    are. Drawn wherever the wire says a schedule belongs, which is that
+                    layer, so this markup names no layer.
+
+                    **The one sentence this block prints**, and it is here rather than
+                    under the heading because it is what *this* tick costs: both
+                    schedules is a second episode set per family, so the layer's
+                    ceiling doubles and the doubling reaches the figure the operator
+                    confirms before a run starts. The two document sentences the route
+                    serves are still not printed anywhere on this screen (ADR-0096).
+                  */}
+                  {layer.schedules.length === 0 ? null : (
+                    <>
+                      <span className="of">Schedules</span>
+                      <ul className="sent">
+                        {layer.schedules.map((one) => (
+                          <li key={one.schedule}>
+                            <label>
+                              <input
+                                className="tick"
+                                type="checkbox"
+                                checked={one.selected}
+                                onChange={(event) =>
+                                  void selectSchedule(
+                                    one.schedule,
+                                    event.target.checked,
+                                  )
+                                }
+                              />
+                              {readName(one.schedule)}
+                            </label>
+                          </li>
+                        ))}
+                      </ul>
+                      <span className="aside">{sends.schedulesCost}</span>
                     </>
                   )}
                 </dd>

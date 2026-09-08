@@ -57,6 +57,7 @@ from typing import Any
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 
+from backend.bench.adaptive.tree import BranchSchedule
 from backend.bench.library import Transform
 from backend.bench.payload import ARTEFACT, ARTEFACT_VERSION
 from backend.bench.rendering import REPORT_MARKDOWN, REPORT_PAYLOAD
@@ -879,16 +880,31 @@ def _selection(body: Mapping[str, Any], comparisons: _Comparisons) -> None:
     stated = _mapping(_mapping(body, "provenance"), "selection")
     layers = [str(name) for name in _sequence_of_strings(stated, "layers")]
     transforms = [str(name) for name in _sequence_of_strings(stated, "transforms")]
+    # The schedules, when the document carries them. Absent on every artefact issued
+    # before ADR-0096, and those runs attacked under the line — which is what the
+    # default names, so a rebuilt selection is the selection that ran either way. The
+    # sentence is checked only when the key is there, because a check that failed on
+    # its absence would report every earlier document as a disagreement.
+    schedules = (
+        [str(name) for name in _sequence_of_strings(stated, "schedules")]
+        if "schedules" in stated
+        else []
+    )
     try:
         selection = AttackSelection(
             layers=frozenset(AttackLayer(name) for name in layers),
             transforms=frozenset(Transform(name) for name in transforms),
+            **(
+                {"schedules": frozenset(BranchSchedule(name) for name in schedules)}
+                if schedules
+                else {}
+            ),
         )
     except ValueError as refused:
         comparisons.agrees(
             "provenance.selection",
             False,
-            f"{layers} and {transforms}",
+            f"{layers}, {transforms} and {schedules}",
             (
                 "layers and constructions this bench has members for, in a selection "
                 f"that sends something: {refused}"
@@ -901,6 +917,13 @@ def _selection(body: Mapping[str, Any], comparisons: _Comparisons) -> None:
         "wording that does not follow from the selection beside it",
         "the wording for these layers and these constructions",
     )
+    if "schedules_stated" in stated:
+        comparisons.agrees(
+            "provenance.selection.schedules_stated",
+            stated.get("schedules_stated") == selection.schedules_stated(),
+            "wording that does not follow from the schedules beside it",
+            "the wording for these schedules and this adaptive switch",
+        )
     comparisons.agrees(
         "provenance.selection.whole_library",
         stated.get("whole_library") == (selection == EVERY_CONSTRUCTION),

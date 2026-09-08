@@ -33,10 +33,11 @@ than present at zero (ADR-0055).
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import assert_never
 
+from backend.bench.adaptive.tree import BranchSchedule
 from backend.bench.library import Transform
 
 
@@ -143,6 +144,33 @@ class AttackSelection:
 
     layers: frozenset[AttackLayer]
     transforms: frozenset[Transform]
+    schedules: frozenset[BranchSchedule] = field(
+        default_factory=lambda: frozenset({BranchSchedule.LINEAR})
+    )
+    """Which schedules the adaptive layer attacks under, if it runs at all.
+
+    **The third switch, and the adaptive layer's own.** The layer names no
+    construction — what it would name are the two loops ADR-0051 §3 refuses the
+    `Transform` enum — so until this field the operator's only question about it was
+    *does the agent run*, and the box on the console said so. These are the two names
+    the catalogues carry, each standing for a policy the bench declares, and selecting
+    both is **two episode sets per family** rather than one wider search: the ceiling
+    doubles and the operator confirms the doubled figure
+    ([ADR-0096](../../docs/adr/0096-the-adaptive-schedule-is-selected-and-both-schedules-are-two-episodes.md)).
+
+    A set with a default rather than a required field, and the default is the **line
+    alone** — where this parts from `transforms`, whose default is everything the
+    library holds. A construction switched on measures more of the same library; a
+    second schedule is a different attacker, and the reference agents were gated under
+    the line (ADR-0023, ADR-0057 §2). So a caller that says nothing gets the schedule
+    every reading in this bench was produced under, and a bench nobody has narrowed is
+    still on the line.
+
+    It reaches the run through `AdaptiveBudget.under`, which is the only join, and it
+    reaches a **target run only**: a gate run is priced and calibrated without a
+    selection, so the citation stays a claim about the line whatever this console is
+    set to.
+    """
 
     def __post_init__(self) -> None:
         """Refuse a selection under which no scored construction runs.
@@ -159,6 +187,14 @@ class AttackSelection:
         would open no episode either. Saying *scores nothing* is saying the whole of
         what such a run would do.
         """
+        if not self.schedules:
+            raise ValueError(
+                "the adaptive layer has to attack under a schedule: an empty set is "
+                "a layer that opens no episode, which is what switching the layer "
+                "off already says, and two ways of saying it are two things a "
+                "reader has to reconcile. Name linear_jailbreak, tree_jailbreak or "
+                "both — the layer switch is how the layer is turned off"
+            )
         if not self.scored:
             raise ValueError(
                 "this selection scores nothing: no construction it names runs in a "
@@ -232,9 +268,52 @@ class AttackSelection:
             "condition."
         )
 
+    def schedules_stated(self) -> str:
+        """Which schedules the adaptive layer attacked under, in one sentence.
+
+        **Part of the selection and therefore part of the comparability claim** — and
+        its own sentence rather than a clause appended to `stated()` above, which is a
+        decision about the *verifier* and not about prose. `stated()` is re-derived by
+        `verification._selection` from the members beside it, so a wording that grew a
+        schedules clause would make every document a version-2 verifier reads report a
+        disagreement it cannot explain: a false tampering claim, where a key added
+        beside the others is a key an older verifier skips over a document whose
+        figures it still re-derives in full (ADR-0044 §8, ADR-0070, ADR-0096 §8). The
+        artefact carries both strings, side by side in section 2.
+
+        Said even when the adaptive layer is off, and says so: *no schedule ran* is
+        the fact, and a sentence that went quiet there would leave a reader deciding
+        whether the schedules were absent or unrecorded.
+        """
+        named = ", ".join(str(one) for one in BranchSchedule if one in self.schedules)
+        if not self.adaptive:
+            return (
+                "The adaptive layer was switched off for this run, so no episode was "
+                "opened and no schedule ran. What was selected is not named here: a "
+                "schedule nothing ran under is a setting rather than a fact about "
+                "this run, and naming it would invite a reader to think it did."
+            )
+        if len(self.schedules) == 1:
+            return (
+                f"The adaptive layer attacked under one schedule, {named}, so its "
+                "episodes are k per family and their turns are that schedule's."
+            )
+        return (
+            f"The adaptive layer attacked under both schedules — {named} — which is "
+            "one episode set per schedule per family and twice the episodes of a run "
+            "under one of them. An episode is a summand of nothing either way, and "
+            "the ceiling this run was approved against carries the doubling."
+        )
+
 
 EVERY_CONSTRUCTION = AttackSelection(
-    layers=frozenset(AttackLayer), transforms=frozenset(Transform)
+    layers=frozenset(AttackLayer),
+    transforms=frozenset(Transform),
+    # Every layer and every construction, and **one** schedule. Not both, for the
+    # reason the field's own docstring gives: a second schedule is a second attacker
+    # and not more of the same library, so the selection nobody narrowed is still the
+    # one the reference agents were gated under (ADR-0023, ADR-0096).
+    schedules=frozenset({BranchSchedule.LINEAR}),
 )
 """Every layer and every construction: the selection a run that narrowed nothing made.
 

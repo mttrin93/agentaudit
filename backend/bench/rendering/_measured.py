@@ -695,6 +695,18 @@ def _elective(elective: Mapping[str, Any]) -> tuple[str, ...]:
             "- None. Every elective family the bench declares was requested by this "
             "run, so none of them is absent here for want of a request.",
         ),
+        "",
+        # The sixth kind of nothing, under the two lists it is neither of: a family
+        # this run asked for and had no case to attempt. Printed even when the list
+        # is empty, on this function's own terms — a reader who cannot tell *every
+        # request was attempted* from *this document predates the check* is the
+        # reader the empty answers on this page exist for (ADR-0094).
+        *_listed(
+            (f"- {one['stated']}." for one in elective["requested_and_unanswered"]),
+            "- None. Every elective family this run requested had cases in the "
+            "library it was made against, so no request here went unattempted for "
+            "want of one.",
+        ),
     )
 
 

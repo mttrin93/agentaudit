@@ -1543,6 +1543,37 @@ class TargetResult:
     """
 
     @property
+    def requested_and_unanswered(self) -> tuple[ElectiveFamily, ...]:
+        """Requested elective families this run answered in no way at all.
+
+        The **sixth kind of nothing**, derived and never set, in the discipline
+        `MeasuredSection.unfit_to_report` and `NotRequested.over` already follow: a
+        document that had to be *told* which requests went unanswered is one where
+        forgetting prints nothing, and this is the absence that hid a defect for as
+        long as it went unprinted — a mounted library holding no case for a family the
+        console let an operator request, so the run asked for three families, spent
+        nothing on them, and its `requested_stated` sentence pointed at figures that
+        were not there.
+
+        Requested, minus the two answers the tier has: a rate in `measured.elective`,
+        or a reason in `measured.elective_not_measurable`. What is left is a request
+        this run could not act on, which is a fact about the *library* it ran against
+        and not about the target — so the sentence says so and the library version is
+        in the provenance block
+        ([ADR-0094](../../docs/adr/0094-the-seed-is-per-library-directory-and-a-requested-elective-family-with-no-case-is-stated.md)).
+
+        Not a `NotMeasurable`: that is a precondition this bench checked against this
+        endpoint and could not meet, and this one would be unanswered against every
+        target in the world.
+        """
+        answered = {entry.family for entry in self.measured.elective} | set(
+            self.measured.elective_not_measurable
+        )
+        return tuple(
+            family for family in self.elective.requested if family not in answered
+        )
+
+    @property
     def headline(self) -> tuple[ScannedControl, ...]:
         """Declared and defeated — controls this target claims, which the bench broke.
 

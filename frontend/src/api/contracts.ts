@@ -261,6 +261,29 @@ export interface FamilyRun {
 }
 
 /**
+ * How far one *elective* family has got against this target.
+ *
+ * `FamilyRun`'s twin and deliberately a second type, which is the split the bench
+ * carries at every site keyed by family (ADR-0035 §2, ADR-0088 §2): the two lists
+ * describe two closed sets, and a function that took either would be a function
+ * through which a seventh family could reach the six's arithmetic. Nothing in this
+ * app concatenates them.
+ *
+ * `no_case` is `not_run`'s counterpart and not the same sentence. A family of the six
+ * is out of the plan because its caller declared something away; a requested elective
+ * family is out because the library the run was planned against holds no case in it,
+ * which is a gap in the bench and not in the target (ADR-0094).
+ */
+export interface ElectiveFamilyRun {
+  family: string
+  attempted: number
+  of: number
+  resisted: number
+  succeeded: number
+  no_case: string
+}
+
+/**
  * The answer to one run's interrupt. A `confirmed: true` is the only thing that
  * spends.
  *

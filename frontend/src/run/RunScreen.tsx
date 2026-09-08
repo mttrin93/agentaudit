@@ -56,6 +56,7 @@ import {
 } from './interrupt'
 import {
   adaptiveReading,
+  electiveRows,
   familyRows,
   hasLength,
   payloads,
@@ -550,6 +551,27 @@ function Progress({
             {familyRows(progress).map((row) => (
               <FamilyBar row={row} key={row.family} />
             ))}
+            {/*
+              And the elective families this run asked for, directly under the six
+              and drawn by the same component.
+
+              **Two lists and nowhere they meet.** `electiveRows` reads the route's
+              second list, and the two maps stay two maps: this app concatenates the
+              tiers nowhere, so no length here is taken against a denominator from
+              the other list and nothing on the screen is a figure over the nine
+              (ADR-0035 §2, ADR-0088). What they share is a bar, which is a length
+              and not a rate anybody reads.
+
+              Empty for a run that asked the tier for nothing, and empty for a run
+              made before the tier could be asked for: the six are always six rows,
+              and three rows of *not asked for* under a person's own bars say nothing
+              about where their run has got to. The absences the tier owes a reader
+              are stated in the artefact, which is the document that has to account
+              for every family (ADR-0094).
+            */}
+            {electiveRows(progress).map((row) => (
+              <FamilyBar row={row} key={row.family} />
+            ))}
           </div>
           <div className="answering">
             <h3>How each family is answering</h3>
@@ -564,8 +586,29 @@ function Progress({
             {familyRows(progress).map((row) => (
               <FamilyAnswer row={row} key={row.family} />
             ))}
+            {/* The same nine rows on this side, in the same order and by the
+                same rule: two maps, and no verdict length taken against the other
+                tier's denominator. */}
+            {electiveRows(progress).map((row) => (
+              <FamilyAnswer row={row} key={row.family} />
+            ))}
           </div>
         </div>
+
+        {/*
+          And the reason a requested elective family's bar cannot fill. The bench's
+          own sentence, unedited: it says the gap is in the library this run was
+          planned against and not in the target, which is the one thing an operator
+          would otherwise get wrong — an empty bar reads as their agent, and this one
+          is ours (ADR-0094).
+        */}
+        {electiveRows(progress)
+          .filter((row) => row.notRun)
+          .map((row) => (
+            <p className="aside" key={row.family}>
+              <strong>{row.name}</strong>: {row.notRun}
+            </p>
+          ))}
 
         {/* The call it is on, under both columns and at the width of the page: an
             exchange is a paragraph of somebody's traffic and it reads badly in half

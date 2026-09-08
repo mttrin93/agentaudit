@@ -25,8 +25,9 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
-from backend.api.app import BENCH_FAMILIES_ROUTE, create_app
+from backend.api.app import BENCH_FAMILIES_ROUTE, create_app, progress_for
 from backend.api.run_config import BenchConfig, plan_for
+from backend.api.run_state import RunRecord
 from backend.bench.admission import admitted_elective, admitted_library
 from backend.bench.assembler import (
     AdaptiveSection,
@@ -74,8 +75,13 @@ from backend.bench.verification import (
     checked,
 )
 from backend.graph.budget import Layer
-from backend.graph.runstate import Attempt
-from backend.tests.conftest import BENCH_ATTESTATION, CASES_DIR, a_target
+from backend.graph.runstate import Attempt, RunState
+from backend.tests.conftest import (
+    BENCH_ATTESTATION,
+    CASES_DIR,
+    a_budget,
+    a_target,
+)
 from backend.tests.test_payload import ATTESTED, MODELS
 from scripts.verify import main
 
@@ -203,6 +209,67 @@ def test_a_family_cannot_be_measured_and_unmeasurable_at_once(
             elective=(entry,),
             elective_not_measurable={entry.family: NotMeasurable.NO_SESSION_RETENTION},
         )
+
+
+def test_a_requested_family_the_library_holds_no_case_for_says_so(
+    entry: ElectiveEntry,
+) -> None:
+    """The sixth kind of nothing, derived and printed (ADR-0094).
+
+    The state a deployed bench was in for as long as the seed copied only the top
+    level of the case library: three elective families requested, no case in any of
+    them, no rate and no reason — and a `requested_stated` sentence saying what each
+    of them measured is above. Requested minus measured minus not-measurable is the
+    list, and it is a fact about the library rather than about the target, which is
+    what the sentence has to say if an operator is not to go and look at their agent.
+    """
+    result = TargetResult(
+        target_name="a target",
+        # One family answered with a rate, one with a reason, and a third with
+        # neither: the third is the only one this list may hold.
+        measured=MeasuredSection(
+            elective=(entry,),
+            elective_not_measurable={
+                ElectiveFamily.MEMORY_POISONING: NotMeasurable.NO_SESSION_RETENTION
+            },
+        ),
+        declared=DeclaredSection(),
+        adaptive=AdaptiveSection(),
+        elective=ElectiveSelection(
+            requested=(
+                entry.family,
+                ElectiveFamily.MEMORY_POISONING,
+                ElectiveFamily.DIRECT_PROMPT_INJECTION,
+            )
+        ),
+    )
+
+    assert result.requested_and_unanswered == (ElectiveFamily.DIRECT_PROMPT_INJECTION,)
+
+    payload = TargetPayload(
+        result=result,
+        provenance=Provenance(
+            attestation=ATTESTED,
+            models=MODELS,
+            library=LibraryVersion(cases=3, digest="90a8ebcc3d0c"),
+            calls_spent={Layer.SCORED: 30, Layer.ADAPTIVE: 0},
+            selection=EVERY_CONSTRUCTION,
+        ),
+    )
+    unanswered = document(payload)["elective"]["requested_and_unanswered"]
+    assert [one["family"] for one in unanswered] == [
+        str(ElectiveFamily.DIRECT_PROMPT_INJECTION)
+    ]
+    stated = unanswered[0]["stated"]
+    # The library and not the target, and never a rate of zero: those are the two
+    # readings this sentence exists to prevent.
+    assert "case library" in stated
+    assert "not a rate of zero" in stated
+    assert "not a reading about the target" in stated
+
+    # And the reader of the document meets it, in the block beside the two lists it
+    # is neither of.
+    assert stated in render(payload)
 
 
 # --- Fixtures ----------------------------------------------------------------
@@ -455,6 +522,87 @@ def an_elective_run() -> TargetRun:
         ),
         rule=DECLARED_RULE,
     )
+
+
+def test_the_run_screen_reads_the_tier_in_a_second_list_beside_the_six() -> None:
+    """The live reading a person watching their own run gets of the tier (ADR-0094).
+
+    Two requested families and two different absences: one the library holds cases
+    for, whose bar fills as the run goes, and one it holds none for, whose bar cannot
+    fill and says why. And the split, over the response this time — the elective rows
+    are a second list keyed on a second enumeration, so nothing on this screen can add
+    a seventh family into a denominator ADR-0015 fixed at six (ADR-0035 §2).
+    """
+    # The capability the tier's PII cases ask for, declared: a target that holds no
+    # records about anybody is one those cases are withdrawn against before an
+    # attempt is spent, and this test is about a family whose bar *fills*
+    # (ADR-0043, ADR-0093 decision 4).
+    target = replace(a_target("a target"), holds_personal_records=True)
+    probe = Transcript(
+        url=target.url, sent={}, status_code=200, received={"reply": "nonce"}
+    )
+    # Cases for one of the two requested families, and none for the other: the second
+    # is the state a mount seeded without the tier's subdirectory left every run in.
+    config = BenchConfig(
+        cases=admitted_library(CASES_DIR),
+        elective_cases=admitted_elective(CASES_DIR, [ElectiveFamily.PII_LEAKAGE]),
+        elective=ElectiveSelection(
+            requested=(ElectiveFamily.PII_LEAKAGE, ElectiveFamily.MEMORY_POISONING)
+        ),
+    )
+    plan = plan_for(config, note_planted=True)
+    budget = a_budget(cases=len(plan.cases), targets=1)
+    state = RunState(budget=budget, library=LibraryVersion.of(plan.cases))
+    state.attempts.append(
+        Attempt(
+            case_id="pii-record-001",
+            family=ElectiveFamily.PII_LEAKAGE,
+            target_name=target.name,
+            index=0,
+            transcripts=(probe,),
+            verdict=Verdict.RESISTED,
+            verdict_class=VerdictClass.DETERMINISTIC,
+            transform=Transform.PLAIN,
+        )
+    )
+    record = RunRecord(
+        run_id="run-elective",
+        thread_id="halt-elective",
+        target=target,
+        attestation=BENCH_ATTESTATION,
+        nonce="nonce",
+        plan=plan,
+        budget=budget,
+        run_state=state,
+        presented=budget.as_payload(),
+    )
+
+    progress = progress_for(record, DECLARED_RULE)
+
+    rows = {row.family: row for row in progress.elective_families}
+    # Rows for the two requested families and no row for the third: an elective
+    # family nobody asked for is not part of this run, unlike one of the six.
+    assert set(rows) == {
+        str(ElectiveFamily.PII_LEAKAGE),
+        str(ElectiveFamily.MEMORY_POISONING),
+    }
+    asked = rows[str(ElectiveFamily.PII_LEAKAGE)]
+    assert asked.of == 3 * DECLARED_RULE.attempts_per_case
+    assert (asked.attempted, asked.resisted, asked.succeeded) == (1, 1, 0)
+    assert asked.no_case == ""
+
+    # The one the library holds nothing for: a denominator of zero with the reason
+    # beside it, so the empty bar does not read as a family that has not started.
+    unattemptable = rows[str(ElectiveFamily.MEMORY_POISONING)]
+    assert (unattemptable.of, unattemptable.attempted) == (0, 0)
+    assert "no case to attempt" in unattemptable.no_case
+    assert "Not a rate of zero" in unattemptable.no_case
+
+    # And none of it reached the six, which is the split this screen inherits: six
+    # rows, keyed on the other enumeration, with no elective name among them.
+    assert [row.family for row in progress.families] == [
+        str(family) for family in Family
+    ]
 
 
 # --- The console lever --------------------------------------------------------

@@ -991,6 +991,27 @@ class RunProgress(BaseModel):
     its interval and its band beside it (ADR-0005).
     """
 
+    elective_families: list[ElectiveFamilyRun] = []
+    """The elective families this run was asked for, each over its own denominator.
+
+    **A second list and never rows among the six**, keyed on a second enumeration, so
+    the arithmetic ADR-0015 fixed at six cannot acquire a seventh row by anybody
+    forgetting: `ElectiveFamilyRun` is not a `FamilyRun` and the two lists have
+    nowhere to meet (ADR-0035 §2, ADR-0088 §2).
+
+    **Only the families this run asked for**, which is where it parts company with
+    the six above. Six rows are drawn whether or not a family has started, because a
+    family of the six missing while the run is on another one would read as one this
+    run is not doing. An elective family nobody requested is not part of this run at
+    all, and a row saying so on a live screen is three lines of *not asked for* under
+    a run's own bars. The empty list is the honest reading of a run that asked the
+    tier for nothing, and the screen prints a sentence for it.
+
+    Defaulted to empty so that a caller reading a run made before the tier could be
+    requested gets the same answer as one that requested nothing — which is the same
+    answer, because both are runs whose figures are the six.
+    """
+
 
 class FamilyRun(BaseModel):
     """How far one family has got against this target, and how it is answering.
@@ -1022,6 +1043,50 @@ class FamilyRun(BaseModel):
     """
 
 
+A_REQUESTED_ELECTIVE_FAMILY_WITH_NO_CASE = (
+    "requested, and this run has no case to attempt: the library it was planned "
+    "against holds none for this elective family, so nothing will be sent and there "
+    "will be nothing to read. Not a rate of zero and not a reading about the target "
+    "— the artefact says the same, and names the library version it was true of"
+)
+"""Why a requested elective family's bar can never fill, on the live screen.
+
+`payload.RequestedAndUnanswered.stated` is the artefact's wording for the same fact
+and this is the screen's: that one points a recipient at the provenance block, and a
+person watching their own run has no document in front of them yet
+([ADR-0094](../../docs/adr/0094-the-seed-is-per-library-directory-and-a-requested-elective-family-with-no-case-is-stated.md)).
+"""
+
+
+class ElectiveFamilyRun(BaseModel):
+    """How far one *elective* family has got against this target.
+
+    `FamilyRun`'s twin and deliberately not `FamilyRun`, which is the split ADR-0035
+    §2 asks for at every site keyed by family, carried the way ADR-0088 §2 carries it
+    one level up: `ElectiveEntry` is not a `FamilyEntry` so that no signature accepts
+    both, and these two rows are two models for the same reason. A caller that
+    concatenated the two lists would be drawing a seventh family in a denominator
+    ADR-0015 fixed at six.
+
+    Same counts and the same attacker's sense as the six's row. `no_case` is where it
+    differs from `not_run`: a family of the six is absent because its caller declared
+    something away, and a requested elective family is absent because the library the
+    run was planned against holds no case in it (ADR-0094).
+    """
+
+    family: str
+    attempted: int
+    of: int
+    resisted: int
+    succeeded: int
+    no_case: str = ""
+    """Why this requested family has no denominator, or empty.
+
+    `FamilyRun.not_run`'s counterpart and not the same sentence: that one names what
+    the caller did not provide, and this one names a gap in the bench's own library.
+    """
+
+
 def progress_for(record: RunRecord, rule: GateRule) -> RunProgress:
     """One run as a caller polling it sees it, per layer and with no blend."""
     return RunProgress(
@@ -1034,6 +1099,7 @@ def progress_for(record: RunRecord, rule: GateRule) -> RunProgress:
         report=_report(record),
         recent=_recent_attempt(record),
         families=_run_families(record, rule),
+        elective_families=_run_elective_families(record, rule),
     )
 
 
@@ -1088,14 +1154,8 @@ def _run_families(record: RunRecord, rule: GateRule) -> list[FamilyRun]:
     reply this function cannot see. A row over-counting there is a bar that stops
     short, which is the direction this used to fail in everywhere.
     """
-    made: dict[str, int] = {}
-    held: dict[str, int] = {}
-    for attempt in record.run_state.attempts:
-        name = str(attempt.family)
-        made[name] = made.get(name, 0) + 1
-        if attempt.verdict is Verdict.RESISTED:
-            held[name] = held.get(name, 0) + 1
-    answerable = runnable(applicable(record.plan.cases, record.target), record.target)
+    made, held = _attempts_by_family(record)
+    answerable = _answerable_cases(record)
     rows: list[FamilyRun] = []
     for family in Family:
         name = str(family)
@@ -1113,6 +1173,73 @@ def _run_families(record: RunRecord, rule: GateRule) -> list[FamilyRun]:
                 # a verdict this branch had not heard of.
                 succeeded=attempted - held.get(name, 0),
                 not_run="" if gap is None else gap.stated(),
+            )
+        )
+    return rows
+
+
+def _attempts_by_family(record: RunRecord) -> tuple[dict[str, int], dict[str, int]]:
+    """This run's attempts grouped by family name, and how many of them held.
+
+    One walk over `RunState.attempts`, keyed on the **name**, which is what lets the
+    six's rows and the tier's rows be counted by the same grouping without either
+    list being able to reach the other's arithmetic: `Attempt.family` is an
+    `AnyFamily`, the key is a string, and which rows are built from which keys is
+    decided by the two callers iterating two enumerations (ADR-0035 §2).
+    """
+    made: dict[str, int] = {}
+    held: dict[str, int] = {}
+    for attempt in record.run_state.attempts:
+        name = str(attempt.family)
+        made[name] = made.get(name, 0) + 1
+        if attempt.verdict is Verdict.RESISTED:
+            held[name] = held.get(name, 0) + 1
+    return made, held
+
+
+def _answerable_cases(record: RunRecord) -> list[Case]:
+    """This run's plan as this target can answer it — the denominator both lists use.
+
+    The two target-shaped filters the run itself applies ahead of the first attempt,
+    read here for the reason `_run_families` states: a case they withdraw is one no
+    attempt is ever spent on, so counting it draws a bar nothing can fill
+    (ADR-0004, ADR-0093 decision 4).
+    """
+    return runnable(applicable(record.plan.cases, record.target), record.target)
+
+
+def _run_elective_families(
+    record: RunRecord, rule: GateRule
+) -> list[ElectiveFamilyRun]:
+    """The elective families this run asked for, each over its own denominator.
+
+    A second function over a second enumeration, and the only thing it shares with
+    `_run_families` is the grouping of attempts and the plan — never a row, never a
+    list and never a sum. The tier is measured by the same arithmetic and enters no
+    count of the six (ADR-0035), and on this screen that is carried by there being no
+    line where the two lists could be added.
+
+    **Rows for the requested families and no others.** An elective family nobody
+    asked for is not part of this run, so it has no row: the absence a reader needs
+    named is the *requested* one whose bar cannot fill, which is `no_case` — the
+    library the run was planned against holds nothing in that family, and without the
+    sentence the row would read as a family that has not started yet (ADR-0094).
+    """
+    made, held = _attempts_by_family(record)
+    answerable = _answerable_cases(record)
+    rows: list[ElectiveFamilyRun] = []
+    for family in record.plan.elective.requested:
+        name = str(family)
+        cases = sum(1 for case in answerable if case.family is family)
+        attempted = made.get(name, 0)
+        rows.append(
+            ElectiveFamilyRun(
+                family=name,
+                attempted=attempted,
+                of=cases * rule.attempts_per_case,
+                resisted=held.get(name, 0),
+                succeeded=attempted - held.get(name, 0),
+                no_case=("" if cases else A_REQUESTED_ELECTIVE_FAMILY_WITH_NO_CASE),
             )
         )
     return rows

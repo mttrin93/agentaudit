@@ -820,7 +820,7 @@ def document(payload: TargetPayload) -> dict[str, Any]:
         "adaptive": _adaptive(payload.result.adaptive),
         "findings": _findings(payload.result.findings),
         "coverage_gaps": [_gap(gap) for gap in payload.result.coverage_gaps],
-        "elective": _elective(payload.result.elective),
+        "elective": _elective(payload.result),
         "untested_categories": [
             _untested(category) for category in payload.result.untested_categories
         ],
@@ -831,7 +831,7 @@ def document(payload: TargetPayload) -> dict[str, Any]:
     }
 
 
-def _elective(selection: ElectiveSelection) -> dict[str, Any]:
+def _elective(result: TargetResult) -> dict[str, Any]:
     """The tier as a target report carries it: a declared input and a fifth absence.
 
     **Both halves, because either alone lies by omission.** The absences are the
@@ -851,6 +851,7 @@ def _elective(selection: ElectiveSelection) -> dict[str, Any]:
     block: what a run did is on its record, and what it was asked is a statement its
     caller made.
     """
+    selection = result.elective
     return {
         "requested": [family.value for family in selection.requested],
         "requested_stated": selection.requested_stated(),
@@ -858,7 +859,69 @@ def _elective(selection: ElectiveSelection) -> dict[str, Any]:
             {"family": one.family, "stated": one.stated()}
             for one in NotRequested.over(selection)
         ],
+        # And the third state of a request, beside *asked* and *not asked*: asked,
+        # and there was nothing to attempt. Derived off the result rather than
+        # supplied, and its own list rather than a row among the ones above — a
+        # family nobody asked for and a family the library could not offer are two
+        # statements, and one list holding both would be this serialiser deciding
+        # they are the same (ADR-0094).
+        "requested_and_unanswered": [
+            {"family": one.family, "stated": one.stated()}
+            for one in RequestedAndUnanswered.over(result)
+        ],
     }
+
+
+@dataclass(frozen=True)
+class RequestedAndUnanswered:
+    """One elective family this run asked for and could not attempt at all.
+
+    The **sixth kind of nothing**, and none of the five above it
+    ([ADR-0094](../../docs/adr/0094-the-seed-is-per-library-directory-and-a-requested-elective-family-with-no-case-is-stated.md)).
+    A `NotRequested` family is one nobody asked for. An `elective_not_measurable`
+    family is one this target could not answer. This one was asked for, and the
+    library the run was made against holds no case in it — so the request is not the
+    target's failure to answer and not the caller's failure to ask, and neither of
+    those two lists could carry it without saying something untrue.
+
+    It exists because the absence of it hid a defect. A deployment seeded only the
+    top level of the case library, the tier's subdirectory was never copied, and a run
+    that requested three elective families reported nothing about any of them while
+    its own `requested_stated` sentence said what each measured was above.
+    """
+
+    family: str
+
+    @classmethod
+    def over(cls, result: TargetResult) -> tuple["RequestedAndUnanswered", ...]:
+        """The unanswered requests one result produces, derived rather than supplied.
+
+        `TargetResult.requested_and_unanswered` is the derivation and this is its
+        serialisation: the request list and the two answer lists are all on the
+        result, so nothing here subtracts anything a caller could get wrong.
+        """
+        return tuple(
+            cls(family=family.value) for family in result.requested_and_unanswered
+        )
+
+    def stated(self) -> str:
+        """The line the report prints in place of a figure nothing could produce.
+
+        It names the library rather than the target, which is the whole point of the
+        sentence: an operator reading *not measurable* goes and looks at their agent,
+        and the thing to look at here is the bench. The version of the library that
+        held no case for it is in the provenance block, so a reader can say which
+        library this was true of.
+        """
+        return (
+            f"{self.family}: requested, and this run had no case to attempt — the "
+            "case library it was made against holds none for this elective family, "
+            "so nothing was sent and there is no rate, no interval and no band. This "
+            "is not a rate of zero and it is not a reading about the target: it is a "
+            "gap in the library this run used, whose version is in the provenance "
+            "block, and the same request against a library that holds the tier's "
+            "cases would have been attempted (ADR-0035, ADR-0094)"
+        )
 
 
 def canonical_json(payload: TargetPayload) -> str:

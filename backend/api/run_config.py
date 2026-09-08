@@ -337,6 +337,20 @@ class RunPlan:
 
     cases: tuple[Case, ...]
     gaps: Mapping[Family, DeclaredGap]
+    elective: ElectiveSelection = NOTHING_REQUESTED
+    """The elective tier this run was asked for, carried with what it planned.
+
+    The **declared input** the plan above was built from, and it is here because the
+    request and what the request produced are two different facts: a family the tier
+    was asked for and the library holds no case in is absent from `cases` with nothing
+    beside it, and a reader of the plan alone cannot tell it from a family nobody asked
+    for. `_run_elective_families` draws its rows off this, so the run screen names the
+    request rather than inferring it from the cases that survived
+    ([ADR-0094](../../docs/adr/0094-the-seed-is-per-library-directory-and-a-requested-elective-family-with-no-case-is-stated.md)).
+
+    Not a second copy of a decision: `plan_for` reads it off `config.elective`, which
+    is the one place a run's selection is set (ADR-0025).
+    """
 
 
 def plan_for(
@@ -436,7 +450,7 @@ def plan_for(
             gaps[leakage] = DeclaredGap.NONCE_NOT_PLANTED
         cases = [case for case in cases if case.family is not leakage]
 
-    return RunPlan(cases=tuple(cases), gaps=gaps)
+    return RunPlan(cases=tuple(cases), gaps=gaps, elective=config.elective)
 
 
 @dataclass(frozen=True)

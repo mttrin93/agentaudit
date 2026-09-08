@@ -23,6 +23,7 @@ import {
   ADAPTIVE_UNITS,
   SCORED_UNITS,
   adaptiveReading,
+  electiveRows,
   familyRows,
   hasLength,
   payloads,
@@ -88,6 +89,28 @@ function inTheScoredLayer(): RunProgress {
         resisted: 12,
         succeeded: 8,
         not_run: '',
+      },
+    ],
+    // The second list, keyed on the second enumeration: one family this run asked
+    // for and is attacking, and one it asked for and the library holds no case in.
+    elective_families: [
+      {
+        family: 'pii_leakage',
+        attempted: 10,
+        of: 30,
+        resisted: 7,
+        succeeded: 3,
+        no_case: '',
+      },
+      {
+        family: 'memory_poisoning',
+        attempted: 0,
+        of: 0,
+        resisted: 0,
+        succeeded: 0,
+        no_case:
+          'requested, and this run has no case to attempt: the library it was ' +
+          'planned against holds none for this elective family',
       },
     ],
   }
@@ -373,6 +396,50 @@ describe('the six families, while the run is going', () => {
     expect(hasLength('66.6667%')).toBe(true)
     expect(hasLength('0.0001%')).toBe(true)
     expect(hasLength('0%')).toBe(false)
+  })
+})
+
+describe('the elective families, while the run is going', () => {
+  it('is a second list, read the same way and joined to the six nowhere', () => {
+    // The tier's rows go through the same widths as the six's — a length is not a
+    // figure — and they arrive from the route's own second list, so nothing in this
+    // module has to know which enumeration a name belongs to (ADR-0035 §2, ADR-0094).
+    const [pii, memory] = electiveRows(inTheScoredLayer())
+
+    expect(pii).toEqual({
+      family: 'pii_leakage',
+      name: 'pii leakage',
+      attempted: 10,
+      of: 30,
+      notRun: '',
+      done: '33.3333%',
+      held: '23.3333%',
+      broke: '10%',
+    })
+
+    // The absence this list exists to name: requested, and no case to attempt. Zero
+    // over zero with the bench's sentence carried, so the empty bar does not read as
+    // a family that has not started — and the sentence says the gap is in the
+    // library rather than in the target.
+    expect(memory.of).toBe(0)
+    expect(memory.done).toBe('0%')
+    expect(memory.notRun).toContain('no case to attempt')
+
+    // And the two lists stay two: the elective names are nowhere among the six's
+    // rows, which is what makes *six rows and no seventh* true of this screen.
+    const six = familyRows(inTheScoredLayer()).map((row) => row.family)
+    expect(six).not.toContain('pii_leakage')
+    expect(six).not.toContain('memory_poisoning')
+  })
+
+  it('is empty for a run that asked the tier for nothing, and for an older one', () => {
+    // Two runs, one answer. The field is absent on a run made before the tier could
+    // be requested and empty on one that requested none of it, and both are runs
+    // whose figures are the six — so the screen draws no elective block for either.
+    expect(electiveRows(holdingItsInterrupt())).toEqual([])
+    expect(
+      electiveRows({ ...inTheScoredLayer(), elective_families: [] }),
+    ).toEqual([])
   })
 })
 

@@ -28,6 +28,7 @@ import type {
   AttemptExchange,
   AttestationBody,
   CostBody,
+  ElectiveFamilyRun,
   FamilyRun,
   Refusal,
   ReportLocation,
@@ -198,6 +199,16 @@ export interface RunProgress extends RunStanding {
   report: ReportLocation | null
   recent: AttemptExchange[]
   families: FamilyRun[]
+  /**
+   * The elective families this run asked for, in a list of their own.
+   *
+   * Only the requested ones, which is where it differs from `families` above: six
+   * rows are always drawn, because a family of the six missing while the run is on
+   * another one reads as one this run is not doing, and an elective family nobody
+   * asked for is not part of the run at all. Absent from a run made before the tier
+   * could be requested, so the screen reads it as the empty list it is.
+   */
+  elective_families?: ElectiveFamilyRun[]
 }
 
 /** What one run's scored layer put on the wire, against the scored ceiling. */

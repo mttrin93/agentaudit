@@ -842,6 +842,59 @@ def test_the_deployed_library_is_a_mount_seeded_once_and_never_overwritten(
     assert len(list(accumulated.glob("*.toml"))) == 1
 
 
+def test_the_seed_reaches_the_elective_tier_and_leaves_an_accumulated_one_alone(
+    tmp_path: Path,
+) -> None:
+    """The tier's subdirectory is seeded too, and per directory rather than per mount.
+
+    `load_library` does not recurse, so the elective tier is a second directory —
+    which meant a seed over the top level alone left a mounted bench able to *request*
+    an elective family and holding no case to attempt it with. Every deployment with a
+    volume was in that state: the tier ran in a terminal run off the image and never
+    on a deployment (ADR-0094).
+
+    Three states again, read per directory. An empty mount gets both. A mount that
+    predates the tier — top-level records and no subdirectory — gains the tier's
+    records and keeps its own history, because the two directories are seeded
+    independently. And an elective directory that already holds records is left
+    exactly as it is, for the reason the top level is: a decay series cannot be
+    recomputed.
+    """
+    empty = tmp_path / "mount"
+    empty.mkdir()
+    seeded_library(empty, CASES_DIR)
+    assert {record.name for record in (empty / "elective").glob("*.toml")} == {
+        record.name for record in (CASES_DIR / "elective").glob("*.toml")
+    }
+
+    # A volume from before the tier existed: the top level is the library it has been
+    # accumulating and must not be touched, and the subdirectory is simply absent.
+    older = tmp_path / "older"
+    older.mkdir()
+    (older / "data-leakage-001.toml").write_text("held = true\n", encoding="utf-8")
+    seeded_library(older, CASES_DIR)
+    assert (older / "data-leakage-001.toml").read_text(encoding="utf-8") == (
+        "held = true\n"
+    )
+    assert len(list(older.glob("*.toml"))) == 1
+    assert len(list((older / "elective").glob("*.toml"))) == len(
+        list((CASES_DIR / "elective").glob("*.toml"))
+    )
+
+    # And an accumulated tier, which is the state that must survive a boot: one
+    # record, whatever it says, and the seed does not write over it.
+    held = tmp_path / "held-elective"
+    (held / "elective").mkdir(parents=True)
+    (held / "elective" / "memory-poisoning-001.toml").write_text(
+        "held = true\n", encoding="utf-8"
+    )
+    seeded_library(held, CASES_DIR)
+    assert (held / "elective" / "memory-poisoning-001.toml").read_text(
+        encoding="utf-8"
+    ) == "held = true\n"
+    assert len(list((held / "elective").glob("*.toml"))) == 1
+
+
 # --- one writer at a time -------------------------------------------------------
 
 

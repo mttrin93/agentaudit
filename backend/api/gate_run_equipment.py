@@ -33,6 +33,7 @@ from pathlib import Path
 
 from backend.bench.calibration import DropNamespace, PlantNonce
 from backend.bench.contract import TargetConfig
+from backend.bench.library import ELECTIVE_DIRECTORY
 
 GOLDSET_DIR = Path(__file__).resolve().parents[1] / "goldset"
 """The hand-labelled transcripts a judged family's κ is measured against.
@@ -80,15 +81,43 @@ def seeded_library(mount: Path, seed: Path) -> Path | None:
     Copied file by file rather than by any tree copy, so that what lands is case
     records and nothing else: no lease left behind by a previous run, no document,
     nothing that is not a `*.toml` this bench wrote itself.
+
+    **Two directories, seeded independently, because the library is two libraries.**
+    The elective tier lives in a subdirectory and `load_library` does not recurse
+    (`library.ELECTIVE_DIRECTORY`), so a seed that copied only the top level left a
+    mounted bench able to *request* an elective family and holding no case to attempt
+    it with — the tier reachable in a terminal run off the image and unreachable on
+    every deployment with a volume. Each directory is seeded when it holds no record
+    of its own, which is the three-state rule above read per directory: an
+    accumulated series is never written over, and a mount that predates the tier
+    gains the tier's records without losing its own history
+    ([ADR-0094](../../docs/adr/0094-the-seed-is-per-library-directory-and-a-requested-elective-family-with-no-case-is-stated.md)).
     """
     if not mount.is_dir():
         return None
-    if not any(mount.glob("*.toml")):
-        for record in sorted(seed.glob("*.toml")):
-            (mount / record.name).write_text(
-                record.read_text(encoding="utf-8"), encoding="utf-8"
-            )
+    _seeded_directory(mount, seed)
+    _seeded_directory(mount / ELECTIVE_DIRECTORY, seed / ELECTIVE_DIRECTORY)
     return mount
+
+
+def _seeded_directory(into: Path, out_of: Path) -> None:
+    """One directory of case records, seeded once from the image.
+
+    Creates `into` only when there is something to put in it: a deployment whose
+    image ships no elective directory gets no empty one, because an empty directory
+    and a directory of records are the same answer to `load_library` and a different
+    answer to somebody reading the volume.
+    """
+    if any(into.glob("*.toml")):
+        return
+    records = sorted(out_of.glob("*.toml"))
+    if not records:
+        return
+    into.mkdir(parents=True, exist_ok=True)
+    for record in records:
+        (into / record.name).write_text(
+            record.read_text(encoding="utf-8"), encoding="utf-8"
+        )
 
 
 @dataclass(frozen=True)

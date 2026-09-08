@@ -156,7 +156,7 @@ def test_every_section_states_its_own_reproducibility_and_four_read_the_payload(
 
 # --- The golden digest: one document, pinned to the byte ---------------------
 
-GOLDEN_ONE_FAMILY = "5a8c2ea22a3489dd02f35636840a6f49ecc9f8a03ef43ee20969f53967520059"
+GOLDEN_ONE_FAMILY = "8cf9b3861ed6000eb2f18d16b1c84d4e8782e87c457bc8a1e1e6022406213927"
 """The sha256 of `_one_family()`'s rendering, written down.
 
 **A tripwire, and it is deliberately a strict one.** Every other assertion in this
@@ -368,6 +368,17 @@ empty answer is a sentence rather than a vanished heading, on the terms every ot
 absence in this document is printed — a run that asked for nothing has to read
 differently from a report written before the block existed. The masthead moved too,
 because it prints the artefact version and the version is now 2.
+
+Moved a nineteenth time, and it is section 4's *requested and not* block gaining a
+third list: the elective families a run asked for and had **no case to attempt**
+([ADR-0094](../../docs/adr/0094-the-seed-is-per-library-directory-and-a-requested-elective-family-with-no-case-is-stated.md)).
+**This fixture requested nothing**, so the list prints its empty answer and no figure
+moved — which is the move: a reader of a report where the tier is silent could not
+tell *every request was attempted* from *the library held nothing to attempt*, and
+that is the state a mounted bench was in for as long as the seed copied only the top
+level of the library. **The artefact version does not move**: this is a key added
+beside existing keys, carrying no figure and nothing for a verifier to re-derive,
+which is the case ADR-0044 §8 and ADR-0070 both declined to move it for.
 """
 
 

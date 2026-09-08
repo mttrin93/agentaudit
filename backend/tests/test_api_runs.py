@@ -1776,9 +1776,12 @@ def test_calls_spent_and_findings_are_per_layer_and_never_blended(
         "adaptive",
         "transport",
         "report",
-        # Two readings that are per family and per attempt rather than per layer, and
-        # neither adds anything: six rows over six denominators, and the last exchange.
+        # Three readings that are per family and per attempt rather than per layer,
+        # and none of them adds anything: six rows over six denominators, the
+        # elective families this run asked for in a second list keyed on a second
+        # enumeration (ADR-0035 §2, ADR-0094), and the last exchange.
         "families",
+        "elective_families",
         "recent",
     }
     blended = state.calls_spent

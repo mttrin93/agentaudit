@@ -243,6 +243,34 @@ const CONFIGURED: BenchSettings = {
         does: 'sent as the record commits it',
       },
     ],
+    schedules: [
+      {
+        schedule: 'line',
+        layer: 'adaptive',
+        selected: true,
+        does: 'one branch, carried forward turn by turn',
+      },
+      {
+        schedule: 'tree',
+        layer: 'adaptive',
+        selected: false,
+        does: 'several branches, pruned as they are spent',
+      },
+    ],
+    schedules_statement:
+      'both schedules selected is two episode sets per family rather than one wider ' +
+      'search, so the adaptive layer’s ceiling doubles with the second tick.',
+    adaptive_constructions: [
+      {
+        transform: 'base64',
+        layer: 'adaptive',
+        selected: false,
+        does: 'the attacker’s own sentence, respelled on its way out',
+      },
+    ],
+    adaptive_constructions_statement:
+      'each spelling selected is its own episode set, so the layer’s ceiling ' +
+      'multiplies rather than the same episodes being spelled differently.',
     selection_off_statement:
       'a construction switched off is not sent, and a family whose every ' +
       'construction is off is stated as not run rather than measured at zero.',

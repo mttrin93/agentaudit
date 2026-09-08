@@ -406,7 +406,9 @@ class RunBudget:
                 f"T={covering.turns_per_episode}"
                 f" × k={covering.episodes_per_family}"
                 f" × {_count(len(covering.schedules), 'schedule')}"
-                f" ({', '.join(str(one) for one in covering.scheduled)}),"
+                f" ({', '.join(str(one) for one in covering.scheduled)})"
+                f" × {_count(len(covering.constructions), 'spelling')}"
+                f" ({', '.join(str(one) for one in covering.spellings)}),"
                 f" × {_count(len(targets), 'target')}"
                 if selection.adaptive
                 else (

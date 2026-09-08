@@ -15,6 +15,7 @@ attacker chose to send, for the reason that file gives: what a model would think
 is not this layer's plumbing, and it has its own evaluation, which is `A_break`.
 """
 
+from base64 import b64decode
 from dataclasses import replace
 
 import pytest
@@ -26,7 +27,7 @@ from backend.bench.adaptive.episode import (
     AttackerTool,
     EpisodeOutcome,
 )
-from backend.bench.adaptive.prompt import episode_brief
+from backend.bench.adaptive.prompt import RESPELLING, episode_brief
 from backend.bench.adaptive.scripted import (
     BRANCHED,
     DESCRIPTION,
@@ -42,9 +43,15 @@ from backend.bench.adaptive.tree import (
     EpisodeTree,
     deepest_path,
 )
+from backend.bench.contract import Transcript
 from backend.bench.evaluator import Verdict
-from backend.bench.library import Case, Family
+from backend.bench.library import (
+    Case,
+    Family,
+    Transform,
+)
 from backend.bench.selection import EVERY_CONSTRUCTION, AttackLayer
+from backend.bench.transforms import ADAPTIVE_SPELLINGS, spelled
 from backend.graph.budget import Layer, RunBudget
 from backend.tests.conftest import a_target
 from backend.tests.test_adaptive_attacker import attack, attackable
@@ -592,3 +599,173 @@ def test_the_adaptive_block_states_one_rule_per_selected_schedule(
 
     assert "linear_jailbreak: scheduling: one line" in reading
     assert "tree_jailbreak: scheduling: a tree" in reading
+
+
+# --- The spelling an episode is composed in ---------------------------------
+
+
+BASE64_BUDGET = replace(
+    DECLARED_ADAPTIVE_BUDGET,
+    constructions=frozenset({Transform.BASE64}),
+    episodes_per_family=1,
+)
+"""One spelling and one episode per family, so the probes below are one route."""
+
+
+def test_an_episodes_probes_go_on_the_wire_in_the_spelling_it_was_opened_in(
+    leakage_case: Case,
+) -> None:
+    """What the target was sent is respelled; what the attacker composed is not.
+
+    The whole claim of the feature (ADR-0097): the harness respells the probe at the
+    one place a probe goes on the wire, so the transcript — which is the evidence a
+    proposed route has to reproduce — carries what the endpoint actually read.
+
+    Driven red by respelling nothing, which is the version that reports a base64 run
+    having sent plain probes, and by respelling the *log* as well, which is the version
+    that shows the attacker its own words back encoded.
+    """
+    with attackable(names=("hardened",)) as targets:
+        _, episodes = attack(targets, [leakage_case], budget=BASE64_BUDGET)
+
+    assert episodes
+    for episode in episodes:
+        assert episode.transcripts
+        for transcript in episode.transcripts:
+            sent = _sent_text(transcript)
+            # Decodable, and what it decodes to is a plain sentence: the encoding is
+            # the harness's, over the attacker's own words.
+            decoded = b64decode(sent.encode()).decode()
+            assert decoded
+            assert decoded != sent
+
+
+def test_a_spelling_is_its_own_episode_set_and_the_ceiling_carries_it() -> None:
+    """`k` per family per schedule **per spelling**, and the ceiling multiplies.
+
+    Driven red by counting the spellings nowhere in `episode_count`: that is the run
+    that opens two episode sets against a ceiling priced for one and is stopped at the
+    counter halfway through the second (ADR-0007).
+    """
+    one = replace(DECLARED_ADAPTIVE_BUDGET, episodes_per_family=1)
+    two = replace(one, constructions=frozenset({Transform.PLAIN, Transform.BASE64}))
+    both = replace(two, schedules=frozenset(BranchSchedule))
+
+    assert two.episode_count == 2 * one.episode_count
+    assert two.turn_ceiling == 2 * one.turn_ceiling
+    # And the two selections multiply each other rather than one of them winning: two
+    # schedules in two spellings is four episode sets per family.
+    assert both.episode_count == 4 * one.episode_count
+    assert two.spellings == (Transform.PLAIN, Transform.BASE64)
+
+    targets = [a_target(name="trivial")]
+    priced = RunBudget.declare(
+        cases=[], targets=targets, adaptive=one.under(both.schedules, two.constructions)
+    )
+    assert "2 spellings (plain, base64)" in priced.estimate.adaptive.basis
+    assert (
+        "2 schedules (linear_jailbreak, tree_jailbreak)"
+        in priced.estimate.adaptive.basis
+    )
+
+
+def test_the_brief_tells_the_attacker_what_will_be_done_to_its_words(
+    leakage_case: Case,
+) -> None:
+    """The model composes plainly and is told the harness respells. Not blind.
+
+    An attacker composing for a target that reads base64 without being told would
+    compose blind, and one that encoded its own probe would have it encoded twice. A
+    plain episode's brief is unchanged, which is why the line is conditional.
+    """
+
+    def brief(spelling: Transform) -> str:
+        return episode_brief(
+            handle="target-a",
+            objective=leakage_case,
+            family=Family.DATA_LEAKAGE,
+            tools=frozenset(),
+            turns_used=0,
+            turn_cap=8,
+            log=[],
+            continuation=Continuation(parent=0, turns_taken=0),
+            spelling=spelling,
+        )
+
+    plain_brief = brief(Transform.PLAIN)
+    encoded = brief(Transform.BASE64)
+
+    assert RESPELLING not in plain_brief
+    assert f"{RESPELLING} base64" in encoded
+    assert "do not encode anything yourself" in encoded
+
+
+def test_a_construction_that_needs_words_of_ours_cannot_respell_a_probe() -> None:
+    """Four spellings and not seven, refused at the function and at the selection.
+
+    A framing is words this repository writes per family — and withholds entirely for
+    the override wrapper (ADR-0074 §5) — and a crescendo is a ladder computed from a
+    case record. Neither is a spelling of a sentence the attacker wrote a moment ago,
+    so both are refused rather than quietly sending a plain probe under a
+    construction's name.
+    """
+    assert ADAPTIVE_SPELLINGS == frozenset(
+        {Transform.PLAIN, Transform.BASE64, Transform.ROT13, Transform.LEETSPEAK}
+    )
+    assert spelled(Transform.ROT13, "abc") == "nop"
+    assert spelled(Transform.PLAIN, "abc") == "abc"
+
+    for refused in (
+        Transform.ROLEPLAY,
+        Transform.PROMPT_INJECTION_WRAPPER,
+        Transform.SCRIPTED_CRESCENDO,
+    ):
+        with pytest.raises(ValueError, match="needs words of ours|is not a spelling"):
+            spelled(refused, "abc")
+        with pytest.raises(ValueError, match="cannot respell a probe"):
+            replace(EVERY_CONSTRUCTION, adaptive_constructions=frozenset({refused}))
+
+    with pytest.raises(ValueError, match="some spelling"):
+        replace(EVERY_CONSTRUCTION, adaptive_constructions=frozenset())
+    with pytest.raises(ValueError, match="no spelling"):
+        replace(DECLARED_ADAPTIVE_BUDGET, constructions=frozenset())
+
+
+def test_the_selection_states_the_spellings_and_the_block_names_them(
+    leakage_case: Case,
+) -> None:
+    """Provenance says which spellings were composed in; the adaptive block too.
+
+    Its own sentence beside the schedules', for the verifier's reason: `stated()` is
+    re-derived from the layers and constructions it names, so neither of the adaptive
+    layer's two switches may grow a clause on it (ADR-0096 §8, ADR-0097).
+    """
+    asked = replace(
+        EVERY_CONSTRUCTION,
+        adaptive_constructions=frozenset({Transform.PLAIN, Transform.BASE64}),
+    )
+
+    assert "plain, base64" in asked.constructions_stated()
+    assert "one episode set per spelling" in asked.constructions_stated()
+    assert asked.constructions_stated() not in asked.stated()
+    assert EVERY_CONSTRUCTION.constructions_stated().startswith(
+        "The adaptive layer composed its probes plainly"
+    )
+
+    with attackable(names=("trivial", "hardened")) as targets:
+        _, episodes = attack(targets, [leakage_case], budget=BASE64_BUDGET)
+    reading = measure(
+        episodes, trivial="trivial", hardened="hardened", budget=BASE64_BUDGET
+    ).stated()
+
+    assert "probes composed in: base64" in reading
+
+
+def _sent_text(transcript: Transcript) -> str:
+    """What went on the wire, off the transcript the episode recorded."""
+    sent = transcript.sent
+    for key in ("input", "message", "prompt", "text"):
+        held = sent.get(key)
+        if isinstance(held, str):
+            return held
+    raise AssertionError(f"no message in {sorted(sent)}")

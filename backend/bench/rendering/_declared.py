@@ -277,6 +277,13 @@ def _how_the_run_was_made(body: Mapping[str, Any]) -> Section:
             # like everything else in this block (ADR-0096).
             f"{selection['schedules_stated']}",
             "",
+            # And the spelling those episodes' probes were composed in, which is the
+            # other half of how the adaptive layer attacked: the scored layer's
+            # constructions are named above by the members they were sent under, and
+            # this says which of them the attacker's own probes went out in
+            # (ADR-0097).
+            f"{selection['adaptive_constructions_stated']}",
+            "",
             "### What this run spent, per layer",
             "",
             *(

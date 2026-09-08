@@ -232,6 +232,20 @@ are spent, and an episode is a summand of nothing. The reference agents were gat
 under the line, so a run under the tree is read against a citation the line earned.
 _Avoid_: strategy, mode, adaptive construction, multi-turn attack
 
+**Spelling**:
+Which **construction** the adaptive layer's own composed probes are respelled by on
+their way to the wire: the identity, base64, rot13 or leetspeak. The attacker composes
+in plain words and the harness respells — the brief says so, and a model that encoded
+its own probe would encode it twice. **One spelling per episode, and each selected
+spelling is its own episode set**: `k` episodes per family in it, so the ceiling
+multiplies exactly as a second **schedule** multiplies it. Four members and not seven,
+because the other three need words of ours: a **framing** is written per family and
+withheld entirely for the override wrapper, and a crescendo is a ladder computed from a
+case record — neither is a spelling of a sentence the attacker wrote a moment ago. The
+same member in the scored layer is a case *sent* in that construction and scored on its
+own attempts; here nothing is scored.
+_Avoid_: encoding strategy, adaptive transform, variant
+
 **Turn**:
 One exchange inside an episode — the attacker composes, the target replies. **One
 probe on the target's wire, wherever it sits in the episode's tree**: branching

@@ -433,6 +433,23 @@ export interface Tuning {
   transforms: TransformSelected[]
   schedules: ScheduleSelected[]
   /**
+   * The spellings the adaptive layer may compose its probes in, and which it does.
+   *
+   * `TransformSelected` rows, because they are `Transform` members — four of the
+   * seven, the ones whose construction needs no words of ours — and a second list
+   * rather than more rows on `transforms`: the same member means two different things
+   * in the two lists, a case sent in base64 and scored on its own attempts, and a
+   * probe the attacker composed being respelled on its way out.
+   */
+  adaptive_constructions: TransformSelected[]
+  /**
+   * What selecting a second spelling buys and what it costs, in the bench's words.
+   *
+   * Read and drawn, on `schedules_statement`'s terms: each spelling is its own episode
+   * set, so the tick is turns on the operator's own endpoint.
+   */
+  adaptive_constructions_statement: string
+  /**
    * What selecting both schedules buys and what it costs, in the bench's own words.
    *
    * Read and drawn, unlike the two sentences below it: those are written for a reader
@@ -556,8 +573,10 @@ export const BENCH_SELECTION_PATH = '/bench/settings/selection'
  * All three lists go every time, because they are one statement — a request that sent
  * the layers alone would leave the constructions declared by an earlier one, and the
  * three together are what decides whether anything is sent at all. The schedules are
- * the adaptive layer's half of it: an empty list is refused, because a layer running
- * under no schedule is what the layer's own switch already says (ADR-0096).
+ * the adaptive layer's two halves of it: an empty list of either is refused, because a
+ * layer running under no schedule, or composing in no spelling, is what the layer's own
+ * switch already says (ADR-0096, ADR-0097). A spelling the bench cannot respell a
+ * composed probe by is refused by name.
  *
  * A selection under which nothing would be scored is refused rather than widened: the
  * run would measure nothing and still spend a registration probe per target. A `409`
@@ -567,11 +586,17 @@ export async function selectConstructions(
   layers: string[],
   transforms: string[],
   schedules: string[],
+  adaptiveConstructions: string[],
 ): Promise<BenchSettings> {
   const response = await fetch(BENCH_SELECTION_PATH, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ layers, transforms, schedules }),
+    body: JSON.stringify({
+      layers,
+      transforms,
+      schedules,
+      adaptive_constructions: adaptiveConstructions,
+    }),
   })
   if (!response.ok) {
     throw new Error(`the bench did not take this selection: ${await refusalIn(response)}`)

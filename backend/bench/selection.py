@@ -39,6 +39,7 @@ from typing import assert_never
 
 from backend.bench.adaptive.tree import BranchSchedule
 from backend.bench.library import Transform
+from backend.bench.transforms import ADAPTIVE_SPELLINGS
 
 
 class AttackLayer(StrEnum):
@@ -127,6 +128,24 @@ def layer_of(transform: Transform) -> AttackLayer:
             assert_never(unreached)
 
 
+DECLARED_SCHEDULES: frozenset[BranchSchedule] = frozenset({BranchSchedule.LINEAR})
+"""The schedules a selection carries when nobody named any: the line alone.
+
+A constant rather than a literal inside the field's default, because two readers need
+it — the field below, and `verification._selection`, which rebuilds a selection from a
+document that predates the key and has to rebuild the selection those runs *made*
+(ADR-0096, ADR-0097). Two literals could come to disagree about what an older
+artefact meant.
+"""
+
+DECLARED_ADAPTIVE_CONSTRUCTIONS: frozenset[Transform] = frozenset({Transform.PLAIN})
+"""The spelling a selection carries when nobody named one: the attacker's own words.
+
+`DECLARED_SCHEDULES`' constant, over the other of the adaptive layer's two switches
+and for the same two readers.
+"""
+
+
 @dataclass(frozen=True)
 class AttackSelection:
     """Which layers the next run runs, and which constructions inside them.
@@ -145,7 +164,7 @@ class AttackSelection:
     layers: frozenset[AttackLayer]
     transforms: frozenset[Transform]
     schedules: frozenset[BranchSchedule] = field(
-        default_factory=lambda: frozenset({BranchSchedule.LINEAR})
+        default_factory=lambda: DECLARED_SCHEDULES
     )
     """Which schedules the adaptive layer attacks under, if it runs at all.
 
@@ -172,6 +191,34 @@ class AttackSelection:
     set to.
     """
 
+    adaptive_constructions: frozenset[Transform] = field(
+        default_factory=lambda: DECLARED_ADAPTIVE_CONSTRUCTIONS
+    )
+    """Which spellings the adaptive layer's probes are composed in.
+
+    **The fourth switch, and the second one that is the adaptive layer's own.** The
+    scored layer attacks in seven constructions and the adaptive layer attacked in one
+    — the attacker's own words, as composed — so a target that refuses a plain request
+    and answers the same request in base64 was a difference this bench could measure
+    in its scored layer and could not search for in its adaptive one
+    ([ADR-0097](../../docs/adr/0097-the-adaptive-layer-attacks-in-a-spelling-and-it-is-selected.md)).
+
+    **One spelling per episode set, on the schedules' own arithmetic**: `k` episodes
+    per family per schedule per spelling, so an episode is composed in one spelling
+    throughout and selecting a second one is a second episode set rather than a
+    mixture nobody can read. The ceiling multiplies, and the operator confirms it.
+
+    **A subset of `Transform`, and `ADAPTIVE_SPELLINGS` is the whole of it**, refused
+    below rather than filtered: the two framing constructions need words this
+    repository writes per family and withholds for one of them, and the crescendo is a
+    ladder rather than a spelling (`transforms.ADAPTIVE_SPELLINGS`). A selection naming
+    one of the three is a `422` naming what is missing, never a run that quietly sent
+    plain probes under a construction's name.
+
+    The default is `plain` alone, on `schedules`' terms: it is the layer every reading
+    this bench has published was taken under.
+    """
+
     def __post_init__(self) -> None:
         """Refuse a selection under which no scored construction runs.
 
@@ -194,6 +241,24 @@ class AttackSelection:
                 "off already says, and two ways of saying it are two things a "
                 "reader has to reconcile. Name linear_jailbreak, tree_jailbreak or "
                 "both — the layer switch is how the layer is turned off"
+            )
+        if not self.adaptive_constructions:
+            raise ValueError(
+                "the adaptive layer has to compose its probes in some spelling: an "
+                "empty set is a layer that opens no episode, which is what switching "
+                "the layer off already says. Leave plain on, or name the spellings "
+                "you want beside it"
+            )
+        unspellable = sorted(
+            str(one) for one in self.adaptive_constructions - ADAPTIVE_SPELLINGS
+        )
+        if unspellable:
+            raise ValueError(
+                f"{', '.join(unspellable)} cannot respell a probe the attacker "
+                "composed: a framing is words this repository writes per family and "
+                "a crescendo is a ladder computed from a case record, and neither is "
+                "a spelling of somebody else's sentence. The adaptive layer attacks "
+                f"in {', '.join(sorted(str(one) for one in ADAPTIVE_SPELLINGS))}"
             )
         if not self.scored:
             raise ValueError(
@@ -268,6 +333,45 @@ class AttackSelection:
             "condition."
         )
 
+    def constructions_stated(self) -> str:
+        """Which spellings the adaptive layer composed its probes in, in a sentence.
+
+        Its own sentence for `schedules_stated`'s reason and beside it in the
+        artefact: `stated()` is re-derived by the verifier from the layers and
+        constructions it names, and a wording that grew a clause would report every
+        document issued after ADR-0097 as a disagreement nothing tampered with.
+
+        Said when the layer is off too, and says the same thing that one does: a
+        spelling nothing was composed in is a setting rather than a fact about this
+        run.
+        """
+        named = ", ".join(
+            str(one) for one in Transform if one in self.adaptive_constructions
+        )
+        if not self.adaptive:
+            return (
+                "The adaptive layer was switched off for this run, so no probe was "
+                "composed in any spelling."
+            )
+        if self.adaptive_constructions == frozenset({Transform.PLAIN}):
+            return (
+                "The adaptive layer composed its probes plainly — the attacker's own "
+                "words, as it wrote them — which is the spelling every reading this "
+                "bench has published was taken under."
+            )
+        if len(self.adaptive_constructions) == 1:
+            return (
+                f"The adaptive layer composed every probe in one spelling, {named}: "
+                "the attacker's own words, respelled by the harness as each turn was "
+                "sent, and the transcripts carry what went on the wire."
+            )
+        return (
+            f"The adaptive layer attacked in these spellings — {named} — which is one "
+            "episode set per spelling per family and never a mixture inside one "
+            "episode. An episode is a summand of nothing in any of them, and the "
+            "ceiling this run was approved against carries the multiplication."
+        )
+
     def schedules_stated(self) -> str:
         """Which schedules the adaptive layer attacked under, in one sentence.
 
@@ -313,7 +417,12 @@ EVERY_CONSTRUCTION = AttackSelection(
     # reason the field's own docstring gives: a second schedule is a second attacker
     # and not more of the same library, so the selection nobody narrowed is still the
     # one the reference agents were gated under (ADR-0023, ADR-0096).
-    schedules=frozenset({BranchSchedule.LINEAR}),
+    schedules=DECLARED_SCHEDULES,
+    # And one spelling, on the schedules' own reasoning: the attacker's own words are
+    # what every published reading of this layer was taken under, and a spelling
+    # switched on by default would be a second episode set nobody asked for
+    # (ADR-0097).
+    adaptive_constructions=DECLARED_ADAPTIVE_CONSTRUCTIONS,
 )
 """Every layer and every construction: the selection a run that narrowed nothing made.
 

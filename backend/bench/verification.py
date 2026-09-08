@@ -70,7 +70,13 @@ from backend.bench.scorer import (
     failure_rate,
     reaches,
 )
-from backend.bench.selection import EVERY_CONSTRUCTION, AttackLayer, AttackSelection
+from backend.bench.selection import (
+    DECLARED_ADAPTIVE_CONSTRUCTIONS,
+    DECLARED_SCHEDULES,
+    EVERY_CONSTRUCTION,
+    AttackLayer,
+    AttackSelection,
+)
 from backend.bench.signing import (
     ALGORITHM,
     SIGNATURE_FILE,
@@ -890,21 +896,34 @@ def _selection(body: Mapping[str, Any], comparisons: _Comparisons) -> None:
         if "schedules" in stated
         else []
     )
+    # And the spellings, on the same terms and for the same reason: absent on every
+    # artefact issued before ADR-0097, and those runs composed their probes plainly,
+    # which is what `DECLARED_ADAPTIVE_CONSTRUCTIONS` names.
+    spellings = (
+        [str(name) for name in _sequence_of_strings(stated, "adaptive_constructions")]
+        if "adaptive_constructions" in stated
+        else []
+    )
     try:
         selection = AttackSelection(
             layers=frozenset(AttackLayer(name) for name in layers),
             transforms=frozenset(Transform(name) for name in transforms),
-            **(
-                {"schedules": frozenset(BranchSchedule(name) for name in schedules)}
+            schedules=(
+                frozenset(BranchSchedule(name) for name in schedules)
                 if schedules
-                else {}
+                else DECLARED_SCHEDULES
+            ),
+            adaptive_constructions=(
+                frozenset(Transform(name) for name in spellings)
+                if spellings
+                else DECLARED_ADAPTIVE_CONSTRUCTIONS
             ),
         )
     except ValueError as refused:
         comparisons.agrees(
             "provenance.selection",
             False,
-            f"{layers}, {transforms} and {schedules}",
+            f"{layers}, {transforms}, {schedules} and {spellings}",
             (
                 "layers and constructions this bench has members for, in a selection "
                 f"that sends something: {refused}"
@@ -917,6 +936,14 @@ def _selection(body: Mapping[str, Any], comparisons: _Comparisons) -> None:
         "wording that does not follow from the selection beside it",
         "the wording for these layers and these constructions",
     )
+    if "adaptive_constructions_stated" in stated:
+        comparisons.agrees(
+            "provenance.selection.adaptive_constructions_stated",
+            stated.get("adaptive_constructions_stated")
+            == selection.constructions_stated(),
+            "wording that does not follow from the spellings beside it",
+            "the wording for these spellings and this adaptive switch",
+        )
     if "schedules_stated" in stated:
         comparisons.agrees(
             "provenance.selection.schedules_stated",

@@ -24,7 +24,7 @@ from dataclasses import dataclass, replace
 
 from backend.bench.adaptive.episode import AttackerTool
 from backend.bench.adaptive.tree import BranchSchedule
-from backend.bench.library import Family
+from backend.bench.library import Family, Transform
 
 
 @dataclass(frozen=True)
@@ -122,7 +122,31 @@ class AdaptiveBudget:
     run saying so (ADR-0023, ADR-0057 §2).
     """
 
+    constructions: frozenset[Transform] = frozenset({Transform.PLAIN})
+    """Which spellings the layer composes an episode set's probes in.
+
+    `schedules` beside it, over the other of the adaptive layer's two switches and on
+    exactly the same terms: **each member costs its own `k` episodes per family**, so
+    two spellings is two episode sets, `episode_count` multiplies by it and the
+    operator confirms the multiplied ceiling
+    ([ADR-0097](../../../docs/adr/0097-the-adaptive-layer-attacks-in-a-spelling-and-it-is-selected.md)).
+    An episode is composed in one spelling throughout — the layer hands one member
+    down per episode — because a mixture inside one episode is a route nobody can
+    reproduce from the record.
+
+    Filled from `AttackSelection.adaptive_constructions` by `under`, which is the one
+    join, and defaulting to the attacker's own words. Nothing here checks that a
+    member can respell a probe: `transforms.spelled` refuses the three that cannot and
+    `AttackSelection` refuses them at the door, which is where a caller finds out.
+    """
+
     def __post_init__(self) -> None:
+        if not self.constructions:
+            raise ValueError(
+                "an adaptive layer composing its probes in no spelling sends "
+                "nothing, which is what switching the layer off already says: name "
+                "at least one spelling, or switch the adaptive layer off"
+            )
         if not self.schedules:
             raise ValueError(
                 "an adaptive layer with no schedule opens no episode, which is what "
@@ -150,6 +174,16 @@ class AdaptiveBudget:
         return self.family_count + self.elective_families
 
     @property
+    def spellings(self) -> tuple[Transform, ...]:
+        """The selected spellings in the enum's own order, which is the run order.
+
+        `scheduled`'s reason, over the other switch: a set has no order, and a run
+        whose episode sets came back in a different order per process would be a run
+        nobody could read against another.
+        """
+        return tuple(one for one in Transform if one in self.constructions)
+
+    @property
     def scheduled(self) -> tuple[BranchSchedule, ...]:
         """The selected schedules in the enum's own order, which is the run order.
 
@@ -164,12 +198,19 @@ class AdaptiveBudget:
     def episode_count(self) -> int:
         """How many episodes the layer runs against one target.
 
-        `k` per family **per schedule**: two schedules is two episode sets, so this is
-        the figure that doubles when an operator selects both, and `turn_ceiling`
-        below doubles with it. An episode is a summand of nothing either way — what
-        this counts is spending and never a denominator (ADR-0010).
+        `k` per family **per schedule per spelling**: each of the adaptive layer's two
+        selections is an episode set of its own, so this is the figure that multiplies
+        when an operator selects a second schedule or a second spelling, and
+        `turn_ceiling` below multiplies with it. An episode is a summand of nothing
+        either way — what this counts is spending and never a denominator (ADR-0010,
+        ADR-0096, ADR-0097).
         """
-        return self.families_attacked * self.episodes_per_family * len(self.schedules)
+        return (
+            self.families_attacked
+            * self.episodes_per_family
+            * len(self.schedules)
+            * len(self.constructions)
+        )
 
     @property
     def steps_per_episode(self) -> int:
@@ -199,7 +240,11 @@ class AdaptiveBudget:
         """
         return self.episode_count * self.turns_per_episode
 
-    def under(self, schedules: frozenset[BranchSchedule]) -> "AdaptiveBudget":
+    def under(
+        self,
+        schedules: frozenset[BranchSchedule],
+        constructions: frozenset[Transform] | None = None,
+    ) -> "AdaptiveBudget":
         """This budget as the operator's selection asks for it. The only join.
 
         A method rather than a `replace` at each call site, for the reason
@@ -209,8 +254,16 @@ class AdaptiveBudget:
         read one answer. `selection.py` is not imported here and this takes the set
         rather than the selection, so the two modules stay unaware of each other
         (ADR-0096).
+
+        `constructions` is optional and `None` means *leave this budget's spellings
+        where they are*, which is not the same as the empty set — that one is refused.
+        A caller that knows one half of the adaptive selection and not the other is
+        every caller written before ADR-0097, and a required argument would have made
+        them all pass the default back in by hand.
         """
-        return replace(self, schedules=schedules)
+        if constructions is None:
+            return replace(self, schedules=schedules)
+        return replace(self, schedules=schedules, constructions=constructions)
 
 
 DECLARED_ADAPTIVE_BUDGET = AdaptiveBudget()

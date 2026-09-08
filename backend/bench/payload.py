@@ -1645,6 +1645,12 @@ def _provenance(payload: TargetPayload) -> dict[str, Any]:
                 str(schedule) for schedule in provenance.selection.schedules
             ),
             "schedules_stated": provenance.selection.schedules_stated(),
+            "adaptive_constructions": sorted(
+                str(one) for one in provenance.selection.adaptive_constructions
+            ),
+            "adaptive_constructions_stated": (
+                provenance.selection.constructions_stated()
+            ),
             "whole_library": provenance.selection == EVERY_CONSTRUCTION,
             "stated": provenance.selection.stated(),
         },

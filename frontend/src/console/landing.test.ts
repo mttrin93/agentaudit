@@ -288,6 +288,14 @@ describe('what the next run sends', () => {
     schedules_statement:
       'both selected is two episode sets per family rather than one wider search, ' +
       'so the ceiling doubles.',
+    // The layer's other switch: the spellings its own composed probes go out in.
+    // `Transform` members, four of the seven, each naming the adaptive layer.
+    adaptive_constructions: [
+      { transform: 'plain', layer: 'adaptive', selected: true, does: 'as composed' },
+      { transform: 'base64', layer: 'adaptive', selected: false, does: 'encoded' },
+    ],
+    adaptive_constructions_statement:
+      'each spelling selected is its own episode set, so the ceiling multiplies.',
     transforms: [
       { transform: 'plain', layer: 'single_turn', selected: true, does: 'as committed' },
       { transform: 'base64', layer: 'single_turn', selected: false, does: 'encoded' },
@@ -345,6 +353,29 @@ describe('what the next run sends', () => {
     expect(reading.schedulesCost).toContain('two episode sets')
   })
 
+  it('groups the spellings under the adaptive layer, and never among the seven', () => {
+    const reading = selectionReading(OFFERED)
+
+    expect(
+      reading.layers.map((one) => one.spellings.map((on) => on.transform)),
+    ).toEqual([[], [], ['plain', 'base64']])
+    // Only the attacker's own words are selected on a bench nobody has narrowed: a
+    // second spelling is another episode set per family, not a wider one.
+    // `sent` and not `selected`, because it is a `ConstructionOffered` row: what the
+    // switch answers is *will the next run send this*, in this module's one word for
+    // it.
+    expect(reading.layers.at(-1)?.spellings.map((one) => one.sent)).toEqual([
+      true,
+      false,
+    ])
+    // And `base64` appears in both lists without being one row: the scored layer sends
+    // a case in it and is scored per attempt, the adaptive layer respells a probe it
+    // composed and is scored on nothing, so the switches are two switches.
+    const scored = reading.layers.flatMap((one) => one.constructions)
+    expect(scored.map((one) => one.transform)).toContain('base64')
+    expect(reading.spellingsCost).toContain('own episode set')
+  })
+
   it('draws each switch from the bench’s answer and never from a local default', () => {
     const reading = selectionReading(OFFERED)
     const runs = Object.fromEntries(reading.layers.map((one) => [one.layer, one.runs]))
@@ -366,7 +397,11 @@ describe('what the next run sends', () => {
     // would carry into its provenance, and both are written for a reader holding a
     // document rather than for an operator holding a switch. `families_off_statement`
     // is not read on this page either.
-    expect(Object.keys(reading)).toEqual(['layers', 'schedulesCost'])
+    expect(Object.keys(reading)).toEqual([
+      'layers',
+      'schedulesCost',
+      'spellingsCost',
+    ])
     // No rate, no count and no denominator in the switches themselves: a selection is
     // what a run was asked to send and never a measurement of anything.
     // A digit is not banned here the way it is on the six families' sentences: one

@@ -279,6 +279,7 @@ from backend.bench.signing import (
     public_key,
     signing_key,
 )
+from backend.bench.transforms import ADAPTIVE_SPELLINGS
 from backend.bench.usage import UsageLedger
 from backend.bench.verification import (
     INTEGRITY_CLAIM,
@@ -3394,6 +3395,30 @@ class Tuning(BaseModel):
     it is a second attacker rather than a wider search.
     """
 
+    adaptive_constructions: list[TransformSelected]
+    """The spellings the adaptive layer may compose its probes in, and which it does.
+
+    `TransformSelected` reused rather than a fourth model, because it is the same four
+    fields about the same closed enumeration — these *are* `Transform` members, the
+    ones whose function needs no words of ours — and each row names the adaptive layer
+    for the reason every construction row names its own
+    ([ADR-0097](../../docs/adr/0097-the-adaptive-layer-attacks-in-a-spelling-and-it-is-selected.md)).
+
+    A second list rather than more rows on `transforms`: the same member means two
+    different things in the two lists — a case sent in base64 and scored on its own
+    attempts, and a composed probe respelled on its way out — and one list would put a
+    switch for the second where a console reads the first. Three members are absent,
+    and `transforms.ADAPTIVE_SPELLINGS` is where the absence is argued.
+    """
+
+    adaptive_constructions_statement: str
+    """What selecting a second spelling buys and what it costs, in the bench's words.
+
+    `schedules_statement`'s terms, over the other of the adaptive layer's two
+    switches: the tick is an episode set, so it is turns on the operator's own endpoint
+    and they are told before they answer.
+    """
+
     selection_off_statement: str
     selection_stated: str
     """What a run made now would print in its provenance about what it sent.
@@ -3472,6 +3497,25 @@ Written here beside the construction sentence rather than in the console, for th
 sentence's own reason: the switch and its caveat are one statement, and the last
 clause is the one an operator cannot be expected to work out — the gate's citation is
 a claim about the attacker the reference agents faced, which is the line.
+"""
+
+A_SPELLING_IS_ITS_OWN_EPISODE_SET = (
+    "the adaptive attacker composes its own probes, and a spelling is what the harness "
+    "does to them on the way out: base64, rot13 or leetspeak, applied to every probe "
+    "of an episode as it is sent. Each spelling selected is its own episode set — k "
+    "episodes per family in it — so the layer's ceiling multiplies and the figure you "
+    "confirm before a run starts multiplies with it. Nothing here is scored: an "
+    "episode is a summand of nothing, so what a spelling buys is the search run "
+    "against a target that may answer one spelling and refuse another. The four here "
+    "are the constructions that need no words of ours — a framing is written per "
+    "family and a crescendo is a ladder, and neither is a spelling of the attacker's "
+    "own sentence"
+)
+"""What a second spelling buys and what it costs (ADR-0074, ADR-0097).
+
+Beside the schedules' sentence and written here for its reason: the switch and its
+caveat are one statement. The last clause is the one an operator cannot work out —
+why the list is four members and not seven.
 """
 
 A_CONSTRUCTION_SWITCHED_OFF_IS_NOT_SENT = (
@@ -3660,6 +3704,17 @@ def tuning(config: BenchConfig) -> Tuning:
             for schedule in BranchSchedule
         ],
         schedules_statement=BOTH_SCHEDULES_IS_TWO_EPISODE_SETS,
+        adaptive_constructions=[
+            TransformSelected(
+                transform=str(spelling),
+                layer=str(AttackLayer.ADAPTIVE),
+                selected=spelling in config.selection.adaptive_constructions,
+                does=spelling.stated(),
+            )
+            for spelling in Transform
+            if spelling in ADAPTIVE_SPELLINGS
+        ],
+        adaptive_constructions_statement=A_SPELLING_IS_ITS_OWN_EPISODE_SET,
         selection_off_statement=A_CONSTRUCTION_SWITCHED_OFF_IS_NOT_SENT,
         selection_stated=config.selection.stated(),
         statement=THE_CONSOLE_MAY_SET_THESE,
@@ -4141,6 +4196,18 @@ class SelectRequest(BaseModel):
 
     layers: list[str]
     transforms: list[str]
+    adaptive_constructions: list[str] = Field(
+        default_factory=lambda: [str(Transform.PLAIN)]
+    )
+    """The spellings the adaptive layer composes its probes in. At least one.
+
+    Defaulted on `schedules`' terms and to the same effect — a caller written before
+    the field existed asks for the run this bench has always made, which is the
+    attacker's own words — and refused empty for the same reason. A member outside
+    `ADAPTIVE_SPELLINGS` is a `422` carrying `AttackSelection`'s sentence about why
+    that construction cannot respell somebody else's composed probe (ADR-0097).
+    """
+
     schedules: list[str] = Field(default_factory=lambda: [str(BranchSchedule.LINEAR)])
     """The adaptive schedules the next run attacks under. At least one.
 
@@ -5943,11 +6010,17 @@ def create_app(
             BranchSchedule,
             "is not a schedule this bench attacks under. The two are",
         )
+        spellings = _members(
+            asked.adaptive_constructions,
+            Transform,
+            "is not a construction this bench performs. The seven are",
+        )
         try:
             selection = AttackSelection(
                 layers=frozenset(layers),
                 transforms=frozenset(transforms),
                 schedules=frozenset(schedules),
+                adaptive_constructions=frozenset(spellings),
             )
         except ValueError as nothing:
             raise HTTPException(status_code=422, detail=str(nothing)) from nothing

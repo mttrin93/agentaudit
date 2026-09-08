@@ -54,7 +54,14 @@ from backend.bench.adaptive.precedent import DURABLE_PRECEDENT, PrecedentStore
 from backend.bench.adaptive.tree import BranchSchedule
 from backend.bench.applicability import applicable
 from backend.bench.contract import TargetConfig, TargetUnreachable
-from backend.bench.library import AnyFamily, Case, ElectiveFamily, Family, VerdictClass
+from backend.bench.library import (
+    AnyFamily,
+    Case,
+    ElectiveFamily,
+    Family,
+    Transform,
+    VerdictClass,
+)
 from backend.bench.measurability import runnable
 from backend.bench.unfinished import ReplyUnfinished
 from backend.graph.runstate import RunState
@@ -147,16 +154,19 @@ def run_adaptive_layer(
 ) -> tuple[AdaptiveEpisode, ...]:
     """Run `k` episodes per family per target per schedule, and record every one.
 
-    **The schedules are a loop and not a parameter of one episode.** `budget.scheduled`
-    is what the operator selected, in the enum's own order, and an episode set is
-    opened under each: a run that selected both attacks every family under the line and
-    under the tree, which is `k` episodes each and a ceiling that says so
+    **The schedules and the spellings are loops and not parameters of one episode.**
+    `budget.scheduled` and `budget.spellings` are what the operator selected, in the
+    enum's own order, and an episode set is opened under each pairing: a run that
+    selected both schedules attacks every family under the line and under the tree,
+    and a run that selected a second spelling attacks it again in that spelling —
+    `k` episodes each, and a ceiling that says so
     ([ADR-0096](../../../docs/adr/0096-the-adaptive-schedule-is-selected-and-both-schedules-are-two-episodes.md)).
-    A single episode gets one policy, handed to `run_episode`, because an episode has
-    one shape.
+    A single episode gets one policy and one spelling, both handed to `run_episode`,
+    because an episode has one shape and is composed in one spelling (ADR-0097).
 
-    The schedule is the innermost loop, so the two episodes for one family against one
-    target are adjacent: the position `/runs` reports walks families in
+    The schedule and the spelling are the innermost loops, so every episode for one
+    family against one target is adjacent: the position `/runs` reports walks the
+    families in
     `ATTACKED_IN_ORDER` and the targets inside a family in the order ADR-0011
     randomises, and a schedule loop wrapped around those would make a run's second
     half a repeat of its first — a reader watching one would see every family twice
@@ -178,19 +188,21 @@ def run_adaptive_layer(
             if objective is None:
                 continue
             for schedule in budget.scheduled:
-                for _ in range(budget.episodes_per_family):
-                    _open_episode(
-                        family=family,
-                        entry=entry,
-                        objective=objective,
-                        schedule=schedule,
-                        run_state=run_state,
-                        attacker=attacker,
-                        blinding=blinding,
-                        budget=budget,
-                        precedent=precedent,
-                        episodes=episodes,
-                    )
+                for spelling in budget.spellings:
+                    for _ in range(budget.episodes_per_family):
+                        _open_episode(
+                            family=family,
+                            entry=entry,
+                            objective=objective,
+                            schedule=schedule,
+                            spelling=spelling,
+                            run_state=run_state,
+                            attacker=attacker,
+                            blinding=blinding,
+                            budget=budget,
+                            precedent=precedent,
+                            episodes=episodes,
+                        )
     return tuple(episodes)
 
 
@@ -200,6 +212,7 @@ def _open_episode(
     entry: AttackableTarget,
     objective: Case,
     schedule: BranchSchedule,
+    spelling: Transform,
     run_state: RunState,
     attacker: AttackerCompletion,
     blinding: Blinding,
@@ -230,6 +243,10 @@ def _open_episode(
                 # here: the turn cap, the tool cap and the layer ceiling are the
                 # budget's and are the same under either schedule (ADR-0057 §2).
                 branching=schedule.policy,
+                # And the spelling every probe of this episode is respelled by as it
+                # is sent, which is the same grain: one episode, one spelling
+                # (ADR-0097).
+                spelling=spelling,
             )
         except EPISODE_FAILURES as broke:
             episode = AdaptiveEpisode.against(

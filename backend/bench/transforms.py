@@ -650,6 +650,69 @@ def applied(
             )
 
 
+ADAPTIVE_SPELLINGS: frozenset[Transform] = frozenset(
+    {Transform.PLAIN, Transform.BASE64, Transform.ROT13, Transform.LEETSPEAK}
+)
+"""The constructions a **composed** probe may be respelled by, and the whole set.
+
+Four members of the seven, and the three that are missing are missing for two
+different stated reasons rather than for want of a function.
+
+**`prompt_injection_wrapper` and `roleplay` need words of ours.** Their function takes
+a *framing* — one prefix written per family, coherent with the mechanism that family
+tests — and `FRAMINGS` is the whole of which pairings this repository has written
+(ADR-0074 §1). The wrapper's mapping is deliberately **empty**, because a record of it
+would ship a reusable override frame in this repository's wording and ADR-0008's
+amendment withholds that whatever it wraps (ADR-0074 §5); the persona is written for
+three families and no others. A probe the attacker composed at runtime has no
+committed record, so wrapping it here would mean either inventing a framing outside
+that table or reaching for a family's framing in a context ADR-0074 did not argue —
+and the first is this repository shipping the frame it withholds.
+
+**`scripted_crescendo` is not a spelling at all.** It is a ladder computed from a
+case record, it changes how many turns there are, and a fixed script inside a
+model-driven episode is two attackers composing one episode
+([ADR-0097](../../docs/adr/0097-the-adaptive-layer-attacks-in-a-spelling-and-it-is-selected.md)).
+
+What is left is the identity and the three encodings, whose functions add nothing of
+ours to a probe: they respell the attacker's own words, which is the whole of what
+this set is for.
+"""
+
+
+def spelled(transform: Transform, probe: str) -> str:
+    """One composed probe, respelled by a construction that needs no words of ours.
+
+    The adaptive layer's entry point, beside `applied` and never through it: that one
+    takes a committed payload and a family and asks `framing_for` first, because a
+    *record* of a variant is a pairing this repository has written down. A probe the
+    attacker composed a moment ago is not a record and has no family framing to look
+    up — so this function dispatches over `ADAPTIVE_SPELLINGS` alone and refuses
+    every other member by name.
+
+    One string in and one out, where `applied` is a sequence to a sequence: an
+    episode's turns are composed one at a time and each is respelled as it is sent, so
+    there is no sequence here to be turn-for-turn with (ADR-0097).
+    """
+    if transform not in ADAPTIVE_SPELLINGS:
+        raise ValueError(
+            f"{transform.value} is not a spelling a composed probe can be respelled "
+            "by: its construction needs words of ours — a framing written per family "
+            "in FRAMINGS, or a ladder computed from a case record — and a probe the "
+            "attacker composed at runtime is neither. The four that need nothing of "
+            f"ours are {', '.join(sorted(one.value for one in ADAPTIVE_SPELLINGS))}"
+        )
+    match transform:
+        case Transform.PLAIN:
+            return plain(probe)
+        case Transform.BASE64:
+            return base64_encoded(probe)
+        case Transform.ROT13:
+            return rot13(probe)
+        case _:
+            return leetspeak(probe)
+
+
 def derived_payload(transform: Transform, base: Case) -> tuple[str, ...]:
     """That base case's payload under that transform — the one entry point.
 

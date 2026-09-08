@@ -344,6 +344,16 @@ export interface LayerOffered {
   runs: boolean
   constructions: ConstructionOffered[]
   schedules: ScheduleOffered[]
+  /**
+   * The spellings this layer may compose its probes in. The adaptive layer's, and
+   * empty on the other two.
+   *
+   * `ConstructionOffered` rows, because they are the same members the scored layer's
+   * constructions are — and a separate list rather than the same one, because the two
+   * switches answer two different questions about one member: *send a case in it*, and
+   * *respell a composed probe by it* (ADR-0097).
+   */
+  spellings: ConstructionOffered[]
 }
 
 /**
@@ -379,6 +389,14 @@ export interface SelectionReading {
    * (ADR-0007, ADR-0096).
    */
   schedulesCost: string
+  /**
+   * What selecting a second spelling costs, in the bench's own words.
+   *
+   * `schedulesCost`'s exception, argued the same way: it is about the switch beside it
+   * rather than about a document, and each spelling selected is another episode set —
+   * turns on the operator's own endpoint, which is a thing to know before answering.
+   */
+  spellingsCost: string
 }
 
 /** What the bench's tuning reading says about what the next run sends. */
@@ -387,6 +405,8 @@ interface Offered {
   transforms: readonly TransformSelected[]
   schedules: readonly ScheduleSelected[]
   schedules_statement: string
+  adaptive_constructions: readonly TransformSelected[]
+  adaptive_constructions_statement: string
 }
 
 /**
@@ -418,8 +438,16 @@ export function selectionReading(offered: Offered): SelectionReading {
           does: one.does,
           selected: one.selected,
         })),
+      spellings: offered.adaptive_constructions
+        .filter((one) => one.layer === layer.layer)
+        .map((one) => ({
+          transform: one.transform,
+          does: one.does,
+          sent: one.selected,
+        })),
     })),
     schedulesCost: offered.schedules_statement,
+    spellingsCost: offered.adaptive_constructions_statement,
   }
 }
 

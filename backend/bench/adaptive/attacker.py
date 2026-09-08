@@ -88,8 +88,9 @@ from backend.bench.adaptive.tree import (
 )
 from backend.bench.contract import TargetConfig, Transcript
 from backend.bench.evaluator import Verdict
-from backend.bench.library import AnyFamily, Case
+from backend.bench.library import AnyFamily, Case, Transform
 from backend.bench.measurability import checkable
+from backend.bench.transforms import spelled
 from backend.graph.budget import BudgetExceeded
 from backend.graph.runstate import RunState
 from backend.observability import Field, Span, traced
@@ -186,6 +187,7 @@ def run_episode(
     budget: AdaptiveBudget = DECLARED_ADAPTIVE_BUDGET,
     precedent: PrecedentStore = DURABLE_PRECEDENT,
     branching: BranchPolicy = LINEAR_CHAIN,
+    spelling: Transform = Transform.PLAIN,
 ) -> AdaptiveEpisode:
     """Run one episode and record it on the run state, however it ended.
 
@@ -199,6 +201,11 @@ def run_episode(
     and one episode runs under exactly one of them. The layer reads the set and hands
     a policy down per episode, which is the only way a run under both schedules can be
     two episodes rather than one episode nobody can say the shape of (ADR-0096).
+
+    `spelling` is this episode's construction, handed down the same way and for the
+    same reason: every probe of it is respelled by that member as it goes on the
+    wire, the transcript records what was actually sent, and a mixture inside one
+    episode would be a route nobody could reproduce from the record (ADR-0097).
     """
     return _Episode(
         target=target,
@@ -209,6 +216,7 @@ def run_episode(
         budget=budget,
         precedent=precedent,
         branching=branching,
+        spelling=spelling,
     ).run()
 
 
@@ -231,6 +239,7 @@ class _Episode:
         budget: AdaptiveBudget,
         precedent: PrecedentStore,
         branching: BranchPolicy = LINEAR_CHAIN,
+        spelling: Transform = Transform.PLAIN,
     ) -> None:
         self.target = target
         self.objective = objective
@@ -251,6 +260,13 @@ class _Episode:
         else — so a turn number indexes both."""
         self.proposals: list[ProposedRoute] = []
         self.declined: list[str] = []
+        self.spelling = spelling
+        """How every probe of this episode is respelled on its way to the wire.
+
+        Held for the whole episode and never per turn: one episode, one spelling
+        (ADR-0097). `plain` is the identity, so an episode in the attacker's own
+        words takes the same path as one in base64 and no branch anywhere asks
+        whether a spelling was selected."""
         self.tree = EpisodeTree(branching)
         """Which turn the next probe continues from, and which turns are closed.
 
@@ -338,6 +354,10 @@ class _Episode:
             turn_cap=self.budget.turns_per_episode,
             log=self.log,
             continuation=continuation,
+            # What the harness will do to what the model writes. Told rather than
+            # inferred: a model composing for a target that reads base64 without
+            # knowing the harness respells would compose blind (ADR-0097).
+            spelling=self.spelling,
         )
         invocation = self.attacker(ATTACKER_SYSTEM_PROMPT, self.blinding.redact(brief))
         if invocation is None:
@@ -390,10 +410,15 @@ class _Episode:
         # the convention the scored layer already follows, where `enter` names the
         # attempt in flight rather than the last one that came back (#55).
         self.run_state.enter_turn(self.turns + 1)
+        # Respelled here, at the one place a probe goes on the wire, so the transcript
+        # records what the target was actually sent while the log below shows the
+        # attacker its own words. `plain` is the identity, so this is not a branch
+        # (ADR-0097).
+        sent = spelled(self.spelling, probe)
         with traced(Span.TURN, {Field.TURN: self.turns + 1}):
             transcript = run_probe(
                 self.target,
-                probe,
+                sent,
                 self.run_state,
                 # Its own session, like every scored attempt: a probe that shared a
                 # session with the last one would make the target's memory part of

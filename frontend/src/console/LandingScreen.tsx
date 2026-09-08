@@ -261,10 +261,16 @@ export function LandingScreen() {
     layers: string[],
     transforms: string[],
     schedules: string[],
+    spellings: string[],
   ) => {
     setRefusedSelection('')
     try {
-      const bench = await selectConstructions(layers, transforms, schedules)
+      const bench = await selectConstructions(
+        layers,
+        transforms,
+        schedules,
+        spellings,
+      )
       setSends(selectionReading(bench.tuning))
     } catch (refusal: unknown) {
       setRefusedSelection(`${refusal}`)
@@ -279,6 +285,13 @@ export function LandingScreen() {
       .filter((one) => one.selected)
       .map((one) => one.schedule)
 
+  /** Every spelling left where the operator put it, on `scheduled`'s terms. */
+  const spelled = () =>
+    switches
+      .flatMap((one) => one.spellings)
+      .filter((one) => one.sent)
+      .map((one) => one.transform)
+
   /** One layer switched, and every construction left where the operator put it. */
   const selectLayer = (layer: string, on: boolean) =>
     sent(
@@ -290,6 +303,7 @@ export function LandingScreen() {
         .filter((one) => one.sent)
         .map((one) => one.transform),
       scheduled(),
+      spelled(),
     )
 
   /** One construction switched, and every layer left where the operator put it. */
@@ -301,6 +315,7 @@ export function LandingScreen() {
         .filter((one) => (one.transform === transform ? on : one.sent))
         .map((one) => one.transform),
       scheduled(),
+      spelled(),
     )
 
   /**
@@ -325,6 +340,30 @@ export function LandingScreen() {
         .flatMap((one) => one.schedules)
         .filter((one) => (one.schedule === schedule ? on : one.selected))
         .map((one) => one.schedule),
+      spelled(),
+    )
+
+  /**
+   * One spelling switched, and everything else left where the operator put it.
+   *
+   * The fourth handler, on the three above's reasoning, and the second whose answer is
+   * not a narrower run: each spelling selected is its own episode set, so the bench
+   * answers with a multiplied adaptive ceiling. The last one cannot be unticked, and a
+   * spelling that needs words of ours cannot be ticked at all — the console offers only
+   * the four that can, and the bench refuses the rest by name (ADR-0074, ADR-0097).
+   */
+  const selectSpelling = (transform: string, on: boolean) =>
+    sent(
+      switches.filter((one) => one.runs).map((one) => one.layer),
+      switches
+        .flatMap((one) => one.constructions)
+        .filter((one) => one.sent)
+        .map((one) => one.transform),
+      scheduled(),
+      switches
+        .flatMap((one) => one.spellings)
+        .filter((one) => (one.transform === transform ? on : one.sent))
+        .map((one) => one.transform),
     )
 
   useScreenTitle(THE_BENCH)
@@ -569,10 +608,13 @@ export function LandingScreen() {
         subject, and these are the finer grain of the switch above them rather than a
         second block.
 
-        The adaptive layer holds no construction — what it would hold are the two loops
-        the bench's closed set of constructions deliberately does not name — and it
-        holds **its two schedules** instead, in the footer the constructions would have
-        been in and behind the word for what they are. Both ticked is two episode sets
+        The adaptive layer holds no construction of its own — what it would hold are the
+        two loops the bench's closed set of constructions deliberately does not name —
+        and it holds **its two schedules** instead, in the footer the constructions
+        would have been in and behind the word for what they are, with **the spellings
+        its probes go out in** under them. Those are the scored layer's own members
+        under a second switch, because the question differs: above, send a case in this
+        construction; here, respell a probe the attacker composed (ADR-0097). Both ticked is two episode sets
         per family rather than one wider search, which is why the sentence about what
         the tick costs is printed under them: the second schedule doubles the turns the
         next run may put on the operator's own endpoint, and that is a figure they
@@ -615,7 +657,8 @@ export function LandingScreen() {
                 <dd>{layer.sends}</dd>
                 <dd className="sends">
                   {layer.constructions.length === 0 &&
-                  layer.schedules.length === 0 ? (
+                  layer.schedules.length === 0 &&
+                  layer.spellings.length === 0 ? (
                     <span className="none">
                       Nothing to choose inside this layer — the switch above is the
                       whole of it.
@@ -683,6 +726,42 @@ export function LandingScreen() {
                         ))}
                       </ul>
                       <span className="aside">{sends.schedulesCost}</span>
+                    </>
+                  )}
+                  {/*
+                    And the spellings the layer's own probes go out in, under the
+                    schedules and behind their own word. The same members the scored
+                    layer's constructions are, and a switch of their own, because the
+                    question is a different one: *send a case in it* above, and
+                    *respell a probe the attacker composed* here (ADR-0097). Four of
+                    the seven are offered, because the other three need words this
+                    repository writes per family or a ladder built from a case record —
+                    the sentence under them says so.
+                  */}
+                  {layer.spellings.length === 0 ? null : (
+                    <>
+                      <span className="of">Spellings</span>
+                      <ul className="sent">
+                        {layer.spellings.map((one) => (
+                          <li key={one.transform}>
+                            <label>
+                              <input
+                                className="tick"
+                                type="checkbox"
+                                checked={one.sent}
+                                onChange={(event) =>
+                                  void selectSpelling(
+                                    one.transform,
+                                    event.target.checked,
+                                  )
+                                }
+                              />
+                              {readName(one.transform)}
+                            </label>
+                          </li>
+                        ))}
+                      </ul>
+                      <span className="aside">{sends.spellingsCost}</span>
                     </>
                   )}
                 </dd>

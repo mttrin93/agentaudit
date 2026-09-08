@@ -705,6 +705,12 @@ class AdaptiveDiscrimination:
                     f"  {schedule}: {schedule.stated()}"
                     for schedule in self.budget.scheduled
                 ),
+                # And the spellings those turns were composed in, named for the same
+                # reason: a median over episodes composed in two spellings is a median
+                # over two searches, and a block that named one would tell a reader the
+                # wrong thing about the number above it (ADR-0097).
+                "  probes composed in: "
+                + ", ".join(str(one) for one in self.budget.spellings),
                 *(f"  {line}" for line in self.separation.stated().splitlines()),
                 *(f"  {effort.stated()}" for effort in self.effort),
                 f"  {self.sign_test.stated()}",

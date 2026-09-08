@@ -104,6 +104,7 @@ from backend.bench.signing import (
     generate,
     public_key,
 )
+from backend.bench.transforms import ADAPTIVE_SPELLINGS
 from backend.bench.verification import SignatureOutcome
 from backend.graph.budget import REGISTRATION_PROBES_PER_TARGET, RunBudget
 from backend.targets.reference.model import ModelConfig, Provider
@@ -1479,6 +1480,25 @@ def test_the_console_reads_the_layers_and_the_constructions_it_may_select() -> N
     assert "two episode sets" in tuning["schedules_statement"]
     assert "doubles" in tuning["schedules_statement"]
 
+    # And the layer's other switch: the spellings its probes may be composed in. Four
+    # of the seven constructions, because the other three need words this repository
+    # writes per family or a ladder computed from a record (ADR-0074, ADR-0097).
+    assert [row["transform"] for row in tuning["adaptive_constructions"]] == [
+        str(one) for one in Transform if one in ADAPTIVE_SPELLINGS
+    ]
+    assert {row["layer"] for row in tuning["adaptive_constructions"]} == {
+        str(AttackLayer.ADAPTIVE)
+    }
+    assert {
+        row["transform"]: row["selected"] for row in tuning["adaptive_constructions"]
+    } == {
+        str(Transform.PLAIN): True,
+        str(Transform.BASE64): False,
+        str(Transform.ROT13): False,
+        str(Transform.LEETSPEAK): False,
+    }
+    assert "its own episode set" in tuning["adaptive_constructions_statement"]
+
 
 def test_the_layers_and_constructions_the_next_run_sends_can_be_set() -> None:
     """The third write under `/bench`, on ADR-0025's four conditions (ADR-0058).
@@ -1551,6 +1571,97 @@ def test_the_schedules_the_adaptive_layer_attacks_under_can_be_set() -> None:
         bench.config.adaptive.under(bench.config.selection.schedules).turn_ceiling
         == 2 * bench.config.adaptive.turn_ceiling
     )
+
+
+def test_the_spellings_the_adaptive_layer_composes_in_can_be_set() -> None:
+    """A spelling selected, and the ceiling the next run is priced against (ADR-0097).
+
+    The switch pairs with the schedules': what it changes is not a narrower run but
+    another episode set per family, so the stored selection is asserted beside the
+    ceiling — a selection a screen can set and an estimate cannot see would be the
+    multiplication arriving after the approval.
+    """
+    app = create_app(BenchConfig(cases=[]))
+    with TestClient(app) as client:
+        answered = client.put(
+            BENCH_SELECTION_ROUTE,
+            json={
+                "layers": [str(layer) for layer in AttackLayer],
+                "transforms": [str(transform) for transform in Transform],
+                "schedules": [str(BranchSchedule.LINEAR)],
+                "adaptive_constructions": [
+                    str(Transform.PLAIN),
+                    str(Transform.BASE64),
+                ],
+            },
+        )
+        bench = cast(BenchRuns, app.state.bench)
+        after = client.get(BENCH_SETTINGS_ROUTE).json()["tuning"]
+
+    assert answered.status_code == 200
+    assert bench.config.selection.adaptive_constructions == frozenset(
+        {Transform.PLAIN, Transform.BASE64}
+    )
+    assert {
+        row["transform"]: row["selected"] for row in after["adaptive_constructions"]
+    } == {
+        str(Transform.PLAIN): True,
+        str(Transform.BASE64): True,
+        str(Transform.ROT13): False,
+        str(Transform.LEETSPEAK): False,
+    }
+    # Two spellings is two episode sets per family, so the layer's ceiling doubles.
+    selection = bench.config.selection
+    assert (
+        bench.config.adaptive.under(
+            selection.schedules, selection.adaptive_constructions
+        ).turn_ceiling
+        == 2 * bench.config.adaptive.turn_ceiling
+    )
+    assert "plain, base64" in selection.constructions_stated()
+
+
+def test_a_spelling_that_needs_words_of_ours_is_refused_by_the_route() -> None:
+    """Four spellings, and the other three are a `422` carrying the type's sentence.
+
+    A framing is written per family and withheld entirely for the override wrapper
+    (ADR-0074 §5), and a crescendo is a ladder computed from a case record: neither is
+    a spelling of a probe the attacker composed at runtime, and the refusal says which
+    of the two it is rather than sending a plain probe under the member's name.
+    """
+    app = create_app(BenchConfig(cases=[]))
+    with TestClient(app) as client:
+        framing = client.put(
+            BENCH_SELECTION_ROUTE,
+            json={
+                "layers": [str(layer) for layer in AttackLayer],
+                "transforms": [str(Transform.PLAIN)],
+                "adaptive_constructions": [str(Transform.ROLEPLAY)],
+            },
+        )
+        empty = client.put(
+            BENCH_SELECTION_ROUTE,
+            json={
+                "layers": [str(layer) for layer in AttackLayer],
+                "transforms": [str(Transform.PLAIN)],
+                "adaptive_constructions": [],
+            },
+        )
+        omitted = client.put(
+            BENCH_SELECTION_ROUTE,
+            json={
+                "layers": [str(layer) for layer in AttackLayer],
+                "transforms": [str(Transform.PLAIN)],
+            },
+        )
+        bench = cast(BenchRuns, app.state.bench)
+
+    assert framing.status_code == 422
+    assert "cannot respell a probe" in framing.json()["detail"]
+    assert empty.status_code == 422
+    assert "some spelling" in empty.json()["detail"]
+    assert omitted.status_code == 200
+    assert bench.config.selection.adaptive_constructions == frozenset({Transform.PLAIN})
 
 
 def test_a_run_under_no_schedule_is_refused_and_the_field_may_be_omitted() -> None:

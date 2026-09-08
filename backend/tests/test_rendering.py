@@ -156,7 +156,7 @@ def test_every_section_states_its_own_reproducibility_and_four_read_the_payload(
 
 # --- The golden digest: one document, pinned to the byte ---------------------
 
-GOLDEN_ONE_FAMILY = "945df7474af443e7f0b5f3f7cdcedc5ad01b923775940b41d678bcf4c4fe1118"
+GOLDEN_ONE_FAMILY = "e1b7ea61b41cbaac0142c22b970305f3183a8373c3f0615c65cae8312b9c2a11"
 """The sha256 of `_one_family()`'s rendering, written down.
 
 **A tripwire, and it is deliberately a strict one.** Every other assertion in this
@@ -395,6 +395,19 @@ this change report a disagreement to a version-2 verifier — a false tampering 
 where a key beside the others is one an older verifier skips while re-deriving every
 figure it knows. There is no figure in it either: the layer these name is scored on
 nothing.
+
+Moved a twenty-first time, by the adaptive layer's probes becoming respellable, and it
+is the same block one line further down: section 2's selection now says which
+spellings the adaptive attacker composed its probes in, beside which schedules it
+attacked under
+([ADR-0097](../../docs/adr/0097-the-adaptive-layer-attacks-in-a-spelling-and-it-is-selected.md)).
+**This fixture is the declared selection**, so the sentence says the probes were
+composed plainly — the attacker's own words — and every report gains it, on the
+schedules sentence's own terms: a line that appeared only when somebody selected a
+spelling would be indistinguishable from a report made before the switch existed.
+**The artefact version does not move**, for the reason the schedules key did not move
+it: a key beside the others, carrying no figure, with its own sentence rather than a
+clause on one a version-2 verifier re-derives.
 """
 
 

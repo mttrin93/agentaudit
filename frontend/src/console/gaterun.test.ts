@@ -722,7 +722,10 @@ describe('while the gate run is in flight', () => {
     const [scored, adaptive] = gateProgress(IN_FLIGHT)
 
     expect(scored.units).toEqual(['family', 'case', 'attempt'])
-    expect(adaptive.units).toEqual(['family', 'episode', 'turn'])
+    // Four where the scored layer states three, and the fourth is which schedule the
+    // episode is running under: the gate run's own reading, off the same builder the
+    // run screen uses (ADR-0099).
+    expect(adaptive.units).toEqual(['family', 'schedule', 'episode', 'turn'])
     // The family read as words and the case id as the record writes it: the position
     // is what a person reads, and only the family is a name rather than an id.
     expect(scored.at).toEqual(['data leakage', 'data-leakage-002', '7'])

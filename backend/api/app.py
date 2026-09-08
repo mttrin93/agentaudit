@@ -834,7 +834,7 @@ class ScoredPosition(BaseModel):
 
 
 class AdaptivePosition(BaseModel):
-    """Where the adaptive layer is: family, episode and turn.
+    """Where the adaptive layer is: family, schedule, episode and turn.
 
     A separate model from `ScoredPosition` rather than a shared one with a layer
     label, because the units differ and a reader who could compare the two fields
@@ -842,9 +842,17 @@ class AdaptivePosition(BaseModel):
     apart and ADR-0010 forbids. `episode` counts the episodes this run has started
     and `turn` counts the probes sent inside the current one; neither is a
     denominator, and nothing divides by either.
+
+    `schedule` is the fourth part of the position and not a fourth *unit*: family,
+    episode and turn are what the layer counts in, and this is which of the selected
+    schedules the episode being counted is running under. A run that selected both
+    attacks every family under each, so the other three cannot say which pass a turn
+    belongs to
+    ([ADR-0099](../../docs/adr/0099-a-live-position-names-the-schedule-the-episode-is-running-under.md)).
     """
 
     family: str
+    schedule: str
     episode: int
     turn: int
 
@@ -1317,11 +1325,15 @@ def _adaptive_progress(state: RunState) -> AdaptiveProgress:
     return AdaptiveProgress(
         reached=True,
         statement=(
-            f"family {at.family}, episode {at.index}, turn {at.turn}: the position "
-            "the adaptive layer has reached. Nothing in this layer is scored"
+            f"family {at.family}, {at.schedule}, episode {at.index}, turn {at.turn}: "
+            "the position the adaptive layer has reached. Nothing in this layer is "
+            "scored"
         ),
         position=AdaptivePosition(
-            family=str(at.family), episode=at.index, turn=at.turn
+            family=str(at.family),
+            schedule=str(at.schedule),
+            episode=at.index,
+            turn=at.turn,
         ),
         calls_spent=spent,
         adaptive_findings=len(state.broken_episodes) if state.episodes else None,

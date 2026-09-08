@@ -29,7 +29,7 @@
  * this module for an episode that resisted, so nothing here can assign one.
  */
 
-import { readFamily } from '../families'
+import { readFamily, readName } from '../families'
 import type {
   AdaptiveProgress,
   AttemptExchange,
@@ -45,8 +45,17 @@ import { AWAITING_APPROVAL } from './interrupt'
 /** The scored layer's three units, in the order a position states them. */
 export const SCORED_UNITS = ['family', 'case', 'attempt'] as const
 
-/** The adaptive layer's three, which are three different things. */
-export const ADAPTIVE_UNITS = ['family', 'episode', 'turn'] as const
+/**
+ * The adaptive layer's own, which are different things from the scored layer's.
+ *
+ * Four where the scored layer's are three, and the fourth is not a unit the layer
+ * counts in: `schedule` is which of the selected schedules the episode being counted
+ * is running under. It is read out in the same idiom because a person watching a run
+ * needs it in the same breath — a run that selected both attacks every family under
+ * each, and *family, episode and turn* alone cannot say which pass the turn on the
+ * screen belongs to (ADR-0099).
+ */
+export const ADAPTIVE_UNITS = ['family', 'schedule', 'episode', 'turn'] as const
 
 /**
  * How this screen may describe an episode that ended without breaking a target.
@@ -82,10 +91,26 @@ export interface LayerReading {
   title: string
   /** Whether this layer has started, as the bench states it rather than inferred. */
   reached: boolean
-  /** The three units this layer's position is counted in. */
-  units: readonly [string, string, string]
-  /** One value per unit, or `null` while the layer has attempted nothing. */
-  at: readonly [string, string, string] | null
+  /**
+   * The parts this layer's position is stated in, in the order it states them.
+   *
+   * A list and not a fixed-length tuple, because the two layers state a different
+   * number of parts: the scored layer's three are family, case and attempt, and the
+   * adaptive layer's four are family, schedule, episode and turn (ADR-0099). What
+   * keeps the two from being read against each other is that neither list is built
+   * here from the other's — `SCORED_UNITS` and `ADAPTIVE_UNITS` are two constants, and
+   * there is no function in this module that takes both layers.
+   */
+  units: readonly string[]
+  /**
+   * One value per unit, in the same order, or `null` while the layer has attempted
+   * nothing.
+   *
+   * As long as `units` by construction — the two are built in one expression per layer
+   * — and the panel walks the units and indexes this, so a value with no unit above it
+   * would be a value nothing on the screen names.
+   */
+  at: readonly string[] | null
   /**
    * The bench's own sentence about the position, carried unedited.
    *
@@ -138,7 +163,18 @@ export function adaptiveReading(adaptive: AdaptiveProgress): LayerReading {
     title: 'Adaptive layer',
     reached: adaptive.reached,
     units: ADAPTIVE_UNITS,
-    at: at === null ? null : [readFamily(at.family), `${at.episode}`, `${at.turn}`],
+    at:
+      at === null
+        ? null
+        : [
+            readFamily(at.family),
+            // The wire name read as words, like every other member name on these
+            // screens: an operator reading `tree jailbreak` here and grepping
+            // `tree_jailbreak` in a settings response is looking at the same word.
+            readName(at.schedule),
+            `${at.episode}`,
+            `${at.turn}`,
+          ],
     statement: adaptive.statement,
     callsSpent: adaptive.calls_spent,
   }

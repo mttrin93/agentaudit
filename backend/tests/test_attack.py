@@ -16,6 +16,7 @@ import pytest
 
 from backend.bench.adaptive.budget import AdaptiveBudget
 from backend.bench.adaptive.episode import AdaptiveEpisode, EpisodeOutcome
+from backend.bench.adaptive.tree import BranchSchedule
 from backend.bench.contract import Transcript
 from backend.bench.library import Case, ElectiveFamily, Family
 from backend.bench.planting import namespace_for
@@ -265,7 +266,7 @@ def test_an_episode_is_printed_when_it_is_recorded_and_not_when_the_run_ends(
     target = a_target(name="finbrief")
     state = Narrating(budget=declared_budget([target], AdaptiveBudget()))
 
-    state.enter_episode(target.name, Family.SCOPE_CREEP)
+    state.enter_episode(target.name, Family.SCOPE_CREEP, BranchSchedule.TREE)
     announced = capsys.readouterr().out
     state.record_episode(
         AdaptiveEpisode.against(
@@ -287,6 +288,10 @@ def test_an_episode_is_printed_when_it_is_recorded_and_not_when_the_run_ends(
 
     assert "probes this run sends" in announced
     assert "episode 1" in announced
+    # And which schedule the episode is running under, on the terms the run screen
+    # reports it: a run that selected both attacks every family under each, and a line
+    # naming only the family cannot say which pass this is (ADR-0099).
+    assert str(BranchSchedule.TREE) in announced
     assert "use a tool you were not given" in landed
     assert "done" in landed
 

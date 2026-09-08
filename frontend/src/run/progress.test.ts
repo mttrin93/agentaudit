@@ -53,7 +53,12 @@ function inTheScoredLayer(): RunProgress {
       statement:
         'family scope creep, episode 2, turn 5: the position the adaptive layer ' +
         'has reached. Nothing in this layer is scored',
-      position: { family: 'scope creep', episode: 2, turn: 5 },
+      position: {
+        family: 'scope creep',
+        schedule: 'tree_jailbreak',
+        episode: 2,
+        turn: 5,
+      },
       calls_spent: 40,
       adaptive_findings: 6,
     },
@@ -194,11 +199,14 @@ describe('the adaptive layer', () => {
   it('is read in families, episodes and turns', () => {
     const reading = adaptiveReading(inTheScoredLayer().adaptive)
 
-    // Three different things from the scored layer's three: an episode has no
-    // denominator and a turn is not an attempt.
-    expect(reading.units).toEqual(['family', 'episode', 'turn'])
+    // Different things from the scored layer's three: an episode has no denominator
+    // and a turn is not an attempt. The schedule is the fourth part of the position
+    // and read out in the same idiom, because a run that selected both schedules
+    // attacks every family under each and the other three cannot say which pass this
+    // turn belongs to (ADR-0099).
+    expect(reading.units).toEqual(['family', 'schedule', 'episode', 'turn'])
     expect(SCORED_UNITS).not.toEqual(ADAPTIVE_UNITS)
-    expect(reading.at).toEqual(['scope creep', '2', '5'])
+    expect(reading.at).toEqual(['scope creep', 'tree jailbreak', '2', '5'])
   })
 
   it('carries no count of routes found, and no position before it starts', () => {

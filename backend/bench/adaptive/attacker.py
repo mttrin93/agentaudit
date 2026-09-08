@@ -80,12 +80,7 @@ from backend.bench.adaptive.tools import (
     retrieve_precedent,
     run_probe,
 )
-from backend.bench.adaptive.tree import (
-    LINEAR_CHAIN,
-    BranchPolicy,
-    Continuation,
-    EpisodeTree,
-)
+from backend.bench.adaptive.tree import BranchSchedule, Continuation, EpisodeTree
 from backend.bench.contract import TargetConfig, Transcript
 from backend.bench.evaluator import Verdict
 from backend.bench.library import AnyFamily, Case, Transform
@@ -186,7 +181,7 @@ def run_episode(
     blinding: Blinding,
     budget: AdaptiveBudget = DECLARED_ADAPTIVE_BUDGET,
     precedent: PrecedentStore = DURABLE_PRECEDENT,
-    branching: BranchPolicy = LINEAR_CHAIN,
+    schedule: BranchSchedule = BranchSchedule.LINEAR,
     spelling: Transform = Transform.PLAIN,
 ) -> AdaptiveEpisode:
     """Run one episode and record it on the run state, however it ended.
@@ -195,12 +190,17 @@ def run_episode(
     vanished when the layer ceiling was reached would leave a reader unable to tell
     a target the attacker never got to from one it failed to break (ADR-0011).
 
-    `branching` is **this episode's** schedule and is an argument rather than a field
-    of `budget`, because the two are different grains: the budget declares which
-    schedules the layer runs an episode set under and how many turns each may spend,
-    and one episode runs under exactly one of them. The layer reads the set and hands
-    a policy down per episode, which is the only way a run under both schedules can be
-    two episodes rather than one episode nobody can say the shape of (ADR-0096).
+    `schedule` is **this episode's** and is an argument rather than a field of
+    `budget`, because the two are different grains: the budget declares which schedules
+    the layer runs an episode set under and how many turns each may spend, and one
+    episode runs under exactly one of them. The layer reads the set and hands a member
+    down per episode, which is the only way a run under both schedules can be two
+    episodes rather than one episode nobody can say the shape of (ADR-0096).
+
+    **The member and not its `BranchPolicy`**, though the tree is built from the
+    policy: one representation of *which schedule this episode is*, so the shape the
+    tree schedules and the name the run's position reports cannot come to disagree.
+    `BranchSchedule.policy` is the join and it is asked once (ADR-0099).
 
     `spelling` is this episode's construction, handed down the same way and for the
     same reason: every probe of it is respelled by that member as it goes on the
@@ -215,7 +215,7 @@ def run_episode(
         blinding=blinding,
         budget=budget,
         precedent=precedent,
-        branching=branching,
+        schedule=schedule,
         spelling=spelling,
     ).run()
 
@@ -238,7 +238,7 @@ class _Episode:
         blinding: Blinding,
         budget: AdaptiveBudget,
         precedent: PrecedentStore,
-        branching: BranchPolicy = LINEAR_CHAIN,
+        schedule: BranchSchedule = BranchSchedule.LINEAR,
         spelling: Transform = Transform.PLAIN,
     ) -> None:
         self.target = target
@@ -267,7 +267,14 @@ class _Episode:
         (ADR-0097). `plain` is the identity, so an episode in the attacker's own
         words takes the same path as one in base64 and no branch anywhere asks
         whether a spelling was selected."""
-        self.tree = EpisodeTree(branching)
+        self.schedule = schedule
+        """Which of the two schedules this episode is running under.
+
+        Held because the run's position reports it — a person watching a run reads the
+        schedule beside the family, the episode and the turn — and because the tree
+        below is built from its policy. One field for both, so the shape and the name
+        are one answer (ADR-0099)."""
+        self.tree = EpisodeTree(schedule.policy)
         """Which turn the next probe continues from, and which turns are closed.
 
         The schedule, and never the model's: `_step` asks the tree where the next
@@ -290,7 +297,9 @@ class _Episode:
         # run watched while it happens shows an episode that has reached the model
         # and not yet the endpoint as what it is — turn zero of a started episode,
         # never a layer that has not started (#55).
-        self.run_state.enter_episode(self.target.name, self.objective.family)
+        self.run_state.enter_episode(
+            self.target.name, self.objective.family, self.schedule
+        )
         steps = 0
         try:
             while (

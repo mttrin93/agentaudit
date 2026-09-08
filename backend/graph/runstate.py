@@ -16,6 +16,7 @@ import time
 from dataclasses import dataclass, field, replace
 
 from backend.bench.adaptive.episode import AdaptiveEpisode, EpisodeOutcome
+from backend.bench.adaptive.tree import BranchSchedule
 from backend.bench.contract import Transcript
 from backend.bench.evaluator import Verdict
 from backend.bench.library import (
@@ -212,6 +213,20 @@ class EpisodePosition:
     the same reason `Position.family` above widened (ADR-0035, ADR-0089).
     """
 
+    schedule: BranchSchedule
+    """Which schedule the episode is running under: the line, or the tree.
+
+    A fourth field on the position because a person watching a run needs it in the same
+    breath as the other three: a run that selected both schedules attacks every family
+    under each, and *family, episode and turn* alone cannot say which of the two passes
+    the turn on the screen belongs to
+    ([ADR-0099](../../docs/adr/0099-a-live-position-names-the-schedule-the-episode-is-running-under.md)).
+
+    A member and not a `BranchPolicy`: what a reader is owed is the name they selected,
+    and the policy's two numbers are the harness's own (ADR-0057 §1). Not a denominator
+    either — no field on this record is.
+    """
+
     index: int
     """Which episode of this run is running, counted from one.
 
@@ -285,7 +300,9 @@ class RunState:
         """Move the scored position to the attempt about to be sent."""
         self.position = Position(target_name, family, case_id, attempt_index)
 
-    def enter_episode(self, target_name: str, family: AnyFamily) -> None:
+    def enter_episode(
+        self, target_name: str, family: AnyFamily, schedule: BranchSchedule
+    ) -> None:
         """Move the adaptive position to a new episode, before its first turn.
 
         A method of its own, and it writes to a field of its own: an adaptive
@@ -297,7 +314,11 @@ class RunState:
             1 if self.episode_position is None else self.episode_position.index + 1
         )
         self.episode_position = EpisodePosition(
-            target_name=target_name, family=family, index=started, turn=0
+            target_name=target_name,
+            family=family,
+            schedule=schedule,
+            index=started,
+            turn=0,
         )
 
     def enter_turn(self, turn: int) -> None:

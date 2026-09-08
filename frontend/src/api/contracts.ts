@@ -110,15 +110,22 @@ export interface ScoredPosition {
 }
 
 /**
- * Where the adaptive layer is: family, episode and turn.
+ * Where the adaptive layer is: family, schedule, episode and turn.
  *
  * A second interface rather than a shared one with a layer label, for the reason
  * the API keeps two models: the units differ, and a type that could hold either
  * would let a reader compare an attempt with a turn — the arithmetic CONTEXT.md
  * keeps apart and ADR-0010 forbids.
+ *
+ * `schedule` is the fourth part of the position and not a fourth unit: family,
+ * episode and turn are what the layer counts in, and this is which of the selected
+ * schedules the episode being counted is running under. A run that selected both
+ * attacks every family under each, so the other three cannot say which pass a turn
+ * belongs to (ADR-0099).
  */
 export interface AdaptivePosition {
   family: string
+  schedule: string
   episode: number
   turn: number
 }

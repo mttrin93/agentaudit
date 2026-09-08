@@ -45,6 +45,7 @@ from backend.bench.adaptive.budget import DECLARED_ADAPTIVE_BUDGET, AdaptiveBudg
 from backend.bench.adaptive.episode import AttackerTool, EpisodeOutcome
 from backend.bench.adaptive.scripted import SCRIPTED_ATTACKER
 from backend.bench.adaptive.tools import ToolInvocation
+from backend.bench.adaptive.tree import BranchSchedule
 from backend.bench.adjudication import Completion
 from backend.bench.calibration import run_calibration
 from backend.bench.capability import ReasoningEffort
@@ -1668,7 +1669,7 @@ def test_a_run_carries_the_last_exchange_and_never_the_log(leakage_case: Case) -
     assert recent["reply"] not in payload.text
 
 
-def test_progress_in_the_adaptive_layer_is_family_episode_and_turn(
+def test_progress_in_the_adaptive_layer_is_family_schedule_episode_and_turn(
     leakage_case: Case,
 ) -> None:
     """The second layer, watched at its first probe and again when the run is over.
@@ -1714,6 +1715,11 @@ def test_progress_in_the_adaptive_layer_is_family_episode_and_turn(
     assert in_flight["adaptive"]["reached"] is True
     assert in_flight["adaptive"]["position"] == {
         "family": str(leakage_case.family),
+        # Which schedule the episode is running under, beside the three units: this
+        # run selected one, and a run that selected both attacks every family under
+        # each — so the other three cannot say which pass a turn belongs to
+        # (ADR-0099).
+        "schedule": str(BranchSchedule.LINEAR),
         "episode": 1,
         "turn": 1,
     }
@@ -1725,6 +1731,7 @@ def test_progress_in_the_adaptive_layer_is_family_episode_and_turn(
     last = record.run_state.episodes[-1]
     assert finished["adaptive"]["position"] == {
         "family": str(last.family),
+        "schedule": str(BranchSchedule.LINEAR),
         "episode": len(record.run_state.episodes),
         "turn": last.turns,
     }

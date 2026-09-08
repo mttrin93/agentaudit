@@ -58,6 +58,7 @@ from backend.bench.adaptive.layer import (
     objectives_for,
     run_adaptive_layer,
 )
+from backend.bench.adaptive.tree import BranchSchedule
 from backend.bench.admission import NotAdmitted, admitted_library
 from backend.bench.applicability import applicable
 from backend.bench.calibration import DropNamespace, PlantNonce
@@ -746,14 +747,16 @@ class Narrating(RunState):
     """Whether the banner has been printed. Held here rather than checked against
     the episode count, so the words appear exactly once however many episodes run."""
 
-    def enter_episode(self, target_name: str, family: AnyFamily) -> None:
-        super().enter_episode(target_name, family)
+    def enter_episode(
+        self, target_name: str, family: AnyFamily, schedule: BranchSchedule
+    ) -> None:
+        super().enter_episode(target_name, family, schedule)
         if not self.announced:
             print(PROBES_BANNER, flush=True)
             self.announced = True
         print(
             f"\n  … episode {len(self.episodes) + 1} against {target_name} / "
-            f"{family} — probing",
+            f"{family} / {schedule} — probing",
             flush=True,
         )
 

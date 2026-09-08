@@ -239,10 +239,12 @@ def _open_episode(
                 blinding=blinding,
                 budget=budget,
                 precedent=precedent,
-                # This episode's shape, and the whole of what the schedule decides
-                # here: the turn cap, the tool cap and the layer ceiling are the
-                # budget's and are the same under either schedule (ADR-0057 §2).
-                branching=schedule.policy,
+                # This episode's schedule, and the whole of what it decides here: the
+                # turn cap, the tool cap and the layer ceiling are the budget's and are
+                # the same under either of them (ADR-0057 §2). The member rather than
+                # its policy, because the run's position reports the name and the tree
+                # is built from the policy — one field, one answer (ADR-0099).
+                schedule=schedule,
                 # And the spelling every probe of this episode is respelled by as it
                 # is sent, which is the same grain: one episode, one spelling
                 # (ADR-0097).

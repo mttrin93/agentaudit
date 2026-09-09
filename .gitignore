@@ -77,3 +77,6 @@ node_modules/
 # admitted case's home is `backend/cases/` and nowhere else, and a note about why a
 # variant was proposed belongs in the issue that proposed it.
 /notes/
+
+# The filled-in declaration carries the target's bearer token; the example is committed instead.
+agentaudit.toml

@@ -25,6 +25,8 @@ from pathlib import Path
 
 import pytest
 
+from backend.api.gate_runs import GateRunStatus
+from backend.api.run_status import RunStatus
 from backend.bench.adaptive.budget import AdaptiveBudget
 from backend.bench.adaptive.episode import AdaptiveEpisode, EpisodeOutcome
 from backend.bench.adaptive.proposal import ProposedRoute, proposed_from
@@ -40,10 +42,21 @@ from backend.bench.pending import (
 from backend.bench.queued import file_proposals
 from backend.bench.signing import SIGNING_KEY_VARIABLE, encoded_private, generate
 from backend.tests import headless_agent
-from backend.tests.conftest import a_target
+from backend.tests.conftest import BENCH, REPOSITORY, a_target, reachable_from
 from backend.tests.headless_agent import RecordingAgent
+from backend.tests.test_api_gate_runs import (
+    API_DIR as API,
+)
+from backend.tests.test_api_gate_runs import (
+    GATE_RUN_MODULES,
+    a_bench,
+    a_confirmation,
+    a_library,
+    approval_of,
+    started,
+)
+from backend.tests.test_api_gate_runs import settled as gate_settled
 from backend.tests.test_api_runs import (
-    RunStatus,
     _record,
     a_request,
     api,
@@ -345,3 +358,70 @@ def test_a_headless_run_whose_attacker_proposed_nothing_says_so_and_files_nothin
     assert agent.messages, "the run reached the target"
     assert PENDING_ROUTES.queue() == ()
     assert "proposed no route" in capsys.readouterr().out
+
+
+# --- Seam four: a gate run, which files nothing -------------------------------
+
+
+def test_a_gate_run_leaves_the_pending_queue_as_it_found_it(
+    tmp_path: Path, leakage_case: Case
+) -> None:
+    """Start to finish, and the queue afterwards is the queue from before.
+
+    The routes awaiting a decision have to be the ones no surface decides. A gate
+    run's proposals are fitted to the three reference agents — the exact population
+    ADR-0012 built the cross-model bar around — and `scripts/swap.py` already walks
+    the whole path for them: consult the memory, measure on two models, decide,
+    remember, write. Filing them here would fill a triage page with routes already
+    decided, in front of an operator reading it as findings about a customer.
+
+    Asserted against a route filed *before* the run, so that *unchanged* is a
+    comparison rather than an empty store asserted equal to an empty store — and
+    asserted alongside the proposals the gate run's own attacker made, so a run
+    that proposed nothing cannot make this pass by accident.
+    """
+    before = PENDING_ROUTES.file(a_route(leakage_case), target=A_CUSTOMER, today=RAN_ON)
+
+    with a_bench(a_library(tmp_path), attempts_per_case=1) as gating:
+        body = started(gating)
+        gating.client.post(approval_of(body["gate_run_id"]), json=a_confirmation())
+        [record] = gating.gates.records()
+        gate_settled(record)
+
+    assert record.status is GateRunStatus.DECIDED
+    proposed = [
+        proposal
+        for episode in record.run_state.episodes
+        for proposal in episode.proposals
+    ]
+    assert proposed, "the gate run's attacker proposed nothing, so nothing is tested"
+    assert PENDING_ROUTES.queue() == (before,)
+
+
+def test_no_gate_run_surface_can_reach_the_filing_at_all() -> None:
+    """The same wall as a reachability question, which is the half that survives.
+
+    The test above is about one gate run. This is about every gate run there will
+    ever be: `queued.file_proposals` is unreachable from the gate-run side, from
+    `run_calibration` — which both kinds of run take, and which is why the filing
+    is at the entry points instead — and from the two command-line surfaces whose
+    targets are the three reference agents.
+
+    A reachability question and not an import one, on `test_pending.py`'s
+    reasoning: a module that imports a module that imports this one has reached it,
+    so a filing added two layers down is caught here rather than by the next
+    operator to read a triage page full of routes about the bench itself.
+    """
+    for source in (
+        *(API / name for name in GATE_RUN_MODULES),
+        BENCH / "calibration.py",
+        REPOSITORY / "scripts" / "gate.py",
+        REPOSITORY / "scripts" / "swap.py",
+    ):
+        reachable = [name for name in reachable_from(source) if "bench.queued" in name]
+        assert not reachable, (
+            f"{reachable} is reachable from {source.name}. A gate run's routes are "
+            "fitted to the three reference agents and `scripts/swap.py` already "
+            "decides them, so filing them would fill a triage page with routes no "
+            "operator asked about and none of them about a customer (ADR-0012)"
+        )

@@ -99,6 +99,7 @@ from backend.bench.completion import (
     DEFAULT_ADJUDICATOR_MODEL,
     DEFAULT_ATTACKER_MODEL,
     REFERENCE_MODEL_ENV,
+    SECOND_REFERENCE_MODEL_ENV,
     attacker_completion_for,
     completion_for,
 )
@@ -167,16 +168,16 @@ been.
 
 SWAP_RUNS_DIR = Path(__file__).resolve().parents[1] / "docs" / "swap-runs"
 
-SECOND_REFERENCE_MODEL_ENV = "AGENTAUDIT_SECOND_REFERENCE_MODEL"
-"""Where a deployment declares the model the library is re-run on.
-
-This script's own variable and not one of the three `completion.py` names, because
-nothing else in the bench has a second reference model: a gate run, an admission and
-an adaptive run each measure one, and only a swap measures two.
-"""
-
 DEFAULT_SECOND_MODEL = "openrouter:openai/gpt-4o-mini"
-"""The second model, and it is a deliberate choice rather than a spare string.
+"""This script's default second model, under `completion.SECOND_REFERENCE_MODEL_ENV`.
+
+The variable itself is declared beside the other model names now that a second
+surface reads it: `/pending-routes` measures the cross-model bar on two models
+without a terminal (ADR-0105), so a name only this script knew would have been a
+second definition of one environment variable. What stays here is the *default*,
+because a script's fallback when nothing is declared is the script's own decision.
+
+It is a deliberate choice rather than a spare string.
 
 `gpt-4o-mini` refused the published extraction payload on all four of the tracer
 bullet's runs *while running the trivial agent* — an agent with no defences at all —

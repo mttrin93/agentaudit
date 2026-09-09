@@ -141,13 +141,19 @@ SECOND_REFERENCE_MODEL_ENV = "AGENTAUDIT_SECOND_REFERENCE_MODEL"
 A second variable rather than a list in the first, because the two are declared for
 different reasons and only one of them is what this bench's own gate citation was
 earned on: `REFERENCE_MODEL_ENV` is the model every run and every gate run measures
-against, and this one is reached by the cross-model admission bar alone — three
-agents on two models, per route
+against, and this one is reached by the two things that measure a *pair* — the model
+swap `scripts/swap.py` runs, and the cross-model admission bar
 ([ADR-0012](../../docs/adr/0012-adaptive-discovered-cases-face-a-cross-model-admission-bar.md),
 [ADR-0105](../../docs/adr/0105-deciding-a-pending-route-is-its-own-surface-and-not-a-gate-runs-second-job.md)).
-Unset is a deployment that cannot decide a pending route and says so on the screen
-that would offer the control, which is the honest answer: a bar met on one model is
-not the bar.
+
+**Here rather than in `scripts/swap.py`, which declared it first.** That was correct
+while a swap was the only thing in the bench with a second reference model; the
+`/pending-routes` surface is the second, it has no terminal, and no module of
+`backend/api/` may read an environment of its own — so one name in one place is what
+keeps the two surfaces reading the same declaration. Each caller keeps its own
+default: the swap falls back to `swap.DEFAULT_SECOND_MODEL`, and a deployment that
+declares nothing here decides no pending route and says so on the screen that would
+offer the control, because a bar met on one model is not the bar.
 """
 
 ADJUDICATOR_MODEL_ENV = "AGENTAUDIT_ADJUDICATOR_MODEL"

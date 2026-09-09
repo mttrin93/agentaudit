@@ -67,6 +67,7 @@ here for a route found against somebody's real agent.
 from __future__ import annotations
 
 import ast
+import json
 import time
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -79,7 +80,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from backend.api import pending_route_state, pending_routes
+from backend.api import pending_routes
 from backend.api.app import (
     GATE_RUN_ROUTE,
     GATE_RUNS_ROUTE,
@@ -104,12 +105,18 @@ from backend.bench import admitting, entry
 from backend.bench.adaptive.budget import AdaptiveBudget
 from backend.bench.adaptive.promotion import Promotion, promote
 from backend.bench.adaptive.proposal import ProposedRoute, proposed_from
-from backend.bench.admission import admitted_library, library_provenance
+from backend.bench.admission import (
+    RejectionKind,
+    admitted_library,
+    library_provenance,
+)
 from backend.bench.contract import TargetConfig
 from backend.bench.decided import (
+    ABOUT_THE_ROUTE,
     DECIDED_ROUTES,
     DecidedRoute,
     DecidedRoutes,
+    Remembered,
     RouteKey,
 )
 from backend.bench.entry import enter
@@ -161,6 +168,14 @@ A_CUSTOMER = "acme-support-bot"
 
 FILED_ON = date(2026, 8, 30)
 
+A_PROBE = "the probe that actually beat somebody's agent"
+"""The payload the pending store is the one place in this repository allowed to hold.
+
+A constant so a decision can be asked whether it took it off the disk, which is the
+mitigation ADR-0104 §4 makes mechanical and the one this module checks on the store
+rather than on a response.
+"""
+
 SEPARATING = {"attempts": 10, "hardened": 0, "weak": 5, "trivial": 10}
 """Counts that clear the bar: D = 1.00, intervals nowhere near each other."""
 
@@ -175,6 +190,44 @@ STATEMENT_FIELDS = (
 
 PENDING_MODULES = ("pending_routes.py", "pending_route_state.py")
 """Every module of this side, which is what the source scans below scan."""
+
+WRITES = frozenset(
+    {
+        "write_text",
+        "write_bytes",
+        "mkdir",
+        "makedirs",
+        "open",
+        "dump",
+        "dumps",
+        "copy",
+        "copyfile",
+        "rename",
+        "touch",
+    }
+)
+"""Every way of putting bytes somewhere that this side is asserted not to reach.
+
+Named rather than spelled at the call site, and wider than the three ways an
+admitted case could plausibly be written: the claim is that `enter` is the library's
+one writer (ADR-0033), and a claim that only listed the obvious writes would be one
+a second writer passes by reaching for a different function. `replace` is not here
+and cannot be: `dataclasses.replace` is how this side makes a changed record, and a
+name that meant two things would be a wall that fired on the wrong one.
+"""
+
+
+def on_this_path() -> list[Path]:
+    """Every module a route travels through between the bar and the two writes.
+
+    One spelling of *the modules of this side*, so a scan and the module list cannot
+    drift apart: the two services, and the bar they both reach the reference agents
+    through.
+    """
+    return [API_DIR / name for name in PENDING_MODULES] + [
+        Path(str(admitting.__file__))
+    ]
+
 
 SETTLED = frozenset(
     {
@@ -345,7 +398,7 @@ def a_request(
 
 def a_route(
     objective: Case,
-    payload: str = "the probe that actually beat somebody's agent",
+    payload: str = A_PROBE,
     description: str = "a route worth deciding",
 ) -> ProposedRoute:
     """One proposal, drafted the way `propose_case` drafts it inside an episode."""
@@ -362,6 +415,31 @@ def a_route(
 def filed(proposal: ProposedRoute, target: str = A_CUSTOMER) -> AwaitingDecision:
     """That route, in the queue, as the run that found it left it."""
     return PENDING_ROUTES.file(proposal, target=target, today=FILED_ON)
+
+
+def decided_row(route: RouteKey) -> dict[str, Any]:
+    """The decided record as the database actually holds it, keys and all.
+
+    Read off the store rather than through `read_filed`, because the question is
+    whether the *row* still carries the probe: `Decided` has no `draft` field to
+    read one into, so a reader that went through the type would report a payload
+    gone whether or not the write took it off the disk (ADR-0104 §4).
+    """
+    stored = PENDING_ROUTES.store.get(PENDING_ROUTES.namespace, route.filed_under)
+    assert stored is not None, f"{route.stated()} is not in the queue"
+    return dict(stored.value)
+
+
+def no_payload_left(route: RouteKey, state: RouteState) -> None:
+    """Assert that a decided route's probe went with its decision, on the store."""
+    row = decided_row(route)
+    assert row["state"] == state
+    assert "draft" not in row
+    assert A_PROBE not in json.dumps(row), (
+        f"{route.stated()} was decided {state} and its probe is still on the disk. "
+        "A decided record has no payload, and the write that records the decision "
+        "is the write that removes it (ADR-0104 §4, mitigation 5)"
+    )
 
 
 def remembered(
@@ -799,11 +877,8 @@ def test_an_admitted_route_enters_the_library_and_its_row_names_the_record(
     assert (cases_dir / row["entered_as"]).exists()
     assert {case.id for case in load_library(cases_dir)} - before == {proposal.case.id}
 
-    # And the payload is gone from the store, asserted on the store itself.
-    decided = PENDING_ROUTES.filed(record.route)
-    assert isinstance(decided, Decided)
-    assert decided.state is RouteState.ADMITTED
-    assert not hasattr(decided, "draft")
+    # And the payload is gone, asserted on the row the database holds.
+    no_payload_left(record.route, RouteState.ADMITTED)
 
 
 def test_a_rejected_route_keeps_its_row_and_carries_the_gates_reason(
@@ -840,7 +915,8 @@ def test_a_rejected_route_keeps_its_row_and_carries_the_gates_reason(
     decided = PENDING_ROUTES.filed(record.route)
     assert isinstance(decided, Decided)
     assert decided.reason == reason
-    assert not hasattr(decided, "draft")
+    # Whatever the route was decided as: a rejected record keeps no probe either.
+    no_payload_left(record.route, RouteState.REJECTED)
 
 
 def test_nothing_a_decision_writes_carries_the_target(
@@ -1118,18 +1194,32 @@ def test_a_measured_route_is_remembered_so_it_is_never_bought_twice(
     key = record.route.filed_under
 
     with a_bench(cases_dir) as deciding:
-        answered(deciding, [key])
+        reading = answered(deciding, [key])
         # The estimate's one serving, and one per model to measure with.
         bought = deciding.served.count
         assert deciding.served.models[1:] == list(MODELS)
 
-        stored = DECIDED_ROUTES.store.get(DECIDED_ROUTES.namespace, key)
-        assert stored is not None, (
-            "the measurement decided the route and remembered nothing about it, so "
-            "the next run that meets this route pays for it again (ADR-0032)"
+        # Read back through `recall`, which is the memory's one way out and the way
+        # a later run meets this record. A raw read of the stored document would
+        # pass for a record no consultation could ever use.
+        answer = DECIDED_ROUTES.recall(first, models=MODELS)
+        assert isinstance(answer, Remembered), (
+            "the measurement decided the route and left the memory nothing a later "
+            f"run can use ({answer}), so the next run that meets this route pays "
+            "for it again (ADR-0032)"
         )
-        assert [reading["model"] for reading in stored.value["readings"]] == list(
-            MODELS
+        assert [one.model for one in answer.decided.readings] == list(MODELS)
+        # Whichever way the three agents answered, the memory kept the finding: a
+        # cross-model discard is remembered exactly as an admission is, so a refused
+        # route is never re-bought either (`worth_remembering`, ADR-0012).
+        [row] = reading["routes"]
+        assert answer.decided.decided_as in ABOUT_THE_ROUTE
+        assert (answer.decided.decided_as is RejectionKind.ADMITTED) == (
+            row["state"] == RouteState.ADMITTED
+        ), (
+            f"the queue says {row['state']} and the memory holds "
+            f"{answer.decided.decided_as}. One decision is written in two places "
+            "and they are the same decision"
         )
 
         # The same route, found again by a later run and filed again. It is one
@@ -1178,7 +1268,7 @@ def test_a_route_this_library_already_holds_is_reported_as_held_and_not_written_
     )
 
 
-FORBIDDEN = frozenset(
+NAMES_A_TARGET = frozenset(
     {
         "target",
         "targets",
@@ -1198,15 +1288,31 @@ identity, and the cheapest way is a string field called what it holds.
 """
 
 
-def a_field_graph(record: type) -> list[tuple[str, str, Any]]:
-    """Every field reachable from that dataclass, as owner, name and resolved type.
+@dataclass(frozen=True)
+class Reachable:
+    """One field somewhere in a record's graph: who declares it, and as what."""
+
+    owner: str
+    name: str
+    annotation: Any
+
+    def stated(self) -> str:
+        return f"{self.owner}.{self.name}: {self.annotation}"
+
+    def is_a(self, wanted: type) -> bool:
+        """Whether this field could hold one of those, optional or not."""
+        return wanted in (get_args(self.annotation) or (self.annotation,))
+
+
+def a_field_graph(record: type) -> list[Reachable]:
+    """Every field reachable from that dataclass, with its annotation resolved.
 
     Resolved rather than read off `Field.type`, because every module here declares
     `from __future__ import annotations` and an unresolved annotation is a string a
     type assertion would silently pass.
     """
     seen: set[type] = set()
-    found: list[tuple[str, str, Any]] = []
+    found: list[Reachable] = []
 
     def walk(annotation: Any) -> None:
         for inner in get_args(annotation) or (annotation,):
@@ -1216,7 +1322,7 @@ def a_field_graph(record: type) -> list[tuple[str, str, Any]]:
                 seen.add(inner)
                 hints = get_type_hints(inner)
                 for one in fields(inner):
-                    found.append((inner.__name__, one.name, hints[one.name]))
+                    found.append(Reachable(inner.__name__, one.name, hints[one.name]))
                     walk(hints[one.name])
 
     walk(record)
@@ -1238,7 +1344,8 @@ def test_no_field_the_memory_or_the_library_holds_could_carry_a_target() -> None
     that had quietly stopped finding fields would pass.
     """
     exception = a_field_graph(AwaitingDecision)
-    assert [name for _, name, _ in exception if name in FORBIDDEN] == ["target"], (
+    named = [one.name for one in exception if one.name in NAMES_A_TARGET]
+    assert named == ["target"], (
         "the walk did not find the one field the disclosure posture has an "
         "exception for, so it is not looking at anything (ADR-0104 §2)"
     )
@@ -1246,18 +1353,14 @@ def test_no_field_the_memory_or_the_library_holds_could_carry_a_target() -> None
     for record in (DecidedRoute, Case):
         graph = a_field_graph(record)
         assert graph, f"{record.__name__} has no fields to walk"
-        assert not [
-            f"{owner}.{name}" for owner, name, _ in graph if name in FORBIDDEN
-        ], (
+        assert not [one.stated() for one in graph if one.name in NAMES_A_TARGET], (
             f"a field reachable from {record.__name__} is named for a target. The "
             "identity stops at the decision: the pending store is the one place it "
             "lives, and the one place a decision deletes (ADR-0008, ADR-0011)"
         )
-        assert not [
-            f"{owner}.{name}"
-            for owner, name, annotation in graph
-            if TargetConfig in (get_args(annotation) or (annotation,))
-        ], f"a field reachable from {record.__name__} is typed as a target"
+        assert not [one.stated() for one in graph if one.is_a(TargetConfig)], (
+            f"a field reachable from {record.__name__} is typed as a target"
+        )
 
 
 def test_neither_the_memory_nor_the_library_is_told_which_agent_was_beaten(
@@ -1344,7 +1447,7 @@ def test_an_admission_answered_from_memory_is_dated_the_day_the_agents_ran(
         "the admission memory was measured earlier, and the record says when "
         "(ADR-0032)"
     )
-    assert written.admission.admitted_on != date.today()
+    assert MEASURED_ON != date.today(), "this test needs a day that is not today"
 
 
 def test_nothing_on_this_path_can_supply_a_date() -> None:
@@ -1356,16 +1459,28 @@ def test_nothing_on_this_path_can_supply_a_date() -> None:
     measurement to this morning, and the end-to-end assertion above would still
     pass on the day the counts happened to be read.
     """
-    for module in (pending_routes, pending_route_state, admitting):
-        source = Path(str(module.__file__))
+    for source in on_this_path():
         tree = ast.parse(source.read_text(encoding="utf-8"))
         for node in ast.walk(tree):
             if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
-                named = {one.arg for one in node.args.args + node.args.kwonlyargs} | {
-                    "" if node.args.kwarg is None else node.args.kwarg.arg
+                arguments = node.args
+                # Every kind of parameter, positional-only and the two catch-alls
+                # included: a wall that looked at two of the four is a wall a
+                # `today` walks past.
+                named = {
+                    one.arg
+                    for one in (
+                        *arguments.posonlyargs,
+                        *arguments.args,
+                        *arguments.kwonlyargs,
+                        *(one for one in (arguments.vararg, arguments.kwarg) if one),
+                    )
                 }
-                assert "today" not in named, f"{source.name}:{node.name}"
+                assert "today" not in named, f"{source.name}:{node.name} takes a date"
             if isinstance(node, ast.Attribute):
+                # `today` and not `now`: `MeasurementRecord.recorded_at` stamps the
+                # moment this bench started a measurement, which is a fact about the
+                # request and never a date on a case record.
                 assert node.attr != "today", f"{source.name} reads a clock"
 
 
@@ -1420,13 +1535,16 @@ def test_the_deciding_surface_writes_no_case_record_of_its_own() -> None:
         source = API_DIR / name
         imported = set(imports_of(source))
         assert not [
-            one for one in imported if one.endswith(("case_record", "CASE_SUFFIX"))
-        ], f"{name} names the writer's own serialiser rather than calling `enter`"
+            one
+            for one in imported
+            if one.endswith(("case_record", "CASE_SUFFIX"))
+            or one.split(".")[0] in ("shutil", "os", "tomli_w")
+        ], f"{name} names a way of writing a record rather than calling `enter`"
         assert not [
             node
             for node in ast.walk(ast.parse(source.read_text(encoding="utf-8")))
             if isinstance(node, ast.Call)
-            and ast.unparse(node.func).endswith(("write_text", "write_bytes", "mkdir"))
+            and ast.unparse(node.func).split(".")[-1] in WRITES
         ], f"{name} writes to the filesystem. The library's one writer is `enter`"
 
     assert "backend.bench.entry.enter" in set(imports_of(API_DIR / "pending_routes.py"))

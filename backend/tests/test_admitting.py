@@ -141,11 +141,24 @@ def test_the_memory_is_written_by_selection_and_never_by_a_caught_refusal() -> N
     ]
     assert len(remembering) == 1, "the guarded branch does not remember anything"
 
-    assert not [
-        node for node in ast.walk(tree) if isinstance(node, ast.Try | ast.ExceptHandler)
-    ], (
-        "the cross-model bar catches something. The memory's refusal is a wall and "
-        "not a branch, and a run that could not measure the bar the way the bar "
-        "needs measuring has nothing to hand a later run either way"
+    caught = [
+        ast.unparse(handler)
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Try)
+        for handler in node.handlers
+        if any(
+            isinstance(inner, ast.Call)
+            and ast.unparse(inner.func).endswith(".remember")
+            for inner in ast.walk(node)
+        )
+    ]
+    assert not caught, (
+        f"{caught} wraps the write into the admission memory. The store's refusal is "
+        "a wall and not a branch: a caller that used it as one would have no way to "
+        "say why it chose not to remember, and would swallow a genuine store failure "
+        "with it"
     )
-    assert "NotAboutTheRoute" not in set(imports_of(ADMITTING_SOURCE))
+    assert "NotAboutTheRoute" not in set(imports_of(ADMITTING_SOURCE)), (
+        "the bar names the store's refusal. It has no reason to: the selection is "
+        "made before the call and the refusal is never reached (ADR-0031 point 3)"
+    )

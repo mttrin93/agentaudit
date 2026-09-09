@@ -82,9 +82,17 @@ git commit -m "The MCP server has no privilege the console lacks, and a compact 
 ```python
 """The wall: `backend/mcp/` reaches no bench module.
 
-ADR-0100. Held at import level rather than by review, on the reasoning
-`test_throwaway.py` already uses for `proving.py`: a wall nobody can see from
-the file they are editing is a wall somebody widens by accident.
+[ADR-0100](../../docs/adr/0100-the-mcp-server-has-no-privilege-the-console-lacks.md)
+states the wall absolutely, and it is held here at import level rather than by
+review, on the reasoning `test_throwaway_checkout.py` and `test_proving.py`
+already use for `throwaway.py` and `proving.py`: a wall nobody can see from the
+file they are editing is a wall somebody widens by accident.
+
+**Relative imports are resolved, not skipped.** `from ..bench.judge import
+Finding` inside `backend/mcp/` is the same widening as the dotted form and reads
+in a diff like package-local tidiness, so it is the form most likely to slip a
+reviewer who was thinking about a tool description. The wall is worth little if
+the accidental spelling is the one it cannot see.
 """
 
 from __future__ import annotations
@@ -92,18 +100,33 @@ from __future__ import annotations
 import ast
 import pathlib
 
-PACKAGE = pathlib.Path(__file__).resolve().parents[1] / "mcp"
+ROOT = pathlib.Path(__file__).resolve().parents[2]
+PACKAGE = ROOT / "backend" / "mcp"
+
+
+def _containing_package(source: pathlib.Path) -> tuple[str, ...]:
+    """The dotted package a file lives in, as parts — `backend.mcp` for all of these."""
+    return source.resolve().relative_to(ROOT).parts[:-1]
 
 
 def _imported_modules(source: pathlib.Path) -> set[str]:
-    """Every module name this file imports, dotted, however it imports it."""
+    """Every module this file imports, as an absolute dotted name.
+
+    Relative forms are resolved against the containing package rather than skipped.
+    """
     tree = ast.parse(source.read_text(encoding="utf-8"))
+    package = _containing_package(source)
     names: set[str] = set()
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             names.update(alias.name for alias in node.names)
-        elif isinstance(node, ast.ImportFrom) and node.module and node.level == 0:
-            names.add(node.module)
+        elif isinstance(node, ast.ImportFrom):
+            if node.level == 0:
+                if node.module:
+                    names.add(node.module)
+                continue
+            base = package[: len(package) - node.level + 1]
+            names.add(".".join((*base, node.module) if node.module else base))
     return names
 
 
@@ -167,6 +190,7 @@ from backend.bench.judge import Finding  # noqa: F401
 
 Run: `uv run pytest backend/tests/test_mcp_wall.py -q`
 Expected: FAIL on the assertion, showing `{'__init__.py': ['backend.bench.judge']}`. Then revert that line.
+Drive the relative spelling too — `from ..bench.judge import Finding` — which resolves to the same name and is the form a reviewer thinking about tool descriptions is likeliest to wave through.
 
 - [ ] **Step 6: Run the full checks**
 

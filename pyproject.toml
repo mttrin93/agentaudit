@@ -11,6 +11,12 @@ dependencies = [
     "httpx>=0.28.1",
     "langgraph>=1.2.11",
     "langgraph-checkpoint-sqlite>=3.1.1",
+    # The MCP server surface (`backend/mcp/`, ADR-0100). A runtime dependency and
+    # not a group: the server is shipped with the bench, unlike the lint and type
+    # tooling. Floor at 2.2.0 because 2.x renamed `FastMCP` to `MCPServer` and
+    # `mcp.server.fastmcp` no longer imports — code written against 1.x does not
+    # run here and a lower floor would resolve to it.
+    "mcp>=2.2.0",
     "openai>=3.1.0",
     "opentelemetry-api>=1.30",
     "opentelemetry-exporter-otlp-proto-http>=1.30",

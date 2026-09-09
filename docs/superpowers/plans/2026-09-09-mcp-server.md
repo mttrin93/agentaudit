@@ -215,7 +215,7 @@ git commit -m "The MCP package exists and reaches no bench module"
 **Interfaces:**
 - Consumes: the `backend.mcp` package from Task 2.
 - Produces:
-  - `Declaration` — frozen dataclass with fields: `name: str`, `url: str`, `auth_token: str`, `agent_type: str`, `exposes_tool_calls: bool`, `declared_tools: tuple[str, ...]`, `retains_session_state: bool`, `holds_personal_records: bool`, `nonce: str`, `note_planted: bool`, `nonce_planted: bool`, `echo_waived: bool`, `identity: str`, `authorised_to_test: bool`, `not_production: bool`, `accepts_provider_policy_and_cost: bool`, `price_per_call: str | None`, `currency: str`.
+  - `Declaration` — frozen dataclass with fields: `name: str`, `url: str`, `auth_token: str`, `agent_type: str`, `exposes_tool_calls: bool`, `declared_tools: tuple[str, ...]`, `retains_session_state: bool`, `holds_personal_records: bool`, the four Rule of Two declarations as `bool | None` (ADR-0102, added in Task 5), `nonce: str`, `note_planted: bool`, `nonce_planted: bool`, `echo_waived: bool`, `identity: str`, `authorised_to_test: bool`, `not_production: bool`, `accepts_provider_policy_and_cost: bool`, `price_per_call: str | None`, `currency: str`.
   - `DeclarationRefusal(StrEnum)` — members `NO_FILE`, `NOT_AN_ENDPOINT`, `NO_IDENTITY`, `NOT_ATTESTED`.
   - `DeclarationRefused(ValueError)` with attribute `refusal: DeclarationRefusal`.
   - `declaration_at(path: pathlib.Path) -> Declaration`.
@@ -574,11 +574,11 @@ git commit -m "A compact reading drops prose and never a label"
 **Interfaces:**
 - Consumes: `Declaration` from Task 3.
 - Produces:
-  - `BenchUnreachable(RuntimeError)`, `BenchRefused(RuntimeError)` (attributes `status: int`, `detail: str`), `NoEstimate(RuntimeError)`, `ReportNotSigned(RuntimeError)`.
-  - `class BenchClient` with `__init__(self, http: httpx.Client)` and methods `issue_nonce() -> str`, `start(declaration: Declaration) -> dict[str, Any]`, `approve(run_id: str, *, identity: str, confirmed: bool, reason: str = "") -> dict[str, Any]`, `status(run_id: str) -> dict[str, Any]`, `report(run_id: str) -> dict[str, Any]`, `artefact_urls(run_id: str) -> dict[str, str]`.
+  - `BenchUnreachable(RuntimeError)`, `BenchRefused(RuntimeError)` (attributes `status: int`, `detail: str`; `status` raises the one instance of it the bench did not send — a synthesised `404` for an id on no row of `GET /runs`, since that route answers `200` and a list), `NoEstimate(RuntimeError)`, `ReportNotSigned(RuntimeError)`.
+  - `class BenchClient` with `__init__(self, http: httpx.Client)` and methods `issue_nonce() -> str`, `start(declaration: Declaration) -> dict[str, Any]`, `approve(run_id: str, *, identity: str, confirmed: bool, reason: str = "") -> dict[str, Any]`, `status(run_id: str) -> dict[str, Any]`, `report(run_id: str) -> dict[str, Any]`, `artefact_urls(run_id: str) -> dict[str, str]`. `status` reads **this run's row of `GET /runs`** and not the per-run progress route, because that is the route ADR-0100 §1 and spec §73 name for `run_status`; a row carries the standing, the record's sentence for it and the two spends, which is the whole of what a poller asks.
 - Task 6 constructs one `BenchClient` and calls only these.
 
-**Open, and decide it before writing `start`:** `Declaration` carries none of the four Rule of Two declarations (`processes_untrusted_input`, `reaches_private_data`, `changes_state_or_communicates`, `under_human_supervision`). They default to `None` on `TargetRequest`, so a `StartRunRequest` built from a `Declaration` reads `not_declared` for all four and the report prints — correctly — that nobody said anything, which is the regression ADR-0092/#177 fixed for the console. Either the declaration file carries them (spec §31: it carries what the Action already takes as inputs) or the run's report says unstated on purpose and an ADR says why. Do not let it be decided by omission.
+**Decided, in [ADR-0102](../../adr/0102-the-declaration-file-carries-the-four-rule-of-two-declarations.md):** the declaration file carries the four (`processes_untrusted_input`, `reaches_private_data`, `changes_state_or_communicates`, `under_human_supervision`) in its `[target]` table, `Declaration` holds them as `bool | None`, and an absent key is *unstated* rather than `False` — `False` is the profitable claim on these four, so defaulting to it would be the reader declaring a control the operator did not. Task 3's `Declaration` and `declaration_at` gained the fields and a `_tristate` reader beside `_flag`; `start` puts them on the `target` object. No reading is fetched on this surface — the standing's home here is Annex IV section 3 of the signed report, because there is no register screen to print it on. `agentaudit.toml.example` (#186) must show all four, commented, with *absent means unstated* beside them — **and `sends`, commented out, noting that an absent key leaves the bench its own `RetryPolicy` ceiling.**
 
 Tests run against the real app through the `api()` context manager that `backend/tests/test_api_runs.py` already defines — Step 1 below reads it. No recorded fixtures: a payload shape that moves must break these tests in CI.
 
@@ -590,7 +590,7 @@ Run: `sed -n '277,310p' backend/tests/test_api_runs.py`
 
 Import it: `from backend.tests.test_api_runs import api`. Do not build a second harness, and do not copy it — a second copy is a second thing to keep in step with `create_app`.
 
-Wrap the `TestClient` for `BenchClient` with `httpx.Client(transport=httpx.ASGITransport(app=client.app), base_url="http://bench")`, or pass the `TestClient` itself if `BenchClient` only needs `.get`/`.post` — decide in Step 4 and keep the choice in one helper in this test module.
+Pass the `TestClient` itself: it is a client of exactly this shape, and `httpx.ASGITransport` is an *async* transport that a sync `httpx.Client` cannot take, so the wrapping alternative does not exist. **One cast is needed and it is not optional.** Starlette's `TestClient` extends `httpx2.Client` (httpx 2.x, pulled in by starlette) while this project declares `httpx` 0.28 — same class, same methods, two distributions, no shared supertype. Keep the `cast(httpx.Client, client)` in one helper in this test module and say there that it is a fact about the packages. The consequence to know: an `httpx2` client raises `httpx2.TransportError`, which `client.py`'s `except httpx.TransportError` does not catch, so the `BenchUnreachable` test must use a real `httpx.Client` — which it does anyway, since a transport failure is the one thing an in-process client cannot produce.
 
 - [ ] **Step 2: Write the failing tests**
 
@@ -599,7 +599,10 @@ Cover, one test each:
 - `start` posts a body assembled from a `Declaration` and returns the run id, status and estimate.
 - `start` on a target the bench has no nonce for raises `BenchRefused` with `status == 422` and the route's own detail in `detail`.
 - `approve(confirmed=False)` leaves the run unconfirmed, and the returned status differs from a confirmed one.
-- `report` on a run that was never signed raises `ReportNotSigned` carrying the refusal reason from the 409 body.
+- `report` on a run that was never signed raises `ReportNotSigned` carrying the refusal's `outcome` and reason from the 409 body. Reached by confirming a run on the default `api()` bench, which holds no signing key, and waiting for it with `settled`.
+- the four Rule of Two declarations reach the `TargetConfig` the bench registered (ADR-0102). Read off the record and never off the response.
+- `status` returns the run's progress — folded into the never-signed test, where a `completed` status is what makes *never signed* the fact under test.
+- a 500 from `POST /runs` is `NoEstimate`, provoked by monkeypatching `bench.start` to raise `run_state.NeverPresented`.
 - A client pointed at a closed port raises `BenchUnreachable` naming the base URL — use `httpx.Client(base_url="http://127.0.0.1:9")` for this one, no app.
 - `artefact_urls` returns the four URLs and fetches none of them.
 
@@ -612,9 +615,9 @@ Expected: FAIL — `ModuleNotFoundError: No module named 'backend.mcp.client'`.
 
 - [ ] **Step 4: Write the implementation**
 
-The client owns request assembly and error translation and nothing else. `start` builds `StartRunRequest`'s JSON shape from the `Declaration`: `target` (`name`, `url`, `auth_token`, `agent_type`, `exposes_tool_calls`, `declared_tools`, `retains_session_state`, `holds_personal_records`), `attestation` (`identity` and the three statements), `nonce`, `cost` (`price_per_call`, `currency`), then `note_planted`, `nonce_planted`, `echo_waived`.
+The client owns request assembly and error translation and nothing else. `start` builds `StartRunRequest`'s JSON shape from the `Declaration`: `target` (`name`, `url`, `auth_token`, `agent_type`, `exposes_tool_calls`, `declared_tools`, `retains_session_state`, `holds_personal_records`, the four Rule of Two tri-states, and `sends`), `attestation` (`identity` and the three statements), `nonce`, `cost` (`price_per_call`, `currency`), then `note_planted`, `nonce_planted`, `echo_waived`. **This list was short by `sends`** — the field list above originally stopped at `holds_personal_records`, and `TargetRequest` has one more: `sends`, *what the enforced ceiling is built from, so it is the caller's declaration and not a constant hidden inside the bench*. The console declares it (`frontend/src/register/declarations.ts`) and the file could not, so every run from this surface silently took `RetryPolicy`'s default. `Declaration.sends` is `int | None` and an absent key puts **no `sends` key on the wire at all** rather than a number this reader picked: the default is built from `RetryPolicy`, which is behind the wall this package may not import (ADR-0100), so saying nothing is the only way to let the route own it. `_count` beside `_flag` and `_tristate` refuses a `bool` before it accepts an `int` (`isinstance(True, int)` is true) and refuses anything below 1.
 
-Translate: `httpx.ConnectError`/`httpx.ConnectTimeout` → `BenchUnreachable`; 422 → `BenchRefused`; 409 on the report route → `ReportNotSigned`; 500 whose detail names `NeverPresented` → `NoEstimate`; any other non-2xx → `BenchRefused`.
+Translate: `httpx.ConnectError`/`httpx.ConnectTimeout` → `BenchUnreachable`, and **the connect class only** — a read that timed out is a request that went out, and on `POST /runs` that is a run the bench may well have started, so a caller told *nothing answered* would start it again. 422 → `BenchRefused`. **409 and not 404** on the report route → `ReportNotSigned`, carrying the `Refusal`'s `outcome` as well as its `statement`: the report route's `detail` is **not a string**, it is `{"outcome", "statement"}`; the `409` covers `in_flight` and `did_not_complete` as well as `never_signed`, so the name has to travel; and the `404` beside it is *no such run* and *lost with its process*, which are an id nobody can fetch a report for rather than a run whose report does not exist. A 500 on `POST /runs` that carries a JSON `detail` → `NoEstimate`. **The plan's earlier wording was wrong about that last one:** the route sends `str(unpresented)` and the detail does *not* contain the string `NeverPresented`, so the translation is keyed on the route, which declares exactly one 500 — a translation keyed on prose stops being correct the day somebody rewords the sentence — and narrowed by the presence of the `detail` **key**, so a 500 the route did not mean is not reported as a graph that reached no interrupt. Key on the key and not on `detail != response.text`: that proxy reads a 500 whose body is a bare JSON string as a graph that reached no interrupt, which is the case this narrowing exists to exclude. `report` must ask the same question **only on the 409** — asking it of every response parses the whole signed payload on a `200` to answer a question about a status code. Any other non-2xx → `BenchRefused`.
 
 Module docstring: this module is the only place an HTTP status becomes a named failure, so a caller never branches on a number.
 
@@ -627,6 +630,8 @@ Expected: all pass.
 
 Make the 409 branch fall through to `BenchRefused`. Run the tests.
 Expected: the never-signed test FAILS with `BenchRefused` raised where `ReportNotSigned` was expected. Revert.
+
+The same for each test added since: blank `target["sends"]` (the ceiling test fails `assert 3 == 5`), misspell one `ARTEFACT_ROUTES` entry (the route test fails against `report_paths`), return `{}` from `status` before its raise, and make `_count` accept anything.
 
 - [ ] **Step 7: Full checks and commit**
 

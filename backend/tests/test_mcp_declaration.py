@@ -23,6 +23,11 @@ exposes_tool_calls = true
 declared_tools = ["search", "email"]
 retains_session_state = true
 holds_personal_records = false
+processes_untrusted_input = true
+reaches_private_data = true
+changes_state_or_communicates = false
+under_human_supervision = true
+sends = 4
 nonce = "n-abc"
 note_planted = true
 nonce_planted = true
@@ -57,6 +62,11 @@ def test_a_complete_declaration_reads_every_field(tmp_path: pathlib.Path) -> Non
         declared_tools=("search", "email"),
         retains_session_state=True,
         holds_personal_records=False,
+        processes_untrusted_input=True,
+        reaches_private_data=True,
+        changes_state_or_communicates=False,
+        under_human_supervision=True,
+        sends=4,
         nonce="n-abc",
         note_planted=True,
         nonce_planted=True,
@@ -168,3 +178,66 @@ def test_a_tool_list_that_is_a_string_is_not_read_as_letters(
     with pytest.raises(TypeError) as wrong:
         declaration_at(_written(tmp_path, body))
     assert "declared_tools" in str(wrong.value)
+
+
+def test_the_four_rule_of_two_declarations_are_unstated_when_the_key_is_absent(
+    tmp_path: pathlib.Path,
+) -> None:
+    """A key that is not there is the third answer, and never a denial.
+
+    The one field family on this surface whose default is not the narrowing one, and
+    [ADR-0102](../../docs/adr/0102-the-declaration-file-carries-the-four-rule-of-two-declarations.md)
+    says why: `False` is the profitable claim on these four, so an absent key
+    defaulted to it would be a control declared away by a reader rather than by an
+    operator.
+    """
+    body = COMPLETE.replace("processes_untrusted_input = true", "")
+    read = declaration_at(_written(tmp_path, body))
+    assert read.processes_untrusted_input is None
+    assert read.reaches_private_data is True
+
+
+def test_a_rule_of_two_declaration_that_is_not_a_boolean_is_not_coerced(
+    tmp_path: pathlib.Path,
+) -> None:
+    """`"unstated"` is truthy, and the field it would land in is a held capability."""
+    body = COMPLETE.replace(
+        "reaches_private_data = true", 'reaches_private_data = "unstated"'
+    )
+    with pytest.raises(TypeError) as wrong:
+        declaration_at(_written(tmp_path, body))
+    assert "reaches_private_data" in str(wrong.value)
+
+
+def test_a_send_ceiling_that_is_absent_leaves_the_route_its_own_default(
+    tmp_path: pathlib.Path,
+) -> None:
+    """`None` and not a number this reader chose.
+
+    `TargetRequest` builds the default from `RetryPolicy`, which lives behind the
+    wall `backend/mcp/` may not import — so a reader that supplied a number here
+    would be copying a constant from the far side of the wall and going stale the
+    day it changed. Saying nothing is how the route gets to answer.
+    """
+    read = declaration_at(_written(tmp_path, COMPLETE.replace("sends = 4", "")))
+    assert read.sends is None
+
+
+def test_a_send_ceiling_that_is_true_is_not_read_as_one_send(
+    tmp_path: pathlib.Path,
+) -> None:
+    """`isinstance(True, int)` is true in Python, and one send is not what was meant."""
+    with pytest.raises(TypeError) as wrong:
+        declaration_at(
+            _written(tmp_path, COMPLETE.replace("sends = 4", "sends = true"))
+        )
+    assert "sends" in str(wrong.value)
+
+
+def test_a_send_ceiling_below_one_is_a_run_that_would_send_nothing(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Nought is not a quieter run: it is a run with no attempts in its denominator."""
+    with pytest.raises(TypeError) as wrong:
+        declaration_at(_written(tmp_path, COMPLETE.replace("sends = 4", "sends = 0")))
+    assert "at least" in str(wrong.value)

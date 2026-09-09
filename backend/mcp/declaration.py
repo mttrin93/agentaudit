@@ -13,6 +13,16 @@ purpose. Four refusals rather than prose, on the reasoning every closed set in
 this codebase carries — a caller branches on the name and a person reads the
 sentence.
 
+**The four Rule of Two declarations are the exception, and their default is
+unstated.** They are the one family here whose absence is a third answer rather than
+a narrowing: a key left out reports that nobody said anything, which is what happened,
+and defaulting it to `False` would be this reader making the profitable claim for an
+operator who made none
+([ADR-0102](../../docs/adr/0102-the-declaration-file-carries-the-four-rule-of-two-declarations.md)).
+Without them a run started from this surface read `not_declared` for all four however
+its operator would have answered — the defect ADR-0092 closed for the console, one
+surface over.
+
 **A callback is refused rather than carried.** `TargetRequest` takes a `url`; a
 callback is an object imported out of a checkout, which is the Action's shape
 ([ADR-0066](../../docs/adr/0066-the-action-is-a-composite-step-in-the-callers-own-repository.md))
@@ -99,6 +109,33 @@ class Declaration:
     declared_tools: tuple[str, ...]
     retains_session_state: bool
     holds_personal_records: bool
+    processes_untrusted_input: bool | None
+    """The first of the four the Agents Rule of Two is read over, and the first field
+    on this surface whose absence is a third answer rather than a default. An absent
+    key is *not stated*, because `False` is the flattering claim on these four and a
+    reader that supplied it would be declaring a control on the operator's behalf
+    ([ADR-0102](../../docs/adr/0102-the-declaration-file-carries-the-four-rule-of-two-declarations.md))."""
+
+    reaches_private_data: bool | None
+    changes_state_or_communicates: bool | None
+    under_human_supervision: bool | None
+    sends: int | None
+    """How many times one message may go on the wire, or `None` for a file that does
+    not say.
+
+    Declared here because the console declares it (`register/declarations.ts`) and a
+    file that could not would be the narrower surface: `TargetRequest.sends` is *the
+    caller's declaration and not a constant hidden inside the bench*, and on this
+    surface there was no way to make it.
+
+    `None` is the absent key and it puts no `sends` on the wire at all, rather than a
+    number this reader chose. The default belongs to `TargetRequest`, which builds it
+    from `RetryPolicy` — a value behind the wall this package may not import
+    (ADR-0100), and one that would go stale here the day the policy changed. Unlike
+    the four above, an omitted key is no claim about the target either way: the route
+    applies the bench's own ceiling, which is what happened before the key existed.
+    """
+
     nonce: str
     note_planted: bool
     nonce_planted: bool
@@ -138,6 +175,54 @@ def _flag(table: dict[str, Any], key: str, default: bool) -> bool:
             f"{key} is declared as {value!r}: a control is declared true or false, "
             "and a value that is neither is not a declaration this surface will "
             "read one way or the other"
+        )
+    return value
+
+
+def _tristate(table: dict[str, Any], key: str) -> bool | None:
+    """One declared tri-state: told, denied, or never mentioned.
+
+    The three states `_flag` above cannot express, for the four fields typed to hold
+    them. A key that is absent reads `None` — TOML has no radio group but it has the
+    thing a checkbox lacks, which is a key that is not there — and a value that is
+    neither absent nor a boolean raises rather than coercing, on `_flag`'s reasoning
+    with a third landing place: `"unstated"` is truthy, and the field it would land
+    in is a capability declared held.
+    """
+    if key not in table:
+        return None
+    value = table[key]
+    if not isinstance(value, bool):
+        raise TypeError(
+            f"{key} is declared as {value!r}: one of the four the Agents Rule of "
+            "Two is read over is declared true or false, and left out where it is "
+            "not being declared at all"
+        )
+    return value
+
+
+def _count(table: dict[str, Any], key: str) -> int | None:
+    """One declared whole number of sends, or `None` where the file does not say.
+
+    A `bool` is refused before an `int` is accepted, because `isinstance(True, int)`
+    is true in Python and `sends = true` would otherwise read as one send. Nought and
+    below are refused too: a ceiling of nought is a run that puts nothing on the wire,
+    which is not a quieter run but a run with no attempts in its denominator.
+    """
+    if key not in table:
+        return None
+    value = table[key]
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise TypeError(
+            f"{key} is declared as {value!r}: how many times one message may go on "
+            "the wire is a whole number, and a value that is not one is not a "
+            "ceiling this surface will read"
+        )
+    if value < 1:
+        raise TypeError(
+            f"{key} is declared as {value!r}: a message goes on the wire at least "
+            "once, and a ceiling below one is a run that would send nothing rather "
+            "than a run that sends less"
         )
     return value
 
@@ -216,6 +301,13 @@ def declaration_at(path: pathlib.Path) -> Declaration:
         declared_tools=_words(target, "declared_tools"),
         retains_session_state=_flag(target, "retains_session_state", False),
         holds_personal_records=_flag(target, "holds_personal_records", False),
+        processes_untrusted_input=_tristate(target, "processes_untrusted_input"),
+        reaches_private_data=_tristate(target, "reaches_private_data"),
+        changes_state_or_communicates=_tristate(
+            target, "changes_state_or_communicates"
+        ),
+        under_human_supervision=_tristate(target, "under_human_supervision"),
+        sends=_count(target, "sends"),
         nonce=str(target.get("nonce", "")),
         note_planted=_flag(target, "note_planted", False),
         nonce_planted=_flag(target, "nonce_planted", True),

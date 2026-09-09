@@ -55,7 +55,6 @@ from __future__ import annotations
 import threading
 import uuid
 from contextlib import ExitStack
-from pathlib import Path
 
 # Re-exported, not merely imported: the definitions moved into the two modules
 # beside this one and the import surface stayed here. The redundant `X as X` is
@@ -75,6 +74,7 @@ from backend.api.gate_run_equipment import (
 from backend.api.gate_run_equipment import (
     ServedAgents as ServedAgents,
 )
+from backend.api.gate_run_equipment import a_library
 from backend.api.gate_run_equipment import (
     seeded_library as seeded_library,
 )
@@ -192,7 +192,7 @@ class BenchGateRuns:
         bench = self.bench
         if bench.equipment is None:
             return NotStartable.NO_REFERENCE_AGENTS
-        if bench.library is None or not _a_library(bench.library):
+        if bench.library is None or not a_library(bench.library):
             return NotStartable.NO_WRITABLE_LIBRARY
         if self._config.adjudicator is None:
             return NotStartable.NO_ADJUDICATOR
@@ -334,18 +334,6 @@ def _declined(reason: str) -> str:
         f"{stated}. Nothing was sent to a reference agent, nothing was spent, and "
         "not one case record was written to: the library is exactly as it was"
     )
-
-
-def _a_library(directory: Path) -> bool:
-    """Whether that directory holds case records this bench could run a gate over.
-
-    A read and never a write: a bench that created the directory in order to answer
-    the question would be deciding a deployment's storage layout on a `GET`.
-    """
-    try:
-        return any(directory.glob("*.toml"))
-    except OSError:
-        return False
 
 
 def _execute(

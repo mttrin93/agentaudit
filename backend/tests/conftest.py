@@ -750,12 +750,21 @@ def checkpoints_elsewhere(
     patch.undo()
 
 
-RUN_THREADS: tuple[str, ...] = ("agentaudit-run-", "agentaudit-gate-run-")
-"""How `runs.py` and `gate_runs.py` name the thread one run happens on.
+RUN_THREADS: tuple[str, ...] = (
+    "agentaudit-run-",
+    "agentaudit-gate-run-",
+    "agentaudit-pending-routes-",
+)
+"""How the three registries name the thread one piece of work happens on.
 
-Read here so that a run left going is findable by the suite. The names are the
-registries' own (`threading.Thread(name=...)`), and a gate run's thread is named
-separately because a gate run is not a run — neither prefix covers the other.
+Read here so that anything left going is findable by the suite. The names are the
+registries' own (`threading.Thread(name=...)`), and each is named separately because
+the three are three kinds of thing — a run, a gate run and a pending-route
+measurement — and no prefix covers another (ADR-0018, ADR-0105 §1).
+
+The third one leaks worse than the other two: a measurement holds the case
+library's lease for its duration, so one left going is a library every later test's
+gate run is refused by.
 """
 
 A_RUN_HAS_STOPPED = 2.0
@@ -772,13 +781,27 @@ IN_FLIGHT: frozenset[str] = frozenset({"awaiting_approval", "running"})
 """The two statuses a run can leave, in the words the routes put on the wire
 (`RunStatus.in_flight`)."""
 
-LISTINGS: tuple[tuple[str, str, str], ...] = (
-    ("/runs", "runs", "run_id"),
-    ("/gate-runs", "gate_runs", "gate_run_id"),
+LISTINGS: tuple[tuple[str, str, str, str], ...] = (
+    ("/runs", "runs", "run_id", "/runs"),
+    ("/gate-runs", "gate_runs", "gate_run_id", "/gate-runs"),
+    (
+        "/pending-routes",
+        "measurements",
+        "measurement_id",
+        "/pending-routes/measurements",
+    ),
 )
-"""Where the two kinds of run are listed, the field the rows are under, and what
-each row calls its id. A gate run is not a run and its route says so (ADR-0023),
-so the two are named separately here rather than derived from one another."""
+"""Where each kind is listed, the field its rows are under, what a row calls its id,
+and where its interrupt is answered.
+
+Four elements and not three, because the third kind's listing and its interrupt are
+not the same prefix: a measurement is listed *with the queue it decides* and answered
+under `/pending-routes/measurements/{id}/approval`. Deriving the second from the
+first is what broke when the third arrived, which is why it is written down.
+
+Named one by one rather than derived from one another: a gate run is not a run and a
+measurement is neither (ADR-0018, ADR-0105 §1).
+"""
 
 
 def stop_every_run(client: TestClient) -> None:
@@ -800,17 +823,17 @@ def stop_every_run(client: TestClient) -> None:
     deadline = time.monotonic() + 30.0
     while time.monotonic() < deadline:
         in_flight = [
-            (route, str(row[identifier]), row["status"])
-            for route, field, identifier in LISTINGS
+            (answered_at, str(row[identifier]), row["status"])
+            for route, field, identifier, answered_at in LISTINGS
             for row in _rows(client, route, field)
             if row["status"] in IN_FLIGHT
         ]
         if not in_flight:
             return
-        for route, run_id, status in in_flight:
+        for answered_at, run_id, status in in_flight:
             if status == "awaiting_approval":
                 client.post(
-                    f"{route}/{run_id}/approval",
+                    f"{answered_at}/{run_id}/approval",
                     json={
                         "confirmed": False,
                         "identity": "the suite",

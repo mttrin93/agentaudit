@@ -90,6 +90,8 @@ from backend.api.app import (
     GATE_RUN_APPROVAL_ROUTE,
     GATE_RUN_ROUTE,
     GATE_RUNS_ROUTE,
+    PENDING_MEASUREMENT_APPROVAL_ROUTE,
+    PENDING_MEASUREMENTS_ROUTE,
     RULE_OF_TWO_ROUTE,
     create_app,
 )
@@ -405,13 +407,20 @@ def test_only_the_two_settings_routes_write_under_the_bench_prefix() -> None:
         (BENCH_SELECTION_ROUTE, "PUT"),
     }
 
-    # And the not-`GET` routes on this bench are the nine that are named — six
-    # `POST`s and the three settings `PUT`s. Two of the six start something that
-    # spends — a run and a gate run — and each is behind an attestation that cannot
-    # be constructed incomplete and a halt in front of the figures (ADR-0007). The
-    # count is asserted by naming every pair rather than by its length, because a
-    # **tenth** is either a spend nobody declared or a setting no ADR admitted, and
-    # the failure has to name which route it is.
+    # And the not-`GET` routes on this bench are the eleven that are named — eight
+    # `POST`s and the three settings `PUT`s. Three of the eight start something that
+    # spends — a run, a gate run and a pending-route measurement — and each is behind
+    # an attestation that cannot be constructed incomplete and a halt in front of the
+    # figures (ADR-0007). The count is asserted by naming every pair rather than by
+    # its length, because a **twelfth** is either a spend nobody declared or a
+    # setting no ADR admitted, and the failure has to name which route it is.
+    #
+    # **The third spend arrived with ADR-0105** and is named here on the same terms
+    # as the second: deciding a pending route measures it against three reference
+    # agents on two models and writes an admitted one into the case library, so it
+    # is its own `POST` under its own prefix — nothing moved under `/bench` to do
+    # it, and its halt is answered at a route of its own rather than by a field on
+    # the request that started it.
     #
     # **One of the six writes nothing at all, and it is named here for that reason.**
     # `POST /rule-of-two` reads four declarations against a published rule and
@@ -434,6 +443,8 @@ def test_only_the_two_settings_routes_write_under_the_bench_prefix() -> None:
         ("/runs/{run_id}/approval", "POST"),
         (GATE_RUNS_ROUTE, "POST"),
         (GATE_RUN_APPROVAL_ROUTE, "POST"),
+        (PENDING_MEASUREMENTS_ROUTE, "POST"),
+        (PENDING_MEASUREMENT_APPROVAL_ROUTE, "POST"),
         (BENCH_TUNING_ROUTE, "PUT"),
         (BENCH_FAMILIES_ROUTE, "PUT"),
         (BENCH_SELECTION_ROUTE, "PUT"),

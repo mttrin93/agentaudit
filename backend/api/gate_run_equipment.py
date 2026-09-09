@@ -120,6 +120,24 @@ def _seeded_directory(into: Path, out_of: Path) -> None:
         )
 
 
+def a_library(directory: Path) -> bool:
+    """Whether that directory holds case records at all. A read and never a write.
+
+    Here rather than in either service, because both of them refuse a bench with no
+    library to write to and the question is the same question: a gate run appends a
+    reading to every record, and a pending-route measurement writes an admitted case
+    into the same directory. Two copies of *what counts as a library* would be two
+    deployments' worth of refusals that could disagree about one mounted volume.
+
+    A read and never a write: a bench that created the directory in order to answer
+    the question would be deciding a deployment's storage layout on a `GET`.
+    """
+    try:
+        return any(directory.glob("*.toml"))
+    except OSError:
+        return False
+
+
 @dataclass(frozen=True)
 class ServedAgents:
     """The three reference agents, served, and the roles they were served under.

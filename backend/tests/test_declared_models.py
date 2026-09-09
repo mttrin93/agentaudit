@@ -24,6 +24,7 @@ from backend.bench.completion import (
     DEFAULT_ADJUDICATOR_MODEL,
     DEFAULT_ATTACKER_MODEL,
     REFERENCE_MODEL_ENV,
+    SECOND_REFERENCE_MODEL_ENV,
 )
 from backend.targets.reference.model import DEFAULT_REFERENCE_MODEL
 
@@ -107,7 +108,7 @@ def test_the_swap_re_runs_on_a_model_the_reference_agents_are_not_on() -> None:
         f"{DEFAULT_REFERENCE_MODEL}, so `uv run python -m scripts.swap` with nothing "
         "declared is refused rather than run."
     )
-    assert (
-        declared_in_example(swap.SECOND_REFERENCE_MODEL_ENV)
-        == swap.DEFAULT_SECOND_MODEL
-    )
+    # The variable is declared beside the other model names now that a second
+    # surface reads it (`/pending-routes`, ADR-0105); what stays with the script is
+    # the default it falls back to, which is what this pairs against the file.
+    assert declared_in_example(SECOND_REFERENCE_MODEL_ENV) == swap.DEFAULT_SECOND_MODEL

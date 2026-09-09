@@ -76,6 +76,7 @@ from backend.bench.adaptive.budget import AdaptiveBudget
 from backend.bench.adaptive.promotion import Promotion, promote
 from backend.bench.adaptive.proposal import ProposedRoute, proposed_from
 from backend.bench.decided import DECIDED_ROUTES, RouteKey
+from backend.bench.entry import enter
 from backend.bench.lease import LEASE_FILE, take_the_library
 from backend.bench.library import (
     AdmissionReading,
@@ -1029,4 +1030,85 @@ def test_no_function_in_the_api_names_a_measurement_beside_a_run_or_a_gate_run()
     assert not offenders, (
         f"{offenders} name a measurement beside a run or a gate run. The three are "
         "different records with different readers (ADR-0018, ADR-0105 §1)"
+    )
+
+
+# --- the three writes a decision makes, and the identity that reaches none -----
+
+
+def test_a_measured_route_is_remembered_so_it_is_never_bought_twice(
+    cases_dir: Path, leakage_case: Case
+) -> None:
+    """ADR-0032 from the writing end, which is the end nothing else here asserts.
+
+    Every other assertion about the memory on this surface seeds it and watches the
+    consultation read it. This one measures a route for real — three reference
+    agents on two models, whatever they happen to return — and then asks whether
+    the surface *wrote* what it paid for. The proof is the second measurement: the
+    attacker rediscovers the route in a later run and files it again, and this time
+    no equipment is served to measure with. A refused route is never re-bought, and
+    that is the whole of what ADR-0032 buys (`worth_remembering`, ADR-0031 point 3).
+    """
+    first = a_route(leakage_case)
+    record = filed(first)
+    key = record.route.filed_under
+
+    with a_bench(cases_dir) as deciding:
+        answered(deciding, [key])
+        # The estimate's one serving, and one per model to measure with.
+        bought = deciding.served.count
+        assert deciding.served.models[1:] == list(MODELS)
+
+        stored = DECIDED_ROUTES.store.get(DECIDED_ROUTES.namespace, key)
+        assert stored is not None, (
+            "the measurement decided the route and remembered nothing about it, so "
+            "the next run that meets this route pays for it again (ADR-0032)"
+        )
+        assert [reading["model"] for reading in stored.value["readings"]] == list(
+            MODELS
+        )
+
+        # The same route, found again by a later run and filed again. It is one
+        # record in the queue and one record in the memory, and the memory answers.
+        again = filed(a_route(leakage_case))
+        assert again.route == record.route
+        answered(deciding, [key])
+
+    assert deciding.served.count == bought + 1, (
+        f"{deciding.served.models[bought:]} were served for a route the memory "
+        "already holds. A route decided once is answered from the memory and the "
+        "three reference agents are never called for it again (ADR-0032)"
+    )
+
+
+def test_a_route_this_library_already_holds_is_reported_as_held_and_not_written_again(
+    cases_dir: Path, leakage_case: Case
+) -> None:
+    """ADR-0033 read from this surface: `enter` de-duplicates and this reports it.
+
+    The library already holds this route under an earlier case id, so the write is
+    a no-op and the row says so — naming the record that stands rather than a file
+    the decision did not create. A row that claimed a fresh record here would be a
+    queue disagreeing with the library it describes.
+    """
+    proposal = a_route(leakage_case)
+    record = filed(proposal)
+    promotion = remembered(proposal, SEPARATING, SEPARATING)
+    assert promotion.case is not None
+    standing = replace(promotion.case, id="adaptive-already-in-the-library")
+    written = enter([standing], cases_dir, holder="an earlier admission")
+    assert [one.case.id for one in written.entered] == [standing.id]
+    before = sorted(path.name for path in cases_dir.glob("*.toml"))
+
+    with a_bench(cases_dir) as deciding:
+        reading = answered(deciding, [record.route.filed_under])
+
+    [row] = reading["routes"]
+    assert row["state"] == RouteState.ADMITTED
+    assert row["entered_as"] == standing.id
+    assert "already holds" in row["reason"]
+    assert sorted(path.name for path in cases_dir.glob("*.toml")) == before, (
+        "the decision wrote a second record for a route this library already holds. "
+        "One route is one record, and `enter` is the one place that is decided "
+        "(ADR-0033)"
     )

@@ -24,9 +24,11 @@ consultation is dropped.
 run holds the library, and a gate run is refused while a measurement holds it —
 ADR-0033's property observed from both ends rather than a new one added.
 
-**That a refusal costs nothing and loses nothing.** A declined measurement, an
-aborted one, and one that read the first model and not the second all leave every
-route pending, asserted on the store rather than on the response.
+**That a refusal costs nothing and loses nothing.** A declined measurement, one
+whose second model could not be served, and one whose agents on the second model
+never registered all leave every route pending — asserted on the store rather than
+on the response. The last of those is the path a `Measure` answers with a *code*,
+which is the same path a run aborted on its ceiling takes.
 
 **That the three families stay apart.** No route under `/pending-routes` takes a run
 id or a gate run id, no route under `/runs` or `/gate-runs` takes a pending route
@@ -49,6 +51,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from backend.api import pending_routes
 from backend.api.app import (
     GATE_RUN_ROUTE,
     GATE_RUNS_ROUTE,
@@ -652,6 +655,30 @@ def test_a_route_no_live_case_can_score_is_refused_rather_than_measured(
         assert PENDING_ROUTES.filed(record.route) == record
 
 
+def test_a_library_that_cannot_be_read_is_a_refusal_and_not_a_failure(
+    cases_dir: Path, leakage_case: Case
+) -> None:
+    """What can score a route is read off the library, so a library that will not
+    load is a stated refusal rather than a stack trace.
+
+    The operator's next move is the same one a bench with no library at all gets —
+    look at the volume — so it is the same refusal, with the loader's own words
+    beside it. What it must not be is a `500`: nothing was sent, nothing is held,
+    and a caller cannot tell those apart from an error.
+    """
+    record = filed(a_route(leakage_case))
+    (cases_dir / "not-a-case.toml").write_text("id = [broken", encoding="utf-8")
+
+    with a_bench(cases_dir) as deciding:
+        response = deciding.client.post(
+            PENDING_MEASUREMENTS_ROUTE, json=a_request([record.route.filed_under])
+        )
+        assert response.status_code == 409, response.text
+        assert response.json()["detail"]["refusal"] == NotMeasurable.NO_WRITABLE_LIBRARY
+        assert not (cases_dir / LEASE_FILE).exists()
+        assert deciding.served.count == 0
+
+
 def test_a_bench_with_one_declared_model_may_not_measure_at_all(
     cases_dir: Path, leakage_case: Case
 ) -> None:
@@ -700,6 +727,9 @@ def test_a_remembered_route_is_decided_without_being_measured(
         assert reading["status"] == MeasurementStatus.ANSWERED
         [row] = reading["routes"]
         assert row["state"] == RouteState.ADMITTED
+        # And the row says which of the two it was. A saving nobody can see on the
+        # page they paid from is a saving the operator has to take on trust.
+        assert "admission memory" in row["where"]
 
 
 # --- what a decision leaves behind ---------------------------------------------
@@ -863,6 +893,86 @@ def test_a_measurement_that_read_one_model_and_not_the_second_decides_nothing(
     assert not (cases_dir / LEASE_FILE).exists()
 
 
+def unplanted(model: str, served: Served) -> Equipment:
+    """The three agents on one model, with nobody planting the nonce.
+
+    A reference agent that was never planted into cannot echo its nonce, so it never
+    registers and is never attacked. That is the second way a model's admission run
+    does not happen — the first being equipment that will not serve — and it is the
+    one that comes back through the `Measure` seam as a code rather than as an
+    exception, which is the path that must decide nothing.
+    """
+    shipped = shipped_agents(model)
+    assert shipped is not None
+
+    @contextmanager
+    def serving() -> Iterator[ServedAgents]:
+        served.models.append(model)
+        with shipped() as agents:
+            yield replace(agents, plant=lambda target, nonce, namespace: None)
+
+    return serving
+
+
+def test_a_model_whose_agents_never_registered_decides_nothing(
+    cases_dir: Path, leakage_case: Case
+) -> None:
+    """The other half of spec story 18, and the path that returns a code.
+
+    The first model is measured; on the second nobody plants the nonce, so all
+    three agents refuse registration and the seam answers with a code rather than
+    with readings. `cross_model_bar` decides nothing on a code, and this asserts the
+    consequence where it matters: every route still pending, with its payload, and
+    the library untouched.
+    """
+    record = filed(a_route(leakage_case))
+    served = Served()
+
+    def agents(model: str) -> Equipment | None:
+        return (
+            unplanted(model, served) if model == SECOND else an_equipment(model, served)
+        )
+
+    before = library_bytes(cases_dir)
+    with a_bench(cases_dir, served=served, agents=agents) as deciding:
+        reading = answered(deciding, [record.route.filed_under])
+
+    assert reading["status"] == MeasurementStatus.FAILED
+    assert "never registered" in reading["statement"]
+    assert "still pending" in reading["statement"]
+    still = PENDING_ROUTES.filed(record.route)
+    assert isinstance(still, AwaitingDecision)
+    assert still == record
+    assert library_bytes(cases_dir) == before
+
+
+def test_a_measurement_that_reaches_no_interrupt_gives_the_library_back(
+    cases_dir: Path, leakage_case: Case, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A halt nobody will reach releases the lease rather than holding it out.
+
+    The measuring thread is replaced by one that does nothing, so the interrupt is
+    never presented and nobody will ever answer it. What must not happen is the
+    library staying held: a lease kept by a measurement that is not going to happen
+    is a bench that refuses gate runs for as long as the wait lasts, which is the
+    failure the lease exists to prevent, inverted.
+    """
+    record = filed(a_route(leakage_case))
+    monkeypatch.setattr(pending_routes, "PRESENT_WAIT_SECONDS", 0.2)
+    monkeypatch.setattr(pending_routes, "_execute", lambda *arguments: None)
+
+    with a_bench(cases_dir) as deciding:
+        response = deciding.client.post(
+            PENDING_MEASUREMENTS_ROUTE, json=a_request([record.route.filed_under])
+        )
+
+        assert response.status_code == 500
+        assert not (cases_dir / LEASE_FILE).exists()
+        [row] = deciding.pending.records()
+        assert row.status is MeasurementStatus.FAILED
+        assert PENDING_ROUTES.filed(record.route) == record
+
+
 # --- the three families stay apart ---------------------------------------------
 
 
@@ -886,10 +996,15 @@ def test_no_route_here_takes_a_run_id_or_a_gate_run_id(
     assert not [path for path in paths if "run_id" in path]
 
     with a_bench(cases_dir) as deciding:
-        response = deciding.client.get(
+        # And the other direction, on both families: a pending route key handed to
+        # either of them is a `404` rather than a record somebody reached by
+        # accident, which is the half a path scan cannot see.
+        gated = deciding.client.get(
             GATE_RUN_ROUTE.format(gate_run_id=record.route.filed_under)
         )
-    assert response.status_code == 404
+        run = deciding.client.get(f"/runs/{record.route.filed_under}")
+    assert gated.status_code == 404
+    assert run.status_code == 404
 
 
 def test_no_function_in_the_api_names_a_measurement_beside_a_run_or_a_gate_run() -> (

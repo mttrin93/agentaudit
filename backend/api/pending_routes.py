@@ -54,7 +54,7 @@ from dataclasses import dataclass, replace
 from enum import IntEnum
 from pathlib import Path
 
-from backend.api.gate_run_equipment import Equipment
+from backend.api.gate_run_equipment import Equipment, a_library
 from backend.api.pending_route_state import (
     CannotMeasure,
     MeasurementRecord,
@@ -65,8 +65,9 @@ from backend.api.pending_route_state import (
     a_holder,
 )
 from backend.api.run_config import BenchConfig
-from backend.api.run_state import PendingApproval
+from backend.api.run_state import NeverPresented, PendingApproval
 from backend.api.run_status import PRESENT_WAIT_SECONDS
+from backend.bench.adaptive.promotion import Promotion
 from backend.bench.adaptive.proposal import ProposedRoute
 from backend.bench.adjudication import Completion
 from backend.bench.admission import admitted_library, counted
@@ -74,7 +75,7 @@ from backend.bench.admitting import Measure, cross_model_bar
 from backend.bench.calibration import TargetRun, run_calibration
 from backend.bench.contract import TargetConfig
 from backend.bench.decided import RouteKey, criterion_of
-from backend.bench.entry import Entry, enter
+from backend.bench.entry import AlreadyInTheLibrary, Entered, Entry, enter
 from backend.bench.evaluator import Verdict
 from backend.bench.lease import LibraryBusy, held_by, holding_the_library
 from backend.bench.library import AdmissionReading, Case, VerdictClass
@@ -234,9 +235,7 @@ class SelectedRoute:
     budget: RunBudget
     """What this one route costs: three reference agents on each of two models.
 
-    Per route because that is the unit the operator selects in and the unit the
-    spend is incurred in — a single total would ask them to confirm a figure they
-    could not attribute to anything they chose (ADR-0105 §4).
+    Why per route is `MeasurementRecord.per_route`, which is where these end up.
     """
 
     @property
@@ -322,7 +321,7 @@ class BenchPendingRoutes:
             return NotMeasurable.NO_SECOND_MODEL
         if any(bench.equipment_for(model) is None for model in bench.models):
             return NotMeasurable.NO_REFERENCE_AGENTS
-        if bench.library is None or not _a_library(bench.library):
+        if bench.library is None or not a_library(bench.library):
             return NotMeasurable.NO_WRITABLE_LIBRARY
         if self._config.adjudicator is None:
             return NotMeasurable.NO_ADJUDICATOR
@@ -419,7 +418,24 @@ class BenchPendingRoutes:
         # The figures the interrupt is holding, not the ones declared above: the two
         # are built from the same budget, and returning the presented copy is what
         # makes that checkable rather than assumed.
-        record.presented = pending.halted(PRESENT_WAIT_SECONDS)
+        try:
+            record.presented = pending.halted(PRESENT_WAIT_SECONDS)
+        except NeverPresented:
+            # The thread never reached the halt, so nobody will ever answer it and
+            # nothing will release the lease. Settled and released here rather than
+            # left to the approval wait: a library held for an hour by a measurement
+            # that is not going to happen is a bench that refuses gate runs for an
+            # hour, which is the failure the lease exists to prevent inverted.
+            record.settle(
+                MeasurementStatus.FAILED,
+                (
+                    "this measurement reached no approval interrupt, so it has no "
+                    "estimate to confirm and it will not start. "
+                    f"{EVERY_ROUTE_IS_STILL_PENDING}"
+                ),
+            )
+            stack.close()
+            raise
         return record
 
     def answer(self, measurement_id: str, approval: Approval) -> MeasurementRecord:
@@ -500,9 +516,18 @@ class BenchPendingRoutes:
         library = self._bench.library
         if library is None:
             return frozenset()
-        return frozenset(
-            criterion_of(case) for case in live_library(admitted_library(library))
-        )
+        try:
+            live = live_library(admitted_library(library))
+        except (ValueError, OSError) as unreadable:
+            # A library `admitted_library` will not load is not a library this
+            # surface can decide anything against, and the caller is told so rather
+            # than handed a stack trace: the refusal is the same one a bench with no
+            # library gets, because the operator's next move is the same either way.
+            raise CannotMeasure(
+                NotMeasurable.NO_WRITABLE_LIBRARY,
+                f"{library} could not be read as a case library: {unreadable}",
+            ) from unreadable
+        return frozenset(criterion_of(case) for case in live)
 
     def _targets(self) -> tuple[TargetConfig, ...]:
         """The three reference agents as this deployment describes them.
@@ -555,14 +580,6 @@ def _declined(reason: str) -> str:
         f"{stated}. Nothing was sent to a reference agent, nothing was spent, and "
         f"nothing was written to the case library. {EVERY_ROUTE_IS_STILL_PENDING}"
     )
-
-
-def _a_library(directory: Path) -> bool:
-    """Whether that directory holds case records at all. A read and never a write."""
-    try:
-        return any(directory.glob("*.toml"))
-    except OSError:
-        return False
 
 
 def _execute(
@@ -676,34 +693,14 @@ def _decide(
         record.entry = entry
         record.say(entry.stated())
 
-    written = {} if entry is None else {one.case.id: one for one in entry.entered}
-    already = {} if entry is None else {one.proposed_as: one for one in entry.held}
+    answers = _Written(entry)
     decided = 0
-    for one, promotion in zip(record.routes, promotions, strict=True):
-        row = record.where(one.route)
-        case_id = promotion.proposal.case.id
-        if promotion.case is None:
-            reason = (
-                f"the cross-model bar refused this route: {promotion.outcome.stated()}"
-            )
-            state = RouteState.REJECTED
-            entered_as = ""
-        elif case_id in written:
-            entered_as = written[case_id].path.name
-            state = RouteState.ADMITTED
-            reason = (
-                f"admitted on the cross-model bar and written into "
-                f"{record.library} as {entered_as}: {promotion.outcome.stated()}"
-            )
-        elif case_id in already:
-            entered_as = already[case_id].held_as
-            state = RouteState.ADMITTED
-            reason = (
-                "admitted on the cross-model bar, and this library already holds "
-                f"the route as {entered_as}, so nothing was written: "
-                f"{promotion.outcome.stated()}"
-            )
-        else:
+    for one, promotion, consult in zip(
+        record.routes, promotions, consulted.consulted, strict=True
+    ):
+        row = record.progress_for(one.route)
+        answer = answers.answer_for(promotion, record.library)
+        if answer is None:
             # Admitted, and the write did not happen. The route stays pending with
             # its payload, because a row that said *admitted* with no record behind
             # it would be a queue disagreeing with the library it describes.
@@ -713,6 +710,7 @@ def _decide(
                     f"could not be written to. {busy}"
                 )
             continue
+        state, reason, entered_as = answer
         try:
             bench.queue.decide(one.route, state=state, reason=reason)
         except (KeyError, ValueError) as refused:
@@ -721,7 +719,13 @@ def _decide(
             continue
         decided += 1
         if row is not None:
-            row.settle(state, reason, entered_as)
+            # Whether the counts were bought here or read out of the memory, off the
+            # consultation this run made rather than off a second reading of it: a
+            # route answered from memory sent nothing, and the row is where the
+            # operator can see which of the two they paid for (ADR-0032).
+            row.settle(
+                state, reason, entered_as, remembered=consult.remembered is not None
+            )
 
     record.settle(
         MeasurementStatus.ANSWERED,
@@ -733,6 +737,74 @@ def _decide(
             + (f". {busy}" if busy else "")
         ),
     )
+
+
+@dataclass(frozen=True)
+class _Written:
+    """What one `enter` left behind, as the question each promotion asks of it.
+
+    A small type over the `Entry` rather than two dictionaries built at the call
+    site, because the three answers below are one decision — written, already held,
+    or not written at all — and a caller that rebuilt them would be free to reach a
+    fourth. `None` is an `enter` that did not happen, which is the library having
+    been taken by somebody else between the release and the write.
+    """
+
+    entry: Entry | None
+
+    @property
+    def written(self) -> dict[str, Entered]:
+        """The records this write created, by the case id each was proposed under."""
+        return (
+            {}
+            if self.entry is None
+            else {one.case.id: one for one in self.entry.entered}
+        )
+
+    @property
+    def already(self) -> dict[str, AlreadyInTheLibrary]:
+        """The routes this library already held, by the id they were proposed under."""
+        return (
+            {}
+            if self.entry is None
+            else {one.proposed_as: one for one in self.entry.held}
+        )
+
+    def answer_for(
+        self, promotion: Promotion, library: Path
+    ) -> tuple[RouteState, str, str] | None:
+        """What the queue records for this promotion: the state, the reason, the file.
+
+        `None` for a route the bar admitted and the library did not take — the one
+        case that leaves a route pending after a measurement that finished, because
+        a row saying *admitted* with no record behind it would be a queue
+        disagreeing with the library it describes.
+        """
+        if promotion.case is None:
+            return (
+                RouteState.REJECTED,
+                f"the cross-model bar refused this route: {promotion.outcome.stated()}",
+                "",
+            )
+        case_id = promotion.proposal.case.id
+        entered = self.written.get(case_id)
+        if entered is not None:
+            return (
+                RouteState.ADMITTED,
+                f"admitted on the cross-model bar and written into {library} as "
+                f"{entered.path.name}: {promotion.outcome.stated()}",
+                entered.path.name,
+            )
+        held = self.already.get(case_id)
+        if held is not None:
+            return (
+                RouteState.ADMITTED,
+                "admitted on the cross-model bar, and this library already holds "
+                f"the route as {held.held_as}, so nothing was written: "
+                f"{promotion.outcome.stated()}",
+                held.held_as,
+            )
+        return None
 
 
 def _measuring(

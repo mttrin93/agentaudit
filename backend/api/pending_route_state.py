@@ -1,20 +1,19 @@
 """One pending-route measurement's record, and the refusals in front of it.
 
 The lower half of the `/pending-routes` side, and it stands to
-`pending_route_runs.py` as `gate_run_state.py` stands to `gate_runs.py`: this is
+`pending_routes.py` as `gate_run_state.py` stands to `gate_runs.py`: this is
 what a measurement *is* while it happens, together with the vocabulary that
 describes it — why one may not start (`NotMeasurable`, `CannotMeasure`), where one
 got to (`MeasurementStatus`), where each route in it got to (`RouteProgress`), and
 who the lease says is holding the library (`a_holder`). The service that drives a
 record through all of it is in the module beside this one.
 
-**A measurement is not a gate run and is not a run.** A run produces rates about
-somebody's agent, a gate run produces a decision about this bench, and this
-produces a decision about **a case** — the third kind of fact
-[ADR-0105](../../docs/adr/0105-deciding-a-pending-route-is-its-own-surface-and-not-a-gate-runs-second-job.md)
-§1 gives its own family for. So `MeasurementRecord` never appears in a signature
-with `RunRecord` or `GateRunRecord`, it carries no run id and no gate run id, and
-there is no status here either of the other two could be in.
+**A measurement is not a gate run and is not a run**, and `app.PENDING_ROUTES_ROUTE`
+is where the three kinds of fact are told apart. The consequence here is the shape
+of everything below: `MeasurementRecord` never appears in a signature with
+`RunRecord` or `GateRunRecord`, it carries no run id and no gate run id, and there
+is no status in `MeasurementStatus` that either of the other two records could be
+in.
 
 **This module never constructs an `Attestation`.** It receives one, so there is no
 line in it that could fill in three statements on somebody's behalf, and no name in
@@ -40,10 +39,10 @@ class NotMeasurable(StrEnum):
     """Why a pending-route measurement may not start, as a name the caller branches
     on.
 
-    Eight members and eight different facts, in two groups a screen has to keep
-    apart. The first four are about how the bench was built or what it is doing
+    Nine members and nine different facts, in two groups a screen has to keep
+    apart. The first five are about how the bench was built or what it is doing
     right now — the shape `NotStartable` has, and the reason it is not that enum is
-    that four of these are about *the routes this request named* and a caller of
+    that the other four are about *the routes this request named*, and a caller of
     `/gate-runs` can never be handed one of them.
 
     A route-shaped refusal is refused before anything is sent and before the
@@ -218,12 +217,30 @@ class RouteProgress:
     (spec story 11), so the row names it rather than saying that a write happened.
     """
 
-    def settle(self, state: RouteState, reason: str, entered_as: str = "") -> None:
-        """Record what this route was decided as, and why."""
+    def settle(
+        self,
+        state: RouteState,
+        reason: str,
+        entered_as: str = "",
+        remembered: bool = False,
+    ) -> None:
+        """Record what this route was decided as, why, and how it was measured.
+
+        `remembered` says the counts came from the admission memory rather than from
+        three reference agents this measurement paid for (ADR-0032). It is on the
+        row rather than only in the total, because it is the difference between a
+        route the operator was billed for and one they were not — and a page that
+        could not tell them apart would report a saving nobody can see.
+        """
         self.state = state
         self.reason = reason
         self.entered_as = entered_as
-        self.where = f"decided: {state}"
+        self.where = f"decided: {state}" + (
+            ", on counts the admission memory already held — nothing was sent to "
+            "a reference agent for this route (ADR-0032)"
+            if remembered
+            else ""
+        )
 
 
 @dataclass
@@ -231,11 +248,10 @@ class MeasurementRecord:
     """One measurement: what authorised it, what it was estimated at, what it
     answered.
 
-    Deliberately not a `GateRunRecord`. There is no `GateResult` on it and no
-    library write-back: what it produces is a decision per route, which is a fact
-    about a case (ADR-0018, ADR-0105 §1). The budget and the presented figures are
-    on the record for `RunRecord`'s reason — the ceiling the measurement is held to
-    has to be the one the operator was shown.
+    Deliberately not a `GateRunRecord`: there is no `GateResult` on it and no
+    library write-back, because what it produces is a decision per route. The budget
+    and the presented figures are on the record for `RunRecord`'s reason — the
+    ceiling the measurement is held to has to be the one the operator was shown.
     """
 
     measurement_id: str
@@ -295,8 +311,13 @@ class MeasurementRecord:
         """Keep one line of the bar's prose. The `Say` seam's implementation here."""
         self.lines = (*self.lines, line)
 
-    def where(self, route: RouteKey) -> RouteProgress | None:
-        """This measurement's progress row for one route, or `None`."""
+    def progress_for(self, route: RouteKey) -> RouteProgress | None:
+        """This measurement's progress row for one route, or `None`.
+
+        Named for what it returns rather than for the field it carries: `where` on a
+        row is the prose, and a method of that name returning the whole row would
+        read as the prose at every call site.
+        """
         for row in self.progress:
             if row.route == route:
                 return row

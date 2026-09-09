@@ -5198,9 +5198,8 @@ question an operator selecting routes is asking (ADR-0007).
 class RouteEstimate(BaseModel):
     """What deciding one route costs, in the units the operator already reads.
 
-    Per route because that is the unit they selected in and the unit the spend is
-    incurred in: a single total would ask them to confirm a figure they could not
-    attribute to anything they chose (ADR-0105 §4).
+    Why the estimate is per route is `MeasurementRecord.per_route`, off which every
+    figure here is read.
     """
 
     route: str
@@ -5290,10 +5289,8 @@ def measurement_started(record: MeasurementRecord) -> MeasurementStarted:
 class RouteProgressRow(BaseModel):
     """Where one route in a measurement has got to, and what it ended as.
 
-    Per route because the action is minutes long and the routes were selected one
-    at a time: *measuring on the second model* and *answered from the memory
-    without being measured* are two different things to be told about a route
-    somebody is paying for (spec story 10).
+    One row per `RouteProgress`, whose docstring is why progress on this surface is
+    reported a route at a time.
     """
 
     route: str
@@ -6801,10 +6798,8 @@ def create_app(
     ) -> MeasurementReading:
         """Where one measurement has got to, route by route, and what the bar said.
 
-        **Progress is per route**, because the routes were selected one at a time
-        and the action is minutes long: a route measuring on the second model, one
-        answered from the admission memory without being measured, and one already
-        decided are three different things to be told (spec story 10, ADR-0032).
+        **Progress is per route** — `RouteProgress` is where that is argued, and
+        `RouteProgressRow` is the shape it arrives in.
 
         **The bar's own prose is here.** The consultation's report, each
         promotion's lines and the cross-model rejections are what a command-line run

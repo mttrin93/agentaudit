@@ -2571,7 +2571,18 @@ def load_elective(
 
 
 def load_case(path: Path) -> Case:
-    record: dict[str, Any] = tomllib.loads(path.read_text(encoding="utf-8"))
+    return case_from_record(tomllib.loads(path.read_text(encoding="utf-8")))
+
+
+def case_from_record(record: dict[str, Any]) -> Case:
+    """One case out of the parsed TOML of a record, wherever that TOML came from.
+
+    Split out of `load_case` so that the one reader of this format is reached by
+    both callers that have one: a record on disk, and a record `entry.case_record`
+    wrote into a value rather than into a file — which is how
+    `pending.AwaitingDecision` keeps a case draft in a database without a second
+    definition of what a record means (ADR-0104 §1).
+    """
     external_id = record["external_id"]
     success = record.get("success_condition")
     judged = record.get("judged_condition")

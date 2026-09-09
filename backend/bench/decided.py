@@ -233,7 +233,7 @@ class Conditions:
         """The conditions a run measuring this case now would be measuring under."""
         return cls(
             models=tuple(models),
-            criterion=_criterion(case),
+            criterion=criterion_of(case),
             attempts=rule.attempts_per_case,
         )
 
@@ -722,7 +722,7 @@ def _digest(text: str) -> str:
     return sha256(text.encode("utf-8")).hexdigest()[:16]
 
 
-def _criterion(case: Case) -> str:
+def criterion_of(case: Case) -> str:
     """A digest of what a verdict on this case *means*, and of what it needs to run.
 
     Four fields and not the whole record. `id` cannot be in it — it is a fresh uuid
@@ -735,6 +735,11 @@ def _criterion(case: Case) -> str:
 
     Written out rather than digested off `dataclasses.asdict`, because a digest that
     covered every field would be invalidated by the case id it must not read.
+
+    Public because it has a second caller across a module boundary:
+    `pending.PendingRoutes.file` stores this digest beside the case draft, since it
+    is the one thing about what a verdict meant that outlives the payload a
+    decision removes (ADR-0104 §4).
     """
     condition = case.success_condition
     judged = case.judged_condition

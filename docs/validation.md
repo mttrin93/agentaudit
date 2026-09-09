@@ -94,11 +94,10 @@ an estimate, halts, measures the selected routes against the three reference age
 two models in one action, and hands an admitted one to `enter`
 ([ADR-0105](./adr/0105-deciding-a-pending-route-is-its-own-surface-and-not-a-gate-runs-second-job.md)).
 The identity stops at the decision: neither the admission memory nor a case record has a
-field that could carry it. **None of that is a reading.** The only pass at the
-cross-model bar this document records is still the four proposals of 2026-08-19 on two
-stub models, so the section *No route has ever been written into the library by a run*
-below is **narrowed and not closed** — what it says of the mechanism has changed, and
-what it says of the measurement has not.
+field that could carry it. **None of that is a reading**, and no figure in this document
+moved. The section *No route has ever been written into the library by a run* below is
+**narrowed and not closed**: what it says of the mechanism has changed, and what it says
+of the measurement has not.
 
 ---
 
@@ -165,10 +164,12 @@ What follows from that, and what does not:
 
 ### No route has ever been written into the library by a run (#40, narrowed by #200)
 
-**Every one of the twenty-one cases in `backend/cases/` is `discovered_by = authored`,
-and the adaptive fraction of the live library is 0.00.** `library_provenance` reads live
-`authored 21, adaptive 0, user_gap 0, retrieved 0` with none retired, and the nine
-elective records beside them are `authored` too. The writer exists, it is exercised end
+**Every one of the twenty-one cases in `backend/cases/` — eighteen base cases and the
+three variants admitted since — is `discovered_by = authored`, and the adaptive fraction
+of the live library is 0.00.** `library_provenance` reads live `authored 21, adaptive 0,
+user_gap 0, retrieved 0` with none retired, and the nine elective records beside them are
+`authored` too. The count moved because a **variant is a case** (ADR-0051, ADR-0055) and
+three were written by hand; not one of the three came from an attacker. The writer exists, it is exercised end
 to end in the suite, and it has never fired outside one: the only reading of the
 cross-model bar this document records is the four proposals of 2026-08-19, all four
 refused, both models stubs ([ADR-0033](./adr/0033-an-admitted-route-is-written-into-the-library.md)).
@@ -5516,8 +5517,9 @@ document exists to refuse.
   #194, `pending/routes.sqlite`, the fourth store on the `DatabaseStore` seam and the
   disclosure posture's one stated exception. #195, filing: `file_proposals` is called by
   the two customer-run entry points — the API's run service and `scripts/bench.py` — on
-  **every** exit including an aborted or failed one, de-duplicates on `RouteKey`, and
-  catches every per-route failure into a refusal, so filing can never fail a run. #196,
+  every way out of a run that sent anything, an abort at the budget ceiling and a failure
+  included; it de-duplicates on `RouteKey`, and catches every per-route failure into a
+  refusal, so filing can never fail a run. #196,
   `cross_model_bar` out of `scripts/swap.py` and into `backend/bench/admitting.py` as a
   move rather than a rewrite. #197, the `/pending-routes` surface: attestation, declared
   estimate, halt, then the three reference agents on two models in one action. #198, the
@@ -5542,24 +5544,27 @@ document exists to refuse.
   `cross_model_bar` is the same algorithm with two seams where a `print` and a
   `ModelRun` used to be, and every one of the swap's own behaviour tests passes with its
   assertions unedited — only the helper that calls the bar was rewired — which is what a
-  move rather than a rewrite means. `backend/bench/admission.py` was not edited at all in the
-  seven tickets, so `library_provenance` counts what it always counted; what is new is a
-  second caller that could one day make it print something other than nought.
+  move rather than a rewrite means. `backend/bench/admission.py` was not edited at all
+  in the seven tickets, so `library_provenance` counts what it always counted; what is
+  new is a second caller that could one day make it print something other than nought.
 - **Every reading behind all of it is `stub:obedient` and `stub:cooperative`.** Nothing
-  in the pending-route suite reaches a provider, by design and asserted by the module's
-  own walls. A bar met against hardcoded replies is not a bar met against the field
+  in the pending-route suite reaches a provider, by design and by the two model constants
+  the suite declares — which is a property of how it is written and not a wall a test
+  holds up. A bar met against hardcoded replies is not a bar met against the field
   ([ADR-0022](./adr/0022-the-retirement-window-is-two-readings-of-one-model.md)), so
   nothing here is evidence about a route, about a target, or about the bench.
 - **One route has been filed outside the suite, and it is not a figure.** A customer-run
   path on one machine filed a single `data_leakage` route on 2026-09-09, against the
-  *trivial* reference agent standing in for a customer's, and it is still pending. The
-  store is git-ignored and machine-local for the reason `precedent/` is, and it holds a
-  working probe and the name of the agent it beat — so **no number in this document was
-  read out of it and none may be**. It is recorded here as the one observation that
-  filing happens outside a test, and as nothing else.
+  *trivial* reference agent standing in for a customer's, and it is still pending. What
+  that store is and why nothing here may be read out of it is the bullet *A filed route
+  is not a figure* above. This is recorded as the one observation that filing happens
+  outside a test, and as nothing else.
 - **Still never validated**: no route found against a real customer agent has been
   measured on two provider models, no `/pending-routes` measurement has ever been run
   against the field, no route has ever cleared the cross-model bar, and the adaptive
-  fraction of the live library is 0.00 over twenty-one `authored` records. The dead end
+  fraction of the live library is 0.00 over twenty-one `authored` records. The
+  retirement-by-provenance signal ADR-0012 repair 3 calls the fingerprint of overfitting
+  is in the same position: it now has somewhere adaptive records could come from, and it
+  still has none to group. The dead end
   is gone and the machinery is complete and tested; the measurement has still never been
   taken, and until it is, *the loop closes* stays a claim about a mechanism.

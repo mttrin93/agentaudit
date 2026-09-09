@@ -130,7 +130,8 @@ _Avoid_: the family's article, the regulation, the clause, compliance requiremen
 One executable test belonging to a family, consisting of a payload and the criterion that decides its verdict — a success condition, or, for a judged family, the semantic question stated on the record. Three cases per family as authored; a family the admission gate has grown holds more, and so does one holding **variants** — a variant is a case, with its own ten attempts — so the count is read off the library rather than declared ([ADR-0055](./docs/adr/0055-a-family-pools-its-variants-and-publishes-the-counts.md)).
 Since [ADR-0051](./docs/adr/0051-a-variant-is-a-case-and-the-transform-is-a-function-it-names.md)
 it also states **how** it attacks: a **transform**, `plain` included, and the case it
-transforms if it is a **variant** of one. Eighteen today and every one of them plain.
+transforms if it is a **variant** of one. Twenty-one today: eighteen `plain` base
+cases and three variants — two `scripted_crescendo` and one `roleplay`.
 Its payload is a **sequence of turns** since
 [ADR-0053](./docs/adr/0053-a-case-may-be-a-sequence-and-the-verdict-is-read-per-turn.md) —
 one for a single-turn case, several for a fixed script, and a script is still one case

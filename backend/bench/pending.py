@@ -259,6 +259,10 @@ def read_filed(value: dict[str, Any]) -> AwaitingDecision | Decided:
     Dispatched on the stored state rather than on the presence of a `draft` key, so
     a record that somehow held both would be read as decided and its payload
     dropped rather than being handed back to a caller that asked for a decided one.
+
+    A module function and not a classmethod, which is where this differs from
+    `DecidedRoute.read`: the dispatch *chooses between the two types*, so it cannot
+    belong to either without one of them knowing about the other.
     """
     state = RouteState(value["state"])
     shared: dict[str, Any] = {
@@ -337,13 +341,18 @@ class PendingRoutes:
         proposal: ProposedRoute,
         *,
         target: str,
-        today: date | None = None,
+        today: date,
     ) -> AwaitingDecision:
         """File one route the attacker found, so it survives the run that found it.
 
         Idempotent by the key: a route already filed is *replaced* rather than
         appended to, because the two records are two proposals of one path and the
         newer one is the one whose draft and prose a decision would be taken on.
+
+        **No default for `today`**, so this module reads no clock at all — the
+        stricter half of what `entry` and `decided` do, and cheap here because the
+        only caller is a run that knows the day it ran. A route filed by a run
+        replayed next month is not dated to the morning it was replayed.
 
         Nothing here decides anything. A filed route "faces a stated bar, and is not
         admitted by having been filed" — the same sentence `propose_case` already
@@ -354,7 +363,7 @@ class PendingRoutes:
             criterion=criterion_of(proposal.case),
             description=proposal.description,
             target=target,
-            filed_on=today or date.today(),
+            filed_on=today,
             draft=proposal.case,
         )
         self.store.put(self.namespace, record.route.filed_under, record.stored())

@@ -735,6 +735,11 @@ def criterion_of(case: Case) -> str:
 
     Written out rather than digested off `dataclasses.asdict`, because a digest that
     covered every field would be invalidated by the case id it must not read.
+
+    Public because it has a second caller across a module boundary:
+    `pending.PendingRoutes.file` stores this digest beside the case draft, since it
+    is the one thing about what a verdict meant that outlives the payload a
+    decision removes (ADR-0104 §4).
     """
     condition = case.success_condition
     judged = case.judged_condition

@@ -39,14 +39,7 @@ from backend.bench.pending import (
     PendingRoutes,
     RouteState,
 )
-from backend.tests.conftest import (
-    BACKEND,
-    REPOSITORY,
-    a_target,
-    reachable_from,
-)
-
-BENCH = BACKEND / "bench"
+from backend.tests.conftest import BENCH, REPOSITORY, a_target, reachable_from
 
 FILED_ON = date(2026, 8, 30)
 """The day the run that found the route ended, so nothing here reads a clock.
@@ -172,8 +165,14 @@ def test_two_probes_against_two_targets_are_two_records(
 ) -> None:
     # Three routes filed against three agents and three filed against one are
     # different situations and call for different decisions (ADR-0104 §2).
-    queue.file(a_route(leakage_case, payload="one probe"), target=A_CUSTOMER)
-    queue.file(a_route(leakage_case, payload="another probe"), target="other-bot")
+    queue.file(
+        a_route(leakage_case, payload="one probe"), target=A_CUSTOMER, today=FILED_ON
+    )
+    queue.file(
+        a_route(leakage_case, payload="another probe"),
+        target="other-bot",
+        today=FILED_ON,
+    )
 
     assert {record.target for record in queue.queue()} == {A_CUSTOMER, "other-bot"}
     assert len(queue.queue()) == 2
@@ -374,12 +373,11 @@ def test_the_queue_is_its_own_database_and_not_a_table_in_the_admission_memory()
     "name", ["routes.sqlite", "routes.sqlite-wal", "routes.sqlite-shm"]
 )
 def test_the_queue_and_its_sidecars_are_ignored_by_git(name: str) -> None:
-    """ADR-0104's consequences, and the reason is stronger here than anywhere.
+    """ADR-0104's consequences, asked of git rather than of `.gitignore`'s text.
 
-    Asked of git rather than of `.gitignore`'s text, on `test_decided.py`'s
-    reasoning, and the sidecars are parametrised rather than assumed covered: here
-    the sidecar holds both of the two fields the exception was granted for — a
-    working probe, and the name of the agent it beat.
+    Git's own answer on `test_decided.py`'s reasoning, and the sidecars are
+    parametrised rather than assumed covered — why a sidecar is the sharpest case
+    for this store is `pending.PENDING_DIRECTORY`.
 
     Built from `PENDING_DIRECTORY` rather than from `DEFAULT_PENDING_PATH`, because
     `conftest.py` redirects the store and never the directory.

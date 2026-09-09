@@ -649,10 +649,8 @@ def pending_elsewhere_for_the_session(
 
     Session-scoped for the reason `decisions_elsewhere_for_the_session` is, and the
     stake is higher for this store than for either of the two it copies: what a
-    module-scoped run reaching the real file would leave in the working copy is a
-    working probe and the name of the agent it beat, which is the one thing
-    ADR-0104 grants an exception for keeping and no exception at all for
-    committing.
+    module-scoped run reaching the real file would leave in the working copy is what
+    ADR-0104 grants an exception for keeping and no exception at all for committing.
     """
     patch = pytest.MonkeyPatch()
     _pending_at(patch, tmp_path_factory.mktemp("pending") / "routes.sqlite")
@@ -1038,14 +1036,14 @@ def reachable_from(source: Path) -> set[str]:
     """
     seen: set[Path] = {source}
     names: set[str] = set()
-    pending = [source]
-    while pending:
-        for name in imports_of(pending.pop()):
+    frontier = [source]
+    while frontier:
+        for name in imports_of(frontier.pop()):
             names.add(name)
             module = _module_file(name)
             if module is not None and module not in seen:
                 seen.add(module)
-                pending.append(module)
+                frontier.append(module)
     return names
 
 

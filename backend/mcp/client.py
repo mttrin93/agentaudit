@@ -37,7 +37,7 @@ from typing import Any
 
 import httpx
 
-from backend.mcp.declaration import Declaration
+from backend.declaration import Declaration
 
 NONCES_ROUTE = "/nonces"
 RUNS_ROUTE = "/runs"

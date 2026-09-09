@@ -6,7 +6,7 @@ import pathlib
 
 import pytest
 
-from backend.mcp.declaration import (
+from backend.declaration import (
     Declaration,
     DeclarationRefusal,
     DeclarationRefused,
@@ -77,6 +77,12 @@ def test_a_complete_declaration_reads_every_field(tmp_path: pathlib.Path) -> Non
         accepts_provider_policy_and_cost=True,
         price_per_call="0.002",
         currency="USD",
+        # Every key `COMPLETE` writes, and it writes all of them: the set is what the
+        # Action's both-given rule is read against, so a key the reader defaulted and
+        # a key the operator declared have to be distinguishable here (ADR-0103 §4).
+        declared_keys=frozenset(
+            line.split(" = ")[0] for line in COMPLETE.splitlines() if " = " in line
+        ),
     )
 
 

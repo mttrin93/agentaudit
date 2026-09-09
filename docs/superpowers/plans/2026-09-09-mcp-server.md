@@ -209,7 +209,7 @@ git commit -m "The MCP package exists and reaches no bench module"
 ### Task 3: The declaration file
 
 **Files:**
-- Create: `backend/mcp/declaration.py`
+- Create: `backend/declaration.py`
 - Test: `backend/tests/test_mcp_declaration.py`
 
 **Interfaces:**
@@ -375,7 +375,7 @@ Expected: FAIL — `ModuleNotFoundError: No module named 'backend.mcp.declaratio
 
 - [ ] **Step 3: Write the implementation**
 
-`backend/mcp/declaration.py`. Use `tomllib` from the standard library. Structure:
+`backend/declaration.py`. Use `tomllib` from the standard library. Structure:
 
 ```python
 """`agentaudit.toml`: what the operator declared about their target, committed.
@@ -494,7 +494,7 @@ Expected: `test_the_conservative_defaults_are_the_strict_ones` FAILS on the tupl
 
 ```bash
 uv run pytest -q && uv run mypy && uv run ruff check . && uv run ruff format --check .
-git add backend/mcp/declaration.py backend/tests/test_mcp_declaration.py
+git add backend/declaration.py backend/tests/test_mcp_declaration.py
 git commit -m "A committed declaration says what the target is, and four refusals say what it is not"
 ```
 

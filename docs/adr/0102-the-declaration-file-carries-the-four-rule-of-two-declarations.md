@@ -16,7 +16,7 @@ anything, because there is no way to say it.*
 
 The MCP server is a third registration surface and it arrived after both records.
 `POST /runs` takes the whole target on every start and there is no stored target to
-reference, so what `backend/mcp/declaration.py` reads out of `agentaudit.toml` *is* the
+reference, so what `backend/declaration.py` reads out of `agentaudit.toml` *is* the
 registration. The file carried the endpoint, the agent type, the tool declarations, the
 attestation and the price, and none of the four — so a run started from this surface
 reproduced exactly the defect ADR-0092 had just closed, one surface over. This record

@@ -11,13 +11,13 @@ import pathlib
 import pytest
 from mcp.server.mcpserver.exceptions import ToolError
 
+from backend.declaration import DeclarationRefusal, declaration_at
 from backend.mcp.__main__ import (
     DEFAULT_API,
     DEFAULT_DECLARATION,
     configured,
     serving,
 )
-from backend.mcp.declaration import DeclarationRefusal, declaration_at
 from backend.tests.test_mcp_tools import NOWHERE, UNREACHED, declared
 
 EXAMPLE = pathlib.Path(__file__).resolve().parents[2] / "agentaudit.toml.example"

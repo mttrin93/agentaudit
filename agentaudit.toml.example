@@ -6,6 +6,15 @@
 # `attributed_cause` in the signed report is read against, so a control declared here
 # and absent from the target is a finding attributed to a control that does not exist.
 #
+# **The Action reads it too** — pass its path as the `declaration:` input, and a
+# push-time run and an on-demand run measure the same declared target. Not every key
+# below is read there: the Action's attestation is committed prose signed for by an
+# actor the runner authenticated, and the address and the credential belong in its own
+# secret store, so `[attestation]` and the two waivers are the MCP server's alone. A
+# key this file declares and the workflow also passes fails the step before anything
+# is sent — neither wins
+# (docs/adr/0103-the-action-reads-the-committed-declaration-and-a-key-declared-twice-refuses-the-run.md).
+#
 # The first run against a new target is still registered in the console — this file
 # is the declaration that walk produces, written down. What the four tools do, and
 # which of them spends, is in the README section that points at this file.
@@ -16,7 +25,10 @@
 name = "checkout-agent"
 
 # The endpoint the bench will attack. A callback target is imported out of a checkout
-# and is the Action's shape, not this surface's: run one of those through the Action.
+# and is the Action's shape, not this surface's: run one of those through the Action,
+# where the callback is a `with:` line and this key is left out — the Action refuses
+# only a file that is not there, and a run given both a callback and a url has two
+# targets.
 url = "https://staging.example.test/agent"
 
 # Sent as `Authorization: Bearer …` on every call to this endpoint. Leave it empty if

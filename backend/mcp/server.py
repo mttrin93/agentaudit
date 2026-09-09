@@ -40,6 +40,7 @@ from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp.types import ToolAnnotations
 
+from backend.declaration import Declaration, DeclarationRefused, declaration_at
 from backend.mcp.client import (
     BenchClient,
     BenchRefused,
@@ -47,7 +48,6 @@ from backend.mcp.client import (
     NoEstimate,
     ReportNotSigned,
 )
-from backend.mcp.declaration import Declaration, DeclarationRefused, declaration_at
 from backend.mcp.reading import compact_report
 
 INSTRUCTIONS = (

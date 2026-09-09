@@ -49,8 +49,15 @@ jobs:
           # callback: myproject.agent:answer
           # callback-install: uv pip install -e .
 
-          # What you declare about the target, in this file, because these are the
-          # run's declared inputs and the report records them.
+          # What you declare about the target. The better place for all four is the
+          # committed `agentaudit.toml` — it is the same declaration the MCP server
+          # reads, so an on-demand run measures the same target this one does, and it
+          # says seven things no input here can, among them the four the Agents Rule
+          # of Two is read over. Uncomment the line below, move these four into it,
+          # and delete them here: a key declared in both places fails the step before
+          # anything is sent, because neither the file nor the input wins (ADR-0103).
+          #
+          # declaration: agentaudit.toml
           name: support-assistant
           agent-type: assistant
           exposes-tool-calls: "true"

@@ -1,10 +1,21 @@
 """`agentaudit.toml`: what the operator declared about their target, committed.
 
+**One file, one reader, two surfaces.** The MCP server reads it through
+`declaration_at` below and the Action reads it through `everything_declared_at`
+(`--declaration`), because a second parse would have its own idea of what an absent
+flag means and the drift would then be between two readings of one document
+([ADR-0103](../docs/adr/0103-the-action-reads-the-committed-declaration-and-a-key-declared-twice-refuses-the-run.md)).
+Which keys each surface takes is that record's §2 and §3, and it is not the same
+set: the Action keeps its own attestation, which is committed prose by an actor the
+runner authenticated (ADR-0065), and takes no waiver out of a file. This module
+imports `tomllib` and nothing else, which is what lets `backend/mcp/` reach it
+without reaching a bench module (ADR-0100).
+
 **Read, never written.** No tool edits this file, fills a field it found empty or
 declares a control on the operator's behalf. A surface that could write a
 declaration is a surface that could declare a control, and every
 `attributed_cause` in a report is read against what this file says
-([ADR-0100](../../docs/adr/0100-the-mcp-server-has-no-privilege-the-console-lacks.md)).
+([ADR-0100](../docs/adr/0100-the-mcp-server-has-no-privilege-the-console-lacks.md)).
 
 **The defaults are the strict ones.** `nonce_planted` defaults true and
 `echo_waived` false, for the reason `StartRunRequest` states at the same two
@@ -18,14 +29,14 @@ unstated.** They are the one family here whose absence is a third answer rather 
 a narrowing: a key left out reports that nobody said anything, which is what happened,
 and defaulting it to `False` would be this reader making the profitable claim for an
 operator who made none
-([ADR-0102](../../docs/adr/0102-the-declaration-file-carries-the-four-rule-of-two-declarations.md)).
+([ADR-0102](../docs/adr/0102-the-declaration-file-carries-the-four-rule-of-two-declarations.md)).
 Without them a run started from this surface read `not_declared` for all four however
 its operator would have answered — the defect ADR-0092 closed for the console, one
 surface over.
 
 **A callback is refused rather than carried.** `TargetRequest` takes a `url`; a
 callback is an object imported out of a checkout, which is the Action's shape
-([ADR-0066](../../docs/adr/0066-the-action-is-a-composite-step-in-the-callers-own-repository.md))
+([ADR-0066](../docs/adr/0066-the-action-is-a-composite-step-in-the-callers-own-repository.md))
 and unreachable over HTTP. Passing one through would produce a run against
 nothing.
 """
@@ -114,7 +125,7 @@ class Declaration:
     on this surface whose absence is a third answer rather than a default. An absent
     key is *not stated*, because `False` is the flattering claim on these four and a
     reader that supplied it would be declaring a control on the operator's behalf
-    ([ADR-0102](../../docs/adr/0102-the-declaration-file-carries-the-four-rule-of-two-declarations.md))."""
+    ([ADR-0102](../docs/adr/0102-the-declaration-file-carries-the-four-rule-of-two-declarations.md))."""
 
     reaches_private_data: bool | None
     changes_state_or_communicates: bool | None
@@ -149,6 +160,22 @@ class Declaration:
     only one of them is safe to confirm without reading further (ADR-0007)."""
 
     currency: str
+
+    declared_keys: frozenset[str] = frozenset()
+    """Which keys the file actually holds, across all three tables.
+
+    Every other field on this record has a default, so no reader of one can tell a
+    key that was declared from a key that was not. The Action needs to: a key
+    declared here and also passed as a workflow input refuses the run, and neither
+    side wins
+    ([ADR-0103](../docs/adr/0103-the-action-reads-the-committed-declaration-and-a-key-declared-twice-refuses-the-run.md)
+    §4). A rule read off the values instead would let an operator who declared
+    `exposes_tool_calls = false` and passed the flag anyway through, because the
+    reader's default for the absent key is the same word.
+
+    Names, not table-qualified paths: no key name occurs in two of the three tables,
+    and a set of bare names is what the caller compares its own flags against.
+    """
 
 
 def _table(document: dict[str, Any], name: str) -> dict[str, Any]:
@@ -243,13 +270,100 @@ def _words(table: dict[str, Any], key: str) -> tuple[str, ...]:
     return tuple(value)
 
 
+def _declared(document: dict[str, Any]) -> Declaration:
+    """One declaration out of a parsed file, with nothing refused.
+
+    The whole of what the file says, read once for both surfaces: the refusals each
+    of them makes are its own and sit in its own entry point below (ADR-0103 §1).
+    """
+    target = _table(document, "target")
+    attestation = _table(document, "attestation")
+    cost = _table(document, "cost")
+    return Declaration(
+        name=str(target["name"]),
+        url=str(target.get("url", "")),
+        auth_token=str(target.get("auth_token", "")),
+        agent_type=str(target.get("agent_type", "assistant")),
+        exposes_tool_calls=_flag(target, "exposes_tool_calls", False),
+        declared_tools=_words(target, "declared_tools"),
+        retains_session_state=_flag(target, "retains_session_state", False),
+        holds_personal_records=_flag(target, "holds_personal_records", False),
+        processes_untrusted_input=_tristate(target, "processes_untrusted_input"),
+        reaches_private_data=_tristate(target, "reaches_private_data"),
+        changes_state_or_communicates=_tristate(
+            target, "changes_state_or_communicates"
+        ),
+        under_human_supervision=_tristate(target, "under_human_supervision"),
+        sends=_count(target, "sends"),
+        nonce=str(target.get("nonce", "")),
+        note_planted=_flag(target, "note_planted", False),
+        nonce_planted=_flag(target, "nonce_planted", True),
+        echo_waived=_flag(target, "echo_waived", False),
+        identity=str(attestation.get("identity", "")),
+        authorised_to_test=_flag(attestation, "authorised_to_test", False),
+        not_production=_flag(attestation, "not_production", False),
+        accepts_provider_policy_and_cost=_flag(
+            attestation, "accepts_provider_policy_and_cost", False
+        ),
+        price_per_call=(
+            None if cost.get("price_per_call") is None else str(cost["price_per_call"])
+        ),
+        currency=str(cost.get("currency", "")),
+        declared_keys=frozenset(target) | frozenset(attestation) | frozenset(cost),
+    )
+
+
+def _document_at(path: pathlib.Path) -> dict[str, Any]:
+    """The parsed file, or the refusal that says there is not one.
+
+    The one refusal both surfaces make, because it is the one that is true of the
+    file rather than of its contents. A file that is not TOML at all raises rather
+    than refuses, for the reason `declaration_at` gives.
+    """
+    if not path.is_file():
+        raise DeclarationRefused(
+            DeclarationRefusal.NO_FILE,
+            f"no declaration at {path}: a run from this surface is run against a "
+            "target declared in a committed file, and the first run against a new "
+            "target is registered in the console",
+        )
+    return tomllib.loads(path.read_text(encoding="utf-8"))
+
+
+def everything_declared_at(path: pathlib.Path) -> Declaration:
+    """Everything the file at `path` says, with only its absence refused.
+
+    Named for what it does rather than beside `declaration_at`, because the two are
+    a letter apart and mean materially different things: a reader who reached for
+    the wrong one would get the weaker check and no error.
+
+    **The Action's reading**, and the shorter of the two: the three refusals
+    `declaration_at` adds below are about reaching the target over HTTP and about
+    attesting in the file, and the Action does neither
+    ([ADR-0103](../docs/adr/0103-the-action-reads-the-committed-declaration-and-a-key-declared-twice-refuses-the-run.md)
+    §3). Its target may be a callback resolved against a checkout, and its
+    attestation is committed prose signed for by an actor the runner authenticated
+    (ADR-0065) — so a `[target]` with no `url` and an absent `[attestation]` are
+    both ordinary here, and `scripts/bench.py` reads neither table's answer to
+    those questions.
+
+    What it does read is `declared_keys`, because the Action's own rule is that a
+    key declared here and passed as a workflow input refuses the run, and *declared
+    here* has to mean the key is in the file rather than the reader's default for
+    it.
+    """
+    return _declared(_document_at(path))
+
+
 def declaration_at(path: pathlib.Path) -> Declaration:
     """The committed declaration at `path`, or the named refusal that stops the run.
 
-    The refusals are ordered the way a reader meets the problem: there is no file,
-    then the target is not an endpoint, then nobody is attesting, then somebody is
-    attesting less than three things. Each stops before the next is asked, so the
-    sentence names the first thing to fix rather than all of them at once.
+    **The MCP server's reading**, which is `everything_declared_at` above plus the three
+    refusals that surface makes. They are ordered the way a reader meets the
+    problem: there is no file, then the target is not an endpoint, then nobody is
+    attesting, then somebody is attesting less than three things. Each stops before
+    the next is asked, so the sentence names the first thing to fix rather than all
+    of them at once.
 
     A file that is not TOML at all, or one whose `[target]` omits `name`, raises
     rather than refuses. The four refusals are for a declaration that parses and
@@ -258,17 +372,9 @@ def declaration_at(path: pathlib.Path) -> Declaration:
     it would make the closed set mean something other than what the operator
     declared.
     """
-    if not path.is_file():
-        raise DeclarationRefused(
-            DeclarationRefusal.NO_FILE,
-            f"no declaration at {path}: this surface runs against a target declared "
-            "in a committed file, and the first run against a new target is "
-            "registered in the console",
-        )
-    document = tomllib.loads(path.read_text(encoding="utf-8"))
+    document = _document_at(path)
     target = _table(document, "target")
     attestation = _table(document, "attestation")
-    cost = _table(document, "cost")
     if not target.get("url"):
         raise DeclarationRefused(
             DeclarationRefusal.NOT_AN_ENDPOINT,
@@ -292,34 +398,4 @@ def declaration_at(path: pathlib.Path) -> Declaration:
             f"withheld: {', '.join(withheld)} — a run does not start on a "
             "statement the operator did not make (ADR-0007)",
         )
-    return Declaration(
-        name=str(target["name"]),
-        url=str(target["url"]),
-        auth_token=str(target.get("auth_token", "")),
-        agent_type=str(target.get("agent_type", "assistant")),
-        exposes_tool_calls=_flag(target, "exposes_tool_calls", False),
-        declared_tools=_words(target, "declared_tools"),
-        retains_session_state=_flag(target, "retains_session_state", False),
-        holds_personal_records=_flag(target, "holds_personal_records", False),
-        processes_untrusted_input=_tristate(target, "processes_untrusted_input"),
-        reaches_private_data=_tristate(target, "reaches_private_data"),
-        changes_state_or_communicates=_tristate(
-            target, "changes_state_or_communicates"
-        ),
-        under_human_supervision=_tristate(target, "under_human_supervision"),
-        sends=_count(target, "sends"),
-        nonce=str(target.get("nonce", "")),
-        note_planted=_flag(target, "note_planted", False),
-        nonce_planted=_flag(target, "nonce_planted", True),
-        echo_waived=_flag(target, "echo_waived", False),
-        identity=str(attestation["identity"]),
-        authorised_to_test=_flag(attestation, "authorised_to_test", False),
-        not_production=_flag(attestation, "not_production", False),
-        accepts_provider_policy_and_cost=_flag(
-            attestation, "accepts_provider_policy_and_cost", False
-        ),
-        price_per_call=(
-            None if cost.get("price_per_call") is None else str(cost["price_per_call"])
-        ),
-        currency=str(cost.get("currency", "")),
-    )
+    return _declared(document)

@@ -1,0 +1,35 @@
+# The declaration the `action` job's own run is made under.
+#
+# It exists so that the reading path story 3 added is exercised by the job that
+# installs this repository the way a stranger's workflow installs it, rather than only
+# by a test that calls `bench.main` with a list
+# (docs/adr/0103-the-action-reads-the-committed-declaration-and-a-key-declared-twice-refuses-the-run.md).
+# It doubles as the demonstration of the `declaration` input, exactly as
+# `.github/agentaudit-attestation.md` doubles as the demonstration of `attestation`.
+#
+# It declares less than `agentaudit.toml.example` does, deliberately. Every key here is
+# one this job's target can honestly claim and none of them moves a rate: the four the
+# Agents Rule of Two is read over reach Annex IV section 3 and no figure at all, and a
+# smoke run whose declarations changed what was sent would be a bar decided against a
+# different suite every time somebody edited this file.
+#
+# There is no `url`: this target is a callback served on a loopback port inside the
+# runner, which is the Action's shape and the one `declaration_at` refuses for the MCP
+# server. There is no `[attestation]` table either — a CI attestation is committed
+# prose by an actor the runner authenticated (ADR-0065), and this run's is beside this
+# file.
+
+[target]
+
+name = "headless-agent"
+agent_type = "assistant"
+
+# `backend/tests/headless_agent.py` answers from the message it was handed and reaches
+# nothing, which is what makes the smoke run free. All four are declared rather than
+# left out, because the point of declaring them here is that a CI run *can* now say
+# something other than *not stated* — the defect ADR-0092 closed for the console and
+# ADR-0103 §2 closes for this surface.
+processes_untrusted_input = true
+reaches_private_data = false
+changes_state_or_communicates = false
+under_human_supervision = false

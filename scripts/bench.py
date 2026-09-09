@@ -70,6 +70,7 @@ import argparse
 import importlib
 import os
 import sys
+import tomllib
 from collections.abc import Mapping, Sequence
 from contextlib import ExitStack
 from dataclasses import replace
@@ -85,7 +86,7 @@ from backend.bench.admission import NotAdmitted, admitted_library
 from backend.bench.calibration import TargetRun, run_calibration
 from backend.bench.cited import the_citation, the_reliability
 from backend.bench.completion import DEFAULT_ADJUDICATOR_MODEL
-from backend.bench.contract import TargetConfig
+from backend.bench.contract import RetryPolicy, TargetConfig
 from backend.bench.declared_gap import DeclaredGap
 from backend.bench.elective import NOTHING_REQUESTED
 from backend.bench.evaluator import Verdict
@@ -110,6 +111,7 @@ from backend.bench.unattended import (
     committed_attestation,
 )
 from backend.bench.usage import UsageLedger
+from backend.declaration import DeclarationRefused, everything_declared_at
 from backend.graph.approval import Approval, Approve
 from backend.graph.budget import (
     BudgetExceeded,
@@ -155,6 +157,22 @@ person reading a red step: one is a run somebody refused and the other is a work
 missing a secret. Both stop before the first send.
 """
 
+EXIT_DOUBLY_DECLARED = 7
+"""Exit code when a key is declared in the committed file and passed as an input.
+
+Its own code and not `EXIT_WITHHELD`, for `EXIT_NO_KEY`'s reason one input further
+out: this is a workflow to fix and not a run somebody refused, and the two are
+different jobs for the person reading the red step. Nothing was sent
+([ADR-0103](../docs/adr/0103-the-action-reads-the-committed-declaration-and-a-key-declared-twice-refuses-the-run.md)
+§4).
+
+The neighbouring refusals stay `EXIT_WITHHELD`: a declaration that is not where the
+workflow pointed, or that cannot be read at all, is refused by `DeclarationRefusal`
+under its own name, and every refusal `main` makes on the declared inputs returns
+that code. What is its own thing here is the *collision* — the one failure where the
+run could have gone ahead and the reason it must not is that two documents disagree.
+"""
+
 URL_ENV = "AGENTAUDIT_TARGET_URL"
 """Where the target's endpoint comes from when no flag carries one.
 
@@ -189,6 +207,120 @@ WAIVED = (
 )
 
 
+SHARED_WITH_THE_DECLARATION: tuple[tuple[str, str, str], ...] = (
+    ("name", "name", "--name"),
+    ("url", "url", f"--url (or {URL_ENV})"),
+    ("token", "auth_token", f"--token (or {TOKEN_ENV})"),
+    ("agent_type", "agent_type", "--agent-type"),
+    ("exposes_tool_calls", "exposes_tool_calls", "--exposes-tool-calls"),
+    ("declared_tools", "declared_tools", "--declared-tools"),
+    ("retains_session_state", "retains_session_state", "--retains-session-state"),
+    ("holds_personal_records", "holds_personal_records", "--holds-personal-records"),
+    ("nonce", "nonce", f"--nonce (or {NONCE_ENV})"),
+    ("note_planted", "note_planted", "--note-planted"),
+    ("price_per_call", "price_per_call", "--price-per-call"),
+    ("currency", "currency", "--currency"),
+)
+"""The keys `agentaudit.toml` and this entrypoint's inputs can both carry.
+
+One row per key: the attribute on the parsed arguments, the key in the file, and
+what a caller would have to have written for the two to collide. The third column
+exists so the refusal names *the input to delete* rather than the field it landed
+in — a person reading a red step is holding a workflow file, not this one.
+
+Every input of this entrypoint that is *not* in this table stays the workflow's, and
+which those are and why is
+[ADR-0103](../docs/adr/0103-the-action-reads-the-committed-declaration-and-a-key-declared-twice-refuses-the-run.md)
+§3. The consequence here is one line of code: the file's `[attestation]` table is
+never looked at, so `--identity` and `--attestation-file` cannot collide and are
+absent below.
+"""
+
+ONLY_IN_THE_DECLARATION = (
+    "processes_untrusted_input",
+    "reaches_private_data",
+    "changes_state_or_communicates",
+    "under_human_supervision",
+    "sends",
+)
+"""The five the file can state and no input of this entrypoint can.
+
+The four the Agents Rule of Two is read over are the reason story 3 is worth more
+here than tidiness: `action.yml` has an input for none of them, so a target audited
+only in CI reads `not_declared` in Annex IV section 3 for ever — ADR-0092's defect,
+surviving on the surface nobody had looked at (ADR-0103 §2). No collision is
+possible on any of the five, because there is nothing to collide with.
+"""
+
+THE_ENTRYPOINT_DEFAULTS = (
+    ("name", "target"),
+    ("agent_type", "assistant"),
+    ("currency", "USD"),
+)
+"""Three defaults that used to live in `action.yml`'s own input table.
+
+They are applied after the file is read rather than by argparse, because a default
+argparse supplied would be indistinguishable from a value the caller typed, and the
+both-given rule would then fire on every run of a workflow that declares nothing
+(ADR-0103 §4). A run with no `--declaration` gets exactly the values it always got.
+"""
+
+
+class DoublyDeclared(ValueError):
+    """A key the committed file declares and a workflow input also carries.
+
+    An exception rather than a returned sentence, so that the two ways a declaration
+    can stop a run — this and `DeclarationRefused` — are raised the same way and
+    caught in one place. The sentence names every key declared twice, because one
+    red step should fix the whole `with:` block rather than the first line of it.
+    """
+
+
+def _read_the_declaration(args: argparse.Namespace) -> None:
+    """Fold the committed declaration into the parsed arguments, in place.
+
+    **Neither the file nor the input wins**, and the argument for refusing instead of
+    choosing is
+    [ADR-0103](../docs/adr/0103-the-action-reads-the-committed-declaration-and-a-key-declared-twice-refuses-the-run.md)
+    §4. What that costs here is this function's shape: the merge happens before the
+    attestation is read and before anything is sent, and the three defaults are
+    applied after it rather than by the parser.
+
+    *Given* is the truthy value, uniformly. An unset string is empty or `None`, an
+    unset flag is `False`, an unset list is empty, and no row of the table above has
+    a falsy value a caller could mean.
+    """
+    if args.declaration:
+        declaration = everything_declared_at(Path(args.declaration))
+        twice = [
+            written
+            for attribute, key, written in SHARED_WITH_THE_DECLARATION
+            if getattr(args, attribute) and key in declaration.declared_keys
+        ]
+        if twice:
+            raise DoublyDeclared(
+                f"{', '.join(twice)}: declared in {args.declaration} and passed as "
+                "an input too. Neither wins — an input that overrode the committed "
+                "file would audit something the pull request did not approve, and a "
+                "file that overrode the input would leave a workflow line doing "
+                "nothing — so the run stops here. Delete one of the two (ADR-0103)."
+            )
+        for attribute, key, _ in SHARED_WITH_THE_DECLARATION:
+            if key in declaration.declared_keys:
+                setattr(args, attribute, getattr(declaration, key))
+        for attribute in ONLY_IN_THE_DECLARATION:
+            setattr(args, attribute, getattr(declaration, attribute))
+        # `url = ""` and `nonce = ""` are how the example file spells *this target
+        # needs no such thing*, and both are `None` rather than empty everywhere
+        # downstream: an empty string would leave `main` reading a target where there
+        # is none, and it would count as a nonce a served callback was handed.
+        args.url = args.url or None
+        args.nonce = args.nonce or None
+    for attribute, default in THE_ENTRYPOINT_DEFAULTS:
+        setattr(args, attribute, getattr(args, attribute) or default)
+    return None
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     load_dotenv()
     args = _parser().parse_args(argv)
@@ -202,6 +334,30 @@ def main(argv: Sequence[str] | None = None) -> int:
     except NoSigningKey as missing:
         print(f"{missing}\n\nNothing was sent.")
         return EXIT_NO_KEY
+
+    # Second, and before the ceiling is read: `--currency` and `--price-per-call`
+    # are two of the keys the committed file can carry, so the estimate below has to
+    # be built from the merged declaration rather than from the workflow's half of
+    # it (ADR-0103 §2).
+    try:
+        _read_the_declaration(args)
+    except DoublyDeclared as collision:
+        print(f"{collision}\n\nNothing was sent.")
+        return EXIT_DOUBLY_DECLARED
+    except DeclarationRefused as missing:
+        print(f"{missing}\n\nNothing was sent.")
+        return EXIT_WITHHELD
+    except (KeyError, OSError, TypeError, tomllib.TOMLDecodeError) as unreadable:
+        # A file that cannot be read is not a declaration whose contents can be
+        # argued with, which is why `everything_declared_at` raises here rather
+        # than returning a fifth refusal name — and why this prints the exception
+        # rather than a sentence of its own. `OSError` is in the tuple because
+        # `is_file()` passing is not the same as `read_text` succeeding.
+        print(
+            f"The declaration at {args.declaration} cannot be read: {unreadable}"
+            "\n\nNothing was sent."
+        )
+        return EXIT_WITHHELD
 
     try:
         call_price = price(args.price_per_call, args.currency)
@@ -222,8 +378,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         # zero is not a run.
         print(
             "This run has no target, or two. Pass exactly one of --url (or "
-            f"{URL_ENV}) and --callback: the committed attestation names one target "
-            "and authorises a run against that one."
+            f"{URL_ENV}, or a `url` in the declaration) and --callback: the "
+            "committed attestation names one target and authorises a run against "
+            "that one."
         )
         return EXIT_WITHHELD
     reference = args.url if args.url is not None else args.callback
@@ -889,15 +1046,18 @@ def _target(
     """
     if args.url is not None:
         return (
-            TargetConfig(
-                name=args.name,
-                url=args.url,
-                auth_token=args.token,
-                agent_type=args.agent_type,
-                exposes_tool_calls=args.exposes_tool_calls,
-                retains_session_state=args.retains_session_state,
-                holds_personal_records=args.holds_personal_records,
-                declared_tools=tuple(args.declared_tools),
+            _as_declared(
+                TargetConfig(
+                    name=args.name,
+                    url=args.url,
+                    auth_token=args.token,
+                    agent_type=args.agent_type,
+                    exposes_tool_calls=args.exposes_tool_calls,
+                    retains_session_state=args.retains_session_state,
+                    holds_personal_records=args.holds_personal_records,
+                    declared_tools=tuple(args.declared_tools),
+                ),
+                args,
             ),
             None,
         )
@@ -921,7 +1081,27 @@ def _target(
             declared_tools=tuple(args.declared_tools),
         )
     )
-    return target, callback
+    return _as_declared(target, args), callback
+
+
+def _as_declared(target: TargetConfig, args: argparse.Namespace) -> TargetConfig:
+    """The five fields only the committed declaration can fill, put on the target.
+
+    Applied to both shapes above rather than to the URL branch alone: `serve_callback`
+    reads a callback's contract for what it can read off it, and these five are not
+    among them — what a target does with untrusted input is the operator's statement
+    wherever the agent lives, exactly as retention and personal records already are
+    (ADR-0059 §2). A run with no `--declaration` leaves every one of them `None` and
+    the target is the one it was.
+    """
+    return replace(
+        target,
+        processes_untrusted_input=args.processes_untrusted_input,
+        reaches_private_data=args.reaches_private_data,
+        changes_state_or_communicates=args.changes_state_or_communicates,
+        under_human_supervision=args.under_human_supervision,
+        retry=RetryPolicy(sends=args.sends) if args.sends else target.retry,
+    )
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -947,8 +1127,24 @@ def _parser() -> argparse.ArgumentParser:
             "team whose agent is a Python object in their own repository (ADR-0059)"
         ),
     )
-    parser.add_argument("--name", default="target")
-    parser.add_argument("--agent-type", default="assistant")
+    # Empty rather than `target` and `assistant`, and `--currency` below the same:
+    # the defaults are applied in `_the_declared_target` after the committed file has
+    # been read, because a default argparse supplied is one the both-given rule
+    # cannot tell from a value the caller typed (ADR-0103 §4).
+    parser.add_argument("--name", default="")
+    parser.add_argument("--agent-type", default="")
+    parser.add_argument(
+        "--declaration",
+        default="",
+        help=(
+            "the committed `agentaudit.toml` this run is declared in — the same file "
+            "the MCP server reads, so that a push-time run and an on-demand run "
+            "measure the same declared target (ADR-0103). Empty by default, which "
+            "declares the run from these inputs and reads no file; a path that is "
+            "not there is refused rather than fallen back from. A key it declares "
+            "and an input below both carry stops the run: neither wins"
+        ),
+    )
     parser.add_argument(
         "--checkout",
         default=None,
@@ -1026,7 +1222,7 @@ def _parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument("--price-per-call", default=None)
-    parser.add_argument("--currency", default="USD")
+    parser.add_argument("--currency", default="")
     parser.add_argument("--adjudicator-model", default=None)
     parser.add_argument("--deterministic-only", action="store_true")
     parser.add_argument(
@@ -1095,6 +1291,13 @@ def _parser() -> argparse.ArgumentParser:
     # (ADR-0043, ADR-0095).
     parser.add_argument("--holds-personal-records", action="store_true")
     parser.add_argument("--declared-tools", nargs="*", default=[])
+    # No flag for any of these five, and that is the decision rather than an
+    # omission: the four the Agents Rule of Two is read over and the ceiling one
+    # message may go on the wire under are declared in the committed file or not at
+    # all on this surface, so the workflow gains no way to claim a control in a
+    # `with:` block (ADR-0103 §2). `None` on all five is *nobody said anything*,
+    # which is what `TargetConfig` reads it as.
+    parser.set_defaults(**dict.fromkeys(ONLY_IN_THE_DECLARATION))
     return parser
 
 

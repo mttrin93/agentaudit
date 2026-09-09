@@ -25,6 +25,7 @@ from fastapi.testclient import TestClient
 from backend.api.run_state import NeverPresented
 from backend.bench.contract import RetryPolicy, TargetConfig
 from backend.bench.library import Case
+from backend.declaration import Declaration
 from backend.mcp.client import (
     BenchClient,
     BenchRefused,
@@ -33,7 +34,6 @@ from backend.mcp.client import (
     ReportNotSigned,
     _body,
 )
-from backend.mcp.declaration import Declaration
 from backend.tests.test_api_runs import (
     Watched,
     api,

@@ -59,16 +59,44 @@ inputs:
     default: ""
 
   # --- what you declare about it, in the file, where it is reviewed ---------------
-  name:
-    description: The name this target is recorded under in the report.
+  #
+  # Every input in this block has a key in `agentaudit.toml`, and the file is the
+  # better place for all of them: it is the same declaration the MCP server reads, so
+  # a push-time run and an on-demand run measure the same declared target, and it is
+  # reviewed in a pull request rather than retyped per workflow
+  # (docs/adr/0103-the-action-reads-the-committed-declaration-and-a-key-declared-twice-refuses-the-run.md).
+  # Declare a key in both places and the step is red before anything is sent: neither
+  # the file nor the input wins, because either precedence is a silent disagreement
+  # between two documents a reader only ever holds one of.
+  #
+  # Seven things the file can say that no input here can: the four the Agents Rule of
+  # Two is read over, whether a later turn sees what an earlier one did, whether this
+  # target holds records about people other than you, and how many times one message
+  # may go on the wire.
+  declaration:
+    description: >-
+      Path in your repository to the committed `agentaudit.toml` — the same file the
+      MCP server reads. Empty by default, which reads no file and declares the run
+      from the inputs below, exactly as this action always has. A path that is not
+      there fails the step rather than falling back to them: a typo would otherwise
+      run with no declared tools, and against an empty list every call your agent
+      makes scores as a finding. `agentaudit.toml.example` in the bench's own
+      repository is the example.
     required: false
-    default: target
+    default: ""
+  name:
+    description: >-
+      The name this target is recorded under in the report. `target` if neither this
+      nor the file says.
+    required: false
+    default: ""
   agent-type:
     description: >-
       What kind of agent this is. Decides which of the library's cases apply to it
       at all; a case not written for this type is not sent and is in no denominator.
+      `assistant` if neither this nor the file says.
     required: false
-    default: assistant
+    default: ""
   exposes-tool-calls:
     description: >-
       Whether the target returns a trace of the tools it called. Requires
@@ -150,9 +178,11 @@ inputs:
     required: false
     default: ""
   currency:
-    description: The currency the two figures above are in.
+    description: >-
+      The currency the two figures above are in. `USD` if neither this nor the file
+      says.
     required: false
-    default: USD
+    default: ""
 
   # --- what it covers, and at what denominator ------------------------------------
   families:
@@ -338,6 +368,7 @@ runs:
         IDENTITY: ${{ inputs.identity }}
         WORKSPACE: ${{ github.workspace }}
         ATTESTATION: ${{ inputs.attestation }}
+        DECLARATION: ${{ inputs.declaration }}
         TARGET_NAME: ${{ inputs.name }}
         AGENT_TYPE: ${{ inputs.agent-type }}
         CURRENCY: ${{ inputs.currency }}
@@ -367,6 +398,17 @@ runs:
           *) attestation="$WORKSPACE/$ATTESTATION" ;;
         esac
 
+        # Resolved against the caller's checkout for the same reason, and left empty
+        # when it is empty: an unset input reads no file at all, which is what this
+        # action did before it could read one.
+        declaration=""
+        if [ -n "$DECLARATION" ]; then
+          case "$DECLARATION" in
+            /*) declaration="$DECLARATION" ;;
+            *) declaration="$WORKSPACE/$DECLARATION" ;;
+          esac
+        fi
+
         # `if` and not `&&`, deliberately: under `set -e` a `test && append` whose
         # test is false is a failing statement, so an unset optional input would end
         # the step rather than be left out of the command.
@@ -374,7 +416,15 @@ runs:
         # is where the token and the nonce already come from and for the same second
         # reason — `/proc/<pid>/cmdline` is world-readable, and every other process
         # on the runner can read a command line.
+        # Four of these are values the committed declaration may carry instead, so
+        # they are appended only when the workflow gave one: passing `--name ""`
+        # would be this file declaring a name the caller did not, and the entrypoint
+        # could no longer tell the two apart (ADR-0103 §4).
         declared=()
+        if [ -n "$declaration" ]; then declared+=(--declaration "$declaration"); fi
+        if [ -n "$TARGET_NAME" ]; then declared+=(--name "$TARGET_NAME"); fi
+        if [ -n "$AGENT_TYPE" ]; then declared+=(--agent-type "$AGENT_TYPE"); fi
+        if [ -n "$CURRENCY" ]; then declared+=(--currency "$CURRENCY"); fi
         if [ -n "$CALLBACK" ]; then declared+=(--callback "$CALLBACK"); fi
         if [ -n "$MAX_CALLS" ]; then declared+=(--max-calls "$MAX_CALLS"); fi
         if [ -n "$MAX_SPEND" ]; then declared+=(--max-spend "$MAX_SPEND"); fi
@@ -429,9 +479,6 @@ runs:
           --identity "$IDENTITY" \
           --attestation-file "$attestation" \
           --out "$REPORT_DIR" \
-          --name "$TARGET_NAME" \
-          --agent-type "$AGENT_TYPE" \
-          --currency "$CURRENCY" \
           --checkout "$WORKSPACE" \
           "${declared[@]}"
 

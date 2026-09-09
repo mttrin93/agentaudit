@@ -389,6 +389,7 @@ in it reaches AgentAudit, and the only place it uploads to is your own workflow 
     token: ${{ secrets.AGENTAUDIT_TARGET_TOKEN }}
     signing-key: ${{ secrets.AGENTAUDIT_SIGNING_KEY }}
     openrouter-api-key: ${{ secrets.OPENROUTER_API_KEY }}
+    declaration: agentaudit.toml
     attestation: .github/agentaudit-attestation.md
     bar: .github/agentaudit-bar.toml
     max-calls: "600"
@@ -398,7 +399,22 @@ The whole file, with every input and the comments that say why each one lives wh
 does, is [docs/examples/agentaudit-workflow.yml](./docs/examples/agentaudit-workflow.yml);
 the action itself is [action.yml](./action.yml) and the argument for it is
 [ADR-0066](./docs/adr/0066-the-action-is-a-composite-step-in-the-callers-own-repository.md).
-Five things are worth reading before you copy it.
+Six things are worth reading before you copy it.
+
+**`declaration:` is the same file your coding agent reads.** What you claim about the
+target — its name, its tools, what it retains, what it holds about other people, and
+the four the Agents Rule of Two is read over — belongs in the committed
+`agentaudit.toml` under **From your coding agent**
+below, not in this `with:` block, so that a push-time run and an on-demand run measure
+the same declared target. What stays here is what this run does in this pipeline: the
+address and the credentials, who is attesting, the bar, the ceilings and the family
+selection. Declare a key in both places and the step is red before anything is sent —
+neither wins, because an input that quietly overrode the reviewed file would audit
+something the pull request never approved, and a file that quietly overrode the input
+would leave a workflow line doing nothing
+([ADR-0103](./docs/adr/0103-the-action-reads-the-committed-declaration-and-a-key-declared-twice-refuses-the-run.md)).
+Leave the input out and nothing changes: no file is read and the block below declares
+the run, exactly as before.
 
 **Pin the tag, and read the library version when the numbers move.** The tag pins the
 bench, the bench pins the case library, and the library is what `LibraryVersion` records
@@ -470,7 +486,8 @@ declaration, it does not make one.
 to `agentaudit.toml` at your repository root and fill it in; every field carries a
 comment saying what declaring it means. It is read on every tool call and written by
 nothing, so what your agent claimed about itself is a reviewed diff rather than an
-answer somebody typed into a chat.
+answer somebody typed into a chat. **The Action reads the same file** — pass its path
+as `declaration:` in the workflow above, and one declaration serves both surfaces.
 
 **Start the API** — `uv run uvicorn backend.api.app:create_app --factory`, as under
 **Try it** above. The server starts no bench and will not refuse to start because

@@ -208,6 +208,13 @@ jobs:
           } >> "$GITHUB_ENV"
           rm "$RUNNER_TEMP/private"
 
+      # `declaration:` is what makes this job the Action's *reading* test as well as
+      # its disclosure test: the file is `.github/agentaudit-smoke.toml`, the same
+      # shape `agentaudit.toml.example` documents, and it is read through the same
+      # module the MCP server reads it through (ADR-0103). A key it declares and a
+      # `with:` line below both carried would turn this job red before anything was
+      # sent, which is the rule under test.
+      #
       # No `bar:` here, because the input defaults to `.github/agentaudit-bar.toml`
       # and this repository commits one: the smoke run is decided against it exactly
       # as a caller's run is decided against theirs, so a family that stops being
@@ -219,6 +226,7 @@ jobs:
         uses: ./
         with:
           callback: backend.tests.headless_agent:AGENT
+          declaration: .github/agentaudit-smoke.toml
           signing-key: ${{ env.AGENTAUDIT_SIGNING_KEY }}
           deterministic-only: "true"
           max-calls: "100000"

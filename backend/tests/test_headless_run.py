@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 from decimal import Decimal
 from pathlib import Path
 
@@ -1171,3 +1172,238 @@ def test_a_fix_written_without_a_case_id_is_refused_before_the_run(
         _proof_args(Path("."), ["path/to/replacement.py"])
 
     assert "is not a fix" in capsys.readouterr().err
+
+
+DECLARED = """
+[target]
+name = "checkout-agent"
+agent_type = "assistant"
+declared_tools = ["send_email", "lookup_order"]
+retains_session_state = true
+processes_untrusted_input = true
+reaches_private_data = true
+changes_state_or_communicates = false
+under_human_supervision = true
+
+[attestation]
+identity = "somebody-else@example.test"
+authorised_to_test = true
+not_production = true
+accepts_provider_policy_and_cost = true
+"""
+"""One committed declaration, as the MCP server and the Action both read it.
+
+No `url`, because this one is audited through a callback: `everything_declared_at`
+refuses only a missing file, and the endpoint the MCP server would need is the
+Action's own input here (ADR-0103 §3). The `[attestation]` table is present and
+deliberately names somebody the workflow does not — the Action reads none of it, and
+a test whose file agreed with the workflow could not tell that apart from a test
+whose file was read.
+"""
+
+
+def declaration_file(directory: Path, body: str = DECLARED) -> Path:
+    """The declaration, written where a caller commits it."""
+    path = directory / "agentaudit.toml"
+    path.write_text(body, encoding="utf-8")
+    return path
+
+
+def test_a_committed_declaration_is_what_a_ci_run_declares(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Story 3: one declaration, read by the Action as well as by the MCP server.
+
+    The name and the four the Agents Rule of Two is read over come out of the file
+    and reach the signed document. The four are the sharp half — `action.yml` has no
+    input for any of them, so before this a target audited only in CI read
+    `not_declared` for all four for ever, which is ADR-0092's defect on the one
+    surface nobody had looked at (ADR-0103 §2).
+    """
+    key = generate()
+    monkeypatch.setenv(SIGNING_KEY_VARIABLE, encoded_private(key))
+    monkeypatch.setattr(headless_agent, "AGENT", RecordingAgent())
+    published = tmp_path / "artefact"
+    reference = "backend.tests.headless_agent:AGENT"
+
+    code = bench.main(
+        [
+            f"--identity={ACTOR}",
+            f"--attestation-file={attestation_file(tmp_path, reference)}",
+            f"--out={published}",
+            f"--declaration={declaration_file(tmp_path)}",
+            "--deterministic-only",
+            "--max-calls=100000",
+            f"--callback={reference}",
+        ]
+    )
+
+    assert code == 0
+    signed = json.loads((published / "report.json").read_text(encoding="utf-8"))
+    assert signed["target"] == "checkout-agent", "the file named the target"
+    assert signed["declared"]["rule_of_two"]["standing"] != "not_declared"
+    assert signed["provenance"]["attestation"]["identity"] == ACTOR, (
+        "the attestation is the runner's authenticated actor and never the file's"
+    )
+
+
+def test_a_key_declared_in_the_file_and_passed_as_an_input_refuses_the_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Both given is refused, and neither side wins (ADR-0103 §4).
+
+    Precedence either way is a silent disagreement between a reviewed file and a
+    workflow: the report is correct whichever is picked, the two documents disagree,
+    and no reader holding one of them can tell. The refusal names every key declared
+    twice rather than the first, so one red step fixes the whole `with:` block.
+    """
+    monkeypatch.setenv(SIGNING_KEY_VARIABLE, encoded_private(generate()))
+    agent = RecordingAgent()
+    monkeypatch.setattr(headless_agent, "AGENT", agent)
+    reference = "backend.tests.headless_agent:AGENT"
+
+    code = bench.main(
+        [
+            f"--identity={ACTOR}",
+            f"--attestation-file={attestation_file(tmp_path, reference)}",
+            f"--out={tmp_path / 'artefact'}",
+            f"--declaration={declaration_file(tmp_path)}",
+            "--deterministic-only",
+            "--max-calls=100000",
+            f"--callback={reference}",
+            "--name=something-else",
+            "--retains-session-state",
+        ]
+    )
+
+    printed = capsys.readouterr().out
+    assert code == bench.EXIT_DOUBLY_DECLARED
+    assert "--name" in printed and "--retains-session-state" in printed
+    assert "--agent-type" not in printed, "a key declared once is not a collision"
+    assert agent.messages == [], "nothing was sent"
+    assert not (tmp_path / "artefact").exists()
+
+
+def test_a_declaration_the_workflow_points_at_and_has_not_committed_is_refused(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A path that is not there stops the run rather than falling back to the inputs.
+
+    The fallback is what makes the input opt-in rather than defaulted (ADR-0103 §5):
+    a typo in the path would otherwise be indistinguishable from a workflow-declared
+    run, and the typo's run declares no tools at all — against which every call the
+    target makes scores as a finding.
+    """
+    monkeypatch.setenv(SIGNING_KEY_VARIABLE, encoded_private(generate()))
+    agent = RecordingAgent()
+    monkeypatch.setattr(headless_agent, "AGENT", agent)
+    reference = "backend.tests.headless_agent:AGENT"
+
+    code = bench.main(
+        [
+            f"--identity={ACTOR}",
+            f"--attestation-file={attestation_file(tmp_path, reference)}",
+            f"--out={tmp_path / 'artefact'}",
+            f"--declaration={tmp_path / 'agentaudit.tml'}",
+            "--deterministic-only",
+            "--max-calls=100000",
+            f"--callback={reference}",
+        ]
+    )
+
+    assert code == EXIT_WITHHELD
+    assert "no declaration at" in capsys.readouterr().out
+    assert agent.messages == []
+
+
+def test_the_action_offers_the_declaration_and_hands_it_over_by_environment() -> None:
+    """The Action's half of story 3, in the file where a reviewer sees it.
+
+    Empty by default, which is the behaviour the Action had before this: no file is
+    read and the workflow declares the run. And the three inputs whose defaults were
+    written into this table are empty now too — a default is indistinguishable from a
+    value a caller typed by the time a composite step sees it, so left there every
+    caller who committed a file would collide on three keys they never wrote
+    (ADR-0103 §4).
+    """
+    text = ACTION.read_text(encoding="utf-8")
+
+    assert "\n  declaration:" in text, "declaration is not an input of the action"
+    interpolation = "${{ inputs.declaration }}"
+    assert f"DECLARATION: {interpolation}" in text
+    assert text.count(interpolation) == 1, (
+        "declaration is interpolated somewhere other than its env binding"
+    )
+    assert '--declaration "$declaration"' in text
+    for defaulted in ("name", "agent-type", "currency"):
+        block = re.split(
+            r"\n  (?=\S)", text.split(f"\n  {defaulted}:", 1)[1], maxsplit=1
+        )[0]
+        assert 'default: ""' in block, (
+            f"{defaulted} still defaults in the action's own table, so a caller who "
+            "declares it in the file collides on a key they never wrote"
+        )
+
+
+def test_a_key_the_environment_carries_collides_with_the_file_too(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The route the Action actually uses for the three secrets it holds.
+
+    `endpoint`, `token` and `nonce` never reach this entrypoint as flags — they are
+    bound into the environment, because `/proc/<pid>/cmdline` is world-readable
+    (ADR-0066 §2). A both-given rule that only saw the command line would therefore
+    be switched off for exactly the three keys where the two surfaces disagreeing
+    matters most: the file would silently lose to a repository secret, on the
+    address the run attacks.
+    """
+    monkeypatch.setenv(SIGNING_KEY_VARIABLE, encoded_private(generate()))
+    monkeypatch.setenv(bench.URL_ENV, ENDPOINT)
+    declared = DECLARED.replace(
+        "[target]", '[target]\nurl = "https://elsewhere.example/agent"'
+    )
+
+    code = bench.main(
+        [
+            f"--identity={ACTOR}",
+            f"--attestation-file={attestation_file(tmp_path, ENDPOINT)}",
+            f"--out={tmp_path / 'artefact'}",
+            f"--declaration={declaration_file(tmp_path, declared)}",
+            "--token=t",
+            "--deterministic-only",
+            "--max-calls=100000",
+        ]
+    )
+
+    printed = capsys.readouterr().out
+    assert code == bench.EXIT_DOUBLY_DECLARED
+    assert bench.URL_ENV in printed, "the refusal names the environment variable"
+    assert not (tmp_path / "artefact").exists()
+
+
+def test_an_empty_url_in_the_file_is_no_target_rather_than_an_empty_one(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """`url = ""` is how the example file spells *there is no endpoint here*.
+
+    Read through as an empty string it would be a target this run attacked at no
+    address at all, or — beside a callback — a second target that made the run refuse
+    for the wrong reason. `None` is the same answer `--url`'s own environment fallback
+    gives, and the refusal below is the one a caller can act on.
+    """
+    monkeypatch.setenv(SIGNING_KEY_VARIABLE, encoded_private(generate()))
+    declared = DECLARED.replace("[target]", '[target]\nurl = ""')
+
+    code = bench.main(
+        [
+            f"--identity={ACTOR}",
+            f"--attestation-file={attestation_file(tmp_path, ENDPOINT)}",
+            f"--out={tmp_path / 'artefact'}",
+            f"--declaration={declaration_file(tmp_path, declared)}",
+            "--deterministic-only",
+            "--max-calls=100000",
+        ]
+    )
+
+    assert code == EXIT_WITHHELD
+    assert "This run has no target, or two" in capsys.readouterr().out

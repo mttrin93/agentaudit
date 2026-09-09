@@ -203,8 +203,8 @@ export function TheControl({
           ) : null}
           {control.refusal === ALREADY_IN_FLIGHT ? null : (
             <p className="aside">
-              Every route above is still pending and still undecided. Nothing has
-              been sent and nothing has been spent.
+              Every route in the queue below is still pending and still undecided.
+              Nothing has been sent and nothing has been spent.
             </p>
           )}
         </div>

@@ -699,16 +699,24 @@ def anyio_backend() -> str:
 
 
 @contextmanager
-def served(tmp_path: pathlib.Path, cases: list) -> Iterator[object]:
-    """One MCP server over one bench, and the declaration it reads."""
+def served(tmp_path: pathlib.Path, cases: list, document: str) -> Iterator[tuple]:
+    """One MCP server over one bench, and the declaration file it reads.
+
+    The path is yielded as well as the server: a run only starts on a nonce this
+    bench issued, which is not known until the bench exists, so a test that starts
+    one writes the real declaration over this one and the tools read it on the next
+    call. The `TestClient` is handed to `BenchClient` through the same one-line cast
+    `test_mcp_client.py` justifies, rather than through a second ASGI transport.
+    """
     declaration = tmp_path / "agentaudit.toml"
-    declaration.write_text(DECLARED, encoding="utf-8")
-    with api(cases) as (client, _runs):
-        http = httpx.Client(
-            transport=httpx.ASGITransport(app=client.app), base_url="http://bench"
+    declaration.write_text(document, encoding="utf-8")
+    with api(cases) as (client, bench):
+        yield (
+            build_server(BenchClient(cast(httpx.Client, client)), declaration),
+            client,
+            bench,
+            declaration,
         )
-        with http:
-            yield build_server(BenchClient(http), declaration)
 
 
 @pytest.mark.anyio
@@ -717,7 +725,7 @@ async def test_exactly_four_tools_are_registered(
 ) -> None:
     """A fifth tool is a fifth route. The count is asserted so that adding one is
     a decision somebody makes on purpose (ADR-0100)."""
-    with served(tmp_path, cases=[]) as server:
+    with served(tmp_path, [], DECLARED) as (server, _client, _bench, _path):
         assert sorted(tool.name for tool in await server.list_tools()) == [
             "approve_run",
             "run_report",
@@ -736,11 +744,23 @@ async def test_no_argument_to_start_run_reaches_a_confirmed_run(
     tmp_path: pathlib.Path,
 ) -> None:
     """The consent seam, asserted by trying to cross it (ADR-0007). `start_run`
-    takes no argument that could confirm, and passing an invented one is refused
-    rather than ignored."""
-    with served(tmp_path, cases=[]) as server:
-        with pytest.raises(Exception):
-            await server.call_tool("start_run", {"confirmed": True})
+    publishes no argument a caller could confirm with, and an invented one changes
+    nothing about the run it starts.
+
+    **Not `pytest.raises`.** mcp 2.2.0 validates arguments against a pydantic model
+    built from the signature, and that model's `extra` is pydantic's default —
+    `ignore`. An invented argument is dropped, not refused, so a test that asserted
+    a raise would be asserting a behaviour this library does not have, and would go
+    green again the day the tool grew the parameter for an unrelated reason. What is
+    asserted instead is the schema a model reads and the standing of the run a model
+    gets: the field is not in `tool.input_schema["properties"]`, the run is still
+    holding its interrupt, and nothing arrived at the target's ledger.
+    """
+    with served(tmp_path, [leakage_case], DECLARED) as (server, client, bench, path):
+        (tool,) = [one for one in await server.list_tools() if one.name == "start_run"]
+        path.write_text(declared(watched.target, registered(client, watched)))
+        started = answered(await server.call_tool("start_run", {"confirmed": True}))
+        ...
 
 
 @pytest.mark.anyio
@@ -777,7 +797,7 @@ from mcp.types import ToolAnnotations
 
 `build_server` creates `MCPServer(name="agentaudit", instructions="An adversarial test bench for AI agents. Runs are declared in a committed agentaudit.toml and cost real inference budget: start_run returns an estimate and spends nothing, approve_run spends it. This surface cannot register a target, start a gate run, or write a patch.")` and registers four functions with `@server.tool(...)`. Annotations carry the honest hints: `run_status` and `run_report` are `read_only_hint=True`; `start_run` and `approve_run` are not, and `approve_run` is the one that spends.
 
-`start_run` takes no arguments beyond an optional declaration path override. It reads the declaration, issues a nonce only when the file carries none, calls `client.start`, and returns the run id, the status, the estimate and both ceilings. It never calls `approve`.
+`start_run` takes **no arguments at all** — not even a declaration path override. An argument is the one part of a tool a prompt can set, and a path argument is a caller choosing which target the run is against; the file `build_server` was handed is the operator's. It reads the declaration, issues a nonce only when the file carries none, calls `client.start`, and returns the run id, the status, the estimate and both ceilings — which are `BudgetPayload.scored_ceiling` and `adaptive_ceiling`, inside the estimate rather than beside it. A nonce issued here is returned to be planted: the run is holding its interrupt and the registration probe goes out after the approval, so planting it then is in time. It never calls `approve`.
 
 `approve_run(run_id: str, confirmed: bool, reason: str = "")` passes the declaration's identity through.
 
@@ -793,7 +813,7 @@ Expected: all pass.
 - [ ] **Step 5: Drive the consent test red for the right reason**
 
 Add a `confirmed: bool = False` parameter to `start_run` that calls `client.approve` when true. Run the tests.
-Expected: `test_no_argument_to_start_run_reaches_a_confirmed_run` FAILS — the call succeeds where it should have been refused. Revert.
+Expected: `test_no_argument_to_start_run_reaches_a_confirmed_run` FAILS twice over — the run reaches `completed` where it should still be `awaiting_approval`, and `confirmed` appears in the tool's published schema. The spend is the graver half, so assert it first: the argument is ignored rather than refused, and a test whose only assertion was about the schema would pass a `start_run` that took the argument under another name. Revert.
 
 - [ ] **Step 6: Full checks and commit**
 

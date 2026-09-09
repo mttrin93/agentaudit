@@ -38,7 +38,7 @@ answers to, one store further on.
 from __future__ import annotations
 
 from collections.abc import Iterable
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import date
 
 from backend.bench.adaptive.episode import AdaptiveEpisode
@@ -70,7 +70,7 @@ class Queued:
     """
 
     filed: tuple[AwaitingDecision, ...] = ()
-    """The distinct records this run wrote, in the order they were written.
+    """The distinct records this run wrote, in the order the routes were proposed.
 
     The records rather than a count, on `Filing.filed`'s reasoning: the one question
     a reader has about a store that now grows per run is *what went into it*.
@@ -78,12 +78,13 @@ class Queued:
     **Distinct by `RouteKey`, and that is the definition of done rather than
     tidiness.** An attacker that finds one path in four episodes proposes it four
     times, `PendingRoutes.file` replaces its own record on the key, and a queue that
-    listed four would disagree with the one row on disk it describes. The last write
-    is the one listed, because the last write is the record a decision would be
-    taken on (`PendingRoutes.file`).
+    listed four would disagree with the one row on disk it describes. Each route
+    keeps the position it was first proposed at and the record of its *last* write,
+    which is the record a decision would be taken on (`PendingRoutes.file`) — the
+    order is the run's and the content is the store's.
     """
 
-    refusals: tuple[str, ...] = field(default_factory=tuple)
+    refusals: tuple[str, ...] = ()
     """One sentence per route this run could not file, and why.
 
     Per route rather than per run, because the two things that refuse here refuse
@@ -131,6 +132,19 @@ def file_proposals(
     against — a run handed a target name beside its episodes could file a route
     under the wrong agent's name, and the queue's one job is that a person can tell
     which routes are worth paying to decide (ADR-0104 §2).
+
+    **`queue` has a default where `file_precedent`'s store does not**, and the
+    departure is deliberate rather than an oversight. ADR-0031 point 2 makes the
+    precedent write handle a required argument so that only `run_calibration` holds
+    one; here the equivalent restriction is *which entry points call this at all*,
+    which no signature can carry — a required argument would be satisfied by
+    `PENDING_ROUTES` at any call site that imported it. So the wall is the
+    reachability test instead (`test_pending_filed_by_a_run.py`), and the default is
+    what keeps every caller filing into the one location with no environment
+    override (`pending.DEFAULT_PENDING_PATH`). It is the module-level object bound
+    at import, so a caller that wants a different queue passes one — which is what
+    every test does, and how the suite's redirection reaches this (`conftest`
+    moves the store's path rather than rebinding the name).
 
     **No default for `today`**, for `PendingRoutes.file`'s reason: nothing between
     the entry point and the row reads a clock, so a route filed by a replayed run is

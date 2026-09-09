@@ -819,12 +819,19 @@ def _run(record: RunRecord, config: BenchConfig, pending: PendingApproval) -> No
             # id a restart looks the halt up by names nothing (ADR-0034).
             thread_id=record.thread_id,
         )
+    # Every one of the three ways out below files first. A run the ceiling cut
+    # short is the run whose attacker was most likely still finding things, and
+    # `RunState.episodes` holds every episode that finished before it bit — so a
+    # filing reachable only from the completed path would discard exactly the
+    # routes an operator paid the most for. The paths that settle *before* this
+    # try block add no such clause: nothing was sent, so there is no attacker to
+    # have a reading about.
     except BudgetExceeded as abort:
         record.settle(
             RunStatus.ABORTED,
             (
                 f"{abort}. An episode the ceiling cut short is recorded as "
-                "censored, never as resisted"
+                f"censored, never as resisted. {_queued(record)}"
             ),
         )
         return
@@ -833,12 +840,15 @@ def _run(record: RunRecord, config: BenchConfig, pending: PendingApproval) -> No
         # not. A run that reported only the sentence would leave a caller parsing
         # prose to tell a quota from an outage.
         record.failure = unreachable.failure
-        record.settle(RunStatus.FAILED, str(unreachable))
+        record.settle(RunStatus.FAILED, f"{unreachable} {_queued(record)}")
         return
     except Exception as failure:
         record.settle(
             RunStatus.FAILED,
-            f"the run stopped rather than produced a result: {failure}",
+            (
+                f"the run stopped rather than produced a result: {failure}. "
+                f"{_queued(record)}"
+            ),
         )
         return
 
@@ -862,20 +872,6 @@ def _run(record: RunRecord, config: BenchConfig, pending: PendingApproval) -> No
         return
 
     record.report = _published(record, result, config)
-    # The routes this run's attacker found, filed so they outlive the run that
-    # found them. **Here rather than in `run_calibration`**, which a gate run takes
-    # too: the queue's whole purpose is routes no surface decides, and a gate run's
-    # routes are ones `scripts/swap.py` already decides against the very agents
-    # they were fitted to (`docs/specs/pending-routes.md`, ADR-0012).
-    #
-    # After the report, so this is the last write the run makes — ADR-0031's
-    # ordering, applied to the other store a run now grows: nothing filed here was
-    # read by anything in this run. It cannot fail the run, because
-    # `file_proposals` catches every write and hands the refusal back as prose.
-    #
-    # The date is the day the run went on the record and never a clock read here,
-    # so a route filed by a replayed run is dated to the run (`queued.file_proposals`).
-    queued = file_proposals(record.run_state.episodes, today=record.recorded_at.date())
     finished = (
         f"the run finished inside the ceiling that was confirmed by "
         f"{record.confirmed_by}"
@@ -947,18 +943,39 @@ def _run(record: RunRecord, config: BenchConfig, pending: PendingApproval) -> No
             "new one, so this is what the run contributed and not what the store "
             "grew by"
         )
-    # Unconditional, where the precedent and review-queue clauses above are not: a
-    # run that proposed nothing says so, because a zero is a reading about the
-    # attacker and about the families it worked in rather than about the target
-    # (ADR-0011, `queued.NOTHING_WAS_PROPOSED`). An absence here would be
-    # indistinguishable from a filing that was never attempted.
-    finished = f"{finished}. {queued.stated()}"
     if isinstance(record.report, Unsigned):
         # Said here rather than left to the report route, because this is the
         # sentence a poller reads: a run whose status says completed and whose
         # report location is empty would otherwise read as one to keep polling.
         finished = f"{finished}, and it has no signed report — {record.report.reason}"
-    record.settle(RunStatus.COMPLETED, finished)
+    # Last of the clauses, and the only unconditional one. Last because every
+    # clause above extends the sentence with a comma and this one ends it, so a
+    # filing clause in the middle would hand the report clause a subject it does
+    # not have. Unconditional because a run that proposed nothing says so:
+    # `queued.NOTHING_WAS_PROPOSED` is why silence is not an option here.
+    record.settle(RunStatus.COMPLETED, f"{finished}. {_queued(record)}")
+
+
+def _queued(record: RunRecord) -> str:
+    """File the routes this run's attacker found, and say what was filed.
+
+    Called from this entry point and not from `run_calibration`, which a gate run
+    takes too — `queued.file_proposals` is where that is argued, and what it means
+    here is that the call sits in the run service and has no counterpart in the
+    gate run's worker beside it.
+
+    Called on every way out of the run that sent anything, and the exact position
+    on the completed path is the last write the run makes: ADR-0031's ordering,
+    applied to the second store a run now grows.
+
+    `recorded_at` is the day the run went on the record, so nothing between this
+    entry point and the row reads a clock (`queued.file_proposals`). Returns the
+    sentence rather than settling the record, because what the four callers share
+    is the filing and not what else their statement has to say.
+    """
+    return file_proposals(
+        record.run_state.episodes, today=record.recorded_at.date()
+    ).stated()
 
 
 def _published(

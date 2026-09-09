@@ -32,6 +32,7 @@ from backend.bench.adaptive.budget import AdaptiveBudget
 from backend.bench.adaptive.episode import AdaptiveEpisode, EpisodeOutcome
 from backend.bench.adaptive.precedent import Precedent
 from backend.bench.adaptive.proposal import ProposedRoute, proposed_from
+from backend.bench.calibration import CalibrationResult, run_calibration
 from backend.bench.decided import DecidedRoute, RouteKey
 from backend.bench.library import Case, Family
 from backend.bench.pending import (
@@ -43,6 +44,8 @@ from backend.bench.pending import (
 )
 from backend.bench.queued import file_proposals
 from backend.bench.signing import SIGNING_KEY_VARIABLE, encoded_private, generate
+from backend.graph.budget import BudgetExceeded, Layer
+from backend.graph.runstate import RunState
 from backend.tests import headless_agent
 from backend.tests.conftest import BENCH, REPOSITORY, a_target, reachable_from
 from backend.tests.headless_agent import RecordingAgent
@@ -68,6 +71,7 @@ from backend.tests.test_api_runs import (
 )
 from backend.tests.test_headless_run import arguments, attestation_file
 from scripts import bench
+from scripts.console import EXIT_ABORTED
 
 RAN_ON = date(2026, 8, 30)
 """The day the run ended. Deliberately not today's date: a filing that read a clock
@@ -468,3 +472,108 @@ def test_the_filed_route_is_the_only_record_in_the_repository_naming_a_target() 
     # And it is beside a payload here, which is the whole of why it is an exception
     # rather than a fifth store that happens to carry a name.
     assert "draft" in {field.name for field in dataclasses.fields(AwaitingDecision)}
+
+
+# --- What an aborted run keeps ------------------------------------------------
+
+
+def test_a_run_the_ceiling_aborted_still_files_what_its_attacker_had_found(
+    leakage_case: Case, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A run that ended on its ceiling ended, and its routes are not lost with it.
+
+    The run most likely to be cut short mid-layer is the run whose attacker was
+    still finding things, and `RunState.episodes` holds every episode that finished
+    before the ceiling bit. A filing reachable only from the completed path would
+    discard exactly those — which is the defect this whole module removes, narrowed
+    to the runs an operator paid the most for.
+
+    The abort is raised *after* the real run rather than by starving the layer into
+    one, so the routes filed here are routes an attacker actually found: a ceiling
+    small enough to bite after an episode that proposed is a figure two budget rules
+    away from anything this assertion is about, and the interrupt this run halts at
+    lives inside `run_calibration` and has to keep happening.
+    """
+
+    def aborts_once_it_has_run(**passed: object) -> CalibrationResult:
+        run_calibration(**passed)  # type: ignore[arg-type]
+        raise BudgetExceeded(layer=Layer.ADAPTIVE, ceiling=4, spent=5, requested=0)
+
+    monkeypatch.setattr("backend.api.runs.run_calibration", aborts_once_it_has_run)
+    narrow = AdaptiveBudget(turns_per_episode=6, episodes_per_family=1, family_count=1)
+
+    with (
+        watched_reference() as watched,
+        api([leakage_case], adaptive=narrow) as (
+            client,
+            served,
+        ),
+    ):
+        nonce = registered(client, watched)
+        started = client.post("/runs", json=a_request(watched.target, nonce)).json()
+        record = _record(served, started)
+        client.post(
+            f"/runs/{started['run_id']}/approval",
+            json={"confirmed": True, "identity": "operator"},
+        )
+        settled(record)
+
+    assert record.status is RunStatus.ABORTED
+    proposed = {
+        RouteKey.of(proposal.case)
+        for episode in record.run_state.episodes
+        for proposal in episode.proposals
+    }
+    assert proposed, "the attacker proposed nothing, so nothing here is under test"
+    assert {held.route for held in PENDING_ROUTES.queue()} == proposed
+    assert "awaiting the cross-model bar" in record.statement
+
+
+def test_a_headless_run_the_ceiling_aborted_files_what_its_attacker_had_found(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The same for the unattended entry point, which has to hold its own state.
+
+    `run_calibration` builds a `RunState` for a caller that hands it none, and a
+    caller that let it do so has no way to read the episodes back out of a run that
+    raised instead of returning — so this entry point declares the state before the
+    run rather than reading it off a result that never arrived. The assertion that
+    it does is the `run_state` this stand-in insists on being handed.
+    """
+    monkeypatch.setenv(SIGNING_KEY_VARIABLE, encoded_private(generate()))
+
+    def aborts_once_it_has_run(**passed: object) -> CalibrationResult:
+        state = passed.get("run_state")
+        assert isinstance(state, RunState), (
+            "the unattended entry point handed `run_calibration` no run state, so "
+            "the episodes of a run it aborts are unreachable and its routes are "
+            "lost with it"
+        )
+        run_calibration(**passed)  # type: ignore[arg-type]
+        raise BudgetExceeded(layer=Layer.ADAPTIVE, ceiling=4, spent=5, requested=0)
+
+    monkeypatch.setattr("scripts.bench.run_calibration", aborts_once_it_has_run)
+    with watched_reference() as watched:
+        nonce = "a-nonce-the-operator-planted"
+        watched.plant(watched.target, nonce, "by-hand")
+        code = bench.main(
+            [
+                *arguments(
+                    watched.target.url,
+                    tmp_path / "artefact",
+                    attestation_file(tmp_path, watched.target.url),
+                    **{
+                        "--max-calls": "100000",
+                        "--token": str(watched.target.auth_token),
+                        "--nonce": nonce,
+                        "--name": A_CUSTOMER,
+                    },
+                )
+            ]
+        )
+
+    assert code == EXIT_ABORTED
+    held = PENDING_ROUTES.queue()
+    assert held, "the attacker proposed nothing, so nothing here is under test"
+    assert {record.target for record in held} == {A_CUSTOMER}
+    assert "awaiting the cross-model bar" in capsys.readouterr().out

@@ -262,20 +262,12 @@ def a_bench(
             )
         finally:
             # A measurement left at its interrupt outlives the test that started it
-            # and holds this library's lease while it does — the reason
-            # `test_api_gate_runs` stops every run it started.
+            # and holds this library's lease while it does, so every later test's
+            # gate run is refused by a library nothing is writing to. `stop_every_run`
+            # answers all three kinds of halt — `conftest.LISTINGS` is where the third
+            # was added — and `no_run_left_running` is the guard that says when one
+            # was missed.
             stop_every_run(client)
-            _stop_every_measurement(client)
-
-
-def _stop_every_measurement(client: TestClient) -> None:
-    """Decline anything still waiting, so no lease outlives its test."""
-    listing = client.get(PENDING_ROUTES_ROUTE)
-    if listing.status_code != 200:
-        return
-    for row in listing.json()["measurements"]:
-        if row["status"] == MeasurementStatus.AWAITING_APPROVAL:
-            client.post(approval_of(row["measurement_id"]), json=a_confirmation(False))
 
 
 def approval_of(measurement_id: str) -> str:

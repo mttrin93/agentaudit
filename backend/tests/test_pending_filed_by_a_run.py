@@ -1,0 +1,192 @@
+"""The filing half: a customer run's proposals survive the run that found them.
+
+The store is `test_pending.py`. What is asserted here is the *write* — who makes it,
+who must not, and what a run says about having made it. Four seams:
+
+1. **`queued.file_proposals`** — one record per route off a run's episodes, keyed on
+   `decided.RouteKey`, the target read off the episode, and a store that refuses
+   reported rather than raised.
+2. **`POST /runs`** — a customer run, start to finish, and the queue afterwards.
+3. **`scripts/bench.py`** — the same run from a `__main__`, and the queue afterwards.
+4. **`POST /gate-runs`** — a gate run, start to finish, leaving the queue as it found
+   it, and no module on that side able to reach the store at all.
+
+The seam is the customer-run entry points and deliberately not `run_calibration`,
+which is shared with gate runs: filing there would fill a queue whose purpose is
+routes no surface decides with reference-agent routes `scripts/swap.py` already
+decides (`docs/specs/pending-routes.md`).
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from datetime import date
+from pathlib import Path
+
+import pytest
+
+from backend.bench.adaptive.episode import AdaptiveEpisode, EpisodeOutcome
+from backend.bench.adaptive.proposal import ProposedRoute, proposed_from
+from backend.bench.decided import RouteKey
+from backend.bench.library import Case, Family
+from backend.bench.pending import (
+    AwaitingDecision,
+    PendingDatabase,
+    PendingRoutes,
+    RouteState,
+)
+from backend.bench.queued import file_proposals
+from backend.tests.conftest import a_target
+
+RAN_ON = date(2026, 8, 30)
+"""The day the run ended. Deliberately not today's date: a filing that read a clock
+instead of the date the run passed it would date a replayed run's route to the
+morning it was replayed, and a date equal to today's could not tell the two apart."""
+
+A_CUSTOMER = "acme-support-bot"
+"""Whose agent the route was found against — the field ADR-0104 §2 grants and the
+one thing triage cannot do without."""
+
+
+def a_route(
+    objective: Case,
+    payload: str = "the probe that actually beat somebody's agent",
+    description: str = "a route worth deciding",
+) -> ProposedRoute:
+    """One proposal, drafted the way `propose_case` drafts it inside an episode."""
+    return proposed_from(
+        objective=objective,
+        target=a_target("trivial"),
+        family=Family(objective.family),
+        payload=payload,
+        description=description,
+        today=RAN_ON,
+    )
+
+
+def an_episode(
+    objective: Case,
+    *proposals: ProposedRoute,
+    target: str = A_CUSTOMER,
+) -> AdaptiveEpisode:
+    """One recorded episode against one named target, carrying those proposals."""
+    return AdaptiveEpisode(
+        target_name=target,
+        family=Family(objective.family),
+        outcome=EpisodeOutcome.BROKEN,
+        turns=1,
+        proposals=tuple(proposals),
+    )
+
+
+@dataclass(frozen=True)
+class RefusesOneRoute(PendingRoutes):
+    """A queue whose database refuses one named route and takes every other.
+
+    A subclass rather than a patched attribute, because `PendingRoutes` is frozen
+    and deliberately is — and because what has to be exercised is a real store that
+    fails on one write, not a stand-in for one: the route after the refusal has to
+    reach the database it would have reached.
+    """
+
+    refused: RouteKey | None = None
+
+    def file(
+        self, proposal: ProposedRoute, *, target: str, today: date
+    ) -> AwaitingDecision:
+        if RouteKey.of(proposal.case) == self.refused:
+            raise OSError("the queue's database is not writable")
+        return super().file(proposal, target=target, today=today)
+
+
+@pytest.fixture
+def queue(tmp_path: Path) -> PendingRoutes:
+    """This test's own queue, at a directory that is not there yet."""
+    return PendingRoutes.at(tmp_path / "pending" / "routes.sqlite")
+
+
+# --- Seam one: what a run's episodes file --------------------------------------
+
+
+def test_a_runs_proposals_are_filed_with_the_target_the_episode_beat(
+    queue: PendingRoutes, leakage_case: Case
+) -> None:
+    # The interesting output of a customer run used to be a printed line. This is
+    # the whole of the ticket: the route is on disk afterwards, and the row says
+    # whose agent it beat — read off the episode's own record rather than handed in
+    # beside it, so a run against two targets cannot file one under the other's name.
+    proposal = a_route(leakage_case)
+
+    filed = file_proposals(
+        [an_episode(leakage_case, proposal)], queue=queue, today=RAN_ON
+    )
+
+    assert [record.route for record in filed.filed] == [RouteKey.of(proposal.case)]
+    assert not filed.refusals
+    held = queue.filed(RouteKey.of(proposal.case))
+    assert isinstance(held, AwaitingDecision)
+    assert held.target == A_CUSTOMER
+    assert held.draft.payload == proposal.case.payload
+    assert held.filed_on == RAN_ON
+    assert held.state is RouteState.PENDING
+
+
+def test_four_proposals_of_one_route_are_one_record_within_a_run_and_across_runs(
+    queue: PendingRoutes, leakage_case: Case
+) -> None:
+    # `docs/validation.md` records a run whose four proposals all described one
+    # path. The key is `decided.RouteKey` — the same family-plus-probe-digest the
+    # memory and the library de-duplicate on — so one route is one pending record,
+    # and the report of the filing has to agree with the one row on disk.
+    proposal = a_route(leakage_case)
+    four = [an_episode(leakage_case, proposal) for _ in range(4)]
+
+    within = file_proposals(four, queue=queue, today=RAN_ON)
+    across = file_proposals(
+        [an_episode(leakage_case, proposal)], queue=queue, today=RAN_ON
+    )
+
+    assert len(within.filed) == 1
+    assert len(across.filed) == 1
+    assert len(queue.queue()) == 1
+
+
+def test_a_run_that_proposed_nothing_files_nothing_and_says_so(
+    queue: PendingRoutes, leakage_case: Case
+) -> None:
+    # A zero is a reading about the attacker and about the families it worked in,
+    # never about the target (ADR-0011). An entry point that printed nothing here
+    # would leave an operator unable to tell a queue that grew by nothing from a
+    # filing that was never attempted.
+    nothing = file_proposals([an_episode(leakage_case)], queue=queue, today=RAN_ON)
+
+    assert nothing.filed == ()
+    assert nothing.refusals == ()
+    assert queue.queue() == ()
+    assert "proposed no route" in nothing.stated()
+    assert "ADR-0011" in nothing.stated()
+
+
+def test_a_store_that_refuses_is_reported_and_the_rest_of_the_routes_still_file(
+    tmp_path: Path, leakage_case: Case
+) -> None:
+    # Filing cannot fail a run, and it cannot fail the route after the one that
+    # refused either: the suite ran and the target was measured, so what a storage
+    # fault costs is a row and never a measurement (`runs._filed`'s argument).
+    first = a_route(leakage_case)
+    second = a_route(leakage_case, payload="a second route, and a second digest")
+    refusing = RefusesOneRoute(
+        store=PendingDatabase(tmp_path / "pending" / "routes.sqlite"),
+        refused=RouteKey.of(first.case),
+    )
+
+    both = file_proposals(
+        [an_episode(leakage_case, first, second)], queue=refusing, today=RAN_ON
+    )
+
+    assert [record.route for record in both.filed] == [RouteKey.of(second.case)]
+    assert len(both.refusals) == 1
+    assert "not writable" in both.refusals[0]
+    assert "measurement stands" in both.stated()
+    # And the run is not the thing that failed: the second route is on disk.
+    assert len(refusing.queue()) == 1

@@ -34,6 +34,34 @@ which is the same path a run aborted on its ceiling takes.
 id or a gate run id, no route under `/runs` or `/gate-runs` takes a pending route
 key, and no function in the API package names a `MeasurementRecord` beside a
 `RunRecord` or a `GateRunRecord`.
+
+And then the three writes a decision makes, each with its own invariant.
+
+**That the memory keeps what the measurement paid for.** Asserted from the writing
+end, which nothing else here reaches: every other memory assertion in this module
+seeds the store and watches the consultation read it, so none of them would notice a
+surface that consulted correctly and remembered nothing. A route is measured for
+real, filed again the way a later run's attacker would file it, and the second
+measurement serves no equipment at all (ADR-0032).
+
+**That `enter` is the library's one writer.** A route the library already holds is
+reported as held and no second record appears, and this side names no serialiser and
+writes no file of its own (ADR-0033).
+
+**That the identity stops at the decision, from both ends.** No argument to
+`remember` or to `enter` carries the target's name; and neither `DecidedRoute` nor
+`Case` has a field, anywhere in its graph, that could hold one. The second is the
+assertion that survives a refactor, and its control is the exception itself —
+`AwaitingDecision` carries `target` deliberately, so the walk demonstrably finds an
+identity where one is declared (ADR-0008, ADR-0011, ADR-0104 §2).
+
+**That a record is dated by the measurement.** A route admitted out of the memory
+carries the day the three reference agents ran, not the day the row was decided, and
+no function on this path takes a `today` to date it with (ADR-0032).
+
+**That the loop closes.** `library_provenance` counts the new record as an adaptive
+live case, and `run_calibration` runs it — the assertion #40 made for the swap, made
+here for a route found against somebody's real agent.
 """
 
 from __future__ import annotations
@@ -109,6 +137,7 @@ from backend.tests.conftest import (
     a_target,
     authored_library,
     calibrate,
+    imports_of,
     stop_every_run,
     unlisted_case,
 )
@@ -780,7 +809,15 @@ def test_an_admitted_route_enters_the_library_and_its_row_names_the_record(
 def test_a_rejected_route_keeps_its_row_and_carries_the_gates_reason(
     cases_dir: Path, leakage_case: Case
 ) -> None:
-    """Spec story 12: a route that was a property of one model is a finding."""
+    """Spec story 12: a route that was a property of one model is a finding.
+
+    In the gate's own words, and that is the assertion rather than a non-empty
+    string: ADR-0012 calls a cross-model discard direct evidence that what the
+    attacker found was a property of one model, and a row that said only
+    *rejected* would drop the finding and keep the bookkeeping. The counts here
+    separate on the first model and not on the second, which is exactly that
+    finding, so the row has to say which of the refusals it was.
+    """
     proposal = a_route(leakage_case)
     record = filed(proposal)
     remembered(proposal, SEPARATING, FLAT)
@@ -791,9 +828,18 @@ def test_a_rejected_route_keeps_its_row_and_carries_the_gates_reason(
 
     [row] = listing["routes"]
     assert row["state"] == RouteState.REJECTED
-    assert row["reason"], "a rejected route's row carries the gate's own reason"
+    reason = row["reason"]
+    for said in (*MODELS, "clears", "does not clear", "D >= 0.4"):
+        assert said in reason, (
+            f"the row does not say {said!r}. A rejected route's reason is the gate's "
+            "own reading — which models were read, what each of them said, and the "
+            "declared bar the counts were held against — because a cross-model "
+            "discard is a finding in its own right (ADR-0012) and a row saying only "
+            "*rejected* keeps the bookkeeping and drops the finding"
+        )
     decided = PENDING_ROUTES.filed(record.route)
     assert isinstance(decided, Decided)
+    assert decided.reason == reason
     assert not hasattr(decided, "draft")
 
 
@@ -1358,3 +1404,29 @@ def test_an_admitted_route_is_a_live_adaptive_case_the_next_run_runs(
         "the next run loaded the record and did not run it. A case in the library "
         "that no run attempts is a file, not a case"
     )
+
+
+def test_the_deciding_surface_writes_no_case_record_of_its_own() -> None:
+    """ADR-0033: an admitted route reaches the library through `enter` and nothing else.
+
+    De-duplication against the library on disk, the lease, the round-trip check and
+    the refusal of a record that does not clear its own bar all live in `enter`. A
+    second writer would not be a second copy of that — it would be a path with none
+    of it, and the row it wrote would be the one a `library_provenance` reading
+    could not account for. So this side hands `enter` cases and takes an `Entry`
+    back: it names no serialiser, no record suffix, and writes no file at all.
+    """
+    for name in PENDING_MODULES:
+        source = API_DIR / name
+        imported = set(imports_of(source))
+        assert not [
+            one for one in imported if one.endswith(("case_record", "CASE_SUFFIX"))
+        ], f"{name} names the writer's own serialiser rather than calling `enter`"
+        assert not [
+            node
+            for node in ast.walk(ast.parse(source.read_text(encoding="utf-8")))
+            if isinstance(node, ast.Call)
+            and ast.unparse(node.func).endswith(("write_text", "write_bytes", "mkdir"))
+        ], f"{name} writes to the filesystem. The library's one writer is `enter`"
+
+    assert "backend.bench.entry.enter" in set(imports_of(API_DIR / "pending_routes.py"))

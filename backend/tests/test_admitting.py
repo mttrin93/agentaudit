@@ -109,3 +109,43 @@ def test_nothing_in_the_bar_can_name_which_bar_applies() -> None:
         f"{named_in_a_signature} could carry a bar into the function. `promote` reads "
         "it off `discovered_by`, and this signature is the other end of that claim"
     )
+
+
+def test_the_memory_is_written_by_selection_and_never_by_a_caught_refusal() -> None:
+    """ADR-0031 point 3: the choice is made before the call, not by the exception.
+
+    `DecidedRoutes.remember` refuses a decision that says nothing about its route,
+    and a path that reached the store and caught `NotAboutTheRoute` would look
+    identical from the outside — the same records written, the same records not.
+    It is not identical: the store's refusal is a wall, and a caller that used it
+    as a branch would have no way to say *why* it chose not to remember, and would
+    swallow a genuine store failure with it. So `worth_remembering` selects, and
+    this asserts the shape rather than the outcome, because the outcome cannot tell
+    the two apart.
+    """
+    tree = ast.parse(ADMITTING_SOURCE.read_text(encoding="utf-8"))
+    guarded: list[ast.If] = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.If) and "worth_remembering" in ast.unparse(node.test)
+    ]
+    assert len(guarded) == 1, (
+        "the write into the admission memory is not selected by "
+        "`worth_remembering`. A decision that says nothing about a route is not "
+        "remembered, and the selection is what says so (ADR-0031 point 3)"
+    )
+    remembering = [
+        node
+        for node in ast.walk(guarded[0])
+        if isinstance(node, ast.Call) and ast.unparse(node.func).endswith(".remember")
+    ]
+    assert len(remembering) == 1, "the guarded branch does not remember anything"
+
+    assert not [
+        node for node in ast.walk(tree) if isinstance(node, ast.Try | ast.ExceptHandler)
+    ], (
+        "the cross-model bar catches something. The memory's refusal is a wall and "
+        "not a branch, and a run that could not measure the bar the way the bar "
+        "needs measuring has nothing to hand a later run either way"
+    )
+    assert "NotAboutTheRoute" not in set(imports_of(ADMITTING_SOURCE))

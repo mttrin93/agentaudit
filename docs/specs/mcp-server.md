@@ -63,7 +63,7 @@ The **report a tool returns is compact and keeps every label**. The signed paylo
 ### When it goes wrong
 
 16. As an engineer, I want an unreachable API to say so plainly, so that a missing server is not reported to me as a bench with no findings.
-17. As an engineer, I want the case-library lease being held to be a named error, so that a run started while a gate run is going is not a mysterious hang.
+17. As an engineer, I want a run that halted without producing an estimate to be a named error, so that `NeverPresented` reaches me as a stated failure rather than as a run that never answers. The case-library lease is deliberately not on this list: `LibraryBusy` is raised in `api/gate_runs.py` and nowhere else, so a target run never takes the lease and this surface cannot meet it.
 18. As an engineer, I want a withheld attestation statement to name which one, so that a refused start is actionable without opening the console.
 19. As an engineer, I want a run that ended declined, unanswered or aborted to be distinguishable from one that completed, so that an absent report has a reason attached.
 20. As an engineer, I want a request for the report of an unsigned run to carry the refusal's own reason, so that the word *signed* means one thing on this surface too.

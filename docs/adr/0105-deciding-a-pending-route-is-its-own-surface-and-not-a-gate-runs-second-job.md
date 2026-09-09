@@ -169,9 +169,10 @@ pending route without an operator attesting and approving.
 
 ## Consequences
 
-- A fifth thing on this API that spends money, and the second that spends it on the
-  bench's own behalf. It carries the same attestation record and the same interrupt seam
-  as the other two, and no third consent flow is written.
+- A third family on this API that spends money, after `/runs` and `/gate-runs`, and the
+  second that spends it on the bench's own behalf. It carries the same attestation
+  record and the same interrupt seam as the other two, and no third consent flow is
+  written.
 - `cross_model_bar` lives in the backend with two callers. `scripts/swap.py` is a caller
   rather than the owner, and its tests are the regression check on the move.
 - A gate run and a pending-route measurement refuse each other through the library lease,

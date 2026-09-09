@@ -60,9 +60,10 @@ side of. The amendment's test is transferability: a payload ships **committed** 
 situation is the mechanism, and is **withheld** when its wording is the working part.
 An adaptive route that beat a real agent is the canonical withheld case — the amendment
 names it, *a successful adaptive route against the hardened agent is the case this
-posture exists for* — and nothing here publishes one. `pending/` is git-ignored, like
-`precedent/` and `decisions/` before it. **The exception is not to what may be
-published; it is to what may be kept.**
+posture exists for* — and nothing here publishes one. `pending/` joins `/precedent/`
+and `/decisions/` in `.gitignore` when the store lands, and the Consequences below make
+that a term of this record rather than a step somebody remembers. **The exception is not
+to what may be published; it is to what may be kept.**
 
 ### 2. The pending store holds the target's identity, and a queue you cannot attribute is a queue you cannot triage
 
@@ -91,8 +92,11 @@ the decision each record is waiting for.
 Each one is a property of this store that `precedent/` does not have, and each is the
 reason a refusal that binds `precedent/` does not bind here.
 
-1. **Short-lived by design.** A record exists between the run that found the route and
-   the decision that measures it. It is not memory, it is a work queue.
+1. **Short-lived by design.** A record carries a payload and a target between the run
+   that found the route and the decision that measures it, and no longer. The decided
+   row that remains is a queue's outcome column — a route key, a state and the gate's
+   reason — and it is not what this exception was granted for. This is a work queue,
+   not memory.
 2. **Single-purpose.** One reader, one writer, one question. It is not a general store
    that a second feature will later find convenient.
 3. **Read by no instrument.** Nothing blinded reads it, nothing scored reads it, and no
@@ -100,8 +104,8 @@ reason a refusal that binds `precedent/` does not bind here.
 4. **Never exported.** No report, no signed artefact and no API response outside the
    queue's own page carries a pending route's payload or its target.
 5. **Emptied by the decision it waits for.** A decided record has no payload —
-   §4 — so the store's steady state is the routes still awaiting a decision and
-   nothing else.
+   §4 — so the two fields this record is about exist only for routes still awaiting a
+   decision.
 
 The five are not a rhetorical list. A change that breaks any of them reopens this
 record rather than being a change to the store, and the sharpest one is 4: an export of
@@ -126,8 +130,9 @@ is a visible act.
 
 `pending/routes.sqlite`, through the `DatabaseStore` seam, following
 [ADR-0029](./0029-the-precedent-store-is-a-database-and-the-connection-belongs-to-the-batch.md)
-decision 6 and the pattern `/precedent/`, `/decisions/`, `/runs/` and `/checkpoints/`
-already follow. A **directory** rather than a file name, for the reason the other three
+decision 6 — the fourth database on the `DatabaseStore` seam, and the fifth git-ignored
+directory beside `/precedent/`, `/decisions/`, `/runs/` and `/checkpoints/`, whose
+pattern it follows. A **directory** rather than a file name, for the reason the other three
 are directories: SQLite writes `-wal` and `-shm` sidecars, and a journal holding the
 payload of a route that beat a named customer's agent must not be what the ignore rule
 missed. That reason is stronger here than anywhere it has been applied before, because
@@ -158,8 +163,9 @@ the exception, and the exception is a compartment rather than a leak.
 ## Considered options
 
 **File the pending route into `precedent/findings.sqlite`.** Rejected, and rejecting it
-is most of what this record is for. It would require ADR-0008's *prose and never payload
-text* and ADR-0011's no-target-identity rule to be relaxed **for a store that is read by
+is most of what this record is for. It would require the *prose and never payload
+text* rule ADR-0008 puts on that store, and ADR-0011's no-target-identity rule, to be
+relaxed **for a store that is read by
 a blinded instrument**, which is the one place neither can be relaxed: `retrieve_precedent`
 serves that store to the attacker, and an attacker that could read a target's name has
 lost the label-blindness ADR-0011's whole discrimination check rests on. The

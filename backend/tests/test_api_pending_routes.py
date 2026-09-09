@@ -438,7 +438,17 @@ def test_no_response_on_this_surface_carries_the_payload(
     assert one.json()["route"] == record.route.filed_under
 
 
-def test_a_route_this_queue_never_held_is_a_404(cases_dir: Path) -> None:
+def test_a_route_this_queue_never_held_is_a_404(
+    cases_dir: Path, leakage_case: Case
+) -> None:
+    """A key this queue holds no record for, with a record beside it in the queue.
+
+    Beside it deliberately: a queue with nothing in it would answer `404` however
+    the lookup were written, and what has to be true is that the answer is about
+    *this key* rather than about whatever the queue happens to hold.
+    """
+    filed(a_route(leakage_case))
+
     with a_bench(cases_dir) as deciding:
         response = deciding.client.get(
             PENDING_ROUTE_ROUTE.format(route="data_leakage-0000000000000000")
@@ -645,10 +655,15 @@ def test_a_route_no_live_case_can_score_is_refused_rather_than_measured(
 def test_a_bench_with_one_declared_model_may_not_measure_at_all(
     cases_dir: Path, leakage_case: Case
 ) -> None:
-    """The bar is two models measured together, and one is not the bar (ADR-0012)."""
+    """The bar is two models measured together, and one is not the bar (ADR-0012).
+
+    One declared model and not none, because those are two different absences and
+    only this one looks like a bench that could measure: the agents are shipped, the
+    library is writable, and what is missing is the second half of the pair.
+    """
     record = filed(a_route(leakage_case))
 
-    with a_bench(cases_dir, models=()) as deciding:
+    with a_bench(cases_dir, models=(FIRST,)) as deciding:
         listing = deciding.client.get(PENDING_ROUTES_ROUTE)
         response = deciding.client.post(
             PENDING_MEASUREMENTS_ROUTE, json=a_request([record.route.filed_under])

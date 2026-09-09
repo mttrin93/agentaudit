@@ -42,6 +42,7 @@ from backend.bench.admission import (
     decide,
     rejections,
 )
+from backend.bench.admitting import Measure, cross_model_bar
 from backend.bench.calibration import CalibrationResult
 from backend.bench.crossmodel import (
     ComparisonOutcome,
@@ -95,14 +96,7 @@ from backend.tests.test_gate import (
     outcomes_for,
 )
 from scripts.console import EXIT_DECLINED, EXIT_WITHHELD
-from scripts.swap import (
-    EXIT_NOT_WRITTEN,
-    Measure,
-    ModelRun,
-    cross_model_bar,
-    main,
-    record_swap,
-)
+from scripts.swap import EXIT_NOT_WRITTEN, ModelRun, main, record_swap
 
 CROSSMODEL_SOURCE = Path(__file__).resolve().parents[1] / "bench" / "crossmodel.py"
 ADAPTIVE_CROSSMODEL_SOURCE = (
@@ -552,8 +546,10 @@ def _bar(
 ) -> tuple[CrossModelRejections, tuple[Promotion, ...], Consultation] | int:
     """`cross_model_bar` over two model runs, the first carrying those proposals."""
     first, second = readings(a_run(*[SEPARATES] * 6), a_run(*[SEPARATES] * 6))
+    runs = [_a_model_run(first, proposals), _a_model_run(second)]
     return cross_model_bar(
-        runs=[_a_model_run(first, proposals), _a_model_run(second)],
+        proposals=[proposal for run in runs for proposal in run.proposals],
+        models=[run.reading.model for run in runs],
         attestation=BENCH_ATTESTATION,
         approve=CONFIRMING,
         adjudicator=adjudicating(),
@@ -561,6 +557,7 @@ def _bar(
         price_per_call=None,
         memory=memory,
         measure=measure,
+        say=print,
     )
 
 

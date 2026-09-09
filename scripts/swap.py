@@ -73,7 +73,6 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import InvalidOperation
 from pathlib import Path
-from typing import Protocol
 
 from dotenv import load_dotenv
 
@@ -85,15 +84,14 @@ from backend.bench.adaptive.discrimination import (
     NoFamiliesInScope,
 )
 from backend.bench.adaptive.discrimination import measure as measure_adaptive
-from backend.bench.adaptive.promotion import Promotion, promote
 from backend.bench.adaptive.proposal import ProposedRoute
 from backend.bench.adjudication import Completion
 from backend.bench.admission import (
     CrossModelRejections,
     NotAdmitted,
     admitted_library,
-    rejections,
 )
+from backend.bench.admitting import cross_model_bar
 from backend.bench.calibration import CalibrationResult, run_calibration
 from backend.bench.completion import (
     ADJUDICATOR_MODEL_ENV,
@@ -106,18 +104,13 @@ from backend.bench.completion import (
 )
 from backend.bench.crossmodel import ModelReading, ModelSwap, NotASwap, compare
 from backend.bench.decided import (
-    DECIDED_ROUTES,
     Consultation,
-    DecidedRoutes,
-    RouteKey,
-    consult,
-    worth_remembering,
 )
 from backend.bench.entry import Entry, enter
 from backend.bench.gate import NotAGateRun, read_gate
 from backend.bench.goldset import load_gold_sets, measure_reliability
 from backend.bench.lease import LibraryBusy
-from backend.bench.library import AdmissionReading, Case, Family
+from backend.bench.library import Case, Family
 from backend.bench.registration import Attestation
 from backend.bench.retirement import live_library
 from backend.bench.rule import DECLARED_RULE
@@ -414,13 +407,23 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
     )
 
+    # The extra admission run ADR-0012 costs: one proposed case against three agents
+    # on each model. It is paid for here rather than in #12 because it protects *this*
+    # check's interpretability — a library grown by a mechanism that may itself be
+    # model-specific makes a collapse on swap uninterpretable, since it could no
+    # longer be told apart from a library built by the first model. The path itself is
+    # `bench/admitting.py`, called rather than copied: a second code path to a
+    # reference agent is what ADR-0105 §5 refuses.
     refused = cross_model_bar(
-        runs=runs,
+        proposals=[proposal for run in runs for proposal in run.proposals],
+        models=[run.reading.model for run in runs],
         attestation=attestation,
         approve=approve,
         adjudicator=adjudicator,
         adjudicator_model=args.adjudicator_model,
         price_per_call=call_price,
+        measure=measure_on,
+        say=print,
     )
     if isinstance(refused, int):
         return refused
@@ -586,148 +589,6 @@ def adaptive_swap(first: ModelRun, second: ModelRun) -> AdaptiveSwap | None:
         second.adaptive,
         first_model=first.reading.model,
         second_model=second.reading.model,
-    )
-
-
-class Measure(Protocol):
-    """How this command measures one set of proposed cases on one model.
-
-    A seam rather than a direct call, and it exists for one reason: what this
-    function has to be able to demonstrate is *that a remembered route is not
-    measured*, and an assertion about a call that did not happen needs the call to be
-    observable. `scripts/admit.py`'s `measure_on` is the only implementation a run
-    ever uses — one admission run in one place, so nothing enters the library on an
-    arithmetic this command invented.
-    """
-
-    def __call__(
-        self,
-        *,
-        cases: Sequence[Case],
-        model: str,
-        adjudicator: Completion,
-        adjudicator_model: str,
-        attestation: Attestation,
-        approve: Approve,
-        price_per_call: CallPrice | None,
-    ) -> dict[str, AdmissionReading] | int: ...
-
-
-def cross_model_bar(
-    *,
-    runs: Sequence[ModelRun],
-    attestation: Attestation,
-    approve: Approve,
-    adjudicator: Completion,
-    adjudicator_model: str,
-    price_per_call: CallPrice | None,
-    memory: DecidedRoutes = DECIDED_ROUTES,
-    measure: Measure = measure_on,
-) -> tuple[CrossModelRejections, tuple[Promotion, ...], Consultation] | int:
-    """Put every undecided route to the bar, on both models, and count what it refused.
-
-    The extra admission run ADR-0012 costs: one proposed case against three agents on
-    each model. It lives here rather than in #12 because it protects *this* check's
-    interpretability — a library grown by a mechanism that may itself be
-    model-specific makes a collapse on swap uninterpretable, since it could no longer
-    be told apart from a library built by the first model.
-
-    **The memory is consulted before anything is sent** (ADR-0032). A route the gate
-    already measured under this run's own conditions is reported from it, and the
-    three reference agents are never called for it — which is the whole of what #39
-    saves, since a refused route the attacker rediscovers every run was costing an
-    admission run on two models for an answer already known. What is remembered is
-    the *measurement*: `promote` decides it again below, so the declared threshold
-    still decides every proposal in this run.
-
-    A route is measured **once per run** even where several proposals took it.
-    `docs/validation.md` records one run proposing four cases all describing the same
-    route, and the counts do not improve for being bought twice; the proposal stays
-    the unit the rejections are counted on.
-
-    Which bar applies is never decided here. `promote` reads it off the proposal's own
-    `discovered_by`, and nothing in this function can name one.
-    """
-    proposals = tuple(proposal for run in runs for proposal in run.proposals)
-    models = tuple(run.reading.model for run in runs)
-    consulted = consult(memory, proposals, models=models)
-    if not proposals:
-        print(
-            "\nNo route was proposed in either run, so the cross-model bar decided "
-            "nothing. That is a fact about the attacker and not about the bar."
-        )
-        return rejections(()), (), consulted
-
-    print()
-    print(consulted.stated())
-    unmeasured = consulted.to_measure
-    readings: dict[str, list[AdmissionReading]] = {
-        proposal.case.id: [] for proposal in unmeasured
-    }
-    for run in runs:
-        if not unmeasured:
-            break
-        print(
-            f"\nputting {len(unmeasured)} proposed case(s) to the bar on "
-            f"{run.reading.model}"
-        )
-        # `scripts/admit.py`'s own admission run, and deliberately: a proposal is
-        # decided on counts read the way every other admission's counts are read, so
-        # nothing enters the library on an arithmetic this command invented. This
-        # run's own adaptive layer is ignored — a proposal made while measuring a
-        # proposal has had no admission run of its own, and following it would be a
-        # loop with no end.
-        measured = measure(
-            cases=[proposal.case for proposal in unmeasured],
-            model=run.reading.model,
-            adjudicator=adjudicator,
-            adjudicator_model=adjudicator_model,
-            attestation=attestation,
-            approve=approve,
-            price_per_call=price_per_call,
-        )
-        if isinstance(measured, int):
-            return measured
-        for case_id, reading in measured.items():
-            readings[case_id].append(reading)
-
-    # The counts, keyed by the route, so that a second proposal of a route this run
-    # measured once is decided from them rather than from a second admission run.
-    counted: dict[str, tuple[AdmissionReading, ...]] = {
-        RouteKey.of(proposal.case).filed_under: tuple(readings[proposal.case.id])
-        for proposal in unmeasured
-    }
-    # One decision per proposal, made once and used twice — the promotions this run
-    # reports are the objects it remembers. Per *proposal* and not per route, because
-    # the proposal is the unit the rejections are counted on (ADR-0012, and the
-    # reading `docs/validation.md` records for #15): four proposals of one route are
-    # four decisions over one measurement, each carrying its own case id.
-    decided_now = {
-        one.proposal.case.id: promote(one.proposal, counted[one.route.filed_under])
-        for one in consulted.consulted
-        if one.remembered is None
-    }
-    # Remembered once per route. A second write of one route replaces the first with
-    # identical counts, so the loop is over what was measured rather than over what
-    # was decided.
-    for proposal in unmeasured:
-        promotion = decided_now[proposal.case.id]
-        # Selection rather than a caught exception, on ADR-0031 point 3's reasoning:
-        # a run that did not measure the bar the way it needs measuring has nothing
-        # to hand a later run, and the memory refuses it either way.
-        if worth_remembering(promotion):
-            memory.remember(promotion, models=models)
-
-    promotions = tuple(
-        one.remembered.promotion
-        if one.remembered is not None
-        else decided_now[one.proposal.case.id]
-        for one in consulted.consulted
-    )
-    return (
-        rejections(promotion.outcome for promotion in promotions),
-        promotions,
-        consulted,
     )
 
 

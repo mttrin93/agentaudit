@@ -8,6 +8,8 @@
 
 **Vocabulary:** every term below is defined in `CONTEXT.md`. A **route**, a **proposal**, an **attempt** and an **admission** mean exactly what they already mean. One word this spec adds is not bench vocabulary and never enters a figure: a **pending route** is a proposal filed durably, awaiting a decision it has not had. A pending route is not a **case** — it becomes one only by clearing the bar — and it is not an **attempt**, so nothing about it reaches a denominator ([ADR-0010](../adr/0010-two-layers-in-one-run-the-adaptive-layer-is-never-scored.md)).
 
+> **Delivered, and the honest reading is in [docs/validation.md](../validation.md).** All seven tickets — #193 to #199 — are merged, and this spec is the record of what was specified and built rather than a status page: it is not rewritten. Two of its sentences are forward-looking and should be read as still forward-looking. *"This set of tickets is what would make it a claim about a measurement"* above, and the **Further Notes** promise that `docs/validation.md` *"can print a non-zero reading where today it prints an honest zero"*, are both promises the build did not itself keep. The machinery is complete and asserted in two halves — a customer run files what its attacker found, and the deciding surface takes a filed route through the bar into the library and on into a later run — **on two stub models, and never joined in one test**. No route found against a real customer agent has been measured on two provider models, admitted, or written into the library, and the adaptive fraction of the live library is still 0.00. `docs/validation.md` keeps that under *what has never been validated*, narrowed rather than closed.
+
 ---
 
 ## Problem Statement

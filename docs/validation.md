@@ -81,6 +81,25 @@ how many came from memory, and the date and the models each remembered reading w
 on. A figure a reader would have to cross-reference to qualify is a figure that gets
 quoted unqualified, so the qualification is on the line with it.
 
+**Since #200 a route found against somebody's real agent survives the run that found it,
+and not one of them has been decided.** The promotion loop used to close for the one
+surface that attacks the three reference agents and for no other: a route the adaptive
+layer found against a customer's agent reached one printed line and died with the run
+record. It is now filed into `pending/routes.sqlite` — the payload and the identity of
+the agent it beat, which is the disclosure posture's one stated exception and is granted
+on five terms
+([ADR-0104](./adr/0104-the-pending-store-holds-the-payload-and-the-target-and-it-is-the-one-exception.md))
+— and it is decided on a surface of its own, `/pending-routes`, which attests, declares
+an estimate, halts, measures the selected routes against the three reference agents on
+two models in one action, and hands an admitted one to `enter`
+([ADR-0105](./adr/0105-deciding-a-pending-route-is-its-own-surface-and-not-a-gate-runs-second-job.md)).
+The identity stops at the decision: neither the admission memory nor a case record has a
+field that could carry it. **None of that is a reading.** The only pass at the
+cross-model bar this document records is still the four proposals of 2026-08-19 on two
+stub models, so the section *No route has ever been written into the library by a run*
+below is **narrowed and not closed** — what it says of the mechanism has changed, and
+what it says of the measurement has not.
+
 ---
 
 ## What has never been validated, and is not claimed to have been
@@ -135,35 +154,82 @@ What follows from that, and what does not:
 - The store is machine-local and git-ignored, so **no figure in this document was ever
   read out of it** and none can be: an import test forbids every module that produces a
   rate, an interval, a band, a `D` or a κ from reaching it (ADR-0010).
+- **Since #200 the memory has a second caller, and that changes nothing above.**
+  `/pending-routes` reaches the bar through the same `cross_model_bar` the swap does
+  ([ADR-0105](./adr/0105-deciding-a-pending-route-is-its-own-surface-and-not-a-gate-runs-second-job.md)
+  §5), so a route it decides is answered from a stored measurement on exactly the terms
+  above or measured again — asserted as a call count, which is the one assertion that
+  fails if the consultation is dropped. Both callers have only ever run on two stub
+  models, so the first sentence of this entry is as true of the second as it was of the
+  first.
 
-### No route has ever been written into the library by a run (#40)
+### No route has ever been written into the library by a run (#40, narrowed by #200)
 
-**Every one of the eighteen cases on disk is `discovered_by = authored`, and the
-adaptive fraction of the live library is 0.00.** The writer exists, it is exercised end
+**Every one of the twenty-one cases in `backend/cases/` is `discovered_by = authored`,
+and the adaptive fraction of the live library is 0.00.** `library_provenance` reads live
+`authored 21, adaptive 0, user_gap 0, retrieved 0` with none retired, and the nine
+elective records beside them are `authored` too. The writer exists, it is exercised end
 to end in the suite, and it has never fired outside one: the only reading of the
 cross-model bar this document records is the four proposals of 2026-08-19, all four
 refused, both models stubs ([ADR-0033](./adr/0033-an-admitted-route-is-written-into-the-library.md)).
 
+**What #200 changed is the sentence this entry used to carry about the *other* half.**
+It said the interesting routes — the ones the fixed suite missed against a real target —
+arrived by the path with no machinery, and that a route found against a customer's agent
+was not stored, not measured and not recoverable once the run record was gone. That is no
+longer true of any of the three. The dead end is gone, the machinery is complete and
+tested end to end, and **the measurement against a real target has still never been
+taken.** The entry stays here, with its scope narrowed to that last clause.
+
 What follows from that, and what does not:
 
 - **"The loop closes" is a claim about a mechanism, demonstrated on constructed
-  evidence.** A case built to clear the bar is written, loaded back by
-  `admitted_library`, counted as an adaptive live case by `library_provenance`, and
-  makes its family read `n = 40` while the other five read 30 — all asserted. What
-  nobody has watched is an *attacker's own* route make that journey, because no
-  attacker's route has cleared the bar yet.
+  evidence — and the mechanism is now whole rather than half.** A case built to clear
+  the bar is written, loaded back by `admitted_library`, counted as an adaptive live
+  case by `library_provenance`, and makes its family read `n = 40` while the other five
+  read 30 — all asserted, and asserted a second time for the customer-run path, where
+  the admitted record is then *put to a reference agent by a run* rather than only
+  checked on disk. What nobody has watched is an *attacker's own* route make that
+  journey, because no attacker's route has cleared the bar yet.
+- **The two halves are each asserted end to end and are never joined in one test.** A
+  customer run files what its attacker proposed, and the deciding surface takes a filed
+  route through the bar into the library; no test carries one route from an attacker's
+  episode against a non-reference target all the way to a `.toml`. The test that watches
+  a route enter the library is served its counts from a seeded admission memory rather
+  than from agents that separated under it, and it says so on itself. Both statements
+  are about how far a suite can go without spending money, and neither is a complaint
+  about the suite.
+- **Every assertion behind that is on stub models, and a stub measures the field not at
+  all.** The whole of the pending-route suite runs on `stub:obedient` and
+  `stub:cooperative`, which is the same limitation the admission memory's entry above
+  states for itself and the reason ADR-0022 exists. A bar met against hardcoded replies
+  is not a bar met against two provider models, and no run of `/pending-routes` against
+  provider models has happened.
 - **The refusals are the tested half and they are the half that matters more.** A
   route the library already holds is not written twice, a rediscovery of a retired case
   does not un-retire it, a record that does not clear its own bar is refused rather
-  than filed, and a write that meets a gate run's lease is refused by name. Each of
-  those was driven red on purpose.
+  than filed, and a write that meets a gate run's lease is refused by name. #200 added
+  more of them: a gate run's own routes never enter the queue, a measurement is refused
+  while a gate run holds the library and a gate run is refused while a measurement does,
+  a reading that reached one model and not the second leaves every route pending, an
+  aborted or declined measurement leaves the queue as it found it, and no setting,
+  environment variable or request field starts a measurement without an attestation and
+  an answered halt. Each of those was driven red on purpose.
 - **The adaptive fraction reporting has never had a non-zero reading to print.**
   ADR-0012 asks for it on every gate run so that a library drifting towards routes
   fitted to these three agents arrives as a series rather than as a surprise. The
   series exists and has one value in it. Whether it is *readable* as a warning is a
-  question the first non-zero reading answers.
+  question the first non-zero reading answers. #200 removed the reason it could not have
+  one — there is now a second population that could reach it — and did not give it one.
+- **A filed route is not a figure, and `pending/routes.sqlite` is not a source for this
+  document.** The store is machine-local and git-ignored, on `precedent/`'s reasoning
+  and one of its own: it holds a working probe and the name of the agent it beat
+  ([ADR-0104](./adr/0104-the-pending-store-holds-the-payload-and-the-target-and-it-is-the-one-exception.md)).
+  **No figure in this file was ever read out of it and none may be.** A pending route is
+  not an **attempt** and not a **case**; it becomes a case only by clearing the bar, and
+  the count of routes waiting in somebody's queue says nothing about this bench.
 - **Nothing in this document was produced by a grown library.** Every gate run and
-  every swap recorded below ran the eighteen authored cases, and each one records the
+  every swap recorded below ran an all-`authored` library, and each one records the
   library version it ran, so a future reading against a grown library is
   distinguishable from these rather than comparable to them by assumption.
 
@@ -5423,3 +5489,77 @@ Both halves are written down before the first run rather than explained after it
   three reference agents on the field, so the tier's `ElectiveAttack` block has no
   reading behind it yet, and no route proposed from the tier has ever faced the
   cross-model bar.
+
+### The promotion loop's missing half is built, and nothing has been measured through it (#200, 2026-09-10)
+
+Nothing ran against a model for this one either. The entry is here because the seven
+tickets of [the pending-routes spec](./specs/pending-routes.md) — #193 to #199 — removed
+the reason the section *No route has ever been written into the library by a run* gave
+for its own zero, **and did not move the zero**. Both halves are written down in the same
+entry, because an entry that recorded only the first would be exactly the claim this
+document exists to refuse.
+
+- **What was a dead end.** A route the adaptive layer found against a customer's agent
+  reached one printed line — *faces a stated bar, and is not admitted by having been
+  proposed* — and died with the run record. It could not be decided where it was found,
+  because the bar is `D` against the three reference agents on two models and a customer
+  run touched one endpoint; it had nowhere to live, because `precedent/findings.sqlite`
+  holds prose and no target identity (ADR-0008, ADR-0011) and `decisions/routes.sqlite`
+  holds what the gate measured, which for an undecided route is nothing; and the one
+  surface that walked the whole path, `scripts/swap.py`, attacks the three agents that
+  judge it. All three are gone.
+- **What the seven tickets built.** #193, the two records the spec argued and no ADR
+  held —
+  [ADR-0104](./adr/0104-the-pending-store-holds-the-payload-and-the-target-and-it-is-the-one-exception.md)
+  and
+  [ADR-0105](./adr/0105-deciding-a-pending-route-is-its-own-surface-and-not-a-gate-runs-second-job.md).
+  #194, `pending/routes.sqlite`, the fourth store on the `DatabaseStore` seam and the
+  disclosure posture's one stated exception. #195, filing: `file_proposals` is called by
+  the two customer-run entry points — the API's run service and `scripts/bench.py` — on
+  **every** exit including an aborted or failed one, de-duplicates on `RouteKey`, and
+  catches every per-route failure into a refusal, so filing can never fail a run. #196,
+  `cross_model_bar` out of `scripts/swap.py` and into `backend/bench/admitting.py` as a
+  move rather than a rewrite. #197, the `/pending-routes` surface: attestation, declared
+  estimate, halt, then the three reference agents on two models in one action. #198, the
+  decision writes. #199, the operator's page.
+- **What a decision writes, and what it deletes.** `remember` takes the route key and
+  the counts; `enter` takes the case and is the only writer of a `.toml`; the queue row
+  is replaced in one write with a decided row. The payload goes with that write — the
+  decided record has no field for it — so the live exploits on an operator's disk are
+  only the ones still awaiting a decision, and that is asserted on the row read back out
+  of the store rather than on the type.
+- **The identity stops at the decision, and it is asserted from both ends.** From the
+  call — a decision's `remember` and `enter` are made and the target's name is in
+  neither — and from the shape: a walk over every field of the memory's record and of a
+  `Case` finds nothing that could hold a target, with the pending record's own `target`
+  field as the control that proves the walk sees one when there is one. The second is
+  the assertion that survives a refactor.
+- **A gate run leaves the queue as it found it**, asserted with a run whose attacker
+  actually proposed something, and asserted structurally: the filing is not reachable
+  from any gate-run surface, from `bench/calibration.py`, from `scripts/gate.py` or from
+  `scripts/swap.py`.
+- **The bar did not change and neither did the arithmetic that reads the library.**
+  `cross_model_bar` is the same algorithm with two seams where a `print` and a
+  `ModelRun` used to be, and every one of the swap's own behaviour tests passes with its
+  assertions unedited — only the helper that calls the bar was rewired — which is what a
+  move rather than a rewrite means. `backend/bench/admission.py` was not edited at all in the
+  seven tickets, so `library_provenance` counts what it always counted; what is new is a
+  second caller that could one day make it print something other than nought.
+- **Every reading behind all of it is `stub:obedient` and `stub:cooperative`.** Nothing
+  in the pending-route suite reaches a provider, by design and asserted by the module's
+  own walls. A bar met against hardcoded replies is not a bar met against the field
+  ([ADR-0022](./adr/0022-the-retirement-window-is-two-readings-of-one-model.md)), so
+  nothing here is evidence about a route, about a target, or about the bench.
+- **One route has been filed outside the suite, and it is not a figure.** A customer-run
+  path on one machine filed a single `data_leakage` route on 2026-09-09, against the
+  *trivial* reference agent standing in for a customer's, and it is still pending. The
+  store is git-ignored and machine-local for the reason `precedent/` is, and it holds a
+  working probe and the name of the agent it beat — so **no number in this document was
+  read out of it and none may be**. It is recorded here as the one observation that
+  filing happens outside a test, and as nothing else.
+- **Still never validated**: no route found against a real customer agent has been
+  measured on two provider models, no `/pending-routes` measurement has ever been run
+  against the field, no route has ever cleared the cross-model bar, and the adaptive
+  fraction of the live library is 0.00 over twenty-one `authored` records. The dead end
+  is gone and the machinery is complete and tested; the measurement has still never been
+  taken, and until it is, *the loop closes* stays a claim about a mechanism.

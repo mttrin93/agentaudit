@@ -189,6 +189,15 @@ from backend.api.gate_runs import (
     shipped_agents,
 )
 from backend.api.gate_runs import NoLongerWaiting as GateRunNoLongerWaiting
+from backend.api.pending_route_state import CannotMeasure, MeasurementRecord
+from backend.api.pending_route_state import (
+    NoLongerWaiting as MeasurementNoLongerWaiting,
+)
+from backend.api.pending_routes import (
+    AgentsOn,
+    BenchPendingRoutes,
+    PendingRouteBench,
+)
 from backend.api.report import (
     CHECKED_BY_THE_BENCH_THAT_PRODUCED_IT,
     UNDECLARED_MODEL,
@@ -233,6 +242,7 @@ from backend.bench.completion import (
     ATTACKER_MODEL_ENV,
     DEFAULT_ATTACKER_TEMPERATURE,
     REFERENCE_MODEL_ENV,
+    SECOND_REFERENCE_MODEL_ENV,
     attacker_completion_for,
     completion_for,
     declared_model,
@@ -263,6 +273,7 @@ from backend.bench.library import (
 )
 from backend.bench.measurability import runnable
 from backend.bench.payload import DeclaredModels, GateCitation, citation
+from backend.bench.pending import AwaitingDecision, Decided
 from backend.bench.registration import ECHO_PROBE, Attestation
 from backend.bench.rendering import REPORT_MARKDOWN, REPORT_PAYLOAD
 from backend.bench.retirement import retired_cases
@@ -4953,6 +4964,424 @@ class ApprovalRequest(BaseModel):
     reason: str = ""
 
 
+PENDING_ROUTES_ROUTE = "/pending-routes"
+"""The queue of routes awaiting the cross-model bar. Its own family, and a third one.
+
+**A pending route is not a run and not a gate run.** A run produces rates about
+somebody's agent, a gate run produces a decision about this bench, and deciding a
+pending route produces a decision about **a case** — a third kind of fact, given
+the shape the other two have so that it stays unmixable with them
+([ADR-0105](../../docs/adr/0105-deciding-a-pending-route-is-its-own-surface-and-not-a-gate-runs-second-job.md)
+§1). No route on this prefix takes a run id or a gate run id, no route under
+`/runs` or `/gate-runs` takes a pending route key, and no model on any of the three
+is another's.
+
+**It is not under `/bench`.** `/bench` is the instrument's own prefix and every
+method on it is a `GET`. Measuring a pending route is three reference agents on two
+models per route and a write into the case library, so it belongs where a caller
+can see that it is not a read.
+"""
+
+PENDING_MEASUREMENTS_ROUTE = "/pending-routes/measurements"
+PENDING_MEASUREMENT_ROUTE = "/pending-routes/measurements/{measurement_id}"
+PENDING_MEASUREMENT_APPROVAL_ROUTE = (
+    "/pending-routes/measurements/{measurement_id}/approval"
+)
+PENDING_ROUTE_ROUTE = "/pending-routes/{route}"
+"""Where a measurement is started, answered and read, and where one route is read.
+
+The measurements are a segment of their own rather than a verb on the queue,
+because a measurement is a record with a lifetime: it is started, halted, answered
+and then reports progress for minutes. The interrupt is a route rather than a field
+on the start request for the reason `POST /runs/{id}/approval` is — a
+`confirmed: true` in the body that started it would be a form answered by whatever
+composed it (ADR-0007).
+
+`{route}` is a pending route's own key — `family-probe`, the digest `RouteKey` files
+it under. It is never a run id and never a gate run id, and no route under either of
+those families takes one.
+"""
+
+A_PENDING_ROUTE_IS_NOT_A_CASE = (
+    "a queue of pending routes, which are not cases. A route the adaptive attacker "
+    "found against a target is filed here by the run that found it; it becomes a "
+    "case only by clearing the cross-model admission bar, and nothing here reaches "
+    "a denominator or a report (ADR-0010, ADR-0012)"
+)
+"""Said on the list, because a screenshot of a list travels alone."""
+
+
+class MayMeasure(BaseModel):
+    """This bench can decide a pending route, and what doing it costs.
+
+    Two facts and no control: the caller learns the affordance is available, which
+    library a decision writes to and which two models the bar is measured on.
+    `available` is a literal so this shape and the one below are two facts rather
+    than one record with empty fields.
+    """
+
+    available: Literal[True] = True
+    library: str
+    models: list[str]
+    """The two underlying models, in the order they are measured. Two, because the
+    bar is two models measured together (ADR-0012, ADR-0105 §2)."""
+
+    statement: str
+
+
+class MayNotMeasure(BaseModel):
+    """This bench cannot decide a pending route, and the named reason it cannot.
+
+    A stated absence rather than a missing field, and never an empty `MayMeasure`:
+    a deployment that ships no reference agents, one that declares a single model
+    and a library another writer is holding are three different facts, and only the
+    last is answered by waiting.
+    """
+
+    available: Literal[False] = False
+    refusal: str
+    """One of `NotMeasurable`'s members — the field a caller branches on."""
+
+    stated: str
+
+
+THE_MEASUREMENT_IS_AVAILABLE = (
+    "Deciding a pending route measures it against three agents of known "
+    "construction on two models, then writes the ones that clear the bar into the "
+    "case library."
+)
+
+
+def may_measure(pending: BenchPendingRoutes) -> MayMeasure | MayNotMeasure:
+    """Whether a measurement may start on this bench right now, and why not if not.
+
+    Read off `BenchPendingRoutes.why_not`, which is the one place the refusals about
+    *the bench* are decided: a second reading here would be a screen that offered a
+    control the bench would refuse, or withheld one it would have taken. The
+    refusals about a *request* — a route not in the queue, one already decided, one
+    nothing live can score — are not here, because nobody has selected anything yet.
+    """
+    refusal = pending.why_not()
+    if refusal is not None:
+        held = pending.holder()
+        return MayNotMeasure(
+            refusal=str(refusal),
+            stated=f"{refusal.stated()}. {held}" if held else refusal.stated(),
+        )
+    bench = pending.bench
+    # Narrowed by `why_not`, which refused a bench with no library to write to.
+    assert bench.library is not None
+    return MayMeasure(
+        library=str(bench.library),
+        models=list(bench.models),
+        statement=THE_MEASUREMENT_IS_AVAILABLE,
+    )
+
+
+class PendingRouteRow(BaseModel):
+    """One route in the queue: what it did, whose agent it beat, and its answer.
+
+    The attacker's own prose is on the row because the row has to say what the
+    route *did* and not only that a route exists (spec story 3), and the target is
+    on it because a page that could not say whose agent a route beat would ask an
+    operator to spend an inference budget blind (ADR-0104 §2).
+
+    **No payload field, on any row.** The probe is in the store for the surface
+    that measures it and reaches no reader here — the exception ADR-0104 grants is
+    for measuring the route, never for showing it.
+    """
+
+    route: str
+    """The key this route is filed under: its family and the digest of its probe."""
+
+    family: str
+    probe: str
+    """The digest of the probe, and never the probe (`RouteKey`, ADR-0008)."""
+
+    target: str
+    description: str
+    filed_on: str
+    state: str
+    """`pending`, `admitted` or `rejected` — the field a caller branches on."""
+
+    reason: str
+    """The gate's own reason, for a decided route. Empty while it is pending.
+
+    A rejected route keeps its row and its reason: a route that was a property of
+    one model is a finding in its own right (ADR-0012, spec story 12).
+    """
+
+
+def pending_route_row(record: AwaitingDecision | Decided) -> PendingRouteRow:
+    """One queue record as a row, built in one place so every route agrees."""
+    return PendingRouteRow(
+        route=record.route.filed_under,
+        family=str(record.route.family),
+        probe=record.route.probe,
+        target=record.target,
+        description=record.description,
+        filed_on=record.filed_on.isoformat(),
+        state=str(record.state),
+        reason=record.reason if isinstance(record, Decided) else "",
+    )
+
+
+class MeasurementRow(BaseModel):
+    """One measurement on the record: when, where it got to, how many routes.
+
+    A row and never a decision. There is no per-route answer on it: those are read
+    from the measurement's own route, beside the models they were measured on.
+    """
+
+    measurement_id: str
+    recorded_at: str
+    status: str
+    statement: str
+    routes: int
+
+
+class PendingRouteQueue(BaseModel):
+    """The queue, the measurements over it, and whether another may start.
+
+    The availability is on the list for `GateRuns.start`'s reason: a console has to
+    know before it draws a control, not after somebody presses one.
+    """
+
+    measure: MayMeasure | MayNotMeasure
+    routes: list[PendingRouteRow]
+    measurements: list[MeasurementRow]
+    statement: str = A_PENDING_ROUTE_IS_NOT_A_CASE
+
+
+def measurement_row(record: MeasurementRecord) -> MeasurementRow:
+    return MeasurementRow(
+        measurement_id=record.measurement_id,
+        recorded_at=record.recorded_at.isoformat(),
+        status=str(record.status),
+        statement=record.statement,
+        routes=len(record.routes),
+    )
+
+
+def pending_routes_response(pending: BenchPendingRoutes) -> PendingRouteQueue:
+    """The queue as it stands, with the one fact a screen needs before it offers a
+    control."""
+    return PendingRouteQueue(
+        measure=may_measure(pending),
+        routes=[pending_route_row(record) for record in pending.queue()],
+        measurements=[measurement_row(record) for record in pending.records()],
+    )
+
+
+THE_ESTIMATE_IS_PER_ROUTE = (
+    "one row per route, and the routes are the operator's own selection. Deciding a "
+    "route is three reference agents on each of two models — six endpoints — at the "
+    "declared attempts per case, plus one registration probe each. Exact because it "
+    "is a multiplication: the adaptive layer is switched off for an admission run, "
+    "so there is no bound here and no second figure to add to this one (ADR-0010, "
+    "ADR-0058). Each row is what that route costs measured on its own, so the rows "
+    "add up to more than the total below and never to less: the routes ride in one "
+    "admission run per model, and a registration probe is one per agent per model "
+    "however many of them ride with it"
+)
+"""What the estimate says about itself, including why its rows over-add.
+
+The over-adding is stated rather than smoothed away, because the alternative was
+worse in both directions: a total equal to the sum of the rows would declare an
+exact figure the measurement will not spend, and rows that shared the registration
+probes out between them would be a number no route costs and no run makes. What is
+true of every row is that it is what deciding *that* route costs, which is the
+question an operator selecting routes is asking (ADR-0007).
+"""
+
+
+class RouteEstimate(BaseModel):
+    """What deciding one route costs, in the units the operator already reads.
+
+    Per route because that is the unit they selected in and the unit the spend is
+    incurred in: a single total would ask them to confirm a figure they could not
+    attribute to anything they chose (ADR-0105 §4).
+    """
+
+    route: str
+    family: str
+    target: str
+    calls: int
+    """The calls this route will make. Exact, and the arithmetic is in `basis`."""
+
+    basis: str
+    cost: str
+
+
+class MeasurementEstimate(BaseModel):
+    """The consent surface for a measurement: the rows, and their total.
+
+    One layer and therefore one total — added over the routes the operator chose
+    and never over layers, which is the sum this codebase does not have a name for
+    (ADR-0007, ADR-0010). Every number is read off the `RunBudget` the measurement
+    is held to; nothing here computes a figure of its own.
+    """
+
+    per_route: list[RouteEstimate]
+    models: list[str]
+    calls: int
+    ceiling: int
+    """The enforced ceiling: the figure above with every message retried to its
+    transport limit. A measurement may not exceed anything it was shown with a `≤`
+    in front of it (ADR-0007)."""
+
+    cost: str
+    currency: str
+    statement: str = THE_ESTIMATE_IS_PER_ROUTE
+
+
+def measurement_estimate(record: MeasurementRecord) -> MeasurementEstimate:
+    """The estimate this measurement is holding, per route, off its own budgets."""
+    by_route = {one.route: one for one in record.routes}
+    estimate = record.budget.estimate
+    return MeasurementEstimate(
+        per_route=[
+            RouteEstimate(
+                route=route.filed_under,
+                family=str(route.family),
+                target=by_route[route].target,
+                calls=budget.estimate.scored.calls,
+                basis=budget.estimate.scored.basis,
+                cost=budget.estimate.cost(budget.estimate.scored),
+            )
+            for route, budget in record.per_route
+        ],
+        models=list(record.models),
+        calls=estimate.scored.calls,
+        ceiling=record.budget.ceiling(Layer.SCORED),
+        cost=estimate.cost(estimate.scored),
+        currency="" if estimate.price is None else estimate.price.currency,
+    )
+
+
+class MeasurementStarted(BaseModel):
+    """A measurement recorded and halted in front of its estimate.
+
+    The estimate is returned once, here, by the request that created the
+    measurement — the same division `POST /runs` and `POST /gate-runs` use, and for
+    the same reason: the route that reports progress reports no estimate.
+    """
+
+    measurement_id: str
+    status: str
+    statement: str
+    estimate: MeasurementEstimate
+    library: str
+    """The case library an admitted route is written into, and which this
+    measurement holds until it is finished."""
+
+
+def measurement_started(record: MeasurementRecord) -> MeasurementStarted:
+    """One measurement as it stands, with the figures it is holding."""
+    return MeasurementStarted(
+        measurement_id=record.measurement_id,
+        status=str(record.status),
+        statement=record.statement,
+        estimate=measurement_estimate(record),
+        library=str(record.library),
+    )
+
+
+class RouteProgressRow(BaseModel):
+    """Where one route in a measurement has got to, and what it ended as.
+
+    Per route because the action is minutes long and the routes were selected one
+    at a time: *measuring on the second model* and *answered from the memory
+    without being measured* are two different things to be told about a route
+    somebody is paying for (spec story 10).
+    """
+
+    route: str
+    target: str
+    description: str
+    where: str
+    state: str
+    reason: str
+    entered_as: str
+    """The case record an admitted route became, named as the file it is — the loop
+    closing is a file an operator can open (spec story 11). Empty for anything
+    else."""
+
+
+class MeasurementReading(BaseModel):
+    """Where one measurement has got to, per route, and what the bar said.
+
+    No estimate here, on `GateRunReading`'s reasoning: the figures were presented
+    once, by the request that created the record, and a second copy served from a
+    progress route is a second thing that could disagree with what was confirmed.
+    """
+
+    measurement_id: str
+    status: str
+    statement: str
+    recorded_at: str
+    models: list[str]
+    library: str
+    routes: list[RouteProgressRow]
+    lines: list[str]
+    """The bar's own prose, in the order it produced it: the consultation, each
+    promotion's lines, and the cross-model rejections. What a run prints at a
+    terminal, kept for a surface that has no terminal (`admitting.Say`)."""
+
+
+def measurement_reading(record: MeasurementRecord) -> MeasurementReading:
+    """One measurement as it stands right now."""
+    return MeasurementReading(
+        measurement_id=record.measurement_id,
+        status=str(record.status),
+        statement=record.statement,
+        recorded_at=record.recorded_at.isoformat(),
+        models=list(record.models),
+        library=str(record.library),
+        routes=[
+            RouteProgressRow(
+                route=row.route.filed_under,
+                target=row.target,
+                description=row.description,
+                where=row.where,
+                state=str(row.state),
+                reason=row.reason,
+                entered_as=row.entered_as,
+            )
+            for row in record.progress
+        ],
+        lines=list(record.lines),
+    )
+
+
+class StartMeasurementRequest(BaseModel):
+    """Everything a measurement needs before it may exist, and nothing it defaults.
+
+    Three fields and no default anywhere. The attestation is the same
+    three-statement record `POST /runs` and `POST /gate-runs` take — one field
+    each, because the record has to show *what* was attested — the cost is declared
+    by the operator because the reference agents run on the operator's own provider
+    credential, and the routes are named because a measurement is per route and a
+    queue that drained itself would be an unbounded spend authorised once
+    (ADR-0105, spec *Out of scope*).
+
+    There is no target here and no nonce: the targets are this bench's own three
+    reference agents on two models, and the run plants its own nonce in equipment
+    it started itself.
+    """
+
+    attestation: AttestationRequest
+    cost: CostRequest
+    routes: list[str]
+    """The pending route keys this measurement decides. Never defaulted to all of
+    them: three agents on two models each is the operator's money."""
+
+
+def _cannot_measure(refused: CannotMeasure) -> dict[str, str]:
+    """The refusal as the caller reads it: the name it branches on, and the words."""
+    return {"refusal": str(refused.refusal), "statement": str(refused)}
+
+
 NO_KEY_NO_BOOT = (
     "This factory does not start without a key it can sign with. A bench that cannot "
     "sign attempts the whole library against the operator's endpoint and then refuses "
@@ -5337,8 +5766,47 @@ def deployed_gate_runs(config: BenchConfig) -> GateRunBench:
     )
 
 
+def deployed_pending_routes(
+    config: BenchConfig, gate_runs: GateRunBench, agents: AgentsOn = shipped_agents
+) -> PendingRouteBench:
+    """What deciding a pending route on a deployed bench has to work with.
+
+    **The library is the gate run's, read from one place rather than declared
+    twice.** Both surfaces write to that directory and both take its lease, so two
+    declarations that could disagree would be two libraries whose lease excluded
+    nothing — and the mutual refusal ADR-0033 gives is the whole reason this surface
+    is safe beside a gate run.
+
+    **The two models are two declarations, and the second is this surface's alone.**
+    `REFERENCE_MODEL_ENV` is what every run and every gate run measures against;
+    `SECOND_REFERENCE_MODEL_ENV` is reached by the cross-model bar and by nothing
+    else (ADR-0012). A deployment that declares one of them can run a gate and
+    cannot decide a route, which is a stated refusal on the screen that would offer
+    the control rather than a bar quietly met on one model.
+
+    The equipment seam is a function of the model rather than the bound `Equipment`
+    a gate run holds, because this action serves the agents twice — once per model,
+    one at a time.
+    """
+    declared = [
+        config.report.models.calibration,
+        declared_model(SECOND_REFERENCE_MODEL_ENV) or UNDECLARED_MODEL,
+    ]
+    models = tuple(model for model in declared if model != UNDECLARED_MODEL)
+    return PendingRouteBench(
+        library=gate_runs.library,
+        agents=agents,
+        # Two or none: a pair with a hole in it is not a pair, and a bench that
+        # measured the first model and then found it had no second would have spent
+        # the operator's budget to reach a reading the bar cannot take.
+        models=models if len(models) == 2 else (),
+    )
+
+
 def create_app(
-    config: BenchConfig | None = None, gate_runs: GateRunBench | None = None
+    config: BenchConfig | None = None,
+    gate_runs: GateRunBench | None = None,
+    pending_routes: PendingRouteBench | None = None,
 ) -> FastAPI:
     """The API over one bench, over one library.
 
@@ -5378,9 +5846,21 @@ def create_app(
     # here rather than held by either registry, so that neither of them names the
     # other's record and the widening ADR-0021 forbids stays unavailable.
     gates = BenchGateRuns(bench.config, gate_runs, cites=bench.cite)
+    if pending_routes is None:
+        # A third declaration, on the second one's terms: a deployment that has said
+        # it can run a gate has not said it can measure on two models, and the second
+        # model is the whole of ADR-0012's bar. A bench that declared its own
+        # configuration decides no pending route unless it was handed the means to.
+        pending_routes = (
+            PendingRouteBench()
+            if declared
+            else deployed_pending_routes(bench.config, gate_runs)
+        )
+    pending = BenchPendingRoutes(bench.config, pending_routes)
     app = FastAPI(title="AgentAudit", version="0.1.0")
     app.state.bench = bench
     app.state.gate_runs = gates
+    app.state.pending_routes = pending
 
     @app.post("/nonces", status_code=status.HTTP_201_CREATED)
     def issue_nonce_for_a_target() -> NonceIssued:
@@ -6205,5 +6685,161 @@ def create_app(
                 detail=f"no gate run {gate_run_id} was started by this bench",
             )
         return gate_run_reading(record, bench.config.rule)
+
+    @app.get(PENDING_ROUTES_ROUTE)
+    def list_the_routes_awaiting_the_bar() -> PendingRouteQueue:
+        """Every route the attacker found and no surface has decided, on one page.
+
+        Pending and decided alike, because the page a decision writes to is the page
+        it was started from: an admitted route's row names the record it became and
+        a rejected one's carries the gate's own reason, and a queue that dropped a
+        route the moment it was decided would answer *what happened to the route I
+        paid for?* with silence (ADR-0012, spec stories 11 and 12).
+
+        **Each row carries the target it beat and the attacker's own prose, and no
+        payload.** The identity is here because deciding is expensive and an
+        operator choosing what to pay for cannot choose blind (ADR-0104 §2); the
+        probe is not, because the exception that store was granted is for measuring
+        a route and never for showing it.
+
+        Whether a measurement may start is on this response for the reason it is on
+        `GET /gate-runs`: a console has to know before it draws a control.
+        """
+        return pending_routes_response(pending)
+
+    @app.post(PENDING_MEASUREMENTS_ROUTE, status_code=status.HTTP_202_ACCEPTED)
+    def start_a_pending_route_measurement(
+        request: Annotated[StartMeasurementRequest, Body()],
+    ) -> MeasurementStarted:
+        """Record the attestation, declare the estimate per route, and halt.
+
+        Returns once the measurement is holding its interrupt, which is before
+        anything has been sent to a reference agent and while every route named is
+        still pending. It holds this bench's case library from this moment, so a
+        gate run started now is refused by name and so is a second measurement.
+
+        **The consent mechanism is the one that exists** (ADR-0105 §4). The three
+        attestation statements are the `Attestation` record that cannot be
+        constructed with one withheld, and the halt is the same `PendingApproval`
+        seam `POST /runs/{id}/approval` and `POST /gate-runs/{id}/approval` answer.
+        Neither is reimplemented, and there is no flag, setting or environment
+        variable on this surface that stands in for either.
+
+        **The estimate is declared here and inherited from nothing.** Whatever the
+        operator attested to for the run that *found* a route was an estimate for
+        attacking their own agent, made possibly weeks ago, and it authorised none
+        of this: three reference agents on two models, per route.
+
+        **The routes are named and never defaulted to all of them.** A queue that
+        drained itself would be an unbounded spend authorised once.
+        """
+        try:
+            attestation = request.attestation.attestation()
+            price = request.cost.price()
+        except ValueError as refused:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(refused)
+            ) from refused
+
+        try:
+            record = pending.start(
+                attestation=attestation, price=price, routes=request.routes
+            )
+        except CannotMeasure as refused:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT, detail=_cannot_measure(refused)
+            ) from refused
+        except NeverPresented as unpresented:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=str(unpresented),
+            ) from unpresented
+        return measurement_started(record)
+
+    @app.post(PENDING_MEASUREMENT_APPROVAL_ROUTE)
+    def answer_the_measurements_interrupt(
+        measurement_id: Annotated[str, PathParam()],
+        request: Annotated[ApprovalRequest, Body()],
+    ) -> MeasurementStarted:
+        """Answer the halt. On a yes the measurement goes; on anything else it does
+        not.
+
+        The same request body the other two interrupts take, deliberately: the
+        answer to an interrupt is the consent mechanism itself, and there is exactly
+        one of those in this application (ADR-0007). What is not shared is the
+        record it answers — this route takes a measurement id, and a run id or a
+        gate run id here is a `404` rather than something somebody accidentally
+        confirmed.
+
+        A declined measurement spends nothing and decides nothing: every route it
+        named is still pending, with its payload, and the library it was holding
+        goes back exactly as it was.
+        """
+        try:
+            record = pending.answer(
+                measurement_id,
+                Approval(
+                    confirmed=request.confirmed,
+                    identity=request.identity,
+                    reason=request.reason,
+                ),
+            )
+        except KeyError as unknown:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"no measurement {measurement_id} was started by this bench",
+            ) from unknown
+        except MeasurementNoLongerWaiting as closed:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT, detail=str(closed)
+            ) from closed
+        return measurement_started(record)
+
+    @app.get(PENDING_MEASUREMENT_ROUTE)
+    def report_the_measurements_progress(
+        measurement_id: Annotated[str, PathParam()],
+    ) -> MeasurementReading:
+        """Where one measurement has got to, route by route, and what the bar said.
+
+        **Progress is per route**, because the routes were selected one at a time
+        and the action is minutes long: a route measuring on the second model, one
+        answered from the admission memory without being measured, and one already
+        decided are three different things to be told (spec story 10, ADR-0032).
+
+        **The bar's own prose is here.** The consultation's report, each
+        promotion's lines and the cross-model rejections are what a command-line run
+        prints; this surface has no terminal, so they are kept on the record and
+        served — a decision an operator paid for is checkable against the sentences
+        the bar wrote, not only against a status.
+        """
+        record = pending.record(measurement_id)
+        if record is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"no measurement {measurement_id} was started by this bench",
+            )
+        return measurement_reading(record)
+
+    @app.get(PENDING_ROUTE_ROUTE)
+    def read_one_pending_route(
+        route: Annotated[str, PathParam()],
+    ) -> PendingRouteRow:
+        """One route in the queue, by the key it is filed under.
+
+        The same row the list serves and never a richer one: there is no payload on
+        it here either, because the surface that measures a route is the only reader
+        the exception in ADR-0104 was granted for.
+        """
+        record = pending.filed(route)
+        if record is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=(
+                    f"this queue holds no route filed under {route}. A route is "
+                    "filed by the run that found it, under its family and the "
+                    "digest of its probe"
+                ),
+            )
+        return pending_route_row(record)
 
     return app

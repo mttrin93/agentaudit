@@ -19,6 +19,7 @@ decides (`docs/specs/pending-routes.md`).
 
 from __future__ import annotations
 
+import dataclasses
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
@@ -29,8 +30,9 @@ from backend.api.gate_runs import GateRunStatus
 from backend.api.run_status import RunStatus
 from backend.bench.adaptive.budget import AdaptiveBudget
 from backend.bench.adaptive.episode import AdaptiveEpisode, EpisodeOutcome
+from backend.bench.adaptive.precedent import Precedent
 from backend.bench.adaptive.proposal import ProposedRoute, proposed_from
-from backend.bench.decided import RouteKey
+from backend.bench.decided import DecidedRoute, RouteKey
 from backend.bench.library import Case, Family
 from backend.bench.pending import (
     PENDING_ROUTES,
@@ -425,3 +427,44 @@ def test_no_gate_run_surface_can_reach_the_filing_at_all() -> None:
             "decides them, so filing them would fill a triage page with routes no "
             "operator asked about and none of them about a customer (ADR-0012)"
         )
+
+
+def test_the_filed_route_is_the_only_record_in_the_repository_naming_a_target() -> None:
+    """The other half of the identity being filed: nowhere else may hold it.
+
+    ADR-0104 grants this store the target identity as an **exception**, and an
+    exception is only bounded if the rule it is an exception to still holds. So the
+    four durable records are asked what fields they have, and exactly one of them
+    answers with a target: the one that also carries the payload, which is what
+    makes it the exception rather than a fifth store with a name on it.
+
+    Asked of the record types rather than of the databases, on `Decided`'s
+    reasoning: a record with no field for a thing cannot be made to hold it by a
+    caller, and that is the half that survives a refactor (ADR-0104 §4).
+    """
+    named = {
+        store: sorted(
+            field.name for field in dataclasses.fields(record) if "target" in field.name
+        )
+        for store, record in (
+            ("precedent/findings.sqlite", Precedent),
+            ("decisions/routes.sqlite", DecidedRoute),
+            ("the case library", Case),
+            ("pending/routes.sqlite", AwaitingDecision),
+        )
+    }
+
+    assert named == {
+        "precedent/findings.sqlite": [],
+        "decisions/routes.sqlite": [],
+        "the case library": [],
+        "pending/routes.sqlite": ["target"],
+    }, (
+        "the target identity is written down somewhere beside the pending queue. "
+        "ADR-0011's rule is that precedent carries no target identity to anything "
+        "blinded, and ADR-0104's exception is granted on this store being the only "
+        "one that departs from it"
+    )
+    # And it is beside a payload here, which is the whole of why it is an exception
+    # rather than a fifth store that happens to carry a name.
+    assert "draft" in {field.name for field in dataclasses.fields(AwaitingDecision)}

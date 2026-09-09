@@ -42,10 +42,10 @@ import ast
 import time
 from collections.abc import Iterator
 from contextlib import contextmanager
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field, fields, is_dataclass, replace
 from datetime import date
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, cast, get_args, get_type_hints
 
 import pytest
 from fastapi import FastAPI
@@ -72,10 +72,17 @@ from backend.api.pending_route_state import (
 from backend.api.pending_routes import BenchPendingRoutes, PendingRouteBench
 from backend.api.report import ReportConfig
 from backend.api.runs import BenchConfig
+from backend.bench import entry
 from backend.bench.adaptive.budget import AdaptiveBudget
 from backend.bench.adaptive.promotion import Promotion, promote
 from backend.bench.adaptive.proposal import ProposedRoute, proposed_from
-from backend.bench.decided import DECIDED_ROUTES, RouteKey
+from backend.bench.contract import TargetConfig
+from backend.bench.decided import (
+    DECIDED_ROUTES,
+    DecidedRoute,
+    DecidedRoutes,
+    RouteKey,
+)
 from backend.bench.entry import enter
 from backend.bench.lease import LEASE_FILE, take_the_library
 from backend.bench.library import (
@@ -1112,3 +1119,139 @@ def test_a_route_this_library_already_holds_is_reported_as_held_and_not_written_
         "One route is one record, and `enter` is the one place that is decided "
         "(ADR-0033)"
     )
+
+
+FORBIDDEN = frozenset(
+    {
+        "target",
+        "targets",
+        "target_name",
+        "endpoint",
+        "url",
+        "base_url",
+        "auth_token",
+        "host",
+    }
+)
+"""Field names that would name whose agent a route was found against.
+
+A name list beside the type check below, because `target: str` on a record is the
+leak the type check cannot see: `TargetConfig` is not the only way to write down an
+identity, and the cheapest way is a string field called what it holds.
+"""
+
+
+def a_field_graph(record: type) -> list[tuple[str, str, Any]]:
+    """Every field reachable from that dataclass, as owner, name and resolved type.
+
+    Resolved rather than read off `Field.type`, because every module here declares
+    `from __future__ import annotations` and an unresolved annotation is a string a
+    type assertion would silently pass.
+    """
+    seen: set[type] = set()
+    found: list[tuple[str, str, Any]] = []
+
+    def walk(annotation: Any) -> None:
+        for inner in get_args(annotation) or (annotation,):
+            if get_args(inner):
+                walk(inner)
+            elif isinstance(inner, type) and is_dataclass(inner) and inner not in seen:
+                seen.add(inner)
+                hints = get_type_hints(inner)
+                for one in fields(inner):
+                    found.append((inner.__name__, one.name, hints[one.name]))
+                    walk(hints[one.name])
+
+    walk(record)
+    return found
+
+
+def test_no_field_the_memory_or_the_library_holds_could_carry_a_target() -> None:
+    """The identity boundary asserted from the end that survives a refactor.
+
+    A test over what one decision *wrote* passes for a decision that wrote nothing
+    interesting; this one asks whether the two records have anywhere to put an
+    identity at all. Every field reachable from `DecidedRoute` — what the admission
+    memory holds — and from `Case` — what a `.toml` record is written from — is
+    walked, and none of them is a `TargetConfig` or is named like one.
+
+    The queue's own record is the control, and it is the point of the exception:
+    `AwaitingDecision` carries `target` deliberately (ADR-0104 §2), so this walk
+    demonstrably finds an identity where one is declared. Without that half a walk
+    that had quietly stopped finding fields would pass.
+    """
+    exception = a_field_graph(AwaitingDecision)
+    assert [name for _, name, _ in exception if name in FORBIDDEN] == ["target"], (
+        "the walk did not find the one field the disclosure posture has an "
+        "exception for, so it is not looking at anything (ADR-0104 §2)"
+    )
+
+    for record in (DecidedRoute, Case):
+        graph = a_field_graph(record)
+        assert graph, f"{record.__name__} has no fields to walk"
+        assert not [
+            f"{owner}.{name}" for owner, name, _ in graph if name in FORBIDDEN
+        ], (
+            f"a field reachable from {record.__name__} is named for a target. The "
+            "identity stops at the decision: the pending store is the one place it "
+            "lives, and the one place a decision deletes (ADR-0008, ADR-0011)"
+        )
+        assert not [
+            f"{owner}.{name}"
+            for owner, name, annotation in graph
+            if TargetConfig in (get_args(annotation) or (annotation,))
+        ], f"a field reachable from {record.__name__} is typed as a target"
+
+
+def test_neither_the_memory_nor_the_library_is_told_which_agent_was_beaten(
+    cases_dir: Path, leakage_case: Case, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The same boundary from the calling end: no argument carries the name.
+
+    Two routes in one measurement, so that both writes happen and both are watched.
+    One the memory has never seen, so it is measured and `remember` is called with
+    what the reference agents returned; one the memory holds as admitted, so `enter`
+    is called with the case it becomes. Neither call is handed the target, and the
+    pending record that *does* hold it is sitting in the queue the whole time.
+    """
+    measured = a_route(leakage_case, payload="a probe nothing has measured yet")
+    admitted = a_route(leakage_case, payload="a probe the memory already holds")
+    filed(measured)
+    filed(admitted)
+    remembered(admitted, SEPARATING, SEPARATING)
+
+    told: list[str] = []
+    real_remember = DecidedRoutes.remember
+    real_enter = entry.enter
+
+    def watched_remember(self: DecidedRoutes, promotion: Promotion, **rest: Any) -> Any:
+        told.append(repr((promotion, rest)))
+        return real_remember(self, promotion, **rest)
+
+    def watched_enter(cases: Any, library: Path, *, holder: str) -> Any:
+        told.append(repr((list(cases), library, holder)))
+        return real_enter(cases, library, holder=holder)
+
+    monkeypatch.setattr(DecidedRoutes, "remember", watched_remember)
+    monkeypatch.setattr(pending_routes, "enter", watched_enter)
+
+    with a_bench(cases_dir) as deciding:
+        answered(
+            deciding,
+            [
+                RouteKey.of(measured.case).filed_under,
+                RouteKey.of(admitted.case).filed_under,
+            ],
+        )
+
+    assert len(told) == 2, (
+        f"{len(told)} of the two writes happened, so this test is watching a "
+        "decision that did not make both of them"
+    )
+    for call in told:
+        assert A_CUSTOMER not in call, (
+            "a decision handed the target's name to the admission memory or to the "
+            "library. The identity stops at the decision (ADR-0008, ADR-0011)"
+        )
+    # And the record that does hold it is still there to have leaked it.
+    assert any(record.target == A_CUSTOMER for record in PENDING_ROUTES.queue())

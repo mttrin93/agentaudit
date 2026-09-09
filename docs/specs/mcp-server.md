@@ -82,7 +82,7 @@ The **report a tool returns is compact and keeps every label**. The signed paylo
 
 **No `git` in the server, and no revision in any payload.** The commit is the caller's to supply. This is the decision that keeps the artefact what [ADR-0018](../adr/0018-the-report-is-about-a-target-the-gate-is-about-the-bench.md) says it is — a claim about a target — rather than a claim about a revision the bench never read.
 
-**Two ADRs to propose, and this spec does not stand in for them.** *The MCP server has no privilege the console lacks* is a decision with alternatives that lost, and so is *a compact reading may drop prose and never a label*. Both are argued here and neither is recorded; per `CLAUDE.md` they are ADRs to write, not paragraphs to append to a neighbouring one.
+**Two ADRs, and this spec does not stand in for them.** *The MCP server has no privilege the console lacks* is a decision with alternatives that lost, and so is *a compact reading may drop prose and never a label*. Both are argued above in their local form; the decisions themselves, their alternatives and why the alternatives lost are recorded in [ADR-0100](../adr/0100-the-mcp-server-has-no-privilege-the-console-lacks.md) and [ADR-0101](../adr/0101-a-compact-reading-may-drop-prose-and-never-a-label.md), per `CLAUDE.md` — a decision belongs in an ADR, not in a paragraph appended to a neighbouring one.
 
 ## Testing Decisions
 

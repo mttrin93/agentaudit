@@ -8,6 +8,8 @@
 
 **Vocabulary:** every term below is defined in `CONTEXT.md`. A **route**, a **proposal**, an **attempt** and an **admission** mean exactly what they already mean. One word this spec adds is not bench vocabulary and never enters a figure: a **pending route** is a proposal filed durably, awaiting a decision it has not had. A pending route is not a **case** — it becomes one only by clearing the bar — and it is not an **attempt**, so nothing about it reaches a denominator ([ADR-0010](../adr/0010-two-layers-in-one-run-the-adaptive-layer-is-never-scored.md)).
 
+> **Delivered — #193 to #199 are merged — and this spec is the record of what was specified and built, not a status page: it is not rewritten.** Its forward-looking sentences are still forward-looking: *"This set of tickets is what would make it a claim about a measurement"* below, and the two promises in **Further Notes** about a non-zero adaptive fraction and about the retirement signal starting to mean something, are what the build made possible rather than what it delivered. What was measured and what was not is in [docs/validation.md](../validation.md) — the header's *Since #200* paragraph, the narrowed entry *No route has ever been written into the library by a run*, and the dated entry at its foot — and that document is the one to read for it.
+
 ---
 
 ## Problem Statement

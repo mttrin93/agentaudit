@@ -22,8 +22,9 @@ sink of its own. The direction of the dependency is asserted as reachability in
 and a backend that could reach a command line would not be callable from one.
 
 **Which bar applies is decided nowhere here.** `promote` reads it off the proposal's
-own `discovered_by` (`adaptive/promotion.py`, ADR-0012), and this module names neither
-`AdmissionBar` nor `bar_for` and has no parameter one could be passed through.
+own `discovered_by` (`adaptive/promotion.py`, ADR-0012), and this module names none of
+`AdmissionBar`, `bar_for` or `MODELS_REQUIRED` and has no parameter one could be passed
+through.
 """
 
 from __future__ import annotations
@@ -140,12 +141,11 @@ def cross_model_bar(
         if not unmeasured:
             break
         say(f"\nputting {len(unmeasured)} proposed case(s) to the bar on {model}")
-        # `scripts/admit.py`'s own admission run, and deliberately: a proposal is
-        # decided on counts read the way every other admission's counts are read, so
-        # nothing enters the library on an arithmetic this path invented. The caller's
-        # own adaptive layer is ignored — a proposal made while measuring a proposal
-        # has had no admission run of its own, and following it would be a loop with
-        # no end.
+        # Through the `Measure` seam above, and its docstring is where the one
+        # admission run in one place is argued. What is local to this line is that the
+        # caller's own adaptive layer is ignored: a proposal made while measuring a
+        # proposal has had no admission run of its own, and following it would be a
+        # loop with no end.
         measured = measure(
             cases=[proposal.case for proposal in unmeasured],
             model=model,

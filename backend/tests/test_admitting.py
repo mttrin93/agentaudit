@@ -33,18 +33,32 @@ def test_the_swap_is_a_caller_of_the_bar_and_not_its_owner() -> None:
     A second surface decides pending routes against the same three agents, and a
     copy of this function would be a second code path to them — measured on an
     arithmetic that nothing would notice drifting from this one.
+
+    Every way the name could be bound again, and not only `def`: a coroutine and a
+    module-level alias are both a second path under the old name, and a wall that one
+    of the three ways through it walks past is not a wall.
     """
-    defined = {
+    tree = ast.parse(SWAP_SOURCE.read_text(encoding="utf-8"))
+    bound = {
         node.name
-        for node in ast.walk(ast.parse(SWAP_SOURCE.read_text(encoding="utf-8")))
-        if isinstance(node, ast.FunctionDef)
+        for node in ast.walk(tree)
+        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef)
+    } | {
+        target.id
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Assign)
+        for target in node.targets
+        if isinstance(target, ast.Name)
     }
 
-    assert "cross_model_bar" not in defined, (
+    assert "cross_model_bar" not in bound, (
         "scripts/swap.py defines the cross-model bar again. The bar is one function "
         "both entry points call (ADR-0105 §5)"
     )
-    assert "backend.bench.admitting.cross_model_bar" in set(imports_of(SWAP_SOURCE))
+    assert "backend.bench.admitting.cross_model_bar" in set(imports_of(SWAP_SOURCE)), (
+        "scripts/swap.py does not import the bar from the backend, so whatever it is "
+        "calling is not the function the other surface calls"
+    )
 
 
 def test_the_bar_reaches_nothing_under_scripts() -> None:
@@ -84,7 +98,14 @@ def test_nothing_in_the_bar_can_name_which_bar_applies() -> None:
     )
 
     parameters = inspect.signature(cross_model_bar).parameters
-    assert "bar" not in parameters
-    assert not [
+    assert "bar" not in parameters, (
+        "the cross-model bar takes a `bar` argument. Which bar applies is a property "
+        "of the proposal, so a caller that could pass one could pass the wrong one"
+    )
+    named_in_a_signature = [
         name for name, parameter in parameters.items() if "Bar" in str(parameter)
     ]
+    assert not named_in_a_signature, (
+        f"{named_in_a_signature} could carry a bar into the function. `promote` reads "
+        "it off `discovered_by`, and this signature is the other end of that claim"
+    )

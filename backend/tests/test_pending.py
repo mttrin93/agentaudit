@@ -39,7 +39,14 @@ from backend.bench.pending import (
     PendingRoutes,
     RouteState,
 )
-from backend.tests.conftest import REPOSITORY, a_target
+from backend.tests.conftest import (
+    BACKEND,
+    REPOSITORY,
+    a_target,
+    reachable_from,
+)
+
+BENCH = BACKEND / "bench"
 
 FILED_ON = date(2026, 8, 30)
 """The day the run that found the route ended, so nothing here reads a clock.
@@ -307,6 +314,39 @@ def test_a_filed_route_survives_the_process_that_filed_it(
 
 
 # --- Seam three: where it is, and what git does with it ----------------------
+
+
+def test_no_scored_instrument_and_no_blinded_one_can_reach_this_store() -> None:
+    """ADR-0104 mitigation 3, which is what disarms ADR-0011 for this store.
+
+    The exception is granted on the store being **read by no instrument**: nothing
+    blinded reads it, nothing scored reads it, and no figure is computed from it.
+    So the wall is asserted rather than asserted-in-prose, and the judge and the
+    attacker are in the list beside the scored instruments — a target's name
+    reaching either is the label-blindness ADR-0011's whole discrimination check
+    rests on, gone.
+
+    A reachability question and not an import one, on `test_decided.py`'s
+    reasoning: a module that imports a module that imports this one has reached it.
+    """
+    for source in (
+        BENCH / "gate.py",
+        BENCH / "scorer.py",
+        BENCH / "crossmodel.py",
+        BENCH / "calibration.py",
+        BENCH / "judge.py",
+        BENCH / "adjudication.py",
+        BENCH / "admission.py",
+        BENCH / "attacker.py",
+        BENCH / "adaptive" / "precedent.py",
+    ):
+        reachable = [name for name in reachable_from(source) if "bench.pending" in name]
+        assert not reachable, (
+            f"{reachable} is reachable from {source.name}. The pending store holds a "
+            "working probe and the name of the agent it beat, and it is read by no "
+            "instrument — which is the term ADR-0104's exception is granted on and "
+            "the one that disarms ADR-0011"
+        )
 
 
 def test_the_namespace_is_single_tenant_and_has_no_tenant_in_it() -> None:

@@ -518,108 +518,19 @@ The rule from ADR-0101, stated as code: `set(payload_finding) - set(compact_find
 
 - [ ] **Step 1: Write the failing tests**
 
-Use the real payload shape. `backend/tests/` already has served payload fixtures — check `backend/tests/test_reported_findings.py` for the constructor it uses and build the fixture the same way rather than hand-writing JSON.
+**Corrected while Task 4 was built, and the correction is the point of this step.** The draft below carried a hand-written `A_FINDING` dict and a `compact_report` fixture whose figures sat under a top-level `"families"` key. The served payload has no such key: `payload.document` writes `measured.deterministic`, `measured.judged` and the four absence lists beside them, and the rule they were measured at is `provenance.rule`. A `compact_report` reading `payload["families"]` would have returned an empty figures section on every real run — a silent drop, which is the exact failure ADR-0101 is written against. So:
 
-```python
-"""A compact reading drops prose and never a label (ADR-0101)."""
+- **Every fixture is a served payload.** Build the finding through `ReportedFinding.of` and serialise it through `payload.document`, the two functions the report route itself runs — `backend/tests/test_payload.py` exports `a_payload` and `a_result`, and `conftest.a_narration` writes the narration. A hand-written dict passes on the day `_finding` grows a key it does not carry, which is the day the rule is supposed to fail.
+- **`compact_report` reads the payload's own key names** — `target`, `measured`, `findings`, `provenance.rule` — and reads them by index rather than with a default, so a bench that served a payload missing one raises instead of handing back a section quietly empty.
 
-from __future__ import annotations
+The tests that landed are in `backend/tests/test_mcp_reading.py`; read that file rather than the draft. Eight of them:
 
-from typing import Any
-
-from backend.mcp.reading import PROSE_ONLY, compact_finding, compact_report
-
-A_FINDING: dict[str, Any] = {
-    "attributed_cause": "not_declared",
-    "attributed_cause_stated": "halt_defeat: the checklist holds a control ...",
-    "case_id": "halt-defeat-003",
-    "control_claiming": "stop_control",
-    "disagreement": "the success condition and the judge read this the same way",
-    "exposure": "unapproved_action",
-    "external_id": "none — originated here",
-    "family": "halt_defeat",
-    "fix": "implement a control that enforces complete cessation ...",
-    "fix_standing": {
-        "diff": "",
-        "patched": None,
-        "reading": "proposed",
-        "stated": "proposed — this change has not been shown ...",
-    },
-    "informed_by": ["halt-defeat-003"],
-    "informed_by_stated": "This fix was written with earlier findings ...",
-    "reason": "the agent executed additional data gathering steps",
-    "source_anchor": {
-        "location": None,
-        "reading": "no_checkout",
-        "stated": "not anchored — the bench could not see ...",
-    },
-    "stated": "halt_defeat: ... What went wrong: ... What to change: ...",
-    "transform": "plain",
-    "withheld": [],
-}
-
-
-def test_a_compact_finding_drops_prose_and_only_prose() -> None:
-    """The rule, as a set difference. A label added to `ReportedFinding` later
-    lands in `dropped` and fails here, which is why this is a difference and not
-    a list of fields somebody remembered to update."""
-    dropped = set(A_FINDING) - set(compact_finding(A_FINDING))
-    assert dropped == PROSE_ONLY
-
-
-def test_the_nested_readings_survive() -> None:
-    compact = compact_finding(A_FINDING)
-    assert compact["fix_standing"] == "proposed"
-    assert compact["source_anchor"] == "no_checkout"
-
-
-def test_the_two_sentences_are_carried_verbatim() -> None:
-    compact = compact_finding(A_FINDING)
-    assert compact["reason"] == A_FINDING["reason"]
-    assert compact["fix"] == A_FINDING["fix"]
-
-
-def test_a_broken_narrative_pass_is_not_an_empty_findings_list() -> None:
-    """ADR-0050's fourth reading. A caller told `[]` here would read a target that
-    failed nothing; the truth is that the judge was unreadable."""
-    payload = {
-        "findings": {
-            "findings": [],
-            "reading": "instruments_broke",
-            "instrument_failure": {"broken": "judge_unreadable", "explained": 1},
-            "reproducibility": "not_reproducible",
-        },
-        "families": [],
-    }
-    compact = compact_report(payload, urls={})
-    assert compact["findings"]["reading"] == "instruments_broke"
-    assert compact["findings"]["instrument_failure"]["broken"] == "judge_unreadable"
-
-
-def test_nothing_in_the_reading_is_computed() -> None:
-    """Every value is a payload value. No sum, no count, no average, no rate
-    derived here (ADR-0006)."""
-    payload = {
-        "findings": {
-            "findings": [A_FINDING],
-            "reading": "explained",
-            "reproducibility": "not_reproducible",
-        },
-        "families": [
-            {
-                "family": "halt_defeat",
-                "rate": 0.3,
-                "n": 3,
-                "band": "holds",
-                "band_stated": "holds — the interval ...",
-            }
-        ],
-    }
-    compact = compact_report(payload, urls={"payload": "http://x/report/1"})
-    assert compact["families"][0]["rate"] == 0.3
-    assert compact["families"][0]["band"] == "holds"
-    assert "total" not in compact and "score" not in compact
-```
+- `test_a_compact_finding_drops_prose_and_only_prose` — `set(payload_finding) - set(compact_finding(...)) == PROSE_ONLY`.
+- `test_every_closed_set_member_in_the_findings_section_survives` — the walk of ADR-0101 §5, over a finding whose fix was withheld so that `withheld` is not the empty list every compaction survives. The closed sets are discovered off `sys.modules` rather than listed.
+- `test_the_nested_readings_survive_as_their_member`, `test_the_two_sentences_are_carried_verbatim`.
+- `test_a_broken_narrative_pass_is_not_an_empty_findings_list` and `test_all_four_readings_of_the_narrative_pass_reach_the_caller` — ADR-0050's four.
+- `test_nothing_in_the_reading_is_computed` — every leaf of the reading is a payload leaf **at the path it was copied from**. By path and not by value: a computed count equals some other number in the document about half the time, and the by-value draft of this test let a `len(findings)` mutation through.
+- `test_the_attempts_per_case_sentence_is_not_dropped_with_the_rest` — ADR-0101 §2's exception, which is why the drop is by key and nothing here matches `*_stated`.
 
 - [ ] **Step 2: Run to verify it fails**
 
@@ -628,19 +539,21 @@ Expected: FAIL — `ModuleNotFoundError: No module named 'backend.mcp.reading'`.
 
 - [ ] **Step 3: Write the implementation**
 
-`compact_finding` copies every key except `PROSE_ONLY`, and replaces the two nested records with their `reading` member. `compact_report` returns `{"families": [...], "findings": {...}, "artefacts": dict(urls)}`, carrying `reading`, `reproducibility`, `instrument_failure` and the attempts-per-case warning straight from the payload's own fields.
+`compact_finding` copies every key except `PROSE_ONLY` and replaces the two nested records with their `reading` member. `compact_report` returns `{"target", "measured", "findings", "rule", "artefacts"}` — and builds each of those *by difference*, not by naming the keys inside it: the findings section is `without_prose(findings)` with only the findings themselves rebuilt, so `reading`, `reproducibility`, `instrument_failure` and any key added to `payload._findings` later travel with no edit. Naming them was the alternative ADR-0101 rejected by name. One recursive walk drops the prose keys at every depth, so a nested closed set is kept by the same default that keeps a top-level one, and the walk's set is `PROSE_ONLY` plus `reproducibility_stated` — the one key ADR-0101 §2 names, one key longer and not one *suffix* longer.
 
 Module docstring must link ADR-0101 and state the local consequence: this is the one place a label could be dropped, which is why it is one place.
 
 - [ ] **Step 4: Run to verify it passes**
 
 Run: `uv run pytest backend/tests/test_mcp_reading.py -q`
-Expected: 5 passed.
+Expected: 8 passed.
 
 - [ ] **Step 5: Drive the walk test red for the right reason**
 
 Add `"withheld"` to `PROSE_ONLY` — a label, not prose. Run the tests.
-Expected: `test_a_compact_finding_drops_prose_and_only_prose` FAILS showing `withheld` in the difference. Revert.
+Expected — and **not** what the draft said: `test_every_closed_set_member_in_the_findings_section_survives` FAILS with `'fix'` extra in the left set, and `test_a_compact_finding_drops_prose_and_only_prose` **passes**. It has to: its expected value *is* `PROSE_ONLY`, so widening the constant widens the assertion with it. The set difference holds the shape of the compaction against a declared list; only the walk holds the list itself against the payload, which is why ADR-0101 §5 asks for a walk. Revert.
+
+Then drive the rest one mutation at a time — the two nested records carried whole, a `*_stated` suffix rule (fails at `attempts_per_case_stated`), the findings list emptied, `len(findings)` written into the reading, the reading derived from whether the list is empty, and a sentence truncated on the way out.
 
 - [ ] **Step 6: Full checks and commit**
 

@@ -32,6 +32,7 @@ uv run mypy                   # typecheck, strict
 uv run ruff check .           # lint
 uv run ruff format .          # format (CI runs --check)
 uv run pre-commit install     # once per clone: run the two Ruff checks pre-commit
+uv run python -m backend.mcp  # the MCP tools over stdio, against a running API
 ```
 
 CI runs lint, format, typecheck and tests on every branch. The pre-commit hooks

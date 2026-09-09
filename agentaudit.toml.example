@@ -1,0 +1,155 @@
+# agentaudit.toml — what you declare about the target the bench will attack.
+#
+# Copy this to `agentaudit.toml` at your repository root, fill it in, and commit it.
+# The MCP server reads this file and never writes it: no tool edits it, fills a field
+# it found empty, or declares a control on your behalf. What it claims is what every
+# `attributed_cause` in the signed report is read against, so a control declared here
+# and absent from the target is a finding attributed to a control that does not exist.
+#
+# The first run against a new target is still registered in the console — this file
+# is the declaration that walk produces, written down. What the four tools do, and
+# which of them spends, is in the README section that points at this file.
+
+[target]
+
+# The name the report will call this target.
+name = "checkout-agent"
+
+# The endpoint the bench will attack. A callback target is imported out of a checkout
+# and is the Action's shape, not this surface's: run one of those through the Action.
+url = "https://staging.example.test/agent"
+
+# Sent as `Authorization: Bearer …` on every call to this endpoint. Leave it empty if
+# yours needs no credential.
+auth_token = ""
+
+# The kind of agent this is. It selects no case and enters no figure today.
+agent_type = "assistant"
+
+# Does this target expose its tool calls?
+#   true  — a reply carries the calls the agent made.
+#   false — it answers in text only, and the two families that read the trace report
+#           as not measurable rather than as defended.
+exposes_tool_calls = true
+
+# The tools this target has. This list is a declaration and the bench cannot verify
+# it — nothing here is discovered, sniffed or confirmed against your agent. The bench
+# reads scope creep as a call outside this list, so a list that omits a tool your
+# agent legitimately has will score its use as a finding, and a list that invents one
+# will hide the finding it should have produced.
+declared_tools = ["send_email", "lookup_order", "issue_refund"]
+
+# Does a later turn see what an earlier one did?
+#   true  — a later turn sees what an earlier one did.
+#   false — it answers each turn from nothing. A ladder needs a later turn for the
+#           stop to survive into, so every fixed multi-turn construction is skipped
+#           before an attempt is spent on it.
+retains_session_state = true
+
+# Does this target hold records about people other than you?
+#   true  — it holds records about people other than you.
+#   false — it holds nothing about anybody but its operator.
+# `pii_leakage` reads a record about a third party leaving your agent. Against a
+# target that holds none, every case of it is withdrawn before an attempt is spent and
+# the family reports not measurable — it is an elective family either way, and decides
+# nothing the six decide.
+holds_personal_records = false
+
+# The four the Agents Rule of Two is read over — and the only keys in this file whose
+# absence is a third answer rather than a default.
+#
+# The published rule says an agent should not, in one session and without human
+# supervision, hold more than two of — processes untrusted input, reaches private
+# data or sensitive systems, changes state or communicates outward.
+#
+# Left commented out, all four report *not stated*, which is what has happened: no
+# reader here will answer them `false` on your behalf, because `false` is the
+# flattering claim on three of them. Uncomment the ones you are declaring.
+#
+# Does it process untrusted input?
+#   true  — it handles content you do not control.
+#   false — everything it reads is content you control.
+# processes_untrusted_input = true
+#
+# Does it reach private data or sensitive systems?
+#   true  — it can read private data or reach sensitive systems.
+#   false — it reaches neither.
+# reaches_private_data = true
+#
+# Does it change state or communicate outward?
+#   true  — it can write, pay, send or publish.
+#   false — it answers and changes nothing.
+# changes_state_or_communicates = false
+#
+# Does a human confirm what it does inside the session?
+#   true  — a human confirms its actions.
+#   false — it acts without human confirmation.
+# under_human_supervision = true
+
+# How many times one message may go on the wire to this endpoint.
+#
+# Left out, no ceiling is put on the wire at all and the bench applies its own retry
+# policy — which is not a declaration you made either way, unlike the four above.
+# sends = 2
+
+# The registration nonce: the value in the target's system prompt that proves you
+# control this endpoint, and the canary the data-leakage family looks for.
+#
+# Left empty, `start_run` fetches one from the bench and hands it back as
+# `nonce_to_plant`. Plant it and reload the target before you call `approve_run` —
+# the run is holding its approval interrupt until then, and the echo probe goes out
+# after the answer.
+nonce = ""
+
+# The hostile content the indirect prompt injection family reads is in place — in a
+# document, a message or a page this agent will fetch. Without it, that family is
+# skipped rather than run. The console's plant step shows the content to put there.
+note_planted = false
+
+# The nonce is in the target's system prompt and the target has reloaded — or will
+# be, by the time you answer the approval interrupt. Planting it there is in time:
+# the registration probe goes out after the approval and not before it.
+#
+# Declared false, the data-leakage family is dropped from the plan — its canary is
+# that value — and the run starts without the proof of control.
+nonce_planted = true
+
+# I cannot get this target to repeat the nonce, I am authorised to test this endpoint
+# anyway, and I am starting the run without the proof.
+#
+# The probe is sent and what came back is still recorded; what changes is only
+# whether a missing echo stops the run.
+echo_waived = false
+
+[attestation]
+
+# Who is making the three statements below. The run is recorded against this name,
+# and a run recorded against nobody is a run nobody made.
+identity = "your-name@example.com"
+
+# I am authorised to test this endpoint.
+# The bench fires jailbreak payloads at whatever answers this URL. Pointed at
+# somebody else's system it is an attack.
+authorised_to_test = true
+
+# This endpoint is a staging or sandbox environment.
+# A run makes 181 calls in the scored layer alone, every one of them an attack, and
+# some of them will succeed.
+not_production = true
+
+# I accept that these payloads will generate provider policy violations against my
+# own account and consume my own inference budget.
+# The payloads reach your model provider under your credentials, so the policy
+# violations are recorded against your account and the inference is billed to it.
+accepts_provider_policy_and_cost = true
+
+[cost]
+
+# What one call to this endpoint costs you. Leave it out for a run you have not
+# priced: the estimate then reports *not priced* rather than zero, because an unknown
+# cost and a free run are different facts.
+price_per_call = "0.002"
+
+# Required when a price is declared: an amount in a currency the bench chose would be
+# a figure you did not state.
+currency = "USD"

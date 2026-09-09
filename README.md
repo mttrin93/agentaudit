@@ -454,6 +454,65 @@ text goes into either, and that is checked rather than trusted: a page carrying 
 turn of a live case, or a secret the run was handed, is refused and the step goes red
 with the artefact still written.
 
+## From your coding agent
+
+The bench is also **four MCP tools**, so the agent in your editor can start a run,
+read the estimate back to you, and act on the findings without you opening a browser.
+It is a delivery surface and not a capability: every tool is one route the console
+already calls, so nothing reachable through a prompt exceeds what you could do on the
+screens ([ADR-0100](./docs/adr/0100-the-mcp-server-has-no-privilege-the-console-lacks.md)).
+
+**Register the target once, in the console.** The register walk asks the declared
+controls and the four Rule of Two questions, and it stays there — this surface reads a
+declaration, it does not make one.
+
+**Then commit the declaration.** Copy [agentaudit.toml.example](./agentaudit.toml.example)
+to `agentaudit.toml` at your repository root and fill it in; every field carries a
+comment saying what declaring it means. It is read on every tool call and written by
+nothing, so what your agent claimed about itself is a reviewed diff rather than an
+answer somebody typed into a chat.
+
+**Start the API** — `uv run uvicorn backend.api.app:create_app --factory`, as under
+**Try it** above. The server starts no bench and will not refuse to start because
+there is none: a missing API is reported by the first tool call, in a sentence naming
+the address it tried.
+
+**Then add the server to your client:**
+
+```json
+{
+  "mcpServers": {
+    "agentaudit": {
+      "command": "uv",
+      "args": ["run", "python", "-m", "backend.mcp"],
+      "env": {
+        "AGENTAUDIT_API": "http://127.0.0.1:8000",
+        "AGENTAUDIT_DECLARATION": "agentaudit.toml"
+      }
+    }
+  }
+}
+```
+
+Both variables have those values as defaults, so a client that sets neither reaches a
+local bench and the file at the root it was spawned in.
+
+**`start_run` does not spend and `approve_run` does.** The first starts a run against
+the target your file declares, returns the estimate and both layer ceilings, and stops
+at the approval interrupt with nothing sent to your agent; the second is the call that
+spends your inference budget. That seam is two tools rather than one argument on
+purpose — and the tool boundary is only where it is *legible*: a caller that skipped
+the first and called the second is refused by the approval route, not by the tool
+fronting it
+([ADR-0100 §4](./docs/adr/0100-the-mcp-server-has-no-privilege-the-console-lacks.md),
+over [ADR-0007](./docs/adr/0007-canary-nonce-as-proof-of-control.md)). `run_status` polls a run and
+`run_report` returns a signed run's findings compacted, with URLs for the artefact
+rather than its contents.
+
+What a client is told this server is, before it reads a single tool, is `INSTRUCTIONS`
+in [backend/mcp/server.py](./backend/mcp/server.py); the design is
+[docs/specs/mcp-server.md](./docs/specs/mcp-server.md).
+
 ## Optional tasks
 
 **Done (4 medium, 2 hard, plus 2 easy).**

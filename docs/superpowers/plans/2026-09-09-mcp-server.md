@@ -829,9 +829,12 @@ git commit -m "Four tools, and starting a run is not paying for one"
 
 **Files:**
 - Create: `backend/mcp/__main__.py`
+- Create: `backend/tests/test_mcp_entrypoint.py`
 - Create: `agentaudit.toml.example` (repo root)
 - Modify: `README.md` — a section on running the MCP server
 - Modify: `CLAUDE.md` — a line in the Commands block
+
+**Corrected while executing.** This task's draft had no tests at all — Step 2 below was a manual `python -c` — and its load-bearing claim is a prohibition: *the entrypoint starts no bench, and a bench that is not there is a tool result rather than a boot failure*. A prohibition checked by hand once is a prohibition nobody checks again, so the module is split at two seams and both are asserted: `configured(environment)` returns the two defaults, and `serving(environment)` is the context manager `main` runs, which a test can list tools on and call a tool on without speaking stdio. The draft's `main` inlined both and left neither reachable.
 
 **Interfaces:**
 - Consumes: `build_server` from Task 6.
@@ -843,9 +846,10 @@ git commit -m "Four tools, and starting a run is not paying for one"
 """`python -m backend.mcp`: the tools over stdio, against a running bench.
 
 It starts no bench. `AGENTAUDIT_API` names the running API and defaults to
-`http://127.0.0.1:8000`; a bench that is not there is reported by the first tool
-call as a stated failure rather than by this module as a crash at boot, because a
-server that refused to start would leave a client with no way to say why.
+`http://127.0.0.1:8000`, `AGENTAUDIT_DECLARATION` names the committed file and
+defaults to `agentaudit.toml`; a bench that is not there is reported by the first
+tool call as a stated failure rather than by this module as a crash at boot, because
+a server that refused to start would leave a client with no way to say why.
 """
 
 from __future__ import annotations
@@ -862,18 +866,34 @@ DEFAULT_API = "http://127.0.0.1:8000"
 DEFAULT_DECLARATION = "agentaudit.toml"
 
 
-def main() -> None:
-    base = os.environ.get("AGENTAUDIT_API", DEFAULT_API)
-    declaration = pathlib.Path(
-        os.environ.get("AGENTAUDIT_DECLARATION", DEFAULT_DECLARATION)
+def configured(environment: Mapping[str, str]) -> tuple[str, pathlib.Path]:
+    return (
+        environment.get("AGENTAUDIT_API", DEFAULT_API),
+        pathlib.Path(environment.get("AGENTAUDIT_DECLARATION", DEFAULT_DECLARATION)),
     )
-    with httpx.Client(base_url=base, timeout=30.0) as http:
-        build_server(BenchClient(http), declaration).run(transport="stdio")
+
+
+@contextmanager
+def serving(environment: Mapping[str, str]) -> Iterator[MCPServer]:
+    base_url, declaration = configured(environment)
+    with httpx.Client(base_url=base_url, timeout=TIMEOUT_SECONDS) as http:
+        yield build_server(BenchClient(http), declaration)
+
+
+def main() -> None:
+    with serving(os.environ) as server:
+        server.run(transport="stdio")
 
 
 if __name__ == "__main__":
     main()
 ```
+
+The environment is a parameter and not a read of `os.environ`, so the two defaults are assertable without a test mutating the process it runs in.
+
+- [ ] **Step 1b: Write the tests, and drive them red**
+
+`backend/tests/test_mcp_entrypoint.py`: the two defaults, the two variables, and the prohibition — that `serving` against a port nothing listens on lists four tools *and then* raises `ToolError` naming the address on `start_run`, in that order, because an entrypoint that checked the connection would have raised before a client could read anything. Drive it red by adding a `http.get("/runs")` above the `yield`: `httpx.ConnectError` at boot, which is exactly the failure mode the module exists to avoid.
 
 - [ ] **Step 2: Verify it starts and lists its tools**
 
@@ -889,15 +909,21 @@ Expected: `['approve_run', 'run_report', 'run_status', 'start_run']`.
 
 - [ ] **Step 3: Write `agentaudit.toml.example`**
 
-The full `[target]`, `[attestation]` and `[cost]` tables from Task 3's `COMPLETE` fixture, with a comment on each field saying what declaring it means — the same words the register walk uses. A comment at the top: this file is read and never written, and what it claims is what every `attributed_cause` in the report is read against.
+The full `[target]`, `[attestation]` and `[cost]` tables, with a comment on each field saying what declaring it means — the same words the register walk uses, copied from `register/declarations.ts` and `RegisterScreen.tsx` rather than paraphrased. A comment at the top: this file is read and never written, and what it claims is what every `attributed_cause` in the report is read against.
+
+**Not Task 3's `COMPLETE` fixture, which answers everything.** Five keys are commented out rather than filled in — the four Rule of Two declarations and `sends` — because an example is copied: a file that answered all four would make every operator who copied it declare four controls they never considered, and `False` is the flattering claim on three of them (ADR-0102). `sends` is left off for its own reason, that the route applies the bench's `RetryPolicy` ceiling and a number here would override a default this file cannot see. Two tests hold it: the example is read through `declaration_at`, and the five read as unstated.
+
+`agentaudit.toml.example` is at the repository root and `agentaudit.toml` is not in `.gitignore`, which is correct — the operator's own file is meant to be committed.
 
 - [ ] **Step 4: Document it**
 
 `README.md`: how to register once in the console, copy the example, start the API, and add the server to a client — including the config block:
 
 ```json
-{"mcpServers": {"agentaudit": {"command": "uv", "args": ["run", "python", "-m", "backend.mcp"], "env": {"AGENTAUDIT_API": "http://127.0.0.1:8000"}}}}
+{"mcpServers": {"agentaudit": {"command": "uv", "args": ["run", "python", "-m", "backend.mcp"], "env": {"AGENTAUDIT_API": "http://127.0.0.1:8000", "AGENTAUDIT_DECLARATION": "agentaudit.toml"}}}}
 ```
+
+The README links `INSTRUCTIONS` in `server.py` rather than restating it, per `CLAUDE.md`.
 
 State plainly that `start_run` does not spend and `approve_run` does.
 
@@ -911,7 +937,7 @@ uv run python -m backend.mcp   # the MCP tools over stdio, against a running API
 
 ```bash
 uv run pytest -q && uv run mypy && uv run ruff check . && uv run ruff format --check .
-git add backend/mcp/__main__.py agentaudit.toml.example README.md CLAUDE.md
+git add backend/mcp/__main__.py backend/tests/test_mcp_entrypoint.py agentaudit.toml.example README.md CLAUDE.md
 git commit -m "The MCP server runs over stdio and the declaration has an example"
 ```
 

@@ -72,8 +72,10 @@ client at a closed port, so the host in it is never resolved.
 def anyio_backend() -> str:
     """The one backend these tests run under.
 
-    Declared in this module rather than in a shared conftest, because it is this
-    file's requirement: no other test file in `backend/tests/` is async today.
+    Declared in this module rather than in a shared conftest, and again in
+    `test_mcp_entrypoint.py`, because these two are the only async files in
+    `backend/tests/`: a fixture in the conftest would be a requirement of this
+    package's whole test suite where it is a requirement of two files in it.
     """
     return "asyncio"
 

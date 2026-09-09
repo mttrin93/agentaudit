@@ -145,6 +145,7 @@ from backend.bench.library import Family, LibraryVersion
 from backend.bench.narration import NarrativeFailure
 from backend.bench.nonce import issue_nonce
 from backend.bench.payload import GateCitation
+from backend.bench.queued import file_proposals
 from backend.bench.registration import Attestation
 from backend.bench.selection import AttackSelection
 from backend.bench.signing import SignedArtefact
@@ -818,12 +819,19 @@ def _run(record: RunRecord, config: BenchConfig, pending: PendingApproval) -> No
             # id a restart looks the halt up by names nothing (ADR-0034).
             thread_id=record.thread_id,
         )
+    # Every one of the three ways out below files first. A run the ceiling cut
+    # short is the run whose attacker was most likely still finding things, and
+    # `RunState.episodes` holds every episode that finished before it bit — so a
+    # filing reachable only from the completed path would discard exactly the
+    # routes an operator paid the most for. The paths that settle *before* this
+    # try block add no such clause: nothing was sent, so there is no attacker to
+    # have a reading about.
     except BudgetExceeded as abort:
         record.settle(
             RunStatus.ABORTED,
             (
                 f"{abort}. An episode the ceiling cut short is recorded as "
-                "censored, never as resisted"
+                f"censored, never as resisted. {_queued(record)}"
             ),
         )
         return
@@ -832,12 +840,15 @@ def _run(record: RunRecord, config: BenchConfig, pending: PendingApproval) -> No
         # not. A run that reported only the sentence would leave a caller parsing
         # prose to tell a quota from an outage.
         record.failure = unreachable.failure
-        record.settle(RunStatus.FAILED, str(unreachable))
+        record.settle(RunStatus.FAILED, f"{unreachable} {_queued(record)}")
         return
     except Exception as failure:
         record.settle(
             RunStatus.FAILED,
-            f"the run stopped rather than produced a result: {failure}",
+            (
+                f"the run stopped rather than produced a result: {failure}. "
+                f"{_queued(record)}"
+            ),
         )
         return
 
@@ -937,7 +948,34 @@ def _run(record: RunRecord, config: BenchConfig, pending: PendingApproval) -> No
         # sentence a poller reads: a run whose status says completed and whose
         # report location is empty would otherwise read as one to keep polling.
         finished = f"{finished}, and it has no signed report — {record.report.reason}"
-    record.settle(RunStatus.COMPLETED, finished)
+    # Last of the clauses, and the only unconditional one. Last because every
+    # clause above extends the sentence with a comma and this one ends it, so a
+    # filing clause in the middle would hand the report clause a subject it does
+    # not have. Unconditional because a run that proposed nothing says so:
+    # `queued.NOTHING_WAS_PROPOSED` is why silence is not an option here.
+    record.settle(RunStatus.COMPLETED, f"{finished}. {_queued(record)}")
+
+
+def _queued(record: RunRecord) -> str:
+    """File the routes this run's attacker found, and say what was filed.
+
+    Called from this entry point and not from `run_calibration`, which a gate run
+    takes too — `queued.file_proposals` is where that is argued, and what it means
+    here is that the call sits in the run service and has no counterpart in the
+    gate run's worker beside it.
+
+    Called on every way out of the run that sent anything, and the exact position
+    on the completed path is the last write the run makes: ADR-0031's ordering,
+    applied to the second store a run now grows.
+
+    `recorded_at` is the day the run went on the record, so nothing between this
+    entry point and the row reads a clock (`queued.file_proposals`). Returns the
+    sentence rather than settling the record, because what the four callers share
+    is the filing and not what else their statement has to say.
+    """
+    return file_proposals(
+        record.run_state.episodes, today=record.recorded_at.date()
+    ).stated()
 
 
 def _published(

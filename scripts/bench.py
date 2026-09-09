@@ -74,6 +74,7 @@ import tomllib
 from collections.abc import Mapping, Sequence
 from contextlib import ExitStack
 from dataclasses import replace
+from datetime import date
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
@@ -81,6 +82,7 @@ from dotenv import load_dotenv
 
 from backend.api.report import ReportConfig, payload_for
 from backend.api.run_config import BenchConfig, plan_for
+from backend.bench.adaptive.episode import AdaptiveEpisode
 from backend.bench.adjudication import Completion
 from backend.bench.admission import NotAdmitted, admitted_library
 from backend.bench.calibration import TargetRun, run_calibration
@@ -91,10 +93,18 @@ from backend.bench.declared_gap import DeclaredGap
 from backend.bench.elective import NOTHING_REQUESTED
 from backend.bench.evaluator import Verdict
 from backend.bench.fix_standing import FixStanding
-from backend.bench.library import AnyFamily, Case, Family, Plant, Precondition
+from backend.bench.library import (
+    AnyFamily,
+    Case,
+    Family,
+    LibraryVersion,
+    Plant,
+    Precondition,
+)
 from backend.bench.narration import Narrator
 from backend.bench.payload import DeclaredModels
 from backend.bench.proving import prove_patch, standing_for
+from backend.bench.queued import file_proposals
 from backend.bench.rule import DECLARED_RULE, GateRule
 from backend.bench.selection import EVERY_CONSTRUCTION
 from backend.bench.shim import serve_callback
@@ -120,6 +130,7 @@ from backend.graph.budget import (
     Layer,
     RunBudget,
 )
+from backend.graph.runstate import RunState
 from scripts.console import (
     EXIT_ABORTED,
     EXIT_DECLINED,
@@ -547,6 +558,16 @@ def main(argv: Sequence[str] | None = None) -> int:
         # `planting.namespace_for` gives: two names for one run is a drop that runs
         # against a directory the copy was never made under (ADR-0063 §1, ADR-0072 §1).
         trace = traced_run(adjudicator_model=adjudicator_model)
+        # The ceiling and the counter, both held in a name and handed in together.
+        # `run_calibration` would build the state for a caller that hands it none,
+        # and a caller that let it would have no way to read the episodes back out
+        # of a run that *raised* instead of returning — so the routes an aborted
+        # run's attacker found would be unreachable and lost with it, which is what
+        # `print_filed_routes` on the abort path below exists to prevent.
+        declared = RunBudget.declare(
+            cases=cases, targets=[target], rule=rule, price=call_price
+        )
+        state = RunState(budget=declared, library=LibraryVersion.of(cases))
         try:
             result = run_calibration(
                 cases=cases,
@@ -557,9 +578,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 narrator=narrator,
                 usage=ledger,
                 rule=rule,
-                budget=RunBudget.declare(
-                    cases=cases, targets=[target], rule=rule, price=call_price
-                ),
+                budget=declared,
+                run_state=state,
                 planters={} if planter is None else {target.name: planter},
                 planted_nonces=(
                     {} if args.nonce is None else {target.name: args.nonce}
@@ -571,6 +591,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
         except BudgetExceeded as abort:
             print(f"\nRun aborted on budget: {abort}")
+            # The run ended, so its routes are filed: an episode the ceiling cut
+            # short is a censored episode, and an episode that finished before it
+            # bit may well have found something.
+            print_filed_routes(state.episodes)
             return EXIT_ABORTED
 
     if not result.approval.proceeded:
@@ -586,6 +610,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     # be two accounts of one run.
     print_target_run(target_run, gaps)
     print_precedent(result)
+    # Beside `print_precedent`, because these are the two stores a customer run
+    # writes to and a job log that reported one of them would be an account of half
+    # the run.
+    print_filed_routes(result.run_state.episodes)
     # Per layer and never added, in the job log as on a terminal: a blended figure
     # would hide which half of a run is consuming the caller's budget (ADR-0007).
     for layer in Layer:
@@ -681,6 +709,26 @@ def main(argv: Sequence[str] | None = None) -> int:
         f"Check them with `uv run python -m scripts.verify {args.out}`."
     )
     return EXIT_NOT_REGISTERED if target_run.registration.refused else 0
+
+
+def print_filed_routes(episodes: Sequence[AdaptiveEpisode]) -> None:
+    """File what this run's attacker found, and print what was filed.
+
+    Here rather than beside `print_precedent` in `scripts/console.py`, which the
+    gate run's entry points read too: a printer there would make the filing
+    *reachable* from `scripts/gate.py` and `scripts/swap.py`, and the whole of why
+    this store is written from the customer-run entry points is that it is not
+    (`queued.file_proposals`, ADR-0012).
+
+    Printed zero included, for `queued.NOTHING_WAS_PROPOSED`'s reason and with one
+    of this entry point's own: nobody is sitting in front of an unattended run, so
+    the job log is the whole of what anybody reads.
+
+    `date.today()` here and nowhere deeper: an entry point is where a clock may be
+    read, and it is the one place that knows which day the run means
+    (`queued.file_proposals`).
+    """
+    print(f"\n{file_proposals(episodes, today=date.today()).stated()}")
 
 
 def declared_families(named: Sequence[str] | None) -> frozenset[Family]:

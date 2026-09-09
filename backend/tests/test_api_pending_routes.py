@@ -51,7 +51,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from backend.api import pending_routes
+from backend.api import pending_route_state, pending_routes
 from backend.api.app import (
     GATE_RUN_ROUTE,
     GATE_RUNS_ROUTE,
@@ -72,10 +72,11 @@ from backend.api.pending_route_state import (
 from backend.api.pending_routes import BenchPendingRoutes, PendingRouteBench
 from backend.api.report import ReportConfig
 from backend.api.runs import BenchConfig
-from backend.bench import entry
+from backend.bench import admitting, entry
 from backend.bench.adaptive.budget import AdaptiveBudget
 from backend.bench.adaptive.promotion import Promotion, promote
 from backend.bench.adaptive.proposal import ProposedRoute, proposed_from
+from backend.bench.admission import admitted_library, library_provenance
 from backend.bench.contract import TargetConfig
 from backend.bench.decided import (
     DECIDED_ROUTES,
@@ -88,8 +89,10 @@ from backend.bench.lease import LEASE_FILE, take_the_library
 from backend.bench.library import (
     AdmissionReading,
     Case,
+    DiscoveredBy,
     Family,
     Precondition,
+    load_case,
     load_library,
 )
 from backend.bench.pending import (
@@ -98,12 +101,14 @@ from backend.bench.pending import (
     Decided,
     RouteState,
 )
+from backend.bench.retirement import live_library
 from backend.bench.rule import DECLARED_RULE
 from backend.tests.conftest import (
     ADJUDICATING,
     BENCH_ATTESTATION,
     a_target,
     authored_library,
+    calibrate,
     stop_every_run,
     unlisted_case,
 )
@@ -330,11 +335,17 @@ def filed(proposal: ProposedRoute, target: str = A_CUSTOMER) -> AwaitingDecision
     return PENDING_ROUTES.file(proposal, target=target, today=FILED_ON)
 
 
-def remembered(proposal: ProposedRoute, *counts: dict[str, int]) -> Promotion:
+def remembered(
+    proposal: ProposedRoute, *counts: dict[str, int], on: date | None = None
+) -> Promotion:
     """What the admission memory holds after a run measured this route.
 
     Written through `DecidedRoutes.remember` rather than into the database by hand,
     so what the consultation reads back is what a measuring run would have left.
+
+    `on` is the day that earlier run read the counts. Given rather than defaulted
+    where a test is about the date, because what a record carries is the day the
+    three reference agents ran and never the day a row was decided (ADR-0032).
     """
     promotion = promote(
         proposal,
@@ -349,7 +360,7 @@ def remembered(proposal: ProposedRoute, *counts: dict[str, int]) -> Promotion:
             for model, one in zip(MODELS, counts, strict=True)
         ],
     )
-    DECIDED_ROUTES.remember(promotion, models=MODELS)
+    DECIDED_ROUTES.remember(promotion, models=MODELS, today=on)
     return promotion
 
 
@@ -1255,3 +1266,95 @@ def test_neither_the_memory_nor_the_library_is_told_which_agent_was_beaten(
         )
     # And the record that does hold it is still there to have leaked it.
     assert any(record.target == A_CUSTOMER for record in PENDING_ROUTES.queue())
+
+
+MEASURED_ON = date(2026, 1, 5)
+"""The day the three reference agents ran, months before this row was decided."""
+
+
+def test_an_admission_answered_from_memory_is_dated_the_day_the_agents_ran(
+    cases_dir: Path, leakage_case: Case
+) -> None:
+    """ADR-0032: the record carries the measurement's date and not the decision's.
+
+    The whole saving the memory buys is that a route decided once is not measured
+    again — so a route admitted on this surface can be admitted on counts read a
+    year ago, and a record dated to the morning the operator clicked would say the
+    reference agents ran today when they did not. `recall` hands `promote` the
+    remembered date for exactly that reason, and this is that decision observed
+    where it lands: in the `.toml` a decision writes.
+    """
+    proposal = a_route(leakage_case)
+    record = filed(proposal)
+    remembered(proposal, SEPARATING, SEPARATING, on=MEASURED_ON)
+
+    with a_bench(cases_dir) as deciding:
+        reading = answered(deciding, [record.route.filed_under])
+
+    written = load_case(cases_dir / reading["routes"][0]["entered_as"])
+    assert written.admission is not None
+    assert written.admission.admitted_on == MEASURED_ON, (
+        "the record is dated to the day the row was decided. A route answered from "
+        "the admission memory was measured earlier, and the record says when "
+        "(ADR-0032)"
+    )
+    assert written.admission.admitted_on != date.today()
+
+
+def test_nothing_on_this_path_can_supply_a_date() -> None:
+    """The structural half: no `today` argument exists to date a reading with.
+
+    `entry` withholds it and `decided.recall` withholds it; this is the same
+    refusal asserted over the two modules of this surface and over the bar they
+    reach it through. A function here able to take one could date a year-old
+    measurement to this morning, and the end-to-end assertion above would still
+    pass on the day the counts happened to be read.
+    """
+    for module in (pending_routes, pending_route_state, admitting):
+        source = Path(str(module.__file__))
+        tree = ast.parse(source.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
+                named = {one.arg for one in node.args.args + node.args.kwonlyargs} | {
+                    "" if node.args.kwarg is None else node.args.kwarg.arg
+                }
+                assert "today" not in named, f"{source.name}:{node.name}"
+            if isinstance(node, ast.Attribute):
+                assert node.attr != "today", f"{source.name} reads a clock"
+
+
+def test_an_admitted_route_is_a_live_adaptive_case_the_next_run_runs(
+    cases_dir: Path, leakage_case: Case
+) -> None:
+    """The loop closing, for a route found against somebody's real agent.
+
+    The assertion #40 made for the swap, made here for the path this spec exists
+    for. `library_provenance` counts the new record as an adaptive live case —
+    which is the reading `docs/validation.md` prints as an honest zero today — and
+    then the case is put to a reference agent through the entry point every run
+    goes through, so what is asserted is a run *running* it and not only a file
+    on disk.
+    """
+    proposal = a_route(leakage_case)
+    record = filed(proposal)
+    remembered(proposal, SEPARATING, SEPARATING)
+    before = library_provenance(admitted_library(cases_dir)).live[DiscoveredBy.ADAPTIVE]
+
+    with a_bench(cases_dir) as deciding:
+        answered(deciding, [record.route.filed_under])
+
+    grown = admitted_library(cases_dir)
+    provenance = library_provenance(grown)
+    assert provenance.live[DiscoveredBy.ADAPTIVE] == before + 1
+    live = live_library(grown)
+    [admitted] = [case for case in live if case.id == proposal.case.id]
+
+    ran = calibrate(admitted)
+
+    [target_run] = ran.target_runs
+    assert [attempt.case_id for attempt in target_run.attempts] == [admitted.id] * (
+        DECLARED_RULE.attempts_per_case
+    ), (
+        "the next run loaded the record and did not run it. A case in the library "
+        "that no run attempts is a file, not a case"
+    )

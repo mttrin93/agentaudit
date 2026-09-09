@@ -73,6 +73,52 @@ export interface Attested {
 }
 
 /**
+ * What an operator has declared so far, and who is declaring it.
+ *
+ * Here rather than beside one of the walks that collects it, because there are
+ * three of them now — a run's registration, a gate run, and a measurement over the
+ * pending routes — and the thing they collect is one thing: the attestation
+ * `registration.py` refuses to construct incomplete, plus the price the operator
+ * declares for their own provider. What differs per surface is the *consequence*
+ * spelled out beside each statement, which is that surface's own and stays there.
+ *
+ * The empty `price_per_call` means *not priced*, which is a declaration and not a
+ * zero — the distinction `CallPrice` and `budget.NOT_PRICED` keep one level down.
+ */
+export interface Attesting {
+  identity: string
+  attested: Attested
+  price_per_call: string
+  currency: string
+}
+
+/** Nothing declared yet. No statement is made and no price is assumed. */
+export function nothingAttested(): Attesting {
+  return {
+    identity: '',
+    attested: {
+      authorised_to_test: false,
+      not_production: false,
+      accepts_provider_policy_and_cost: false,
+    },
+    price_per_call: '',
+    currency: 'USD',
+  }
+}
+
+/**
+ * Whether any of the three statements has not been made.
+ *
+ * Over `ATTESTATION_STATEMENTS` rather than over the record's own keys, so that the
+ * three this app asks about and the three it checks are one list.
+ */
+export function anyWithheld(attesting: Attesting): boolean {
+  return ATTESTATION_STATEMENTS.some(
+    (statement) => !attesting.attested[statement.field],
+  )
+}
+
+/**
  * The two families that are read from a tool trace, named for the screen.
  *
  * Against a target that does not expose its tool calls they report **not

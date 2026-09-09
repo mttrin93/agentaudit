@@ -2032,6 +2032,44 @@ code {
 }
 
 /*
+ * The queue of routes awaiting a decision: the artefact box, with a checkbox in the
+ * name and a decided row that has lost it.
+ *
+ * The same box as a signed artefact, deliberately — a pending route is a thing the
+ * bench is holding for an operator to act on, which is what that box already says —
+ * and the whole of the difference is the selection. The checkbox sits in the heading
+ * because the heading is what the row *is*: the family the route was found in, which
+ * is the one thing an operator triages on before the prose under it.
+ *
+ * No colour anywhere in here, and none by state. `pending`, `admitted` and
+ * `rejected` are three words the row prints; a green box and a red one would be a
+ * verdict scale on a page whose whole subject is that a decision is a reading and
+ * not a grade (ADR-0005, ADR-0010).
+ */
+.routes-queue .artefact h3 {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+
+.routes-queue .artefact h3 label.declaration {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  align-items: baseline;
+}
+
+.routes-queue .artefact h3 .wording {
+  font-weight: inherit;
+}
+
+/* The prose the attacker wrote about its own route, which is the row's content. */
+.routes-queue .artefact > p {
+  margin: 0.2rem 0 0.6rem;
+}
+
+/*
  * The three files, under the names a verifier reads them by.
  *
  * The filename is set in the monospace face the case ids and the nonce use, because

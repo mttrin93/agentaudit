@@ -99,6 +99,7 @@ export default defineConfig({
       '/artefacts': BENCH,
       '/bench': BENCH,
       '/gate-runs': BENCH,
+      '/pending-routes': BENCH,
     },
   },
   test: {

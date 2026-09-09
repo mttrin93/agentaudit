@@ -61,7 +61,10 @@ import type { CostFigure } from '../run/interrupt'
 import { adaptiveReading, scoredReading, type LayerReading } from '../run/progress'
 import {
   ATTESTATION_STATEMENTS,
+  anyWithheld,
+  nothingAttested,
   type Attested,
+  type Attesting,
   type Statement,
 } from '../register/declarations'
 import { clausesOf, REFERENCE_AGENTS, type RuleClause } from './gate'
@@ -211,35 +214,18 @@ export const GATE_RUN_STATEMENTS: readonly GateStatement[] =
     of: ATTESTATION_STATEMENTS.length,
   }))
 
-/** What the operator has declared so far, and who is declaring it. */
-export interface Attesting {
-  identity: string
-  attested: Attested
-  /** The empty string means *not priced*, which is a declaration and not a zero. */
-  price_per_call: string
-  currency: string
-}
+/**
+ * What an operator declares, re-exported from where all three walks now share it.
+ *
+ * The declaration itself moved to `register/declarations.ts` when the pending-routes
+ * page became the third surface collecting it: the record is one record, and three
+ * copies of it would only have to disagree once. Re-exported rather than moved out
+ * of this module's surface, because the gate screen's own components import it from
+ * here and a walk's shape is part of what this module is about.
+ */
+export type { Attesting }
 
-/** Nothing declared yet. No statement is made and no price is assumed. */
-export function nothingAttested(): Attesting {
-  return {
-    identity: '',
-    attested: {
-      authorised_to_test: false,
-      not_production: false,
-      accepts_provider_policy_and_cost: false,
-    },
-    price_per_call: '',
-    currency: 'USD',
-  }
-}
-
-/** Whether any of the three statements has not been made. */
-export function anyWithheld(attesting: Attesting): boolean {
-  return GATE_RUN_STATEMENTS.some(
-    (statement) => !attesting.attested[statement.field],
-  )
-}
+export { anyWithheld, nothingAttested }
 
 /**
  * A gate run ready to start, or the reasons it is not one.

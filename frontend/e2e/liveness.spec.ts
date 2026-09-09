@@ -40,11 +40,12 @@ async function completeTheEndpointStep(page: Page): Promise<void> {
 test('every screen’s title names the screen, and a step of the walk names the step', async ({
   page,
 }) => {
-  // The four the rail goes to, under the names the rail draws them under. A tab
+  // The rail's own destinations, under the names it draws them under. A tab
   // strip truncates from the right, so the screen's own name is what has to be at
   // the left of every one of these.
   for (const [path, name] of [
     ['/#/', 'The bench'],
+    ['/#/pending-routes', 'Routes to decide'],
     ['/#/artefacts', 'Signed artefacts'],
     ['/#/settings', 'Settings'],
   ] as const) {

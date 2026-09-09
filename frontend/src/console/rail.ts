@@ -92,6 +92,23 @@ export const GATE_PATH = '/gate'
 export const ARTEFACTS_PATH = '/artefacts'
 
 /**
+ * Where the routes awaiting the cross-model bar are read and decided.
+ *
+ * The same path the API serves the queue at, on the terms `/runs` and `/artefacts`
+ * already are: the screens are behind a `#` and no document request carries one, so
+ * the dev server proxies the prefix wholesale without shadowing a screen
+ * (`main.tsx`, `vite.config.ts`).
+ *
+ * **On the rail, where the gate is not.** A gate run is this bench measuring its own
+ * instrument, which is bench-development work with a script and a document of its
+ * own. A pending route is the opposite errand: it is what the attacker found against
+ * *somebody's target* during a run the console started, and it sits in a queue doing
+ * nothing until an operator decides it. That is a standing destination — the console
+ * goes there the way it goes to the artefacts it produced.
+ */
+export const PENDING_ROUTES_PATH = '/pending-routes'
+
+/**
  * Where the bench states what it is configured to do: keys, library, models, limits.
  *
  * `/settings` and not `/bench/settings`, for the reason the gate screen is at
@@ -127,7 +144,7 @@ export function reportPath(runId: string): string {
  * Which glyph a destination wants, as a closed set of names.
  *
  * A name and never a drawing: `railIcons.tsx` switches over this union with no
- * `default`, so the seven members and the seven drawings are counted against each
+ * `default`, so the eight members and the eight drawings are counted against each
  * other by the compiler. Widening this without drawing the new one does not
  * compile, which is the whole of the guard — and it is a union rather than a path
  * key so that moving a path can never quietly detach a glyph.
@@ -136,6 +153,7 @@ export type RailIcon =
   | 'bench'
   | 'target'
   | 'gate'
+  | 'routes'
   | 'artefacts'
   | 'settings'
   | 'run'
@@ -214,6 +232,8 @@ export const THE_BENCH = 'The bench'
  */
 export const REGISTER_A_TARGET = 'Register a target'
 
+export const PENDING_ROUTES = 'Routes to decide'
+
 export const SIGNED_ARTEFACTS = 'Signed artefacts'
 
 export const SETTINGS = 'Settings'
@@ -238,6 +258,7 @@ export const ITS_REPORT = 'Its report'
 const STANDING: readonly (Place & { path: string })[] = [
   { path: CONSOLE_PATH, name: THE_BENCH, icon: 'bench' },
   { path: REGISTER_PATH, name: REGISTER_A_TARGET, icon: 'target' },
+  { path: PENDING_ROUTES_PATH, name: PENDING_ROUTES, icon: 'routes' },
   { path: ARTEFACTS_PATH, name: SIGNED_ARTEFACTS, icon: 'artefacts' },
   { path: SETTINGS_PATH, name: SETTINGS, icon: 'settings' },
 ]

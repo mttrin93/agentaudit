@@ -1,5 +1,5 @@
 /**
- * The rail's seven glyphs, drawn here and named in `rail.ts`.
+ * The rail's eight glyphs, drawn here and named in `rail.ts`.
  *
  * The view model says *which* glyph a destination wants and this file is the only
  * place that knows what one looks like. That split is the point: `rail.ts` is a
@@ -13,8 +13,8 @@
  * would have been a `Record<string, …>` that a renamed path silently misses; a
  * union the compiler counts cannot be missed.
  *
- * **Hand-written SVG, and no eighth dependency.** This app has three — `react`,
- * `react-dom`, `react-router-dom` — and seven 16px line drawings are not worth a
+ * **Hand-written SVG, and no fourth dependency.** This app has three — `react`,
+ * `react-dom`, `react-router-dom` — and eight 16px line drawings are not worth a
  * fourth that would arrive with several hundred it does not draw. Everything is
  * stroked in `currentColor` at one weight, which is what makes the rail's existing
  * three-way current-marking — the weight, the ink, the rule down the side — reach
@@ -96,6 +96,21 @@ function drawing(icon: RailIcon): ReactElement {
           <rect x="1.4" y="5.6" width="13.2" height="2.9" rx="0.7" />
           <path d="M4 8.5v5.9M12 8.5v5.9" />
           <path d="M5.4 8.5 8 5.6M9 8.5 11.6 5.6" />
+        </>
+      )
+    // A branching path with a node on each end: a route, and the queue of them is
+    // the routes the attacker found that the fixed suite did not. The fork is the
+    // whole of the glyph — what a pending route *is*, is a way through that nobody
+    // wrote down.
+    case 'routes':
+      return (
+        <>
+          <path d="M2.6 13.4 7 9l0-3.4" />
+          <path d="M7 5.6 10.4 2.2" />
+          <path d="M7 9h4.2l2.2 2.2" />
+          <circle cx="11.4" cy="1.6" r="1.4" />
+          <circle cx="14" cy="12.2" r="1.4" />
+          <circle cx="1.9" cy="14.1" r="1.4" />
         </>
       )
     // A page with a seal in the lower corner: the documents this bench has signed.

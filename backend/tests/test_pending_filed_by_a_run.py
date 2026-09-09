@@ -25,11 +25,13 @@ from pathlib import Path
 
 import pytest
 
+from backend.bench.adaptive.budget import AdaptiveBudget
 from backend.bench.adaptive.episode import AdaptiveEpisode, EpisodeOutcome
 from backend.bench.adaptive.proposal import ProposedRoute, proposed_from
 from backend.bench.decided import RouteKey
 from backend.bench.library import Case, Family
 from backend.bench.pending import (
+    PENDING_ROUTES,
     AwaitingDecision,
     PendingDatabase,
     PendingRoutes,
@@ -37,6 +39,15 @@ from backend.bench.pending import (
 )
 from backend.bench.queued import file_proposals
 from backend.tests.conftest import a_target
+from backend.tests.test_api_runs import (
+    RunStatus,
+    _record,
+    a_request,
+    api,
+    registered,
+    settled,
+    watched_reference,
+)
 
 RAN_ON = date(2026, 8, 30)
 """The day the run ended. Deliberately not today's date: a filing that read a clock
@@ -190,3 +201,56 @@ def test_a_store_that_refuses_is_reported_and_the_rest_of_the_routes_still_file(
     assert "measurement stands" in both.stated()
     # And the run is not the thing that failed: the second route is on disk.
     assert len(refusing.queue()) == 1
+
+
+# --- Seam two: a customer run over the API ------------------------------------
+
+
+def test_a_customer_run_files_its_proposals_and_says_so_on_its_own_record(
+    leakage_case: Case,
+) -> None:
+    """The ticket, end to end on `POST /runs`: the queue is not empty afterwards.
+
+    Driven all the way through the interrupt, because what is under test is the
+    entry point rather than the function it calls: a filing wired into anything
+    `run_calibration` reaches would pass a unit test and put reference-agent routes
+    in front of an operator.
+    """
+    narrow = AdaptiveBudget(turns_per_episode=6, episodes_per_family=1, family_count=1)
+    with (
+        watched_reference() as watched,
+        api([leakage_case], adaptive=narrow) as (
+            client,
+            bench,
+        ),
+    ):
+        nonce = registered(client, watched)
+        started = client.post("/runs", json=a_request(watched.target, nonce)).json()
+        record = _record(bench, started)
+        client.post(
+            f"/runs/{started['run_id']}/approval",
+            json={"confirmed": True, "identity": "operator"},
+        )
+        settled(record)
+
+    assert record.status is RunStatus.COMPLETED
+    proposed = {
+        RouteKey.of(proposal.case)
+        for episode in record.run_state.episodes
+        for proposal in episode.proposals
+    }
+    assert proposed, "the attacker proposed nothing, so nothing here is under test"
+
+    held = PENDING_ROUTES.queue()
+    assert {record_.route for record_ in held} == proposed
+    # The target the route was found against, on every row: the one field no other
+    # store in this repository carries, and the whole of what triage runs on
+    # (ADR-0104 §2).
+    assert {record_.target for record_ in held} == {watched.target.name}
+    assert all(isinstance(record_, AwaitingDecision) for record_ in held)
+    # The date the run went on the record, not the day the row was written: nothing
+    # between the entry point and the store reads a clock.
+    assert {record_.filed_on for record_ in held} == {record.recorded_at.date()}
+    # And the sentence a poller reads says the queue grew, beside what the run said
+    # about precedent and about its review queue.
+    assert "awaiting the cross-model bar" in record.statement

@@ -145,6 +145,7 @@ from backend.bench.library import Family, LibraryVersion
 from backend.bench.narration import NarrativeFailure
 from backend.bench.nonce import issue_nonce
 from backend.bench.payload import GateCitation
+from backend.bench.queued import file_proposals
 from backend.bench.registration import Attestation
 from backend.bench.selection import AttackSelection
 from backend.bench.signing import SignedArtefact
@@ -861,6 +862,20 @@ def _run(record: RunRecord, config: BenchConfig, pending: PendingApproval) -> No
         return
 
     record.report = _published(record, result, config)
+    # The routes this run's attacker found, filed so they outlive the run that
+    # found them. **Here rather than in `run_calibration`**, which a gate run takes
+    # too: the queue's whole purpose is routes no surface decides, and a gate run's
+    # routes are ones `scripts/swap.py` already decides against the very agents
+    # they were fitted to (`docs/specs/pending-routes.md`, ADR-0012).
+    #
+    # After the report, so this is the last write the run makes — ADR-0031's
+    # ordering, applied to the other store a run now grows: nothing filed here was
+    # read by anything in this run. It cannot fail the run, because
+    # `file_proposals` catches every write and hands the refusal back as prose.
+    #
+    # The date is the day the run went on the record and never a clock read here,
+    # so a route filed by a replayed run is dated to the run (`queued.file_proposals`).
+    queued = file_proposals(record.run_state.episodes, today=record.recorded_at.date())
     finished = (
         f"the run finished inside the ceiling that was confirmed by "
         f"{record.confirmed_by}"
@@ -932,6 +947,12 @@ def _run(record: RunRecord, config: BenchConfig, pending: PendingApproval) -> No
             "new one, so this is what the run contributed and not what the store "
             "grew by"
         )
+    # Unconditional, where the precedent and review-queue clauses above are not: a
+    # run that proposed nothing says so, because a zero is a reading about the
+    # attacker and about the families it worked in rather than about the target
+    # (ADR-0011, `queued.NOTHING_WAS_PROPOSED`). An absence here would be
+    # indistinguishable from a filing that was never attempted.
+    finished = f"{finished}. {queued.stated()}"
     if isinstance(record.report, Unsigned):
         # Said here rather than left to the report route, because this is the
         # sentence a poller reads: a run whose status says completed and whose

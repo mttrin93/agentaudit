@@ -58,6 +58,18 @@ wheels/
 # names whoever authorised a spend against somebody else's endpoint (ADR-0008).
 /runs/
 
+# Routes the adaptive layer found against somebody's real agent, filed to await the
+# cross-model decision the run that found them cannot make (backend/bench/pending.py,
+# ADR-0105). This is the one store in the repository that holds a **working probe and
+# the name of the agent it beat** — the disclosure posture's single stated exception,
+# granted on five terms by ADR-0104, of which "never committed" is not one of the
+# five because it was never in question (ADR-0008). Its own directory and its own
+# database on ADR-0029 decision 6, and a directory rather than a file name for
+# /decisions/'s reason with more force than anywhere it has been applied before:
+# SQLite writes `-wal` and `-shm` sidecars beside the database, and here the journal
+# holds both of the two fields the exception is about.
+/pending/
+
 # Node
 node_modules/
 

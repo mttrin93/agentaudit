@@ -27,7 +27,7 @@ from opentelemetry import trace as otel_trace
 
 from backend.api import recorded
 from backend.api.recorded import RECORDED_RUNS
-from backend.bench import decided
+from backend.bench import decided, pending
 from backend.bench.adaptive import precedent
 from backend.bench.adaptive.precedent import DURABLE_PRECEDENT
 from backend.bench.adjudication import Completion
@@ -68,6 +68,7 @@ from backend.bench.library import (
     load_library,
 )
 from backend.bench.narration import Narration
+from backend.bench.pending import PENDING_ROUTES
 from backend.bench.registration import Attestation
 from backend.bench.remediation import Remediation
 from backend.bench.rule import DECLARED_RULE
@@ -626,6 +627,49 @@ def decisions_elsewhere(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
     from, and the suite's result would depend on its order.
     """
     _decisions_at(monkeypatch, tmp_path / "decisions" / "routes.sqlite")
+
+
+def _pending_at(patch: pytest.MonkeyPatch, elsewhere: Path) -> None:
+    """Point every route to the pending-route queue at `elsewhere`.
+
+    Two of them, on `_decisions_at`'s reasoning: the module constant, which is what
+    a freshly constructed `PendingDatabase` reads, and the shared module-level
+    object a customer run files into — which captured the real path at import and
+    would answer with it however the constant moved.
+    """
+    patch.setattr(pending, "DEFAULT_PENDING_PATH", elsewhere)
+    patch.setattr(PENDING_ROUTES.store, "path", elsewhere)
+
+
+@pytest.fixture(scope="session", autouse=True)
+def pending_elsewhere_for_the_session(
+    tmp_path_factory: pytest.TempPathFactory,
+) -> Iterator[None]:
+    """The redirection below, from a scope a module-scoped fixture cannot escape.
+
+    Session-scoped for the reason `decisions_elsewhere_for_the_session` is, and the
+    stake is higher for this store than for either of the two it copies: what a
+    module-scoped run reaching the real file would leave in the working copy is a
+    working probe and the name of the agent it beat, which is the one thing
+    ADR-0104 grants an exception for keeping and no exception at all for
+    committing.
+    """
+    patch = pytest.MonkeyPatch()
+    _pending_at(patch, tmp_path_factory.mktemp("pending") / "routes.sqlite")
+    yield
+    patch.undo()
+
+
+@pytest.fixture(autouse=True)
+def pending_elsewhere(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """No test files a route into the queue a real run files into.
+
+    Autouse and unconditional, on `decisions_elsewhere`'s reasoning. A fresh
+    database per test, because the queue accumulates by design: a route one test
+    filed would be a row the next test's page read back, and the suite's result
+    would depend on its order.
+    """
+    _pending_at(monkeypatch, tmp_path / "pending" / "routes.sqlite")
 
 
 def _run_records_at(patch: pytest.MonkeyPatch, elsewhere: Path) -> None:

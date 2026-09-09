@@ -233,7 +233,7 @@ class Conditions:
         """The conditions a run measuring this case now would be measuring under."""
         return cls(
             models=tuple(models),
-            criterion=_criterion(case),
+            criterion=criterion_of(case),
             attempts=rule.attempts_per_case,
         )
 
@@ -722,7 +722,7 @@ def _digest(text: str) -> str:
     return sha256(text.encode("utf-8")).hexdigest()[:16]
 
 
-def _criterion(case: Case) -> str:
+def criterion_of(case: Case) -> str:
     """A digest of what a verdict on this case *means*, and of what it needs to run.
 
     Four fields and not the whole record. `id` cannot be in it — it is a fresh uuid

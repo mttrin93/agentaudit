@@ -448,18 +448,20 @@ def declaration_at(path: pathlib.Path) -> Declaration:
         url=str(target["url"]),
         auth_token=str(target.get("auth_token", "")),
         agent_type=str(target.get("agent_type", "assistant")),
-        exposes_tool_calls=bool(target.get("exposes_tool_calls", False)),
-        declared_tools=tuple(str(tool) for tool in target.get("declared_tools", [])),
-        retains_session_state=bool(target.get("retains_session_state", False)),
-        holds_personal_records=bool(target.get("holds_personal_records", False)),
+        exposes_tool_calls=_flag(target, "exposes_tool_calls", False),
+        declared_tools=_words(target, "declared_tools"),
+        retains_session_state=_flag(target, "retains_session_state", False),
+        holds_personal_records=_flag(target, "holds_personal_records", False),
         nonce=str(target.get("nonce", "")),
-        note_planted=bool(target.get("note_planted", False)),
-        nonce_planted=bool(target.get("nonce_planted", True)),
-        echo_waived=bool(target.get("echo_waived", False)),
+        note_planted=_flag(target, "note_planted", False),
+        nonce_planted=_flag(target, "nonce_planted", True),
+        echo_waived=_flag(target, "echo_waived", False),
         identity=str(attestation["identity"]),
-        authorised_to_test=True,
-        not_production=True,
-        accepts_provider_policy_and_cost=True,
+        authorised_to_test=_flag(attestation, "authorised_to_test", False),
+        not_production=_flag(attestation, "not_production", False),
+        accepts_provider_policy_and_cost=_flag(
+            attestation, "accepts_provider_policy_and_cost", False
+        ),
         price_per_call=(
             None if cost.get("price_per_call") is None else str(cost["price_per_call"])
         ),
@@ -467,7 +469,16 @@ def declaration_at(path: pathlib.Path) -> Declaration:
     )
 ```
 
-Read `declared_tools` as `tuple(target.get("declared_tools", []))`. Read `price_per_call` as `cost.get("price_per_call")` and leave `None` alone — *not priced* and *free* are different facts.
+Read `price_per_call` as `cost.get("price_per_call")` and leave `None` alone — *not priced* and *free* are different facts.
+
+**Do not coerce a declared value; read it.** `bool("no")` is `True`, so `bool(target.get("echo_waived", False))` turns the word that withholds a waiver into the waiver itself, and `tuple(str(t) for t in "search")` reads a bare string as six one-letter tools against which every real call scores as scope creep. Two module-level helpers do the reading instead, and a wrong-typed value raises rather than joining the four refusals — a file that cannot be read is not a declaration whose contents can be argued with:
+
+```python
+def _flag(table: dict[str, Any], key: str, default: bool) -> bool: ...
+def _words(table: dict[str, Any], key: str) -> tuple[str, ...]: ...
+```
+
+Two tests beyond the six above cover them: `echo_waived = "no"` and `declared_tools = "search"` each raise a `TypeError` naming the field. The attestation booleans are read the same way rather than hardcoded `True` — the `withheld` guard above makes them true either way, and reading records the file rather than an assertion.
 
 - [ ] **Step 4: Run to verify it passes**
 
@@ -653,6 +664,8 @@ git commit -m "A compact reading drops prose and never a label"
   - `BenchUnreachable(RuntimeError)`, `BenchRefused(RuntimeError)` (attributes `status: int`, `detail: str`), `NoEstimate(RuntimeError)`, `ReportNotSigned(RuntimeError)`.
   - `class BenchClient` with `__init__(self, http: httpx.Client)` and methods `issue_nonce() -> str`, `start(declaration: Declaration) -> dict[str, Any]`, `approve(run_id: str, *, identity: str, confirmed: bool, reason: str = "") -> dict[str, Any]`, `status(run_id: str) -> dict[str, Any]`, `report(run_id: str) -> dict[str, Any]`, `artefact_urls(run_id: str) -> dict[str, str]`.
 - Task 6 constructs one `BenchClient` and calls only these.
+
+**Open, and decide it before writing `start`:** `Declaration` carries none of the four Rule of Two declarations (`processes_untrusted_input`, `reaches_private_data`, `changes_state_or_communicates`, `under_human_supervision`). They default to `None` on `TargetRequest`, so a `StartRunRequest` built from a `Declaration` reads `not_declared` for all four and the report prints — correctly — that nobody said anything, which is the regression ADR-0092/#177 fixed for the console. Either the declaration file carries them (spec §31: it carries what the Action already takes as inputs) or the run's report says unstated on purpose and an ADR says why. Do not let it be decided by omission.
 
 Tests run against the real app through the `api()` context manager that `backend/tests/test_api_runs.py` already defines — Step 1 below reads it. No recorded fixtures: a payload shape that moves must break these tests in CI.
 

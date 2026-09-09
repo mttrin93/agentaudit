@@ -60,6 +60,7 @@ export function PendingRoutesScreen() {
     statements,
     step,
     view,
+    walking,
   } = usePendingRoutes()
 
   useScreenTitle(PENDING_ROUTES)
@@ -149,7 +150,8 @@ export function PendingRoutesScreen() {
           control={view.control}
           selected={selected}
           begin={begin}
-          going={ourMeasurementIsGoing}
+          going={walking || ourMeasurementIsGoing}
+          holding={ourMeasurementIsGoing}
           ask={askTheBench}
         />
       )}

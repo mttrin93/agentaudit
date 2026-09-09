@@ -18,7 +18,7 @@
  */
 
 import type { EmptyQueue, MeasureControl, QueueRow } from './pending'
-import { ADMITTED, ALREADY_IN_FLIGHT, REJECTED } from './pending'
+import { ADMITTED, REJECTED } from './pending'
 
 /** Every route awaiting a decision, and the ones already decided under them. */
 export function TheQueue({
@@ -108,10 +108,19 @@ function Row({
         <dd>{row.state}</dd>
       </dl>
       {row.reason ? <p className="aside">{row.reason}</p> : null}
-      {row.state === ADMITTED && row.enteredAs ? (
-        <p>
-          Written into the case library as <code>{row.enteredAs}</code>.
-        </p>
+      {row.state === ADMITTED ? (
+        row.enteredAs ? (
+          <p>
+            Written into the case library as <code>{row.enteredAs}</code>.
+          </p>
+        ) : (
+          <p className="aside">
+            The record this route became is named in the reason above, in the
+            deciding surface’s own words. This page has not read the measurement
+            that wrote it — a stated absence, and not a filename guessed out of a
+            sentence.
+          </p>
+        )
       ) : null}
       {row.state === REJECTED ? (
         <p className="aside">
@@ -136,12 +145,18 @@ export function TheControl({
   selected,
   begin,
   going,
+  holding,
   ask,
 }: {
   control: MeasureControl
   selected: readonly string[]
   begin: () => void
+  /** Whether the control is greyed: an operator part-way through the walk that
+   * starts a measurement is not offered a second one. */
   going: boolean
+  /** Whether a measurement this page started is actually on the wire, which is a
+   * different fact and the only one that may say a lease is held. */
+  holding: boolean
   ask: () => void
 }) {
   return (
@@ -175,7 +190,7 @@ export function TheControl({
               statements are made and the estimate is confirmed.
             </p>
           )}
-          {going ? (
+          {holding ? (
             <p className="aside">
               A measurement started here is going. It holds an exclusive lease on the
               case library while it runs, so this control comes back when that one
@@ -201,10 +216,10 @@ export function TheControl({
               </p>
             </>
           ) : null}
-          {control.refusal === ALREADY_IN_FLIGHT ? null : (
+          {control.waiting ? null : (
             <p className="aside">
-              Every route in the queue below is still pending and still undecided.
-              Nothing has been sent and nothing has been spent.
+              Nothing has been sent and nothing has been spent: every route below
+              that is awaiting a decision is still awaiting one.
             </p>
           )}
         </div>

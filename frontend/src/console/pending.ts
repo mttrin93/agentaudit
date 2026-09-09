@@ -46,7 +46,10 @@ import type {
 import { readFamily } from '../families'
 import {
   ATTESTATION_STATEMENTS,
+  anyWithheld,
+  nothingAttested,
   type Attested,
+  type Attesting,
   type Statement,
 } from '../register/declarations'
 
@@ -67,18 +70,20 @@ export const REJECTED = 'rejected'
  */
 export const ALREADY_IN_FLIGHT = 'already_in_flight'
 
-/** The states a measurement does not leave, in the words its own record keeps. */
-const SETTLED = [
-  'declined',
-  'unanswered',
-  'answered',
-  'aborted',
-  'failed',
-] as const
+/**
+ * The two states a measurement is still going in, in the words its own record keeps.
+ *
+ * The in-flight pair rather than the five settled ones, because that is the list
+ * `MeasurementStatus.in_flight` is written as one level down — and because the two
+ * lists fail differently on a status this app does not recognise. Inverting the
+ * settled list would poll a stranger for ever; naming the going ones stops, which is
+ * the answer that costs nothing and leaves the page's last reading on it.
+ */
+const IN_FLIGHT = ['awaiting_approval', 'measuring'] as const
 
 /** Whether a measurement in this state is still going, or has stopped for good. */
 export function stillMeasuring(status: string): boolean {
-  return !SETTLED.some((settled) => settled === status)
+  return IN_FLIGHT.some((going) => going === status)
 }
 
 // --- the queue, as an operator reads it -----------------------------------------
@@ -338,35 +343,17 @@ export const MEASUREMENT_STATEMENTS: readonly MeasurementStatement[] =
     of: ATTESTATION_STATEMENTS.length,
   }))
 
-/** What the operator has declared so far, and who is declaring it. */
-export interface Attesting {
-  identity: string
-  attested: Attested
-  /** The empty string means *not priced*, which is a declaration and not a zero. */
-  price_per_call: string
-  currency: string
-}
+/**
+ * What an operator declares, and the guard over it, shared with the other two walks.
+ *
+ * Re-exported rather than declared again: this is the third surface that collects
+ * the attestation `registration.py` refuses to construct incomplete, and the record
+ * is one record. What is this page's own is `FOR_A_MEASUREMENT` above — the
+ * consequence beside each statement, which is different here and nowhere else.
+ */
+export type { Attesting }
 
-/** Nothing declared yet. No statement is made and no price is assumed. */
-export function nothingAttested(): Attesting {
-  return {
-    identity: '',
-    attested: {
-      authorised_to_test: false,
-      not_production: false,
-      accepts_provider_policy_and_cost: false,
-    },
-    price_per_call: '',
-    currency: 'USD',
-  }
-}
-
-/** Whether any of the three statements has not been made. */
-export function anyWithheld(attesting: Attesting): boolean {
-  return MEASUREMENT_STATEMENTS.some(
-    (statement) => !attesting.attested[statement.field],
-  )
-}
+export { anyWithheld, nothingAttested }
 
 /**
  * A measurement ready to start, or the reasons it is not one.
@@ -474,7 +461,6 @@ export interface EstimateView {
   calls: string
   ceiling: string
   cost: string
-  currency: string
   statement: string
 }
 
@@ -495,7 +481,6 @@ export function measurementEstimateView(
     calls: `${estimate.calls}`,
     ceiling: `≤ ${estimate.ceiling}`,
     cost: estimate.cost,
-    currency: estimate.currency,
     statement: estimate.statement,
   }
 }

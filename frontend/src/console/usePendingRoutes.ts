@@ -303,18 +303,24 @@ export function usePendingRoutes() {
   }
 
   /**
-   * Whether a measurement this page started is still going.
+   * Whether a measurement this page started is on the wire right now.
    *
-   * Read off the reading rather than off the stage alone, so the control comes back
-   * the moment the measurement settles while the progress stays on the page: the
-   * stage remains `watching` because that is what the operator is looking at, and it
-   * is the *measurement* that has stopped, not the page.
+   * Read off the reading rather than off the stage alone, so it comes back to
+   * `false` the moment the measurement settles while the progress stays on the
+   * page: the stage remains `watching` because that is what the operator is looking
+   * at, and it is the *measurement* that has stopped, not the page.
+   *
+   * **`watching` and not `stage !== 'idle'`**, which is the shape this started as
+   * and was wrong: an operator part-way through the three statements has started
+   * nothing, and the sentence that used to appear beside the greyed control said a
+   * lease was being held on the case library. A page may not state a spend-relevant
+   * fact that is false. What greys the control while the walk is open is `walking`
+   * below, which claims nothing.
    */
   const ourMeasurementIsGoing =
-    stage !== 'idle' && (reading === null || stillMeasuring(reading.status))
+    stage === 'watching' && (reading === null || stillMeasuring(reading.status))
 
   return {
-    answer,
     askTheBench,
     attesting,
     begin,
@@ -324,7 +330,6 @@ export function usePendingRoutes() {
     confirmed,
     decline,
     held,
-    measurementId,
     ourMeasurementIsGoing,
     reading,
     refused,
@@ -340,5 +345,8 @@ export function usePendingRoutes() {
     statements: MEASUREMENT_STATEMENTS,
     step,
     view,
+    /** Whether the operator is part-way through starting one. Not a claim that
+     * anything has been sent — `ourMeasurementIsGoing` is that claim. */
+    walking: stage !== 'idle',
   }
 }

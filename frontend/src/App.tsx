@@ -34,11 +34,13 @@ import { ConsoleShell } from './console/ConsoleShell'
 import { ArtefactsScreen } from './console/ArtefactsScreen'
 import { GateScreen } from './console/GateScreen'
 import { LandingScreen } from './console/LandingScreen'
+import { PendingRoutesScreen } from './console/PendingRoutesScreen'
 import { SettingsScreen } from './console/SettingsScreen'
 import {
   ARTEFACTS_PATH,
   CONSOLE_PATH,
   GATE_PATH,
+  PENDING_ROUTES_PATH,
   REGISTER_PATH,
   REPORT_PATTERN,
   RUN_PATTERN,
@@ -56,6 +58,7 @@ export default function App() {
         <Route path={CONSOLE_PATH} element={<LandingScreen />} />
         <Route path={REGISTER_PATH} element={<RegisterScreen />} />
         <Route path={GATE_PATH} element={<GateScreen />} />
+        <Route path={PENDING_ROUTES_PATH} element={<PendingRoutesScreen />} />
         <Route path={ARTEFACTS_PATH} element={<ArtefactsScreen />} />
         <Route path={SETTINGS_PATH} element={<SettingsScreen />} />
         <Route path={RUN_PATTERN} element={<RunScreen />} />
@@ -81,7 +84,9 @@ function NoSuchScreen() {
       <p>
         The console's front door is at <Link to={CONSOLE_PATH}>/</Link>,
         registration at <Link to={REGISTER_PATH}>/register</Link>, the bench's own
-        gate at <Link to={GATE_PATH}>/gate</Link>, the signed artefacts at{' '}
+        gate at <Link to={GATE_PATH}>/gate</Link>, the routes awaiting a decision at{' '}
+        <Link to={PENDING_ROUTES_PATH}>/pending-routes</Link>, the signed artefacts
+        at{' '}
         <Link to={ARTEFACTS_PATH}>/artefacts</Link> and what the bench is set to at{' '}
         <Link to={SETTINGS_PATH}>/settings</Link>. A run is at
         <code> /runs/&lt;id&gt;</code>, and its report at

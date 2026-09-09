@@ -2,7 +2,8 @@
  * The bench's HTTP surface as this app is allowed to see it.
  *
  * One module per API area since #14 — `nonces`, `runs`, `attempts`, `report`,
- * `gateruns`, `settings`, `artefacts`, over the shared `contracts` and the two
+ * `gateruns`, `pendingroutes`, `settings`, `artefacts`, over the shared `contracts`
+ * and the two
  * fetch primitives in `http` — and this file is the surface they are read through.
  * Every screen imports `../api/bench`, and the split deliberately did not move that:
  * an area module is where a wire shape is *defined*, and this is where the app is
@@ -34,5 +35,6 @@ export * from './runs'
 export * from './attempts'
 export * from './report'
 export * from './gateruns'
+export * from './pendingroutes'
 export * from './settings'
 export * from './artefacts'

@@ -23,6 +23,7 @@ import {
   ARTEFACTS_PATH,
   CONSOLE_PATH,
   GATE_PATH,
+  PENDING_ROUTES_PATH,
   REGISTER_PATH,
   REPORT_PATTERN,
   RUN_PATTERN,
@@ -92,6 +93,19 @@ describe('the paths the shell may not move', () => {
     expect(railView(ARTEFACTS_PATH, null).destinations.map((d) => d.path)).toContain(
       ARTEFACTS_PATH,
     )
+  })
+
+  it('lists the routes awaiting a decision at the path the API serves them at', () => {
+    // The queue and the screen over it share a path for `ARTEFACTS_PATH`'s reason:
+    // the screens are behind a `#` and no document request carries one. And it is a
+    // standing destination where the gate is not — a pending route is what the
+    // attacker found against somebody's target, which is the console's own errand,
+    // and it sits in a queue doing nothing until an operator decides it.
+    expect(PENDING_ROUTES_PATH).toBe('/pending-routes')
+    expect(PENDING_ROUTES_PATH.startsWith('/bench')).toBe(false)
+    expect(
+      railView(PENDING_ROUTES_PATH, null).destinations.map((d) => d.path),
+    ).toContain(PENDING_ROUTES_PATH)
   })
 
   it('states what the bench is set to at a path that does not shadow the API', () => {

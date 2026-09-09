@@ -74,6 +74,7 @@ import tomllib
 from collections.abc import Mapping, Sequence
 from contextlib import ExitStack
 from dataclasses import replace
+from datetime import date
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
@@ -95,6 +96,7 @@ from backend.bench.library import AnyFamily, Case, Family, Plant, Precondition
 from backend.bench.narration import Narrator
 from backend.bench.payload import DeclaredModels
 from backend.bench.proving import prove_patch, standing_for
+from backend.bench.queued import file_proposals
 from backend.bench.rule import DECLARED_RULE, GateRule
 from backend.bench.selection import EVERY_CONSTRUCTION
 from backend.bench.shim import serve_callback
@@ -586,6 +588,22 @@ def main(argv: Sequence[str] | None = None) -> int:
     # be two accounts of one run.
     print_target_run(target_run, gaps)
     print_precedent(result)
+    # The two stores a customer run writes to, printed together: what it
+    # contributed to the long-term memory, and what it filed to await the
+    # cross-model bar. **Filed here rather than in `run_calibration`**, which a
+    # gate run takes too — a gate run's routes are ones `scripts/swap.py` already
+    # decides against the very agents they were fitted to
+    # (`docs/specs/pending-routes.md`, ADR-0012).
+    #
+    # Printed unconditionally, zero included: nobody is sitting in front of this
+    # run, so the job log is all anybody reads, and a queue that grew by nothing
+    # has to be distinguishable from a filing that was never attempted (ADR-0011,
+    # `queued.NOTHING_WAS_PROPOSED`).
+    #
+    # `date.today()` here and nowhere deeper: an entry point is where a clock may
+    # be read, and it is the one place that knows which day the run means
+    # (`queued.file_proposals`).
+    print(f"\n{file_proposals(result.run_state.episodes, today=date.today()).stated()}")
     # Per layer and never added, in the job log as on a terminal: a blended figure
     # would hide which half of a run is consuming the caller's budget (ADR-0007).
     for layer in Layer:

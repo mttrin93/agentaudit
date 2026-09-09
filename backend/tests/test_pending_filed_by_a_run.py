@@ -38,7 +38,10 @@ from backend.bench.pending import (
     RouteState,
 )
 from backend.bench.queued import file_proposals
+from backend.bench.signing import SIGNING_KEY_VARIABLE, encoded_private, generate
+from backend.tests import headless_agent
 from backend.tests.conftest import a_target
+from backend.tests.headless_agent import RecordingAgent
 from backend.tests.test_api_runs import (
     RunStatus,
     _record,
@@ -48,6 +51,8 @@ from backend.tests.test_api_runs import (
     settled,
     watched_reference,
 )
+from backend.tests.test_headless_run import arguments, attestation_file
+from scripts import bench
 
 RAN_ON = date(2026, 8, 30)
 """The day the run ended. Deliberately not today's date: a filing that read a clock
@@ -254,3 +259,89 @@ def test_a_customer_run_files_its_proposals_and_says_so_on_its_own_record(
     # And the sentence a poller reads says the queue grew, beside what the run said
     # about precedent and about its review queue.
     assert "awaiting the cross-model bar" in record.statement
+
+
+# --- Seam three: the same run from a `__main__` -------------------------------
+
+
+def test_a_headless_customer_run_files_its_proposals_and_prints_what_it_filed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """`scripts/bench.py`, the second customer-run entry point, end to end.
+
+    Both entry points and not one, because a workflow run is the shape in which a
+    route is *most* likely to be found and least likely to be looked at: nobody is
+    sitting in front of it, so a proposal it does not file is a proposal nobody ever
+    reads. Against the trivial reference agent with a nonce planted by hand, which
+    is what an operator does before an unattended run (ADR-0061, ADR-0064) — a run
+    that waived the proof would have its leakage cases withdrawn for want of a
+    plant and so no leakage episode to propose from.
+    """
+    monkeypatch.setenv(SIGNING_KEY_VARIABLE, encoded_private(generate()))
+    with watched_reference() as watched:
+        nonce = "a-nonce-the-operator-planted"
+        watched.plant(watched.target, nonce, "by-hand")
+        code = bench.main(
+            [
+                *arguments(
+                    watched.target.url,
+                    tmp_path / "artefact",
+                    attestation_file(tmp_path, watched.target.url),
+                    **{
+                        "--max-calls": "100000",
+                        "--token": str(watched.target.auth_token),
+                        "--nonce": nonce,
+                        # The identity the operator declared for their own agent,
+                        # which is the name that reaches the row: what triage needs
+                        # is whose agent, and the record deliberately holds no url
+                        # and no token to reach it by (ADR-0104 §2).
+                        "--name": A_CUSTOMER,
+                    },
+                )
+            ]
+        )
+
+    assert code == 0
+    said = capsys.readouterr().out
+    held = PENDING_ROUTES.queue()
+    assert held, "the attacker proposed nothing, so nothing here is under test"
+    assert {record.target for record in held} == {A_CUSTOMER}
+    assert all(isinstance(record, AwaitingDecision) for record in held)
+    # The job log says what it filed, in the same run of output that carries the
+    # rates and the precedent: an unattended run's output is all anybody reads.
+    assert "awaiting the cross-model bar" in said
+    for record in held:
+        assert record.route.stated() in said
+
+
+def test_a_headless_run_whose_attacker_proposed_nothing_says_so_and_files_nothing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The zero, end to end, against an agent that refuses everything.
+
+    A zero is a reading about the attacker and about the families it worked in,
+    never about the target (ADR-0011) — so it is printed rather than left as an
+    absence, which is the one thing an operator could not tell apart from a filing
+    that was never attempted.
+    """
+    monkeypatch.setenv(SIGNING_KEY_VARIABLE, encoded_private(generate()))
+    agent = RecordingAgent()
+    monkeypatch.setattr(headless_agent, "AGENT", agent)
+    reference = "backend.tests.headless_agent:AGENT"
+
+    code = bench.main(
+        [
+            *arguments(
+                reference,
+                tmp_path / "artefact",
+                attestation_file(tmp_path, reference),
+                **{"--max-calls": "100000"},
+            )[:-1],
+            f"--callback={reference}",
+        ]
+    )
+
+    assert code == 0
+    assert agent.messages, "the run reached the target"
+    assert PENDING_ROUTES.queue() == ()
+    assert "proposed no route" in capsys.readouterr().out

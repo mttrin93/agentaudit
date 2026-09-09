@@ -16,6 +16,7 @@ grants the exception on. Three seams:
 from __future__ import annotations
 
 import dataclasses
+import json
 import subprocess
 from datetime import date
 from pathlib import Path
@@ -40,8 +41,13 @@ from backend.bench.pending import (
 )
 from backend.tests.conftest import REPOSITORY, a_target
 
-FILED_ON = date(2026, 9, 9)
-"""The day the run that found the route ended, so nothing here reads a clock."""
+FILED_ON = date(2026, 8, 30)
+"""The day the run that found the route ended, so nothing here reads a clock.
+
+Deliberately not today: a store that read a clock instead of the date it was given
+would date a route filed by a replayed run to the morning it was replayed, and a
+date equal to today's is a date that assertion could not tell apart.
+"""
 
 PROBE = "the probe that actually beat somebody's agent"
 
@@ -190,7 +196,8 @@ def test_a_decision_replaces_the_record_and_the_payload_is_gone_from_the_store(
 
     stored = queue.store.get(PENDING_NAMESPACE, route.filed_under)
     assert stored is not None
-    assert PROBE not in repr(dict(stored.value))
+    assert "draft" not in dict(stored.value)
+    assert PROBE not in json.dumps(dict(stored.value))
     assert decided == queue.filed(route)
     assert isinstance(decided, Decided)
     assert decided.state is RouteState.ADMITTED
@@ -218,6 +225,21 @@ def test_a_rejected_route_keeps_the_gates_own_reason(
 
     assert decided.state is RouteState.REJECTED
     assert "second" in decided.reason
+
+
+def test_a_decision_with_no_reason_is_refused(
+    queue: PendingRoutes, leakage_case: Case
+) -> None:
+    # A rejected route is a finding in its own right (ADR-0012), and a row that
+    # says only "rejected" is the finding thrown away — which is the defect the
+    # store exists to remove, one field further in.
+    proposal = a_route(leakage_case)
+    queue.file(proposal, target=A_CUSTOMER, today=FILED_ON)
+
+    with pytest.raises(ValueError, match="no reason"):
+        queue.decide(
+            RouteKey.of(proposal.case), state=RouteState.REJECTED, reason="   "
+        )
 
 
 def test_deciding_a_route_nothing_filed_is_refused(

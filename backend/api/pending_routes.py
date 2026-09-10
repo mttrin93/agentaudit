@@ -59,6 +59,7 @@ from backend.api.pending_route_state import (
     CannotMeasure,
     MeasurementRecord,
     MeasurementStatus,
+    ModelPass,
     NoLongerWaiting,
     NotMeasurable,
     RouteProgress,
@@ -92,6 +93,7 @@ from backend.bench.rule import DECLARED_RULE
 from backend.bench.selection import EVERY_CONSTRUCTION, AttackLayer
 from backend.graph.approval import Approval, Approve
 from backend.graph.budget import BudgetExceeded, CallPrice, RunBudget
+from backend.graph.runstate import RunState
 from backend.observability import TracedRun
 
 NO_ADAPTIVE_LAYER = replace(
@@ -386,6 +388,13 @@ class BenchPendingRoutes:
                 budget=budget,
                 presented=budget.as_payload(),
                 per_route=tuple((one.record.route, one.budget) for one in selected),
+                passes=tuple(
+                    ModelPass(
+                        model=model,
+                        of=_planned_attempts(len(chosen), len(targets)),
+                    )
+                    for model in bench.models
+                ),
                 progress=tuple(
                     RouteProgress(
                         route=one.record.route,
@@ -574,6 +583,20 @@ class BenchPendingRoutes:
         )
 
 
+def _planned_attempts(cases: int, targets: int) -> int:
+    """How many attempts one model's pass over these cases is planned for.
+
+    The declared rule's attempts and never this bench's own, for the reason the
+    admission run below gives: `promote` decides every proposal at the declared rule,
+    so a pass counted against a console's tuned `attempts_per_case` (ADR-0025) would
+    draw a bar against a denominator the decision was not made on.
+
+    Registration probes are not in it. They are calls and this counts attempts, which
+    is the same distinction `budget.py` draws between the two figures it keeps.
+    """
+    return cases * DECLARED_RULE.attempts_per_case * targets
+
+
 def _declined(reason: str) -> str:
     stated = reason or "declined at the approval interrupt"
     return (
@@ -607,6 +630,10 @@ def _execute(
             ),
         )
     finally:
+        # Beside the lease for the same reason: whatever this measurement did, no
+        # pass is left drawn as one still filling. A pass the run finished keeps its
+        # counts; anything else is a pass that did not happen (`ModelPass.state`).
+        record.unmeasured()
         stack.close()
 
 
@@ -840,6 +867,23 @@ def _measuring(
         on_the_wire = tuple(RouteKey.of(case) for case in cases)
         record.moved(on_the_wire, f"measuring against the three agents on {model}")
         with equipment() as served:
+            budget = RunBudget.declare(
+                cases=list(cases),
+                targets=served.targets,
+                rule=DECLARED_RULE,
+                adaptive=config.adaptive,
+                price=price_per_call,
+                selection=NO_ADAPTIVE_LAYER,
+            )
+            # The pass's bar counts through this state, which is the run's own and
+            # not a copy: the attempts land on the admission run's thread, and
+            # `ModelPass.attempted` reads the length at the moment a screen asks.
+            progress = RunState(budget=budget)
+            record.measuring_on(
+                model,
+                progress,
+                _planned_attempts(len(cases), len(served.targets)),
+            )
             try:
                 result = run_calibration(
                     cases=list(cases),
@@ -860,14 +904,8 @@ def _measuring(
                     adaptive=config.adaptive,
                     # No agent, and the module docstring is why.
                     selection=NO_ADAPTIVE_LAYER,
-                    budget=RunBudget.declare(
-                        cases=list(cases),
-                        targets=served.targets,
-                        rule=DECLARED_RULE,
-                        adaptive=config.adaptive,
-                        price=price_per_call,
-                        selection=NO_ADAPTIVE_LAYER,
-                    ),
+                    budget=budget,
+                    run_state=progress,
                     # A fresh id per admission run and never this measurement's,
                     # which is what `scripts/admit.measure_on` emits too: the two id
                     # fields a trace carries are a run's and a gate run's, and a
@@ -884,6 +922,7 @@ def _measuring(
             return Unmeasured.DECLINED
         if any(run.registration.refused for run in result.target_runs):
             return Unmeasured.NEVER_REGISTERED
+        record.measured_on(model)
         record.moved(on_the_wire, f"read on {model}")
         by_name = {run.target.name: run for run in result.target_runs}
         return {

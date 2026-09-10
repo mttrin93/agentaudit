@@ -33,6 +33,7 @@ from backend.bench.entry import Entry
 from backend.bench.pending import AwaitingDecision, RouteState
 from backend.bench.registration import Attestation
 from backend.graph.budget import BudgetPayload, RunBudget
+from backend.graph.runstate import RunState
 
 
 class NotMeasurable(StrEnum):
@@ -243,6 +244,78 @@ class RouteProgress:
         )
 
 
+class ModelPassState(StrEnum):
+    """Where one model's admission run got to.
+
+    Four members and not a boolean pair, because *has not started* and *did not
+    happen* are the two an operator must never see merged: the first is a model
+    still to be paid for, the second is a model whose equipment would not serve, and
+    a screen that drew both as an empty bar would report a refusal as a wait.
+    """
+
+    WAITING = "waiting"
+    MEASURING = "measuring"
+    MEASURED = "measured"
+    UNMEASURED = "unmeasured"
+    """The pass that did not happen — equipment that would not serve, an agent that
+    never registered, a ceiling reached, or a measurement that stopped before this
+    model was reached."""
+
+
+@dataclass
+class ModelPass:
+    """One model's pass over the selected routes, and how far into it the run is.
+
+    Per model because the bar is two models walked strictly one at a time
+    (ADR-0012) and the action is minutes long: *measuring on the second model* is
+    the fact `RouteProgress.where` already reports in prose, and this is the same
+    fact as the two counts a length can be drawn from.
+
+    **The counts are attempts, and the ceiling is the declared rule's.** An attempt
+    is the unit of the denominator (CONTEXT.md), so `of` is what the rule asks for
+    over the cases and the three agents of this pass — known exactly before the pass
+    starts, which is what lets a bar be drawn at all. Neither figure is a rate and
+    there is no percentage on either: the share is a length on the page and never a
+    number (`pending.ts`, `GateCards.FamilyBar`).
+    """
+
+    model: str
+    of: int
+    """How many attempts this pass was planned for: cases × the declared rule's
+    attempts, against each of the three reference agents."""
+
+    state: ModelPassState = ModelPassState.WAITING
+    counted: int = 0
+    """The attempts this pass finished with, kept once the pass is over.
+
+    Held rather than read from `progress` at the end, because the `RunState` a pass
+    counts through belongs to that pass's own admission run and is dropped with it —
+    a bar that read a finished pass through a discarded run state would empty itself
+    the moment the pass completed.
+    """
+
+    progress: RunState | None = None
+    """The live run state of this pass, while it is the pass in flight.
+
+    `None` before the pass starts and after it ends. It is the run's own state
+    object rather than a copy of a count, because the count changes on the run's
+    thread and there is no moment on this side that knows when: reading `len` off it
+    at serialisation is what makes the bar live rather than polled.
+    """
+
+    @property
+    def attempted(self) -> int:
+        """Attempts made so far in this pass — live while it runs, fixed after.
+
+        Clamped to `of` rather than reported past it. The planned figure is the
+        declared rule's over this pass's cases and agents, and a registration probe
+        or a retry landing in `attempts` would otherwise draw a bar past its own
+        end (`budget.py`: the ceiling counts calls, this counts attempts).
+        """
+        made = self.counted if self.progress is None else len(self.progress.attempts)
+        return min(made, self.of)
+
+
 @dataclass
 class MeasurementRecord:
     """One measurement: what authorised it, what it was estimated at, what it
@@ -283,6 +356,16 @@ class MeasurementRecord:
     """
 
     progress: tuple[RouteProgress, ...] = ()
+    passes: tuple[ModelPass, ...] = ()
+    """One pass per declared model, in the order they are measured.
+
+    Beside `progress` and not folded into it, because the two answer different
+    questions about the same minutes: a row says where *one route* got to, and a
+    pass says how far into *one model* the run is. A measurement of three routes on
+    two models has three rows and two passes, and neither count is derivable from
+    the other.
+    """
+
     recorded_at: datetime = field(default_factory=lambda: datetime.now(tz=UTC))
     status: MeasurementStatus = MeasurementStatus.AWAITING_APPROVAL
     statement: str = (
@@ -328,6 +411,51 @@ class MeasurementRecord:
         for row in self.progress:
             if row.route in routes and row.state is RouteState.PENDING:
                 row.where = where
+
+    def pass_on(self, model: str) -> ModelPass | None:
+        """This measurement's pass for one model, or `None` where it declares none."""
+        for one in self.passes:
+            if one.model == model:
+                return one
+        return None
+
+    def measuring_on(self, model: str, progress: RunState, of: int) -> None:
+        """Start this model's pass, and hand it the run state its bar counts through.
+
+        `of` is passed rather than kept from the estimate: what a pass is planned
+        for is the attempts over *the cases that reached it*, and the routes the
+        admission memory already answered never reach a reference agent at all
+        (ADR-0032). A bar drawn against the estimate's figure would sit permanently
+        short by the routes nobody was billed for.
+        """
+        one = self.pass_on(model)
+        if one is not None:
+            one.state = ModelPassState.MEASURING
+            one.progress = progress
+            one.of = of
+
+    def measured_on(self, model: str) -> None:
+        """Finish this model's pass, keeping the count and dropping the run state."""
+        one = self.pass_on(model)
+        if one is not None:
+            one.counted = one.attempted
+            one.progress = None
+            one.state = ModelPassState.MEASURED
+
+    def unmeasured(self) -> None:
+        """Mark every pass that never finished as one that did not happen.
+
+        Called where a measurement stops for good, so that a pass left `measuring`
+        by an equipment failure is not drawn as a bar still filling on a screen
+        nothing is going to advance. A pass already `measured` keeps its counts:
+        the first model's run happened whether or not the second one's did
+        (ADR-0012, and `test_a_measurement_that_read_one_model_and_not_the_second`).
+        """
+        for one in self.passes:
+            if one.state is not ModelPassState.MEASURED:
+                one.counted = one.attempted
+                one.progress = None
+                one.state = ModelPassState.UNMEASURED
 
 
 def a_holder(attestation: Attestation, measurement_id: str) -> str:

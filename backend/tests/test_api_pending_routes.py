@@ -1549,3 +1549,32 @@ def test_the_deciding_surface_writes_no_case_record_of_its_own() -> None:
         ], f"{name} writes to the filesystem. The library's one writer is `enter`"
 
     assert "backend.bench.entry.enter" in set(imports_of(API_DIR / "pending_routes.py"))
+
+
+def test_the_reading_carries_one_pass_per_model_with_its_attempt_counts(
+    cases_dir: Path, leakage_case: Case
+) -> None:
+    """A bar per model, and it is fed by attempts rather than by a stage name.
+
+    The action is minutes long on two models walked one at a time, so *how far into
+    the second model* is the question an operator watching it actually has. A pass
+    carries the attempts it has made and the attempts it was planned for, because a
+    stage word cannot answer that and a percentage would be a figure this surface
+    does not carry (`pending.ts`).
+    """
+    record = filed(a_route(leakage_case))
+    served = Served()
+
+    with a_bench(cases_dir, served=served, agents=agents_on(served)) as deciding:
+        reading = answered(deciding, [record.route.filed_under])
+
+    passes = reading["passes"]
+    assert [one["model"] for one in passes] == [FIRST, SECOND], (
+        "one pass per declared model, in the order they are measured"
+    )
+    for one in passes:
+        assert one["of"] > 0, "a pass planned no attempt at all measures nothing"
+        assert one["attempted"] == one["of"], (
+            "a measurement that finished made every attempt its rule asked for"
+        )
+        assert one["state"] == "measured"

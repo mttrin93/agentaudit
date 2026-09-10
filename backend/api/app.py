@@ -5305,6 +5305,21 @@ class RouteProgressRow(BaseModel):
     else."""
 
 
+class ModelPassRow(BaseModel):
+    """One model's pass over the selected routes, and how far into it the run is.
+
+    Two counts and a state, and deliberately no percentage: the share is a length on
+    the page and never a figure (`pending.ts`). `attempted` is read at the moment
+    this row is built, so a reading taken mid-pass carries the count as it stood
+    then — which is what makes the bar on the screen live.
+    """
+
+    model: str
+    state: str
+    attempted: int
+    of: int
+
+
 class MeasurementReading(BaseModel):
     """Where one measurement has got to, per route, and what the bar said.
 
@@ -5320,6 +5335,11 @@ class MeasurementReading(BaseModel):
     models: list[str]
     library: str
     routes: list[RouteProgressRow]
+    passes: list[ModelPassRow]
+    """One pass per model, in the order they are measured. Beside `routes` because
+    the two answer different questions about the same minutes — where one route got
+    to, and how far into one model the run is (`ModelPass`)."""
+
     lines: list[str]
     """The bar's own prose, in the order it produced it: the consultation, each
     promotion's lines, and the cross-model rejections. What a run prints at a
@@ -5346,6 +5366,15 @@ def measurement_reading(record: MeasurementRecord) -> MeasurementReading:
                 entered_as=row.entered_as,
             )
             for row in record.progress
+        ],
+        passes=[
+            ModelPassRow(
+                model=one.model,
+                state=str(one.state),
+                attempted=one.attempted,
+                of=one.of,
+            )
+            for one in record.passes
         ],
         lines=list(record.lines),
     )

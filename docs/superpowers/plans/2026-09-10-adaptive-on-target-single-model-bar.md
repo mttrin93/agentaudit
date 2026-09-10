@@ -8,7 +8,7 @@
 
 **Tech Stack:** Python 3.12, `uv`, pytest, mypy (strict), Ruff; React + TypeScript + Vitest for the console.
 
-**Spec:** [docs/adr/0107-a-route-found-against-a-customers-target-faces-the-single-model-bar.md](../../adr/0107-a-route-found-against-a-customers-target-faces-the-single-model-bar.md) — the accepted decision this plan implements. Read it first; its four numbered decisions map to Tasks 1-6 and its Consequences list is what Task 7 has to write down.
+**Spec:** [docs/adr/0107-a-route-found-against-a-customers-target-faces-the-single-model-bar.md](../../adr/0107-a-route-found-against-a-customers-target-faces-the-single-model-bar.md) — the accepted decision this plan implements. Read it first; its four numbered decisions map to Tasks 1, 2 and 4, and its Consequences list is what Task 4c has to write down.
 
 ## Global Constraints
 
@@ -152,7 +152,11 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
 
 ---
 
-### Task 2: `proposed_from` is told what the route was found against
+### Task 2: The provenance is declared by the caller and threaded to the record
+
+Three sub-parts, one ticket and one commit: a required parameter with no caller does not compile, so none of the three is shippable alone. `uv run mypy` is the gate that keeps the call-site list honest.
+
+#### 2a — `proposed_from` is told what the route was found against
 
 **Files:**
 - Modify: `backend/bench/adaptive/proposal.py:128-142` (signature), `:210` (the hardcoded provenance), `:189-196` (the `not_tested` sentence)
@@ -337,7 +341,7 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
 
 ---
 
-### Task 3: `AttackableTarget` carries it and the episode threads it down
+#### 2b — `AttackableTarget` carries it and the episode threads it down
 
 **Files:**
 - Modify: `backend/bench/adaptive/layer.py:72-97` (`AttackableTarget`), `:209-245` (`_open_episode`), `backend/bench/adaptive/attacker.py:195-245` (`run_episode` and `_Episode.__init__`), `:562-580` (`_propose`)
@@ -451,7 +455,7 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
 
 ---
 
-### Task 4: Every run declares what it attacks
+#### 2c — Every run declares what it attacks
 
 **Files:**
 - Modify: `backend/bench/calibration.py:776` (`run_calibration` signature), `:964` (the `AttackableTarget` construction)
@@ -551,7 +555,7 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
 
 ---
 
-### Task 5a: The routes already in the queue are re-stamped
+### Task 3: The routes already in the queue are re-stamped
 
 **Files:**
 - Create: `scripts/restamp_filed_routes.py`
@@ -664,7 +668,7 @@ Expected: the idempotency test FAILS with `AssertionError: 1 != 0` on the second
 uv run python -m scripts.restamp_filed_routes --dry-run
 ```
 
-Expected: three rows named — `data_leakage-77663dfb1f9ba666`, `scope_creep-e14f521b37ec13e7`, `halt_defeat-df377d79ca7b492a`. Confirm the count is 3, then run without `--dry-run` and re-run to confirm it reports 0. Record the three keys and the date in Task 7's validation entry.
+Expected: three rows named — `data_leakage-77663dfb1f9ba666`, `scope_creep-e14f521b37ec13e7`, `halt_defeat-df377d79ca7b492a`. Confirm the count is 3, then run without `--dry-run` and re-run to confirm it reports 0. Record the three keys and the date in Task 4c's validation entry.
 
 Do this **after** Task 1 has landed and **before** Task 5 reaches an operator, or the surface will serve one model to rows that still demand two.
 
@@ -685,7 +689,11 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
 
 ---
 
-### Task 5: `/pending-routes` measures on one declared reference model
+### Task 4: One pass — the surface, the screen, and the records
+
+"One pass" is a single behavioural claim, so the API, the screen that reads it and the prose that describes it land together. Splitting them would leave the screen contradicting the API for a commit — and CLAUDE.md requires that where prose moves, both ends move in the same commit, which is why there is no trailing docs task.
+
+#### 4a — `/pending-routes` measures on one declared reference model
 
 **Files:**
 - Modify: `backend/api/app.py:5795-5830` (`deployed_pending_routes`)
@@ -797,7 +805,7 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
 
 ---
 
-### Task 6: The screen stops promising a bucket that cannot move
+#### 4b — The screen stops promising a bucket that cannot move
 
 **Files:**
 - Modify: `frontend/src/console/pending.ts` — lines 18, 29, 192, 204-208, 307, 315, 377, 393, 458, 543-547, 581
@@ -877,7 +885,7 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
 
 ---
 
-### Task 7: The records say what changed
+#### 4c — The records say what changed
 
 **Files:**
 - Modify: `docs/specs/pending-routes.md` — §5, §37, §41, §107, §113
@@ -944,14 +952,16 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
 
 ## Self-Review
 
-**Spec coverage.** ADR-0107 §1 → Task 1 (member, declared last). §2 → Task 1 (`bar_for` branch, own reason). §3 → Tasks 2, 3, 4 (`proposed_from` required arg; `AttackableTarget` field; ten call sites). §4 → Task 5 (one declared model, estimate) and Task 6 (the screen). Consequences 1, 4, 5 → Task 7's validation entry. Consequence 3 (the bucket reads zero here, still fills from the swap) → Task 6 Step 3 and Task 7 §41. Consequence 6 (the `pending/routes.sqlite` backfill) → **gap, addressed below.**
+**Spec coverage.** ADR-0107 §1 → Task 1 (member, declared last). §2 → Task 1 (`bar_for` branch, own reason). §3 → Task 2a/2b/2c (`proposed_from` required arg; `AttackableTarget` field; ten call sites). §4 → Task 4a (one declared model, estimate) and 4b (the screen). Consequences 1, 4, 5 → Task 4c's validation entry. Consequence 3 (the bucket reads zero here, still fills from the swap) → Task 4b Step 3 and 4c's §41. Consequence 6 (the queue backfill) → Task 3, resolved below.
 
-**The backfill — resolved, and it is Task 5a.** ADR-0107's last consequence reserved this. Checked rather than left to the implementer: `PendingRoutes.file` stores the whole drafted `Case` as a TOML record (`pending.py:216`, `:277`), so the provenance is persisted, and the live queue holds three rows all reading `discovered_by = "adaptive"`. It is not a schema migration — `store.SCHEMA` is the vendored `SqliteStore.MIGRATIONS` and this project does not add to it — so it is a one-shot rewrite with its own tests. Task 5a must land after Task 1 and before Task 5 reaches an operator; skipping it leaves the surface permanently unable to decide the three routes already filed in it.
+**The backfill — resolved, and it is Task 3.** ADR-0107's last consequence reserved this. Checked rather than left to the implementer: `PendingRoutes.file` stores the whole drafted `Case` as a TOML record (`pending.py:216`, `:277`), so the provenance is persisted, and the live queue holds three rows all reading `discovered_by = "adaptive"`. It is not a schema migration — `store.SCHEMA` is the vendored `SqliteStore.MIGRATIONS` and this project does not add to it — so it is a one-shot rewrite with its own tests. Task 3 must land after Task 1 and before Task 4 reaches an operator; skipping it leaves the surface permanently unable to decide the three routes already filed in it.
 
-**The memory does not need one.** `decided.criterion_of` excludes `discovered_by` by name — "does not change what the three reference agents would return" — so nothing in `decisions/routes.sqlite` is keyed on the provenance and no stored measurement is invalidated by this change. Task 7's validation entry should say this explicitly, because a reader who knows the queue needed a rewrite will ask whether the memory did too.
+**The memory does not need one.** `decided.criterion_of` excludes `discovered_by` by name — "does not change what the three reference agents would return" — so nothing in `decisions/routes.sqlite` is keyed on the provenance and no stored measurement is invalidated by this change. Task 4c's validation entry should say this explicitly, because a reader who knows the queue needed a rewrite will ask whether the memory did too.
 
 **Placeholder scan.** Fixture names are deliberately left as named placeholders (`AN_OBJECTIVE`, `A_BREAKABLE_TARGET`, `A_CONFIG_DECLARING_ONE_REFERENCE_MODEL`) with an instruction to substitute the file's own, because inventing fixtures that duplicate existing ones is worse than naming the substitution. Every other step carries the actual code or the actual command.
 
 **Type consistency.** `discovered_by: DiscoveredBy` is the name and type in all four signatures it reaches — `proposed_from`, `AttackableTarget`, `run_episode`, `run_calibration` — and `FOUND_BY_THE_ATTACKER` is the only new module-level name. `bar_for` is imported from `backend.bench.library` inside that package and from `backend.bench.admission` outside it, matching the existing convention.
 
-**Ordering.** Tasks 1-4 are strictly sequential (each consumes the previous signature). Task 5a depends only on Task 1 and must precede Task 5. Task 5 depends on Task 1 and 5a. Task 6 depends on Task 5. Task 7 depends on all of them. Tasks 5 and 2-4 could run in parallel, but the shared `uv run mypy` gate makes that a false economy.
+**Ordering.** Four tasks, four review gates. Task 1 is unblocked. Task 2's three sub-parts are strictly sequential within it and depend on Task 1. Task 3 depends on Task 1 and must precede Task 4. Task 4 depends on 1, 2 and 3, and its three sub-parts land in one commit.
+
+**An earlier draft split this into seven.** It was consolidated for two reasons worth keeping written down: the Task 2 sub-parts cannot compile independently, so three review gates bought nothing; and a trailing records task is what CLAUDE.md forbids — where prose moves, both ends move in the same commit.

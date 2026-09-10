@@ -296,15 +296,6 @@ class _Episode:
         `turns` is still `len(self.transcripts)` — the tree records the shape of the
         budget's spending and never its size."""
         self.broken = False
-        self.broke_on: int | None = None
-        """The one-based turn the evaluator confirmed the break on, or `None`.
-
-        Recorded so the filed route carries **the probe the break came from** rather
-        than the last probe sent (ADR-0106 §1). The two coincide today because the
-        loop's `not self.broken` condition stops it there, and this field is what
-        keeps them the same probe if that condition is ever relaxed — a route filed
-        with a message the break did not come from is a route the bar would measure
-        against the wrong evidence."""
         self.filed_on_the_break = False
         """Whether a route for this episode's break has already been through the copy.
 
@@ -451,17 +442,6 @@ class _Episode:
     def _last(self) -> Transcript | None:
         return self.transcripts[-1] if self.transcripts else None
 
-    @property
-    def _probe_to_file(self) -> str:
-        """The message a proposed route carries: the probe the break came from.
-
-        `broke_on` and not the last turn, for the reason that field exists — and the
-        last turn where there is no break, which is the path that ends in a
-        declination rather than a route (ADR-0106 §1).
-        """
-        turn = self.turns if self.broke_on is None else self.broke_on
-        return str(self.transcripts[turn - 1].sent.get("message", ""))
-
     def _probe(self, probe: str, sending: bool, continuation: Continuation) -> str:
         if not sending:
             return OBJECTIVE_ALREADY_MET
@@ -529,8 +509,6 @@ class _Episode:
         )
         self.readings.append(verdict)
         self.broken = verdict is Verdict.SUCCEEDED
-        if self.broken and self.broke_on is None:
-            self.broke_on = self.turns
         return verdict
 
     def _check(self) -> str:
@@ -571,13 +549,23 @@ class _Episode:
         # left the layer, and took a paid-for scored run with it (#166, #167). The
         # catch is this one named type and no wider — a bug in the proposal path is
         # still a bug, on ADR-0050's discipline for the other instrument.
+        # Before the copy and after the empty-description return above, so a model
+        # that answered with nothing usable still reaches `_file_the_break` — the
+        # flag records that a route was *asked and answered*, and an empty argument
+        # was neither (ADR-0106 §3).
         self.filed_on_the_break = self.broken
         try:
             proposal = proposed_from(
                 objective=self.objective.case,
                 target=self.target,
                 family=self.objective.family,
-                payload=self._probe_to_file,
+                # The last probe sent, which on the post-break step **is** the probe
+                # that broke the target: the loop's `not self.broken` condition stops
+                # it there, so there is no search over turns and no way to file a
+                # probe the break did not come from (ADR-0106 §1). The assertion that
+                # fails if that condition is ever relaxed is in the test file, where
+                # the breaking turn is re-derived from the objective's own condition.
+                payload=str(self._last.sent.get("message", "")),
                 description=description,
                 # The episode's own record and never the attacker's account of it:
                 # an unbroken episode is declined here, on the route the other two

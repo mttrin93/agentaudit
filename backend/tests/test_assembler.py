@@ -609,4 +609,5 @@ def a_proposed_route(objective: Case, description: str) -> ProposedRoute:
         family=Family(objective.family),
         payload="the probe that actually ran",
         description=description,
+        broken=True,
     )

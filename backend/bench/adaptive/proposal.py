@@ -50,8 +50,9 @@ class RouteNotFilable(Exception):
     place a route the layer could not file is ever written down.
 
     It is *not* an error in the layer: a declined route is a fact about the attacker
-    and the family it worked in, so an episode that raises this one still completes
-    and still reports its outcome. Why the route is declined rather than filed with a
+    and the family it worked in — or about an episode that broke nothing and asked
+    anyway (ADR-0106) — so an episode that raises this one still completes and still
+    reports its outcome. Why the route is declined rather than filed with a
     synthesised artefact is
     [ADR-0084](../../../docs/adr/0084-a-route-the-record-cannot-carry-is-declined-and-not-synthesised.md).
     """
@@ -130,6 +131,7 @@ def proposed_from(
     family: AnyFamily,
     payload: str,
     description: str,
+    broken: bool,
     today: date | None = None,
 ) -> ProposedRoute:
     """Draft a case from the probe that worked, under the objective's criterion.
@@ -147,6 +149,16 @@ def proposed_from(
     invariants that hang off it: the canary is the artefact's own halves joined, and
     the content key is named by the turn that fetches. So the route is declined with
     its reason and the episode records it (`RouteNotFilable`, #166).
+
+    `broken` is whether the evaluator confirmed a break on this episode, and it is a
+    required argument rather than a default because it is the fact this copy cannot
+    be made honestly without: a route from an episode nothing broke is declined here,
+    on the same route as the two above, and the decision is
+    [ADR-0106](../../../docs/adr/0106-a-confirmed-break-files-its-route-and-an-unbroken-episode-proposes-nothing.md).
+    Asked **after** the two family refusals, because those are permanent facts about
+    what a record in that family can carry — an attacker told its family cannot be
+    filed learns something a later break will not change, and one told only that it
+    has not broken anything yet would ask again with the same result.
     """
     kind = (
         None
@@ -162,6 +174,15 @@ def proposed_from(
         )
     if kind in CARRIED_BY_THE_MESSAGE:
         _refuse_a_probe_the_channel_guard_would(objective, family, payload)
+    if not broken:
+        raise RouteNotFilable(
+            f"a route in {family.value} from an episode with no confirmed break is "
+            "not filable as a case: the criterion is the objective's own and the "
+            "evaluator did not answer succeeded on any turn of this episode, so an "
+            "attacker's assessment of what it achieved is all there would be behind "
+            "the record (ADR-0004). The route is recorded on the episode and "
+            "proposed to nothing"
+        )
     return ProposedRoute(
         case=Case(
             id=f"adaptive-{family}-{uuid.uuid4().hex[:8]}",

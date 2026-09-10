@@ -123,6 +123,7 @@ def a_route(
         payload=payload,
         description=description,
         today=date(2026, 8, 18),
+        broken=True,
     )
 
 
@@ -470,6 +471,7 @@ def test_no_stored_record_carries_payload_text_or_a_target_identity(
         payload=PROBE,
         description="the attacker's own prose about what it did",
         today=DECIDED_ON,
+        broken=True,
     )
     memory.remember(
         decided_by_the_bar(proposal, SEPARATING, FLAT), models=MODELS, today=DECIDED_ON

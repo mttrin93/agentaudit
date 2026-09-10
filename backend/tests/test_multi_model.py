@@ -573,6 +573,7 @@ def _a_proposal(objective: Case) -> ProposedRoute:
         family=Family(objective.family),
         payload="the probe that actually ran",
         description="a route worth promoting",
+        broken=True,
     )
 
 
@@ -963,6 +964,7 @@ def _an_admitted_promotion(objective: Case) -> Promotion:
         family=Family(objective.family),
         payload="the probe that actually ran",
         description="a route worth promoting",
+        broken=True,
     )
     readings = [
         AdmissionReading(model=model, attempts=10, hardened=0, weak=5, trivial=10)

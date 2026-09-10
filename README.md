@@ -219,7 +219,7 @@ rather than the target held.
 | `read_tool_trace` | whether it is worth a turn to inspect what your agent called. Offered only against a target that reports its tool calls |
 | `check_canary` | whether the objective has been met yet |
 | `retrieve_precedent` | what has worked against similar targets before, identity-stripped |
-| `propose_case` | whether this route is worth promoting into the scored library |
+| `propose_case` | what to say about the route it found. A confirmed break is filed by the bench whether this tool is invoked or not, and an episode that broke nothing files nothing however confidently it asks |
 
 Each step it answers with one tool and one argument. An answer that parses to
 nothing is not quietly turned into a probe.

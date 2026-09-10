@@ -72,6 +72,7 @@ import {
   WHAT_THIS_CONSOLE_DOES,
   WHAT_THIS_INSTRUMENT_IS,
   type ConsoleDoes,
+  type LayerOffered,
   type SelectionReading,
   familyRows,
 } from './landing'
@@ -100,6 +101,43 @@ interface HeldArtefacts {
 }
 
 const NO_ARTEFACTS_LIST_YET: HeldArtefacts = { list: null, unavailable: '' }
+
+/**
+ * The count words this file spells, and the numeral past the end of them.
+ *
+ * Nine is not a limit on anything — it is where a reader stops reading a word faster
+ * than a numeral — and the wire's own set of layers is closed at three, so the numeral
+ * is a fallback that nothing currently reaches.
+ */
+const IN_WORDS = [
+  'none',
+  'one',
+  'two',
+  'three',
+  'four',
+  'five',
+  'six',
+  'seven',
+  'eight',
+  'nine',
+] as const
+
+/**
+ * How many of the layers the next run sends, for the strip over the switches.
+ *
+ * Spelled in words, and that is the whole of why this function exists rather than an
+ * expression in the markup: the block below it prints no figures on purpose, and `2/3`
+ * over a column of switches is a numeral a reader can take for something the bench
+ * counted. A word cannot be mistaken for a measurement.
+ *
+ * It counts the switches as the reading has them, so it says *will send* rather than
+ * *sent*: nothing here has run yet.
+ */
+function howManySend(layers: readonly LayerOffered[]): string {
+  const word = (count: number): string => IN_WORDS[count] ?? String(count)
+  const sending = layers.filter((layer) => layer.runs).length
+  return `${word(sending)} of ${word(layers.length)} will send`
+}
 
 export function LandingScreen() {
   const [runs, setRuns] = useState<HeldRuns>(NO_LIST_YET)
@@ -595,38 +633,64 @@ export function LandingScreen() {
         question is answered by the layers — do I want the encodings, the ladders, or
         the agent — and the list inside is the finer grain.
 
-        **One layer to a box, one box to a row**, which is the families block's own
-        shape read one level down. Three boxes in an auto-fit grid came out as unequal
-        columns — one tall with the encodings, one short with the ladders, one all but
-        empty — and read as a set of cards rather than as the question the block asks:
-        which of the three will the next run send. One to a row answers it down a
-        single column, and the constructions wrap into as many columns as the box is
-        wide instead of into one tall stack.
+        **One layer to a row, and the row is three columns**: the switch with the
+        layer's name, what a run of that layer sends, and the members it may send them
+        in. Boxes came first — one layer to a box, one box to a row — and what they cost
+        was the comparison: the three sentences began at three different depths down the
+        page, so *which of the three will the next run send* was read one box at a time.
+        In columns the switches line up down one edge, the sentences down the next and
+        the members down the third, and the question is answered by running an eye down
+        a column. Under a narrow viewport the three columns become three stacked bands
+        and the row is the box it used to be.
 
-        The constructions sit in a footer under the layer's sentence, behind the word
-        for what they are, exactly as a family's published claims do: a box holds one
-        subject, and these are the finer grain of the switch above them rather than a
-        second block.
+        The members sit in the third column behind the word for what they are — the same
+        relation a family's published claims have to the family's sentence, which is the
+        finer grain of the switch beside them and not a second block.
+
+        Each member is a chip a pointer lands anywhere on rather than a tick with a name
+        set beside it. The control underneath is still the checkbox, so the keyboard and
+        the screen reader get the real one; what changed is what it looks like. Seven
+        boxes in a grid read as a form to fill in, and seven chips read as a set to pick
+        from, and picking from a closed set is what selecting constructions is. The
+        layer's own switch keeps the square box — it is the one control on the row that
+        is not a member of a set, and a reader who has learned the box on the families
+        block has learned it here.
+
+        The strip above the rows names what the block switches and says how many of the
+        three the next run sends, and that count is spelled in words rather than set as
+        a numeral: this block prints no figures (below), and a reader who found `2/3`
+        here would be reading the first one. Beside it, what a chip is for — an
+        affordance a reader should not have to discover by pressing something.
 
         The adaptive layer holds no construction of its own — what it would hold are the
         two loops the bench's closed set of constructions deliberately does not name —
-        and it holds **its two schedules** instead, in the footer the constructions
-        would have been in and behind the word for what they are, with **the spellings
-        its probes go out in** under them. Those are the scored layer's own members
-        under a second switch, because the question differs: above, send a case in this
-        construction; here, respell a probe the attacker composed (ADR-0097). Both ticked is two episode sets
-        per family rather than one wider search, which is why the sentence about what
-        the tick costs is printed under them: the second schedule doubles the turns the
-        next run may put on the operator's own endpoint, and that is a figure they
-        confirm rather than discover (ADR-0057, ADR-0096). A layer whose footer holds
-        neither says so rather than ending early.
+        and it holds **its two schedules** instead, in the column the constructions would
+        have been in and behind the word for what they are, with **the spellings its
+        probes go out in** under them. Those are the scored layer's own members under a
+        second switch, because the question differs: above, send a case in this
+        construction; here, respell a probe the attacker composed (ADR-0097). A layer
+        whose column holds neither says so rather than ending early.
 
-        No figure in any of it. The two sentences the route serves beside these
-        switches — what switching a construction off does, and what a run made now
-        would carry into its provenance — are both written for a reader holding a
-        document, and neither is printed here: what an operator on this screen is
-        answering is which of the three the next run will send, and the boxes answer
-        it. The artefact still states both, in the artefact.
+        **What each of those two ticks costs is not printed on this screen.** The route
+        serves both sentences and `landing.ts` still reads them — what a second schedule
+        does to the layer's ceiling, and what a spelling does to it — and they used to
+        run under the chips they are about. Two paragraphs under two rows of chips is
+        most of the block by height, and it turned a set of switches into a page to
+        read: the figure they are warning about is the one an operator confirms before
+        the run starts (ADR-0057, ADR-0096), so it is stated where it is confirmed and
+        not where it is chosen. `schedulesCost` and `spellingsCost` are built and tested
+        and this screen prints neither.
+
+        No figure in any of it, and that includes the ones the columns invite. A count of
+        cases or of calls per attempt would sit naturally at the end of one of these rows
+        and nothing on the tuning reading states either, so the column that would hold
+        them is not drawn: a figure an operator reads off this screen has to be one a
+        route said. The two sentences the route does serve beside these switches — what
+        switching a construction off does, and what a run made now would carry into its
+        provenance — are both written for a reader holding a document, and neither is
+        printed here: what an operator on this screen is answering is which of the three
+        the next run will send, and the rows answer it. The artefact still states both,
+        in the artefact.
       */}
       {sends === null ? null : (
         <section>
@@ -639,6 +703,11 @@ export function LandingScreen() {
               <p>{refusedSelection}</p>
             </div>
           ) : null}
+          <p className="switching">
+            <span className="of">Layers</span>
+            <span>{howManySend(sends.layers)}</span>
+            <span className="how">pick the members the next run may send</span>
+          </p>
           <dl className="said layers">
             {sends.layers.map((layer) => (
               <div key={layer.layer}>
@@ -654,13 +723,13 @@ export function LandingScreen() {
                   />
                   {readName(layer.layer)}
                 </dt>
-                <dd>{layer.sends}</dd>
+                <dd className="means">{layer.sends}</dd>
                 <dd className="sends">
                   {layer.constructions.length === 0 &&
                   layer.schedules.length === 0 &&
                   layer.spellings.length === 0 ? (
                     <span className="none">
-                      Nothing to choose inside this layer — the switch above is the
+                      Nothing to choose inside this layer — the switch beside it is the
                       whole of it.
                     </span>
                   ) : null}
@@ -690,17 +759,14 @@ export function LandingScreen() {
                     </>
                   )}
                   {/*
-                    The adaptive layer's own two switches, in the footer its
+                    The adaptive layer's own two switches, in the column its
                     constructions would have been in and behind the word for what they
                     are. Drawn wherever the wire says a schedule belongs, which is that
                     layer, so this markup names no layer.
 
-                    **The one sentence this block prints**, and it is here rather than
-                    under the heading because it is what *this* tick costs: both
-                    schedules is a second episode set per family, so the layer's
-                    ceiling doubles and the doubling reaches the figure the operator
-                    confirms before a run starts. The two document sentences the route
-                    serves are still not printed anywhere on this screen (ADR-0096).
+                    What ticking the second one costs is not printed beside it — see the
+                    block's own comment above, and the estimate the operator confirms
+                    before a run starts, which is where the figure is (ADR-0096).
                   */}
                   {layer.schedules.length === 0 ? null : (
                     <>
@@ -725,7 +791,6 @@ export function LandingScreen() {
                           </li>
                         ))}
                       </ul>
-                      <span className="aside">{sends.schedulesCost}</span>
                     </>
                   )}
                   {/*
@@ -735,8 +800,9 @@ export function LandingScreen() {
                     question is a different one: *send a case in it* above, and
                     *respell a probe the attacker composed* here (ADR-0097). Four of
                     the seven are offered, because the other three need words this
-                    repository writes per family or a ladder built from a case record —
-                    the sentence under them says so.
+                    repository writes per family or a ladder built from a case record;
+                    the sentence that said so is off this screen with the other cost
+                    sentence, and what is left is the four that can be picked.
                   */}
                   {layer.spellings.length === 0 ? null : (
                     <>
@@ -761,7 +827,6 @@ export function LandingScreen() {
                           </li>
                         ))}
                       </ul>
-                      <span className="aside">{sends.spellingsCost}</span>
                     </>
                   )}
                 </dd>

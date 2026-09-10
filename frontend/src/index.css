@@ -662,9 +662,10 @@ pre {
  *
  * Not `display: none` and not `hidden`: either would take it out of the accessibility
  * tree and there would be nothing to announce. A one-pixel clipped box is the way a
- * region stays in the tree with nothing on the page. It is one of two rules in this
- * stylesheet whose purpose is to make something invisible, and the other one —
- * `.skip` — is invisible only until the keyboard reaches it.
+ * region stays in the tree with nothing on the page. It is one of three rules in this
+ * stylesheet whose purpose is to make something invisible, and the other two are
+ * invisible in a weaker sense: `.skip` until the keyboard reaches it, and the checkbox
+ * inside a construction chip, which the chip it is wrapped in is the visible face of.
  *
  * The screen says the same thing in its own heading, which is why this is not drawn:
  * a second copy in the reading column would be the console saying everything twice.
@@ -909,32 +910,21 @@ button:disabled {
 }
 
 /*
- * The three layers, one to a box and one box to a row.
+ * The strip over the switches: what the block switches, how much of it is on, and what
+ * a chip is for.
  *
- * The families' shape read one level down, and for the families' reason: three boxes
- * in the auto-fit grid came out as unequal columns — one tall with the encodings, one
- * short with the ladders, one all but empty — which read as a set of cards and buried
- * the question the block asks, which of the three will the next run send. Down one
- * column the three switches line up under each other, and the constructions wrap into
- * as many columns as the box is wide rather than into one tall stack.
+ * Set in the small upper case the rest of the file labels lists in, and on the ground
+ * rather than in a well of its own — it is a caption over the rows and not a row. The
+ * third part is pushed to the far edge because it is the only one addressed to a
+ * pointer: the two on the left describe what is on the screen, and it says what to do
+ * with it.
  */
-.said.layers {
-  grid-template-columns: 1fr;
-  gap: 0.6rem;
-}
-
-/* The constructions at the foot of the box whose switch schedules them, behind the
- * word for what they are — the same footer a family's published claims sit in, because
- * the two blocks are the same idiom one level apart. */
-.said.layers .sends {
-  margin-top: 0.55rem;
-  padding-top: 0.55rem;
-  border-top: 1px solid var(--line);
-}
-
-.said.layers .sends .of {
-  display: block;
-  margin-bottom: 0.45rem;
+.switching {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.35rem 1rem;
+  margin: 0 0 0.7rem;
   font-size: 0.72rem;
   font-weight: 600;
   letter-spacing: 0.04em;
@@ -942,10 +932,172 @@ button:disabled {
   color: var(--quiet);
 }
 
-/* The adaptive layer's footer, which holds no switch. Set as prose and not as a
+/* Which of the three will send, in the ink: it is the one part of the strip that
+ * changes as switches are moved, so it is the one part that is not grey. */
+.switching span:nth-child(2) {
+  color: var(--ink);
+}
+
+.switching .how {
+  margin-left: auto;
+  font-weight: 400;
+  letter-spacing: 0.03em;
+  text-transform: none;
+}
+
+/*
+ * The three layers, one to a row, and the row in three columns.
+ *
+ * Boxes came first — one layer to a box, one box down a single column — and what they
+ * cost was the comparison the block exists for: the three sentences began at three
+ * different depths, so *which of the three will the next run send* was read one box at
+ * a time. In columns the switches line up down one edge, the sentences down the next
+ * and the members down the third, and the eye answers the question by running down a
+ * column.
+ *
+ * The switch column is fixed and the other two share what is left, weighted toward the
+ * members: the sentences are two lines either way, and a layer offering seven chips is
+ * what needs the width. `minmax(0, …)` on both, or a long word in a sentence pushes the
+ * chips off the row.
+ */
+.said.layers {
+  grid-template-columns: 1fr;
+  gap: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--paper);
+}
+
+.said.layers > div {
+  display: grid;
+  grid-template-columns: 10.5rem minmax(0, 1fr) minmax(0, 1.15fr);
+  align-items: start;
+  gap: 1.1rem;
+  /* One frame around the block and a hairline between rows, rather than a box each:
+   * three framed boxes in a column read as three cards, which is the shape this block
+   * was moved out of. */
+  background: none;
+  border: 0;
+  border-top: 1px solid var(--line);
+  border-radius: 0;
+}
+
+.said.layers > div:first-child {
+  border-top: 0;
+}
+
+/* The members of the layer beside them, behind the word for what they are — the same
+ * relation a family's published claims have to the family's sentence, turned from a
+ * footer into a column now that the row has one. */
+.said.layers .sends {
+  margin: 0;
+}
+
+.said.layers .sends .of {
+  display: block;
+  margin-bottom: 0.4rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--quiet);
+}
+
+/* A second word in the column — the adaptive layer's spellings under its schedules —
+ * is set off from the list above it rather than butting against it. */
+.said.layers .sends .of ~ .of {
+  margin-top: 0.75rem;
+}
+
+
+/*
+ * A member as a chip, and not a tick with its name set beside it.
+ *
+ * Seven boxes in a grid read as a form to fill in; seven chips read as a set to pick
+ * from, and picking from a closed set is what selecting constructions is. The checkbox
+ * is still the control — it is taken out of the flow rather than out of the document,
+ * so the keyboard reaches it and a screen reader still reads a checked box — and the
+ * chip is its label, which is what a pointer was landing on already.
+ *
+ * Selected is the mint's own dark companion under the mint, the one fill this file
+ * gives a control (`button.primary`), because these chips and that button are the same
+ * statement: this is the thing that will happen next.
+ */
+.said.layers .sends .sent {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.said.layers .sends .sent label {
+  gap: 0;
+  margin: 0;
+  padding: 0.2rem 0.55rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.78rem;
+  color: var(--quiet);
+  background: var(--page);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+
+/* The box the chip is the face of, taken out of the flow rather than out of the
+ * document. Its padding and its border go with it: under `border-box` a declared
+ * width cannot fall below them, so a box left with the page's own input padding is
+ * eighteen pixels wide however small the width says it is. */
+.said.layers .sends .sent .tick {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  clip-path: inset(50%);
+}
+
+.said.layers .sends .sent label:has(.tick:checked) {
+  color: var(--accent);
+  background: var(--accent-paper);
+  border-color: var(--accent);
+}
+
+/* ADR-0082's one step, in whichever direction the chip currently is: an unselected
+ * chip's edge moves to the accent, and a selected one's — already there — moves to the
+ * ink. Never the fill, which is what says whether it is in the next run. */
+.said.layers .sends .sent label:hover {
+  border-color: var(--accent);
+}
+
+.said.layers .sends .sent label:has(.tick:checked):hover {
+  border-color: var(--ink);
+}
+
+/* The ring the browser would have drawn around the box, drawn around the chip that
+ * holds it instead. */
+.said.layers .sends .sent label:has(.tick:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/*
+ * Narrow, the row is the box it used to be.
+ *
+ * Three columns need about fifty characters each before the sentences start breaking
+ * mid-phrase, so under that the row stacks: the switch, its sentence, its members. The
+ * hairline between rows is doing more work here than it does wide, which is why it is
+ * the thing that separates them at both widths.
+ */
+@media (max-width: 60rem) {
+  .said.layers > div {
+    grid-template-columns: 1fr;
+    gap: 0.55rem;
+  }
+}
+
+/* The adaptive layer's column when it holds no switch. Set as prose and not as a
  * label, because it is a sentence about the layer and not the name of a list: what
  * the layer would hold are the two loops the closed set of constructions deliberately
- * does not name, so the switch above is the whole of what there is to ask. */
+ * does not name, so the switch beside it is the whole of what there is to ask. */
 .said.layers .sends .none {
   font-style: italic;
 }
@@ -962,8 +1114,8 @@ button:disabled {
 .said dt {
   display: flex;
   align-items: center;
-  /* The tick box leads and the name follows it, so the two columns of boxes line up
-   * down the left edge — which is what makes *which of these will run* readable at a
+  /* The tick box leads and the name follows it, so the switches line up down the left
+   * edge of both blocks — which is what makes *which of these will run* readable at a
    * glance instead of one line at a time. */
   gap: 0.6rem;
   font-weight: 600;
@@ -2869,7 +3021,8 @@ summary,
 input,
 select,
 textarea,
-.said .tick {
+.said .tick,
+.said.layers .sends .sent label {
   transition:
     color 120ms ease,
     background-color 120ms ease,

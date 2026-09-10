@@ -232,8 +232,20 @@ const CONFIGURED: BenchSettings = {
     // in the fixture, or the scan below is a scan over a narrower response than the
     // route serves.
     layers: [
-      { layer: 'single_turn', selected: true, sends: 'one message in one session' },
-      { layer: 'adaptive', selected: true, sends: 'the model-driven attacker' },
+      {
+        layer: 'single_turn',
+        selected: true,
+        sends: 'one message in one session',
+        holds: '3 cases a family',
+        costs: '1 call an attempt',
+      },
+      {
+        layer: 'adaptive',
+        selected: true,
+        sends: 'the model-driven attacker',
+        holds: '2 episodes a family in each set',
+        costs: 'at most 8 turns an episode',
+      },
     ],
     transforms: [
       {

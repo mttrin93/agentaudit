@@ -970,7 +970,9 @@ button:disabled {
 
 .said.layers > div {
   display: grid;
-  grid-template-columns: 10.5rem minmax(0, 1fr) minmax(0, 1.15fr);
+  grid-template-columns:
+    10.5rem minmax(0, 1fr) minmax(0, 1.15fr)
+    minmax(8rem, max-content);
   align-items: start;
   gap: 1.1rem;
   /* One frame around the block and a hairline between rows, rather than a box each:
@@ -1009,6 +1011,38 @@ button:disabled {
   margin-top: 0.75rem;
 }
 
+
+/*
+ * The fourth column: how much of the layer there is, and what an attempt of it costs.
+ *
+ * Ranged right, which is what makes it a column of figures rather than a fourth
+ * sentence: three counts under each other along one edge are read against each other
+ * at a glance, and the same three set flush left are three more lines to start.
+ *
+ * The count leads in the ink and the cost sits under it in the quiet the asides take.
+ * That is the order the two are chosen in — how much of this layer there is, and then
+ * what each attempt of it will cost — and it is one figure to a line because they are
+ * counts of two different things: cases and calls, or episodes and turns, with nothing
+ * in common to add (ADR-0010).
+ */
+.said.layers .holds {
+  margin: 0;
+  text-align: right;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.said.layers .holds .much {
+  display: block;
+  font-size: 0.82rem;
+  color: var(--ink);
+}
+
+.said.layers .holds .each {
+  display: block;
+  margin-top: 0.2rem;
+  font-size: 0.75rem;
+  color: var(--quiet);
+}
 
 /*
  * A member as a chip, and not a tick with its name set beside it.
@@ -1091,6 +1125,13 @@ button:disabled {
   .said.layers > div {
     grid-template-columns: 1fr;
     gap: 0.55rem;
+  }
+
+  /* Stacked, the figures are a line under the chips rather than a column beside
+   * them, so they are set where the eye already is: to the left, in the reading
+   * direction of everything above them. */
+  .said.layers .holds {
+    text-align: left;
   }
 }
 

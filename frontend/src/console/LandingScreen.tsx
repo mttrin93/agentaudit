@@ -633,9 +633,9 @@ export function LandingScreen() {
         question is answered by the layers — do I want the encodings, the ladders, or
         the agent — and the list inside is the finer grain.
 
-        **One layer to a row, and the row is three columns**: the switch with the
-        layer's name, what a run of that layer sends, and the members it may send them
-        in. Boxes came first — one layer to a box, one box to a row — and what they cost
+        **One layer to a row, and the row is four columns**: the switch with the
+        layer's name, what a run of that layer sends, the members it may send them in,
+        and how much of the layer there is with what one attempt of it costs. Boxes came first — one layer to a box, one box to a row — and what they cost
         was the comparison: the three sentences began at three different depths down the
         page, so *which of the three will the next run send* was read one box at a time.
         In columns the switches line up down one edge, the sentences down the next and
@@ -681,13 +681,15 @@ export function LandingScreen() {
         not where it is chosen. `schedulesCost` and `spellingsCost` are built and tested
         and this screen prints neither.
 
-        No figure in any of it, and that includes the ones the columns invite. A count of
-        cases or of calls per attempt would sit naturally at the end of one of these rows
-        and nothing on the tuning reading states either, so the column that would hold
-        them is not drawn: a figure an operator reads off this screen has to be one a
-        route said. The two sentences the route does serve beside these switches — what
-        switching a construction off does, and what a run made now would carry into its
-        provenance — are both written for a reader holding a document, and neither is
+        **The only figures on the block are the last column's**, and they are the
+        bench's own words about the bench's own records: how many cases this library
+        holds for the layer, and what one attempt of it costs in calls or turns. They
+        were not drawn at all until the route stated them, which is the rule they are
+        here under — a figure an operator reads off this screen has to be one a route
+        said, and neither of these is a rate, a denominator or anything two rows could
+        be added over. The two sentences the route does serve beside these switches —
+        what switching a construction off does, and what a run made now would carry into
+        its provenance — are both written for a reader holding a document, and neither is
         printed here: what an operator on this screen is answering is which of the three
         the next run will send, and the rows answer it. The artefact still states both,
         in the artefact.
@@ -828,6 +830,32 @@ export function LandingScreen() {
                         ))}
                       </ul>
                     </>
+                  )}
+                </dd>
+                {/*
+                  How much of the layer there is, and what one attempt of it costs.
+
+                  The fourth column, and the only figures on the block: a count of the
+                  records this library holds for the layer, and the calls or turns one
+                  attempt of it puts on the operator's own endpoint. Both are the
+                  bench's own wording — a console composing either from parts would be
+                  printing a figure no route stated — and both are counts of things
+                  rather than rates: nothing here is read against a denominator and no
+                  two rows may be added (ADR-0005, ADR-0010).
+
+                  Ranged right, so the three rows' figures line up under each other and
+                  a reader comparing what the layers cost runs an eye down one edge
+                  rather than across three sentences. The cost is set under the count in
+                  the quiet the asides take: what an operator picks a layer on is how
+                  much of it there is, and what it costs is the qualifier on that.
+
+                  A layer this library holds no cases for states that in `holds` and has
+                  no cost to state, so the second line is absent rather than empty.
+                */}
+                <dd className="holds">
+                  <span className="much">{layer.holds}</span>
+                  {layer.costs === '' ? null : (
+                    <span className="each">{layer.costs}</span>
                   )}
                 </dd>
               </div>

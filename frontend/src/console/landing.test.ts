@@ -261,13 +261,27 @@ describe('what the next run sends', () => {
    */
   const OFFERED = {
     layers: [
-      { layer: 'single_turn', selected: true, sends: 'one message in one session' },
+      {
+        layer: 'single_turn',
+        selected: true,
+        sends: 'one message in one session',
+        holds: '3 cases a family',
+        costs: '1 call an attempt',
+      },
       {
         layer: 'fixed_multi_turn',
         selected: true,
         sends: 'a fixed script of turns in one session',
+        holds: '1 case a family',
+        costs: '4 calls an attempt',
       },
-      { layer: 'adaptive', selected: false, sends: 'the model-driven attacker' },
+      {
+        layer: 'adaptive',
+        selected: false,
+        sends: 'the model-driven attacker',
+        holds: '2 episodes a family in each set',
+        costs: 'at most 8 turns an episode',
+      },
     ],
     // The adaptive layer's own two switches, each naming the layer it is switched
     // under for the reason a construction row does: the grouping is the wire's.

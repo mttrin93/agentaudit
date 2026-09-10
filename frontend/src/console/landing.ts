@@ -341,6 +341,18 @@ export interface LayerOffered {
   layer: string
   /** What a run of this layer sends, in the bench's own words. */
   sends: string
+  /**
+   * How much of this layer there is to send, in the bench's own words.
+   *
+   * Cases for the two layers that send them and episodes for the one that sends none,
+   * and it is a count of records rather than a rate: what a family measured is read
+   * off a report beside its own denominator, and no two rows' figures may be added
+   * (ADR-0005, ADR-0010).
+   */
+  holds: string
+  /** What one attempt of this layer puts on the target's endpoint, in the bench's own
+   * words, and empty where the library holds nothing of the layer. */
+  costs: string
   runs: boolean
   constructions: ConstructionOffered[]
   schedules: ScheduleOffered[]
@@ -423,6 +435,8 @@ export function selectionReading(offered: Offered): SelectionReading {
     layers: offered.layers.map((layer) => ({
       layer: layer.layer,
       sends: layer.sends,
+      holds: layer.holds,
+      costs: layer.costs,
       runs: layer.selected,
       constructions: offered.transforms
         .filter((one) => one.layer === layer.layer)

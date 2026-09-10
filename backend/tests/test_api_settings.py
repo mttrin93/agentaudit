@@ -90,6 +90,7 @@ from backend.bench.library import (
     ElectiveFamily,
     Family,
     LibraryVersion,
+    Precondition,
     Transform,
 )
 from backend.bench.payload import DeclaredModels
@@ -110,7 +111,7 @@ from backend.bench.transforms import ADAPTIVE_SPELLINGS
 from backend.bench.verification import SignatureOutcome
 from backend.graph.budget import REGISTRATION_PROBES_PER_TARGET, RunBudget
 from backend.targets.reference.model import ModelConfig, Provider
-from backend.tests.conftest import a_target, retired_case, some_cases
+from backend.tests.conftest import a_target, retired_case, some_cases, unlisted_case
 
 DECLARED = DeclaredModels(
     calibration="openrouter:openai/gpt-4.1-nano",
@@ -1511,6 +1512,114 @@ def test_the_console_reads_the_layers_and_the_constructions_it_may_select() -> N
         row["transform"] for row in tuning["adaptive_constructions"]
     }
     assert "its own episode set" in tuning["adaptive_constructions_statement"]
+
+
+def _scripted(case_id: str, payload: tuple[str, ...], base: str = "base") -> Case:
+    """A fixed script the fixed multi-turn layer schedules, built inside a test.
+
+    One `replace` and not several, because `Case.__post_init__` refuses each half on
+    its own: a script that does not ask for session retention measures the target's
+    memory rather than its defences (ADR-0053, ADR-0004), and a case under any
+    construction but the plain one has to name the case it transforms, or its reading
+    is a claim about a change with nothing to compare against (ADR-0051). So the turns,
+    the precondition and the base arrive together.
+    """
+    return replace(
+        unlisted_case(payload=payload[0], case_id=case_id),
+        payload=payload,
+        transform=Transform.SCRIPTED_CRESCENDO,
+        requires=(Precondition.CONFIG_CANARY_PLANT, Precondition.SESSION_RETENTION),
+        derived_from=base,
+    )
+
+
+def test_each_layer_says_how_much_it_holds_and_what_an_attempt_of_it_costs() -> None:
+    """The two figures a layer's row carries, and what neither of them is.
+
+    An operator choosing which layers the next run sends is choosing how much of their
+    own endpoint the run spends, and until these two fields the screen could say what a
+    layer *does* and nothing about how much of it there was. So each row carries how
+    much of that layer this library holds and what one attempt of it costs on the wire.
+
+    **Counts of records and calls, and never a rate.** The cases figure is the most any
+    one family holds of that layer's cases — `_cases_per_family`'s reading, one level
+    down — because what it tells a reader is what a full family of this layer is
+    attacked with, and a mean over families is a figure no family was ever attacked at
+    (ADR-0005). Nothing here is a denominator and nothing here may be added across
+    rows: a call on a scored attempt and a turn in an episode are two different units
+    on purpose (ADR-0010).
+
+    **The adaptive layer's row is per episode set**, which is why it says so. Its
+    episode count multiplies by every schedule and every spelling selected
+    (`budget.episode_count`, ADR-0096, ADR-0097), and doing that multiplication here
+    would put a moving estimate beside the switches instead of behind the confirmation
+    ADR-0007 requires it to sit behind.
+    """
+    library = [
+        replace(
+            unlisted_case(payload="one message", case_id=f"single-{index}"),
+            family=family,
+        )
+        for index, family in enumerate(
+            (Family.DATA_LEAKAGE, Family.DATA_LEAKAGE, Family.SCOPE_CREEP)
+        )
+    ] + [_scripted("script", ("first", "second", "third", "fourth"))]
+    app = create_app(BenchConfig(cases=library))
+    with TestClient(app) as client:
+        rows = {
+            row["layer"]: row
+            for row in client.get(BENCH_SETTINGS_ROUTE).json()["tuning"]["layers"]
+        }
+
+    # Two of the three single-turn cases are one family's and the third is another's,
+    # so the figure is two and never the three in the library: a family holding two is
+    # attacked with two.
+    assert rows[str(AttackLayer.SINGLE_TURN)]["holds"] == "2 cases a family"
+    # One element of `Case.payload` is one turn, so one turn is one call (ADR-0053).
+    assert rows[str(AttackLayer.SINGLE_TURN)]["costs"] == "1 call an attempt"
+
+    # The crescendo is the only construction the fixed multi-turn layer schedules, and
+    # its case is four turns in one session reaching one verdict (ADR-0054).
+    assert rows[str(AttackLayer.FIXED_MULTI_TURN)]["holds"] == "1 case a family"
+    assert rows[str(AttackLayer.FIXED_MULTI_TURN)]["costs"] == "4 calls an attempt"
+
+    # The layer that holds no case counts the thing it does hold, off the declared
+    # budget rather than off a literal here, and says which of the two the figure is.
+    episodes = DECLARED_ADAPTIVE_BUDGET.episodes_per_family
+    assert (
+        rows[str(AttackLayer.ADAPTIVE)]["holds"]
+        == f"{episodes} episodes a family in each set"
+    )
+    assert (
+        rows[str(AttackLayer.ADAPTIVE)]["costs"]
+        == f"at most {DECLARED_ADAPTIVE_BUDGET.turns_per_episode} turns an episode"
+    )
+
+    # Cases of one layer that do not all run to the same length are stated at their
+    # worst case and never averaged: this is the figure read before a run is consented
+    # to (ADR-0007).
+    varying = create_app(
+        BenchConfig(
+            cases=[
+                _scripted("short", ("first", "second")),
+                _scripted("longer", ("first", "second", "third")),
+            ]
+        )
+    )
+    with TestClient(varying) as client:
+        rows = {
+            row["layer"]: row
+            for row in client.get(BENCH_SETTINGS_ROUTE).json()["tuning"]["layers"]
+        }
+    assert (
+        rows[str(AttackLayer.FIXED_MULTI_TURN)]["costs"] == "at most 3 calls an attempt"
+    )
+
+    # And a layer this library holds nothing for says that, rather than a zero a reader
+    # would take for a measurement. There is no cost beside it: nothing is going to be
+    # sent, so there is no price to state.
+    assert rows[str(AttackLayer.SINGLE_TURN)]["holds"] == "no cases in this library"
+    assert rows[str(AttackLayer.SINGLE_TURN)]["costs"] == ""
 
 
 def test_the_layers_and_constructions_the_next_run_sends_can_be_set() -> None:

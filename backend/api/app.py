@@ -3455,11 +3455,41 @@ class Tuning(BaseModel):
 
 
 class LayerSelected(BaseModel):
-    """One layer, whether the next run runs it, and what a run of it sends."""
+    """One layer, whether the next run runs it, what it sends, and what it holds."""
 
     layer: str
     selected: bool
     sends: str
+
+    holds: str
+    """How much of this layer there is to send, in the bench's own words.
+
+    A count of records for the two layers that send cases — the most any one family
+    holds of that layer's cases, which is `_cases_per_family`'s reading one level down
+    — and a count of episodes for the layer that sends none. Both are counts of things
+    the bench *has*, and neither is a rate: what a family measured is read off a
+    report beside its own denominator (ADR-0005), and nothing on this field may be
+    added to anything on another row.
+
+    Composed here rather than on `AttackLayer`, because it is a fact about the library
+    this bench is currently mounted on and not about the layer: a run whose library
+    holds four cases for a family and one whose library holds three send different
+    amounts under the same enum member.
+    """
+
+    costs: str
+    """What one attempt of this layer puts on the target's endpoint, in words.
+
+    One call for a single-turn case, one per turn for a fixed script (`Case.payload`
+    is one element per turn, ADR-0053), and turns rather than calls for the adaptive
+    layer, whose unit is an episode. *At most*, where the layer's cases do not all run
+    to the same length: the figure an operator is shown before they consent is the
+    worst case and never an average (ADR-0007, `budget.turn_ceiling`).
+
+    Empty where there is nothing to spend, which is a layer the mounted library holds
+    no cases for: a layer that will send nothing says so in `holds` and has no cost to
+    state.
+    """
 
 
 class ScheduleSelected(BaseModel):
@@ -3708,6 +3738,8 @@ def tuning(config: BenchConfig) -> Tuning:
                 layer=str(layer),
                 selected=layer in config.selection.layers,
                 sends=layer.stated(),
+                holds=_what_a_layer_holds(layer, config.cases, config.adaptive),
+                costs=_what_an_attempt_costs(layer, config.cases, config.adaptive),
             )
             for layer in AttackLayer
         ],
@@ -3809,6 +3841,84 @@ THE_STAND_IN_ATTACKER = (
     "spend on the bench's own inference. Test equipment, and the honest choice when "
     "what is under test is the plumbing rather than an attacker"
 )
+
+
+def _counted(count: int, noun: str) -> str:
+    """`count` of `noun`, pluralised by adding an `s`.
+
+    Every noun this file counts on a layer's row — case, call, turn, episode — takes
+    a plain `s`, so the helper is the rule and not a table. A noun that does not would
+    have to be worded at its call site rather than added here.
+    """
+    return f"{count} {noun}" if count == 1 else f"{count} {noun}s"
+
+
+def _layer_cases(cases: Sequence[Case], layer: AttackLayer) -> list[Case]:
+    """The mounted library's cases that the named layer is the one to send.
+
+    Read through `selection.layer_of` off each case's own construction, which is the
+    one join between a construction and the switch that turns it off — the same
+    mapping `transforms` carries on every row, for the same reason: a second answer to
+    *which layer sends this* would only have to disagree once.
+    """
+    return [case for case in cases if layer_of(case.transform) is layer]
+
+
+def _what_a_layer_holds(
+    layer: AttackLayer, cases: Sequence[Case], adaptive: AdaptiveBudget
+) -> str:
+    """How much of one layer there is to send, for the row that switches it.
+
+    Cases for the two layers that send them, and the most any one family holds rather
+    than a total or an average — `_cases_per_family`'s argument one level down: what a
+    reader is being told is what a full family of this layer is attacked with, and a
+    mean over families is a figure no family was ever attacked at (ADR-0005).
+
+    Episodes for the layer that holds no case at all, and *in each set* is load-bearing
+    on that row: `episodes_per_family` is the count inside one episode set, and each
+    schedule and each spelling the operator selects is a set of its own
+    (`budget.episode_count`, ADR-0096, ADR-0097). The multiplication belongs to the
+    estimate the operator confirms before a run starts and is deliberately not done
+    here — a figure on this screen that moved as switches moved would be an estimate
+    beside the switches, which is the thing ADR-0007 puts behind a confirmation.
+    """
+    if layer is AttackLayer.ADAPTIVE:
+        return (
+            f"{_counted(adaptive.episodes_per_family, 'episode')} a family in each set"
+        )
+    held = _layer_cases(cases, layer)
+    if not held:
+        return "no cases in this library"
+    return f"{_counted(_cases_per_family(held), 'case')} a family"
+
+
+def _what_an_attempt_costs(
+    layer: AttackLayer, cases: Sequence[Case], adaptive: AdaptiveBudget
+) -> str:
+    """What one attempt of one layer puts on the operator's own endpoint.
+
+    Calls for the layers that send cases, counted off `Case.payload`, which holds one
+    element per turn and therefore one call per element (ADR-0053). Turns for the
+    adaptive layer, because its unit is an episode and a turn is what an episode
+    spends (`budget.turn_ceiling`).
+
+    *At most*, where the layer's cases do not all run to the same length: this is the
+    figure an operator reads before they consent to a run, and the worst case is what
+    that reader is owed rather than a mean the run may exceed (ADR-0007).
+
+    Empty where the layer will send nothing, which is what a library holding no case
+    of it means: `holds` says there are none, and a cost stated beside that would be
+    the price of something that is not going to happen.
+    """
+    if layer is AttackLayer.ADAPTIVE:
+        return f"at most {_counted(adaptive.turns_per_episode, 'turn')} an episode"
+    held = _layer_cases(cases, layer)
+    if not held:
+        return ""
+    turns = [len(case.payload) for case in held]
+    if min(turns) == max(turns):
+        return f"{_counted(max(turns), 'call')} an attempt"
+    return f"at most {_counted(max(turns), 'call')} an attempt"
 
 
 def _cases_per_family(cases: Sequence[Case]) -> int:

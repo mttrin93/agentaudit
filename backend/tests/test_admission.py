@@ -160,6 +160,21 @@ def test_a_retrieved_case_faces_the_single_model_bar_for_a_reason_of_its_own() -
         assert query.strip() not in payloads
 
 
+def test_a_route_found_against_a_target_faces_the_single_model_bar() -> None:
+    # The fifth provenance, and the branch is its own rather than joined to the
+    # three that share its answer. ADR-0012's bar answers a defect in one loop:
+    # the attacker discovers on the three reference agents and the gate admits by
+    # testing separation of those same three. A route found against a user's
+    # target never ran in that loop — CONTEXT.md is explicit that a reference
+    # agent is not a target — so the selection pressure the second bar counters is
+    # not acting on it (ADR-0107).
+    assert bar_for(DiscoveredBy.ADAPTIVE_ON_TARGET) is AdmissionBar.SINGLE_MODEL
+
+    # And the narrowing is asserted from the other side: a route found against the
+    # reference agents keeps the second bar, because there the argument is intact.
+    assert bar_for(DiscoveredBy.ADAPTIVE) is AdmissionBar.CROSS_MODEL
+
+
 def test_an_adaptive_case_that_separates_only_on_the_model_it_was_found_on_is_rejected() -> (  # noqa: E501
     None
 ):

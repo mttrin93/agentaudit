@@ -253,20 +253,24 @@ class DiscoveredBy(StrEnum):
     provenance is free text cannot report what fraction of itself the attacker
     wrote (ADR-0012).
 
-    The member is not decoration. `AUTHORED` and `USER_GAP` face the single-model
-    bar of ADR-0003; `ADAPTIVE` faces the cross-model bar of ADR-0012, because the
-    attacker discovers on the same three agents the gate admits against and a route
-    fitted to that set has to prove itself on a model it was not fitted to. The
-    mapping lives in `backend/bench/admission.py` and is applied to the record here
-    by `Case.__post_init__`.
+    The member is not decoration. `AUTHORED`, `USER_GAP` and `RETRIEVED` face the
+    single-model bar of ADR-0003, and so does `ADAPTIVE_ON_TARGET` on a reason of
+    its own (ADR-0107); `ADAPTIVE` faces the cross-model bar of ADR-0012, because
+    the attacker discovers on the same three agents the gate admits against and a
+    route fitted to that set has to prove itself on a model it was not fitted to.
+    The mapping lives in `backend/bench/admission.py` and is applied to the record
+    here by `Case.__post_init__`.
     """
 
     AUTHORED = "authored"
     """Written by hand, against no measurement of these three agents."""
 
     ADAPTIVE = "adaptive"
-    """Found by the adaptive attacker and promoted through `propose_case`. Faces
-    the second bar."""
+    """Found by the adaptive attacker against the three **reference agents**, and
+    promoted through `propose_case`. Faces the second bar, because discovery and
+    admission ran on the same set (ADR-0012). A route the same attacker found
+    against a user's target is `ADAPTIVE_ON_TARGET` and faces the first
+    (ADR-0107)."""
 
     USER_GAP = "user_gap"
     """Written because a user reported an exposure the library did not cover. Not
@@ -288,6 +292,21 @@ class DiscoveredBy(StrEnum):
     the person who assigned its family, and no route by which the family could have
     been assigned by an instrument
     ([ADR-0046](../../docs/adr/0046-a-family-assignment-is-proposed-here-and-decided-by-a-person.md)).
+    """
+
+    ADAPTIVE_ON_TARGET = "adaptive_on_target"
+    """Found by the adaptive attacker against a **target** — a user's own agent.
+
+    Last in the set, on `RETRIEVED`'s terms: the provenance census prints in this
+    order and a member inserted above one already counted reorders a line readers
+    of two gate runs compare (`admission.LibraryProvenance.stated`).
+
+    Distinct from `ADAPTIVE` because the two were found in different loops and only
+    one of them is the loop ADR-0012's bar was written about, so it faces the
+    single-model rule of ADR-0003
+    ([ADR-0107](../../docs/adr/0107-a-route-found-against-a-customers-target-faces-the-single-model-bar.md)).
+    CONTEXT.md is what keeps the two names apart: a **target** is an agent belonging
+    to a user, and a **reference agent** is test equipment that never reaches one.
     """
 
 
@@ -2845,14 +2864,14 @@ def _retirement(
 def bar_for(discovered_by: DiscoveredBy) -> AdmissionBar:
     """Which bar this provenance has to clear.
 
-    The mapping ADR-0012 states, held here rather than in
+    The mapping ADR-0012 states, as ADR-0107 narrows it, held here rather than in
     `backend/bench/admission.py` for one reason: the record enforces it at load
     (`Case.__post_init__`), and the arithmetic that *applies* a bar reads the
     scorer, which reads this module. `admission.bar_for` is the public name for
     this function and the only one anything outside this module should call.
 
-    The match has no fallback branch on purpose: a fourth provenance must fail the
-    type check rather than acquire the weaker bar by default.
+    The match has no fallback branch on purpose: a provenance added later must fail
+    the type check rather than acquire the weaker bar by default.
     """
     match discovered_by:
         case DiscoveredBy.ADAPTIVE:
@@ -2869,4 +2888,14 @@ def bar_for(discovered_by: DiscoveredBy) -> AdmissionBar:
             # one of the two, and because it has a counter-argument to answer —
             # ADR-0047 decision 1 states it and `test_admission.py` asserts the fact
             # the answer rests on. #67's first gate run is where the claim is tested.
+            return AdmissionBar.SINGLE_MODEL
+        case DiscoveredBy.ADAPTIVE_ON_TARGET:
+            # The same answer on a fourth reason, and its own branch rather than
+            # joined above because it is a fourth reason and not a fourth name for
+            # one of the three. The three above were fitted to nothing this bench
+            # measures; this one was fitted to a target, which is not the thing it
+            # is graded against — so discovery and admission did not run on one
+            # set and ADR-0012's defect is not present. ADR-0107 decides it and
+            # records what is given up: model-dependence is no longer caught at
+            # admission for this population, only by the retirement signal.
             return AdmissionBar.SINGLE_MODEL

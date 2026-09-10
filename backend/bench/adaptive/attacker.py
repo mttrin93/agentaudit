@@ -34,6 +34,12 @@ the attacker still has something to say about what it found, and `propose_case` 
 the only route from this layer into anything scored. Ending the episode on the
 canary check itself would close that route at the exact moment it is worth taking.
 
+**And the route is filed on that step whether the attacker asks or not**, because
+whether a confirmed break is kept was a decision the model made badly in both
+directions (ADR-0106). What the step is for now is the description: the harness
+supplies the payload from the episode's own record and the prose stays the
+attacker's, `NO_DESCRIPTION_GIVEN` where it answered with nothing usable.
+
 **What the attacker never sees.** Every brief and every tool result goes through
 `Blinding.redact` on the way out, so no target name, url or construction label
 reaches the model (ADR-0011). The blinding is applied here, at the one place the
@@ -544,16 +550,16 @@ class _Episode:
                 "a proposed route needs a description of what you did. Nothing "
                 "was proposed"
             )
+        # Set after the empty-description return above and before the copy, so a
+        # model that answered with nothing usable still reaches `_file_the_break`:
+        # the flag records that a route was asked *and answered*, and an empty
+        # argument was neither (ADR-0106 §3).
+        self.filed_on_the_break = self.broken
         # A refusal from the record's own invariants, caught here and recorded.
         # The alternative is the one this replaces: it left `Case.__post_init__`,
         # left the layer, and took a paid-for scored run with it (#166, #167). The
         # catch is this one named type and no wider — a bug in the proposal path is
         # still a bug, on ADR-0050's discipline for the other instrument.
-        # Before the copy and after the empty-description return above, so a model
-        # that answered with nothing usable still reaches `_file_the_break` — the
-        # flag records that a route was *asked and answered*, and an empty argument
-        # was neither (ADR-0106 §3).
-        self.filed_on_the_break = self.broken
         try:
             proposal = proposed_from(
                 objective=self.objective.case,

@@ -42,7 +42,7 @@ from backend.bench.judge import (
     assess_finding,
 )
 from backend.bench.labels import Article, article_for
-from backend.bench.library import Case, Family
+from backend.bench.library import Case, DiscoveredBy, Family
 from backend.bench.narration import (
     BrokenInstrument,
     Narration,
@@ -161,6 +161,7 @@ def narrated(
             approve=CONFIRMING,
             adjudicator=ADJUDICATING,
             narrator=Narrator(assess=assess, remediate=remediate),
+            discovered_by=DiscoveredBy.ADAPTIVE,
         )
     return Narrated(result=result, judge=assess, remediation=remediate)
 
@@ -309,6 +310,7 @@ def test_a_run_made_with_no_narrative_instrument_explains_nothing_and_says_so(
             plant_nonce=reference.plant_nonce,
             approve=CONFIRMING,
             adjudicator=ADJUDICATING,
+            discovered_by=DiscoveredBy.ADAPTIVE,
         )
 
     [target_run] = result.target_runs
@@ -375,6 +377,7 @@ def test_the_article_column_is_the_same_whether_or_not_the_run_narrated(
             plant_nonce=reference.plant_nonce,
             approve=CONFIRMING,
             adjudicator=ADJUDICATING,
+            discovered_by=DiscoveredBy.ADAPTIVE,
         ).target_runs[0]
     assert silent.narrations is None
 
@@ -403,6 +406,7 @@ def test_the_document_of_a_target_that_succeeded_at_nothing_carries_the_column_t
             plant_nonce=reference.plant_nonce,
             approve=CONFIRMING,
             adjudicator=ADJUDICATING,
+            discovered_by=DiscoveredBy.ADAPTIVE,
         ).target_runs[0]
     assert silent.narrations is None
 
@@ -441,6 +445,7 @@ def test_the_four_readings_are_four_documents_and_every_one_of_them_is_signable(
             approve=CONFIRMING,
             adjudicator=ADJUDICATING,
             narrator=Narrator(assess=_truncated, remediate=remediating()),
+            discovered_by=DiscoveredBy.ADAPTIVE,
         ).target_runs
     assert isinstance(broken.narrations, NarrativeFailure), (
         "this run's judge did not break, so the comparison below is between two "
@@ -455,6 +460,7 @@ def test_the_four_readings_are_four_documents_and_every_one_of_them_is_signable(
             plant_nonce=reference.plant_nonce,
             approve=CONFIRMING,
             adjudicator=ADJUDICATING,
+            discovered_by=DiscoveredBy.ADAPTIVE,
         ).target_runs[0]
     assert silent.narrations is None
     explained = narrated(leakage_case).result.target_runs[0]
@@ -630,6 +636,7 @@ def test_a_truncated_narrative_is_the_fourth_reading_and_never_a_finding(
             approve=CONFIRMING,
             adjudicator=ADJUDICATING,
             narrator=Narrator(assess=_truncated, remediate=remediation),
+            discovered_by=DiscoveredBy.ADAPTIVE,
         )
 
     [target_run] = result.target_runs
@@ -713,6 +720,7 @@ def test_a_fix_that_cannot_be_read_discards_the_findings_written_before_it(
             approve=CONFIRMING,
             adjudicator=ADJUDICATING,
             narrator=Narrator(assess=explaining, remediate=failing_second),
+            discovered_by=DiscoveredBy.ADAPTIVE,
         ).target_runs
 
     reading = target_run.narrations
@@ -754,6 +762,7 @@ def test_a_fault_in_the_bench_is_not_a_broken_instrument(leakage_case: Case) -> 
                 approve=CONFIRMING,
                 adjudicator=ADJUDICATING,
                 narrator=Narrator(assess=raising, remediate=remediating()),
+                discovered_by=DiscoveredBy.ADAPTIVE,
             )
 
 
@@ -896,6 +905,7 @@ def test_a_run_declined_at_the_interrupt_calls_neither_narrative_instrument(
             ),
             adjudicator=ADJUDICATING,
             narrator=Narrator(assess=judge, remediate=remediation),
+            discovered_by=DiscoveredBy.ADAPTIVE,
         )
 
     assert not result.approval.proceeded
@@ -1106,6 +1116,7 @@ def test_the_printed_section_says_which_of_the_readings_this_run_was(
             plant_nonce=reference.plant_nonce,
             approve=CONFIRMING,
             adjudicator=ADJUDICATING,
+            discovered_by=DiscoveredBy.ADAPTIVE,
         ).target_runs
 
     assert "no narrative instrument" in findings_section(unexplained)
@@ -1140,6 +1151,7 @@ def test_the_printed_section_says_when_the_instruments_ran_and_failed(
             approve=CONFIRMING,
             adjudicator=ADJUDICATING,
             narrator=Narrator(assess=_truncated, remediate=remediation),
+            discovered_by=DiscoveredBy.ADAPTIVE,
         ).target_runs
     broken = target_run.narrations
     assert isinstance(broken, NarrativeFailure)

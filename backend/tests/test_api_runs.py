@@ -58,7 +58,13 @@ from backend.bench.completion import (
     TURNS_PER_EPISODE_ENV,
 )
 from backend.bench.contract import TargetConfig, TargetFailure
-from backend.bench.library import Case, Family, LibraryVersion, Precondition
+from backend.bench.library import (
+    Case,
+    DiscoveredBy,
+    Family,
+    LibraryVersion,
+    Precondition,
+)
 from backend.bench.registration import Attestation
 from backend.bench.rule import DECLARED_RULE
 from backend.bench.signing import (
@@ -1956,6 +1962,34 @@ def test_a_completed_run_reports_completion_and_where_its_report_is_served(
     assert body["transport"] is None
 
 
+# --- what each surface declares it is attacking ----------------------------------
+
+
+def test_a_customer_runs_route_is_filed_as_found_against_a_target() -> None:
+    """`POST /runs` attacks somebody's own agent, and says so at the call site.
+
+    A route found there faces the single-model bar, and the declaration is made
+    where the run is started rather than inferred downstream from a `TargetConfig`
+    that describes a reference agent and a user's agent alike (ADR-0107 §3).
+
+    A source assertion is the honest test here: the alternative is a live adaptive
+    run against a real target, and this repository does not spend a provider call
+    to assert a constant. The behavioural proof that the declaration reaches the
+    record is `test_adaptive_attacker.py`'s, which drives the thread on both
+    members.
+    """
+    assert (
+        "discovered_by=DiscoveredBy.ADAPTIVE_ON_TARGET"
+        in (API_DIR / "runs.py").read_text()
+    )
+
+    # And the reference-agent surfaces keep the other member, so the narrowing did
+    # not leak into the loop ADR-0012 was written about.
+    for surface in ("gate_runs.py", "pending_routes.py"):
+        source = (API_DIR / surface).read_text()
+        assert "discovered_by=DiscoveredBy.ADAPTIVE," in source
+
+
 # --- the seam the run state travels through --------------------------------------
 
 
@@ -1976,6 +2010,7 @@ def test_a_run_state_handed_in_is_the_one_the_run_fills() -> None:
         attestation=BENCH_ATTESTATION,
         budget=budget,
         run_state=state,
+        discovered_by=DiscoveredBy.ADAPTIVE,
     )
 
     assert result.run_state is state
@@ -1994,6 +2029,7 @@ def test_a_run_state_counting_against_another_ceiling_is_refused() -> None:
             attestation=BENCH_ATTESTATION,
             budget=budget,
             run_state=RunState(budget=elsewhere, library=LibraryVersion.of(cases)),
+            discovered_by=DiscoveredBy.ADAPTIVE,
         )
 
 

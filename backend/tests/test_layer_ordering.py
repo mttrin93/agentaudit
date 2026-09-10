@@ -24,7 +24,7 @@ import pytest
 from backend.api.run_config import BenchConfig, plan_for
 from backend.bench.adaptive.layer import objectives_for
 from backend.bench.calibration import CalibrationResult, run_calibration
-from backend.bench.library import AnyFamily, Case, Family, Transform
+from backend.bench.library import AnyFamily, Case, DiscoveredBy, Family, Transform
 from backend.bench.selection import (
     EVERY_CONSTRUCTION,
     AttackLayer,
@@ -85,6 +85,7 @@ def calibrate_all_three(case: Case) -> CalibrationResult:
             attestation=BENCH_ATTESTATION,
             plant_nonce=references.plant_nonce,
             approve=CONFIRMING,
+            discovered_by=DiscoveredBy.ADAPTIVE,
         )
 
 
@@ -160,6 +161,7 @@ def test_the_layer_an_operator_switched_off_opens_no_episode_at_all(
             plant_nonce=references.plant_nonce,
             approve=CONFIRMING,
             selection=scored_only,
+            discovered_by=DiscoveredBy.ADAPTIVE,
         )
 
     assert episodes_of(result) == []

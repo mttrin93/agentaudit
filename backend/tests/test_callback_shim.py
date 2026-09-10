@@ -32,7 +32,7 @@ from backend.bench.contract import (
     ToolTrace,
     send_message,
 )
-from backend.bench.library import Case, Family
+from backend.bench.library import Case, DiscoveredBy, Family
 from backend.bench.registration import ECHO_PROBE
 from backend.bench.rule import DECLARED_RULE
 from backend.bench.shim import (
@@ -438,4 +438,5 @@ def _calibrate(
         plant_nonce=None if planter is not None else plant,
         planters={} if planter is None else {target.name: planter},
         approve=CONFIRMING,
+        discovered_by=DiscoveredBy.ADAPTIVE,
     )

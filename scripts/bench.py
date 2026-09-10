@@ -96,6 +96,7 @@ from backend.bench.fix_standing import FixStanding
 from backend.bench.library import (
     AnyFamily,
     Case,
+    DiscoveredBy,
     Family,
     LibraryVersion,
     Plant,
@@ -588,6 +589,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 # to paste one, and `WAIVED` above says what that costs the reading.
                 proof_waived=waived,
                 trace=trace,
+                discovered_by=DiscoveredBy.ADAPTIVE_ON_TARGET,
             )
         except BudgetExceeded as abort:
             print(f"\nRun aborted on budget: {abort}")

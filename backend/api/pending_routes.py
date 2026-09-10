@@ -79,7 +79,7 @@ from backend.bench.decided import RouteKey, criterion_of
 from backend.bench.entry import AlreadyInTheLibrary, Entered, Entry, enter
 from backend.bench.evaluator import Verdict
 from backend.bench.lease import LibraryBusy, held_by, holding_the_library
-from backend.bench.library import AdmissionReading, Case, VerdictClass
+from backend.bench.library import AdmissionReading, Case, DiscoveredBy, VerdictClass
 from backend.bench.pending import (
     PENDING_ROUTES,
     AwaitingDecision,
@@ -915,6 +915,7 @@ def _measuring(
                         adjudicator_model=adjudicator_model,
                         reference_model=model,
                     ),
+                    discovered_by=DiscoveredBy.ADAPTIVE,
                 )
             except BudgetExceeded:
                 return Unmeasured.ABORTED

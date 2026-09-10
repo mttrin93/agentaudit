@@ -141,7 +141,7 @@ from backend.bench.adaptive.attacker import AttackerCompletion
 from backend.bench.calibration import CalibrationResult, run_calibration
 from backend.bench.contract import TargetConfig, TargetUnreachable
 from backend.bench.elective import ElectiveSelection
-from backend.bench.library import Family, LibraryVersion
+from backend.bench.library import DiscoveredBy, Family, LibraryVersion
 from backend.bench.narration import NarrativeFailure
 from backend.bench.nonce import issue_nonce
 from backend.bench.payload import GateCitation
@@ -818,6 +818,7 @@ def _run(record: RunRecord, config: BenchConfig, pending: PendingApproval) -> No
             # inside the graph: the record and the checkpoint have to agree, or the
             # id a restart looks the halt up by names nothing (ADR-0034).
             thread_id=record.thread_id,
+            discovered_by=DiscoveredBy.ADAPTIVE_ON_TARGET,
         )
     # Every one of the three ways out below files first. A run the ceiling cut
     # short is the run whose attacker was most likely still finding things, and

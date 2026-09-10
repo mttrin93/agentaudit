@@ -69,7 +69,7 @@ from backend.bench.completion import (
     attacker_completion_for,
 )
 from backend.bench.contract import TargetConfig
-from backend.bench.library import AnyFamily, Case, Family, LibraryVersion
+from backend.bench.library import AnyFamily, Case, DiscoveredBy, Family, LibraryVersion
 from backend.bench.measurability import contradicted_by_the_reply
 from backend.bench.nonce import issue_nonce
 from backend.bench.planting import (
@@ -181,7 +181,10 @@ def attackable(
         applicable(cases, target), target, registration.probe
     )
     return registration, AttackableTarget(
-        target=target, canary=registration.nonce, withdrawn=frozenset(withdrawn)
+        target=target,
+        canary=registration.nonce,
+        withdrawn=frozenset(withdrawn),
+        discovered_by=DiscoveredBy.ADAPTIVE,
     )
 
 

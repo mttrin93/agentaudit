@@ -111,7 +111,7 @@ from backend.bench.entry import Entry, enter
 from backend.bench.gate import NotAGateRun, read_gate
 from backend.bench.goldset import load_gold_sets, measure_reliability
 from backend.bench.lease import LibraryBusy
-from backend.bench.library import Case, Family
+from backend.bench.library import Case, DiscoveredBy, Family
 from backend.bench.registration import Attestation
 from backend.bench.retirement import live_library
 from backend.bench.rule import DECLARED_RULE
@@ -521,6 +521,7 @@ def calibrate_on(
                     cases=list(cases), targets=targets, price=price_per_call
                 ),
                 trace=traced_run(reference_model=str(model)),
+                discovered_by=DiscoveredBy.ADAPTIVE,
             )
         except BudgetExceeded as abort:
             print(f"\nRun aborted on budget: {abort}")

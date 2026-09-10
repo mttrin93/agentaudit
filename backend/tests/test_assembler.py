@@ -42,7 +42,13 @@ from backend.bench.assembler import (
     reported_episodes,
 )
 from backend.bench.contract import DeclaredControl
-from backend.bench.library import Case, ExternalId, Family, VerdictClass
+from backend.bench.library import (
+    Case,
+    DiscoveredBy,
+    ExternalId,
+    Family,
+    VerdictClass,
+)
 from backend.bench.measurability import NotMeasurable
 from backend.bench.reproducibility import Reproducibility
 from backend.bench.scorer import (
@@ -610,4 +616,5 @@ def a_proposed_route(objective: Case, description: str) -> ProposedRoute:
         payload="the probe that actually ran",
         description=description,
         broken=True,
+        discovered_by=DiscoveredBy.ADAPTIVE,
     )

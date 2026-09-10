@@ -72,6 +72,7 @@ from backend.bench.library import (
     ELECTIVE_DIRECTORY,
     AdmissionReading,
     Case,
+    DiscoveredBy,
     ElectiveFamily,
     VerdictClass,
     bar_for,
@@ -380,6 +381,7 @@ def measure_on(
                 trace=traced_run(
                     adjudicator_model=adjudicator_model, reference_model=model
                 ),
+                discovered_by=DiscoveredBy.ADAPTIVE,
             )
         except BudgetExceeded as abort:
             print(f"\nRun aborted on budget: {abort}")

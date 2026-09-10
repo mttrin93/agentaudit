@@ -34,7 +34,7 @@ from backend.bench.adaptive.precedent import Precedent
 from backend.bench.adaptive.proposal import ProposedRoute, proposed_from
 from backend.bench.calibration import CalibrationResult, run_calibration
 from backend.bench.decided import DecidedRoute, RouteKey
-from backend.bench.library import Case, Family
+from backend.bench.library import Case, DiscoveredBy, Family
 from backend.bench.pending import (
     PENDING_ROUTES,
     AwaitingDecision,
@@ -97,6 +97,7 @@ def a_route(
         description=description,
         today=RAN_ON,
         broken=True,
+        discovered_by=DiscoveredBy.ADAPTIVE,
     )
 
 

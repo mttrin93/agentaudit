@@ -26,7 +26,7 @@ import pytest
 from backend.bench import pending
 from backend.bench.adaptive.proposal import ProposedRoute, proposed_from
 from backend.bench.decided import DECISION_NAMESPACE, RouteKey, criterion_of
-from backend.bench.library import Case, Family
+from backend.bench.library import Case, DiscoveredBy, Family
 from backend.bench.pending import (
     DEFAULT_PENDING_PATH,
     PENDING_DIRECTORY,
@@ -70,6 +70,7 @@ def a_route(
         description=description,
         today=FILED_ON,
         broken=True,
+        discovered_by=DiscoveredBy.ADAPTIVE,
     )
 
 

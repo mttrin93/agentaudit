@@ -139,7 +139,7 @@ from backend.bench.gate_record import (
 )
 from backend.bench.goldset import load_gold_sets, measure_reliability
 from backend.bench.lease import LibraryBusy, holding_the_library
-from backend.bench.library import ELECTIVE_DIRECTORY, Case, ElectiveFamily
+from backend.bench.library import ELECTIVE_DIRECTORY, Case, DiscoveredBy, ElectiveFamily
 from backend.bench.payload import DeclaredModels
 from backend.bench.retirement import live_library, readings_of, store
 from backend.bench.rule import DECLARED_RULE
@@ -428,6 +428,7 @@ def run_the_gate(args: argparse.Namespace) -> int:
                     attacker_model=args.attacker_model,
                     reference_model=args.model,
                 ),
+                discovered_by=DiscoveredBy.ADAPTIVE,
             )
         except BudgetExceeded as abort:
             print(f"\nRun aborted on budget: {abort}")

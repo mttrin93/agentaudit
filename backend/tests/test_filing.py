@@ -40,7 +40,7 @@ from backend.bench.adaptive.scripted import SCRIPTED_ATTACKER
 from backend.bench.adaptive.tools import retrieve_precedent
 from backend.bench.calibration import CalibrationResult, TargetRun, run_calibration
 from backend.bench.filing import Filing, file_precedent
-from backend.bench.library import Case, Family, VerdictClass
+from backend.bench.library import Case, DiscoveredBy, Family, VerdictClass
 from backend.bench.narration import Narration, Narrator, narrate
 from backend.tests.conftest import (
     ADJUDICATING,
@@ -359,6 +359,7 @@ def narrated_run(
             adjudicator=ADJUDICATING,
             narrator=Narrator(assess=judging(), remediate=remediating()),
             attacker=attacker,
+            discovered_by=DiscoveredBy.ADAPTIVE,
         )
 
 
@@ -469,6 +470,7 @@ def test_a_run_with_nothing_to_file_says_that_rather_than_printing_an_empty_list
             plant_nonce=reference.plant_nonce,
             approve=CONFIRMING,
             adjudicator=ADJUDICATING,
+            discovered_by=DiscoveredBy.ADAPTIVE,
         )
 
     assert result.filing == Filing()

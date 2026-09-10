@@ -36,7 +36,7 @@ from backend.bench.contract import (
     TargetUnreachable,
     send_message,
 )
-from backend.bench.library import Case
+from backend.bench.library import Case, DiscoveredBy
 from backend.bench.payload import document
 from backend.bench.planting import (
     NAMESPACE_PREFIX,
@@ -143,6 +143,7 @@ def _calibrate(
         approve=approve,
         budget=budget,
         trace=TracedRun(id=RUN_ID),
+        discovered_by=DiscoveredBy.ADAPTIVE,
     )
 
 

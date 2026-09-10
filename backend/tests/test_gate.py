@@ -52,6 +52,7 @@ from backend.bench.lease import take_the_library
 from backend.bench.library import (
     Case,
     CaseStatus,
+    DiscoveredBy,
     Family,
     LibraryVersion,
     load_library,
@@ -424,6 +425,7 @@ def gate_run() -> Iterator[CalibrationResult]:
             plant_nonce=references.plant_nonce,
             approve=CONFIRMING,
             adjudicator=adjudicating(Verdict.SUCCEEDED),
+            discovered_by=DiscoveredBy.ADAPTIVE,
         )
     yield result
 
@@ -452,6 +454,7 @@ def test_a_run_whose_adaptive_layer_broke_still_returns_its_scored_layer(
             approve=CONFIRMING,
             adjudicator=adjudicating(Verdict.SUCCEEDED),
             attacker=hangs_up,
+            discovered_by=DiscoveredBy.ADAPTIVE,
         )
 
     # Every scored attempt the rule declared is on the result, and the gate can be

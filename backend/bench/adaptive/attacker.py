@@ -89,7 +89,7 @@ from backend.bench.adaptive.tools import (
 from backend.bench.adaptive.tree import BranchSchedule, Continuation, EpisodeTree
 from backend.bench.contract import TargetConfig, Transcript
 from backend.bench.evaluator import Verdict
-from backend.bench.library import AnyFamily, Case, Transform
+from backend.bench.library import AnyFamily, Case, DiscoveredBy, Transform
 from backend.bench.measurability import checkable
 from backend.bench.transforms import spelled
 from backend.graph.budget import BudgetExceeded
@@ -198,6 +198,8 @@ def run_episode(
     run_state: RunState,
     attacker: AttackerCompletion,
     blinding: Blinding,
+    *,
+    discovered_by: DiscoveredBy,
     budget: AdaptiveBudget = DECLARED_ADAPTIVE_BUDGET,
     precedent: PrecedentStore = DURABLE_PRECEDENT,
     schedule: BranchSchedule = BranchSchedule.LINEAR,
@@ -225,6 +227,13 @@ def run_episode(
     same reason: every probe of it is respelled by that member as it goes on the
     wire, the transcript records what was actually sent, and a mixture inside one
     episode would be a route nobody could reproduce from the record (ADR-0097).
+
+    `discovered_by` is the target's own declaration of which loop this episode runs
+    in, carried down to every route the episode files and re-decided nowhere: an
+    episode that read it off `target` would be reading a type that describes a
+    reference agent and a user's agent alike (ADR-0107 §3). Keyword-only and
+    required, so a caller that has not said which loop it is in does not get a bar
+    by omission.
     """
     return _Episode(
         target=target,
@@ -232,6 +241,7 @@ def run_episode(
         run_state=run_state,
         attacker=attacker,
         blinding=blinding,
+        discovered_by=discovered_by,
         budget=budget,
         precedent=precedent,
         schedule=schedule,
@@ -255,6 +265,7 @@ class _Episode:
         run_state: RunState,
         attacker: AttackerCompletion,
         blinding: Blinding,
+        discovered_by: DiscoveredBy,
         budget: AdaptiveBudget,
         precedent: PrecedentStore,
         schedule: BranchSchedule = BranchSchedule.LINEAR,
@@ -267,6 +278,13 @@ class _Episode:
         self.blinding = blinding
         self.budget = budget
         self.precedent = precedent
+        self.discovered_by = discovered_by
+        """Which loop this episode is running in, as its target declared it.
+
+        Held for the whole episode and read by `_propose` alone: the provenance
+        every route filed here carries, and so the admission bar each will face
+        (ADR-0107 §3). Nothing between the target and the record decides it again.
+        """
 
         self.tools = tools_against(target)
         self.started_at = time.monotonic()
@@ -577,6 +595,10 @@ class _Episode:
                 # an unbroken episode is declined here, on the route the other two
                 # refusals take (ADR-0106 §2, ADR-0004).
                 broken=self.broken,
+                # The target's declaration, carried down the episode: what this
+                # route was found against, and never a reading of the target
+                # itself (ADR-0107 §3).
+                discovered_by=self.discovered_by,
             )
         except RouteNotFilable as declined:
             self.declined.append(str(declined))

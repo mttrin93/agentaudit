@@ -574,6 +574,7 @@ def _a_proposal(objective: Case) -> ProposedRoute:
         payload="the probe that actually ran",
         description="a route worth promoting",
         broken=True,
+        discovered_by=DiscoveredBy.ADAPTIVE,
     )
 
 
@@ -965,6 +966,7 @@ def _an_admitted_promotion(objective: Case) -> Promotion:
         payload="the probe that actually ran",
         description="a route worth promoting",
         broken=True,
+        discovered_by=DiscoveredBy.ADAPTIVE,
     )
     readings = [
         AdmissionReading(model=model, attempts=10, hardened=0, weak=5, trivial=10)

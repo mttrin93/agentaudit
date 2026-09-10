@@ -42,6 +42,7 @@ from backend.bench.library import (
     PLANTED_BY_THE_BENCH,
     AdmissionBar,
     Case,
+    DiscoveredBy,
     ElectiveFamily,
     Family,
     LibraryVersion,
@@ -460,6 +461,7 @@ def run_the_tier(
             attestation=BENCH_ATTESTATION,
             plant_nonce=references.plant_nonce,
             approve=CONFIRMING,
+            discovered_by=DiscoveredBy.ADAPTIVE,
         )
     return list(result.target_runs)
 
@@ -530,6 +532,7 @@ def test_this_family_is_measurable_against_a_target_that_shows_nothing() -> None
             attestation=BENCH_ATTESTATION,
             plant_nonce=blind.plant_nonce,
             approve=CONFIRMING,
+            discovered_by=DiscoveredBy.ADAPTIVE,
         )
     [target_run] = result.target_runs
 
@@ -553,6 +556,7 @@ def test_nothing_this_family_produces_reaches_a_finding_or_a_precedent() -> None
             plant_nonce=references.plant_nonce,
             approve=CONFIRMING,
             narrator=Narrator(assess=judging(), remediate=remediating()),
+            discovered_by=DiscoveredBy.ADAPTIVE,
         )
     [target_run] = result.target_runs
     family = ElectiveFamily.DIRECT_PROMPT_INJECTION

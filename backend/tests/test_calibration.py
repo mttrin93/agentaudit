@@ -16,7 +16,7 @@ import pytest
 
 from backend.bench.calibration import run_calibration
 from backend.bench.evaluator import Verdict
-from backend.bench.library import Case, Family
+from backend.bench.library import Case, DiscoveredBy, Family
 from backend.bench.rule import DECLARED_RULE
 from backend.bench.usage import ModelUsage, UsageLedger
 from backend.graph.budget import Layer
@@ -155,6 +155,7 @@ def test_a_rate_belongs_to_one_family_and_is_never_pooled_across_them(
             attestation=BENCH_ATTESTATION,
             plant_nonce=reference.plant_nonce,
             approve=CONFIRMING,
+            discovered_by=DiscoveredBy.ADAPTIVE,
         )
 
     [target_run] = result.target_runs
@@ -252,6 +253,7 @@ def test_a_ledger_that_already_holds_calls_belongs_to_another_run_and_is_refused
                 plant_nonce=reference.plant_nonce,
                 approve=CONFIRMING,
                 usage=used,
+                discovered_by=DiscoveredBy.ADAPTIVE,
             )
 
     assert "already holds model calls" in str(refused.value)

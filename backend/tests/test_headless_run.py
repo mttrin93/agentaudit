@@ -14,7 +14,7 @@ from backend.bench.calibration import TargetRun, run_calibration
 from backend.bench.contract import Transcript
 from backend.bench.evaluator import Verdict
 from backend.bench.fix_standing import FixStandingReading
-from backend.bench.library import Case, Family
+from backend.bench.library import Case, DiscoveredBy, Family
 from backend.bench.registration import AttestationRecord, Registration
 from backend.bench.rule import DECLARED_RULE
 from backend.bench.shim import serve_callback
@@ -749,6 +749,7 @@ def test_a_run_declined_at_the_ceiling_records_no_attempt_at_all() -> None:
         attestation=BENCH_ATTESTATION,
         approve=ceiling_approval(ACTOR, over),
         budget=RunBudget.declare(cases=cases, targets=targets),
+        discovered_by=DiscoveredBy.ADAPTIVE,
     )
 
     assert not result.approval.proceeded

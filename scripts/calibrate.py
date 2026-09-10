@@ -59,7 +59,7 @@ from backend.bench.completion import (
     completion_for,
     narrator_for,
 )
-from backend.bench.library import Case, Family, VerdictClass
+from backend.bench.library import Case, DiscoveredBy, Family, VerdictClass
 from backend.bench.rule import DECLARED_RULE
 from backend.bench.scorer import discrimination
 from backend.bench.usage import UsageLedger
@@ -237,6 +237,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     attacker_model=args.attacker_model,
                     reference_model=args.model,
                 ),
+                discovered_by=DiscoveredBy.ADAPTIVE,
             )
         except BudgetExceeded as abort:
             print(f"\nRun aborted on budget: {abort}")

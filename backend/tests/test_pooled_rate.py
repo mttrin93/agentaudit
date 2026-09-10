@@ -42,7 +42,7 @@ from backend.bench.calibration import TargetRun, run_calibration
 from backend.bench.contract import Transcript
 from backend.bench.evaluator import Verdict
 from backend.bench.gate import stated_outcome
-from backend.bench.library import Case, Family, Transform, VerdictClass
+from backend.bench.library import Case, DiscoveredBy, Family, Transform, VerdictClass
 from backend.bench.payload import TargetPayload, document
 from backend.bench.registration import AttestationRecord, Registration
 from backend.bench.rendering import render
@@ -94,6 +94,7 @@ def one_target_run(cases: list[Case]) -> TargetRun:
             attestation=BENCH_ATTESTATION,
             plant_nonce=reference.plant_nonce,
             approve=CONFIRMING,
+            discovered_by=DiscoveredBy.ADAPTIVE,
         )
     [target_run] = result.target_runs
     return target_run

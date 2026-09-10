@@ -57,6 +57,7 @@ from backend.bench.library import (
     AdmissionBar,
     AdmissionReading,
     Case,
+    DiscoveredBy,
     Family,
     Precondition,
     SuccessCondition,
@@ -124,6 +125,7 @@ def a_route(
         description=description,
         today=date(2026, 8, 18),
         broken=True,
+        discovered_by=DiscoveredBy.ADAPTIVE,
     )
 
 
@@ -472,6 +474,7 @@ def test_no_stored_record_carries_payload_text_or_a_target_identity(
         description="the attacker's own prose about what it did",
         today=DECIDED_ON,
         broken=True,
+        discovered_by=DiscoveredBy.ADAPTIVE,
     )
     memory.remember(
         decided_by_the_bar(proposal, SEPARATING, FLAT), models=MODELS, today=DECIDED_ON

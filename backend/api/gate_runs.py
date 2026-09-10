@@ -115,7 +115,7 @@ from backend.bench.contract import TargetUnreachable
 from backend.bench.gate import NotAGateRun, read_gate
 from backend.bench.goldset import load_gold_sets, measure_reliability
 from backend.bench.lease import LibraryBusy, held_by, holding_the_library
-from backend.bench.library import LibraryVersion
+from backend.bench.library import DiscoveredBy, LibraryVersion
 from backend.bench.registration import Attestation
 from backend.bench.retirement import (
     live_library,
@@ -429,6 +429,7 @@ def _decide(
                 attacker_model=config.report.models.attacking,
                 reference_model=config.report.models.calibration,
             ),
+            discovered_by=DiscoveredBy.ADAPTIVE,
         )
     except BudgetExceeded as abort:
         record.settle(

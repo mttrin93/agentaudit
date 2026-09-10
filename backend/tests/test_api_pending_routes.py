@@ -410,6 +410,7 @@ def a_route(
         description=description,
         today=FILED_ON,
         broken=True,
+        discovered_by=DiscoveredBy.ADAPTIVE,
     )
 
 

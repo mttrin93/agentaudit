@@ -26,7 +26,7 @@ from backend.bench.applicability import (
     skipped_cases,
 )
 from backend.bench.calibration import TargetRun, run_calibration
-from backend.bench.library import Case, Family
+from backend.bench.library import Case, DiscoveredBy, Family
 from backend.tests.conftest import (
     ADJUDICATING,
     BENCH_ATTESTATION,
@@ -107,6 +107,7 @@ def test_no_attempt_is_spent_on_a_case_the_target_is_outside(
             plant_nonce=references.plant_nonce,
             approve=CONFIRMING,
             adjudicator=ADJUDICATING,
+            discovered_by=DiscoveredBy.ADAPTIVE,
         )
 
     [target_run] = result.target_runs
@@ -137,6 +138,7 @@ def test_a_skipped_family_is_not_reported_not_measurable(library: list[Case]) ->
             plant_nonce=references.plant_nonce,
             approve=CONFIRMING,
             adjudicator=ADJUDICATING,
+            discovered_by=DiscoveredBy.ADAPTIVE,
         )
 
     [target_run] = result.target_runs
@@ -160,6 +162,7 @@ def test_a_run_may_not_report_a_case_as_skipped_and_run_it_anyway(
             plant_nonce=references.plant_nonce,
             approve=CONFIRMING,
             adjudicator=ADJUDICATING,
+            discovered_by=DiscoveredBy.ADAPTIVE,
         )
 
     [target_run] = result.target_runs
@@ -194,6 +197,7 @@ def test_a_family_with_one_inapplicable_case_still_reports_a_rate(
             plant_nonce=references.plant_nonce,
             approve=CONFIRMING,
             adjudicator=ADJUDICATING,
+            discovered_by=DiscoveredBy.ADAPTIVE,
         )
 
     [target_run] = result.target_runs

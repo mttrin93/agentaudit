@@ -18,6 +18,7 @@ import type {
   Attesting,
   EstimateView,
   MeasurementStatement,
+  ModelBar,
   ProgressRow,
 } from './pending'
 import { ADMITTED } from './pending'
@@ -229,11 +230,13 @@ export function TheMeasurement({
   status,
   statement,
   rows,
+  bars,
   lines,
 }: {
   status: string
   statement: string
   rows: ProgressRow[]
+  bars: ModelBar[]
   lines: string[]
 }) {
   return (
@@ -271,6 +274,28 @@ export function TheMeasurement({
           <ul className="names">
             {lines.map((line, at) => (
               <li key={`${at}-${line}`}>{line}</li>
+            ))}
+          </ul>
+        </>
+      ) : null}
+      {bars.length ? (
+        <>
+          <h3>How far each model has got</h3>
+          <ul className="model-passes">
+            {bars.map((bar) => (
+              <li className={`model-pass ${bar.state}`} key={bar.model}>
+                <p className="model-name">
+                  <span className="name">{bar.model}</span>
+                  <span className="count">
+                    {bar.attempted} / {bar.of}
+                  </span>
+                </p>
+                {/* The element and not a div of a computed width: the browser draws
+                    the share from the two counts, so no percentage is written down
+                    for the figure scan in `pending.test.ts` to find. */}
+                <progress value={bar.attempted} max={bar.of} />
+                <p className="aside">{bar.reading}</p>
+              </li>
             ))}
           </ul>
         </>

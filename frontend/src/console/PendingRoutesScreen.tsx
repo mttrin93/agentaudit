@@ -30,7 +30,7 @@ import {
   TheMeasurement,
 } from './PendingDeciding'
 import { usePendingRoutes } from './usePendingRoutes'
-import { measurementEstimateView, progressRows } from './pending'
+import { measurementEstimateView, modelBars, progressRows } from './pending'
 import { useArrivalFocus, useScreenTitle } from './announce'
 import { PENDING_ROUTES } from './rail'
 
@@ -161,6 +161,7 @@ export function PendingRoutesScreen() {
           status={reading.status}
           statement={reading.statement}
           rows={progressRows(reading)}
+          bars={modelBars(reading)}
           lines={reading.lines}
         />
       ) : null}

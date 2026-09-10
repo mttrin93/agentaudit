@@ -1578,3 +1578,30 @@ def test_the_reading_carries_one_pass_per_model_with_its_attempt_counts(
             "a measurement that finished made every attempt its rule asked for"
         )
         assert one["state"] == "measured"
+
+
+def test_a_pass_that_did_not_happen_is_not_drawn_as_one_still_filling(
+    cases_dir: Path, leakage_case: Case
+) -> None:
+    """The second model's equipment will not serve, so its pass never runs.
+
+    The distinction the four states exist for: the first model's pass happened and
+    keeps its counts, and the second is `unmeasured` rather than left `measuring` on
+    a screen nothing is going to advance. A bar that stayed measuring would report a
+    refusal as a wait.
+    """
+    record = filed(a_route(leakage_case))
+    served = Served()
+
+    with a_bench(cases_dir, served=served, agents=agents_on(served, broken=SECOND)) as (
+        deciding
+    ):
+        reading = answered(deciding, [record.route.filed_under])
+
+    passes = {one["model"]: one for one in reading["passes"]}
+    assert passes[FIRST]["state"] == "measured"
+    assert passes[FIRST]["attempted"] == passes[FIRST]["of"] > 0, (
+        "the first model's pass ran, and a pass that ran keeps its counts"
+    )
+    assert passes[SECOND]["state"] == "unmeasured"
+    assert passes[SECOND]["attempted"] == 0, "nothing was sent on the second model"

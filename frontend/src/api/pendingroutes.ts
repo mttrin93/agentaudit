@@ -177,6 +177,16 @@ export interface RouteProgressRow {
  * once, by the request that created the record, and a second copy served from a
  * progress route is a second thing that could disagree with what was confirmed.
  */
+/** One model's pass over the selected routes, and how far into it the run is. */
+export interface ModelPassRow {
+  model: string
+  /** `waiting`, `measuring`, `measured` or `unmeasured` — the pass that did not
+   * happen is its own state and not an empty one. */
+  state: string
+  attempted: number
+  of: number
+}
+
 export interface MeasurementReading {
   measurement_id: string
   status: string
@@ -185,6 +195,8 @@ export interface MeasurementReading {
   models: string[]
   library: string
   routes: RouteProgressRow[]
+  /** One pass per model, in the order they are measured. */
+  passes: ModelPassRow[]
   /** The bar's own prose, in the order it produced it. A run at a terminal prints
    * these; this surface has no terminal, so they are served. */
   lines: string[]

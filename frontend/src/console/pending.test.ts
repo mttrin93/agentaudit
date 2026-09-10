@@ -37,6 +37,7 @@ import {
   measurementEstimateView,
   measurementRequest,
   nothingAttested,
+  modelBars,
   progressRows,
   queueRows,
   queueView,
@@ -335,6 +336,7 @@ describe('no figure on this page is a rate, an interval, a band or a D', () => {
       ...said(queueView(aQueue(), aReading())),
       ...said(measurementEstimateView(anEstimate())),
       ...said(progressRows(aReading())),
+      ...said(modelBars(aReading())),
       ...said(theEmptyQueue()),
     ]
 
@@ -400,6 +402,10 @@ function aReading(over: Partial<MeasurementReading> = {}): MeasurementReading {
         reason: '',
         entered_as: '',
       },
+    ],
+    passes: [
+      { model: 'model-one', state: 'measured', attempted: 30, of: 30 },
+      { model: 'model-two', state: 'measuring', attempted: 12, of: 30 },
     ],
     lines: ['consulted the admission memory: nothing held for this pair'],
     ...over,
@@ -477,3 +483,38 @@ function counted(value: unknown, name = ''): [string, number][] {
   }
   return []
 }
+
+describe('one bar per model, and it says how far into that model the run is', () => {
+  it('carries each pass in the order the models are measured', () => {
+    const bars = modelBars(aReading())
+
+    expect(bars.map((bar) => bar.model)).toEqual(['model-one', 'model-two'])
+    expect(bars[0].attempted).toBe(30)
+    expect(bars[0].of).toBe(30)
+    expect(bars[1].attempted).toBe(12)
+  })
+
+  it('says in words which of the four states a pass is in', () => {
+    // Never by length alone: a bar sitting at nothing is a pass waiting to be paid
+    // for or a pass that will never run, and the two are not the same fact
+    // (`ModelPassState`). The word is what tells them apart.
+    const bars = modelBars(
+      aReading({
+        passes: [
+          { model: 'model-one', state: 'waiting', attempted: 0, of: 30 },
+          { model: 'model-two', state: 'unmeasured', attempted: 0, of: 30 },
+        ],
+      })
+    )
+
+    expect(bars[0].reading).not.toBe(bars[1].reading)
+    expect(bars[0].reading).toMatch(/wait/i)
+    expect(bars[1].reading).toMatch(/not run|did not/i)
+  })
+
+  it('is empty for a measurement whose record declares no pass', () => {
+    // A record from before this field existed, and a halted measurement that has
+    // declared none yet: neither is a screen drawing two bars at nothing.
+    expect(modelBars(aReading({ passes: [] }))).toEqual([])
+  })
+})

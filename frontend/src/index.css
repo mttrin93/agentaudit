@@ -2203,6 +2203,97 @@ code {
 }
 
 /*
+ * One model's pass: the model, its two counts, and how far into it the run is.
+ *
+ * The row `.family-bar` is, answering the other question this app's bars answer — a
+ * gate run's six are families against three agents, and these two are the models the
+ * admission bar walks one at a time. So the name line is shared and only the mark
+ * differs: a native `progress` rather than a track of segments, because the share
+ * here is one length out of one denominator and the browser draws that from the two
+ * counts without a percentage ever being written down (`pending.ts`).
+ */
+.model-passes {
+  margin: 0 0 1rem;
+  padding: 0;
+  list-style: none;
+}
+
+.model-pass {
+  margin-bottom: 0.9rem;
+}
+
+.model-pass .model-name {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.8rem;
+  margin: 0 0 0.3rem;
+  font-size: 0.85rem;
+}
+
+.model-pass .model-name .name {
+  /* The model id as the record spells it, so mono — this one *is* an identifier,
+   * which is the case `.family-name .name` is the other side of. */
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  overflow-wrap: anywhere;
+}
+
+.model-pass .model-name .count {
+  color: var(--quiet);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.model-pass .aside {
+  margin: 0.3rem 0 0;
+  font-size: 0.76rem;
+  color: var(--quiet);
+}
+
+/* The mark itself, at the track's own height and colour so the two kinds of bar in
+ * this app read as one family of marks. `appearance: none` is what makes the two
+ * vendor pseudo-elements below the thing that paints it. */
+.model-pass progress {
+  appearance: none;
+  display: block;
+  width: 100%;
+  height: 0.45rem;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--line);
+  overflow: hidden;
+}
+
+.model-pass progress::-webkit-progress-bar {
+  background: var(--line);
+  border-radius: var(--radius-pill);
+}
+
+.model-pass progress::-webkit-progress-value {
+  background: var(--scored);
+  border-radius: var(--radius-pill);
+}
+
+.model-pass progress::-moz-progress-bar {
+  background: var(--scored);
+  border-radius: var(--radius-pill);
+}
+
+/*
+ * A pass that did not happen is drawn quiet, and says so in words beside it.
+ *
+ * The hue is not carrying the fact — `ModelBar.reading` is, for the reason
+ * `GateCards.Keys` gives about a mark with no word beside it. What the muted fill
+ * does is stop a pass nothing will advance from reading as one still going.
+ */
+.model-pass.unmeasured progress::-webkit-progress-value {
+  background: var(--quiet);
+}
+
+.model-pass.unmeasured progress::-moz-progress-bar {
+  background: var(--quiet);
+}
+
+/*
  * The bar, and the three segments that fill it.
  *
  * A track in the line colour so an empty family is visibly a family with nothing

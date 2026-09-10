@@ -520,6 +520,54 @@ export function progressRows(reading: MeasurementReading): ProgressRow[] {
   }))
 }
 
+/** One model's pass, as a bar and the word that says which state it is in. */
+export interface ModelBar {
+  model: string
+  state: string
+  attempted: number
+  of: number
+  /** What this pass is, in words. Beside the length and never instead of it: a bar
+   * at nothing is a pass waiting to be paid for or a pass that will never run, and
+   * nothing on this page may be carried by a length alone (`GateCards.Keys`). */
+  reading: string
+}
+
+const PASS_READINGS: Record<string, string> = {
+  waiting: 'waiting — nothing sent on this model yet',
+  measuring: 'measuring against the three agents',
+  measured: 'measured',
+  unmeasured: 'did not run — this model was never measured',
+}
+
+/**
+ * One bar per model, in the order the models are measured.
+ *
+ * The question an operator watching this actually has, and the one `progressRows`
+ * cannot answer: the action is minutes long over two models walked strictly one at
+ * a time (ADR-0012), so *how far into the second model* is a fact about the pass and
+ * not about any route in it.
+ *
+ * **The counts are carried and never recomputed.** `attempted` and `of` are the
+ * record's own — attempts made against the attempts the declared rule asked for —
+ * and a screen that divided them into a percentage would be a figure this surface
+ * does not carry. The share is a length the component draws; the numbers beside it
+ * are counts of attempts, which is what `progressRows` means by reading the disk
+ * rather than deciding a state.
+ *
+ * An unknown state is passed through as its own word rather than mapped to a
+ * default: a fifth `ModelPassState` should read as itself on the page, not as
+ * whichever of the four sorted first.
+ */
+export function modelBars(reading: MeasurementReading): ModelBar[] {
+  return reading.passes.map((pass) => ({
+    model: pass.model,
+    state: pass.state,
+    attempted: pass.attempted,
+    of: pass.of,
+    reading: PASS_READINGS[pass.state] ?? pass.state,
+  }))
+}
+
 // --- the halt, answered on the page ----------------------------------------------
 
 /** The status a measurement holds while it waits on a person, and on nothing else. */

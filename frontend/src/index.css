@@ -153,6 +153,16 @@
    * Named rather than repeated: `3px` was written at eleven places in this file,
    * which is eleven chances for a card and the button inside it to disagree.
    */
+  /*
+   * The measure a paragraph is set to, now that the page itself is the window.
+   *
+   * The screens lay their rows out across the whole frame, and a paragraph that is
+   * only a paragraph is not a row: 62rem of this type is about 110 characters, which
+   * is long and is where a block of prose stops being read at all. Applied to `p` and
+   * to nothing else, so a sentence inside a cell, a card or a column takes the width
+   * of what it is inside and only the free-standing prose is capped.
+   */
+  --reading: 62rem;
   --radius: 10px;
   --radius-sm: 6px;
   /* Round enough to read as a pill whatever the text in it is. */
@@ -200,24 +210,33 @@ body {
 
 /* One step tighter than the browser's `1em`, which is a page-of-prose measure. Every
  * rule in this file that sets its own paragraph margins still wins. */
+/* Free-standing prose is capped at a measure; see `--reading`. A paragraph inside
+ * something narrower is already narrower, so the cap only reaches the ones the page
+ * would otherwise run to the frame. */
 p {
   margin: 0.75rem 0;
+  max-width: var(--reading);
 }
 
 /*
- * One width for everything on the page.
+ * One width for everything on the page, and the page is the window.
  *
  * The prose and the grids share it: a paragraph runs the same length as the row of
  * cards under it, so nothing on a screen reads as a column that has slipped inside a
- * wider one. 64rem, which is what two family cards side by side need.
+ * wider one.
  *
- * **The cost is line length and it is real.** 64rem of this type is about 130
- * characters, well past the 60-to-90 a reader tracks accurately, and this stylesheet
- * used to cap prose at 44rem for exactly that reason. The screens are losing their
- * prose — the rail says its names and stops explaining itself, the front door is a
- * title and three cards — and one width across the page is the choice made here. If a
- * screen ever reads badly, the lever is the page width and not a second measure
- * inside it.
+ * It was 72rem centred in 12rem gutters, and what that cost was the rows. A screen of
+ * this console is a row of switches, a row of figures or a row of chips beside the
+ * sentence that explains it, and three columns inside 48rem of content came out as
+ * three gutters: a sentence broke every five words and a set of seven chips wrapped
+ * into four lines. The gutters are 1.5rem now and the content is the window.
+ *
+ * **The cost is line length and it is real**, and it is the same cost the 72rem
+ * version was already paying — 130 characters then, more than that on a wide monitor
+ * now. What holds it is `--reading`: a paragraph that is *only* a paragraph is capped
+ * at a measure, and everything laid out in columns takes the window. The cap below is
+ * the ultra-wide backstop and not the page width; at any window a person works in it
+ * does not bite.
  */
 .screen {
   /*
@@ -229,33 +248,14 @@ p {
    * and the gutter is the gutter.
    */
   box-sizing: border-box;
-  max-width: 72rem;
+  max-width: 130rem;
   margin: 0 auto;
-  /* 12rem a side, and less above and below than the 3rem and 6rem it was: the tail of
-   * a page of rows is the last row, and six rems under it is a screen of nothing to
-   * scroll through before the page ends.
-   * The rail is a hard edge on one side and the window is on the other,
-   * and a block of figures needs air between it and both — more of it than the 10rem
-   * this was, because the screens now hold rows and lines rather than paragraphs and a
-   * row set close to the frame reads as a page that ran out of room. */
-  padding: 2.2rem 12rem 4rem;
-}
-
-/*
- * Between the phone and the desk, the gutter gives way before the content does.
- *
- * A 12rem gutter inside a frame this size would leave the family cards too narrow to
- * sit two abreast, and the cards are what the width is for. 7.5rem, up from 6rem with
- * the type: at 4rem, which it was before that, the content ran almost to the frame's
- * edge on a laptop and the page read as a screen filled rather than a page set, and two
- * cards still have room to spare at this width. A narrow window gives it back further down, where the rail
- * becomes a strip and 6rem a side is more of the page than is left over. The
- * breakpoint is on the frame rather than the window because the rail is beside it.
- */
-@media (max-width: 78rem) {
-  .screen {
-    padding-inline: 7.5rem;
-  }
+  /* Enough that nothing touches the frame, and no more: the rail is a hard edge on one
+   * side and the window is on the other, and what a row needs between it and both is a
+   * gutter rather than a margin. Less above and below than the 3rem and 6rem it was:
+   * the tail of a page of rows is the last row, and six rems under it is a screen of
+   * nothing to scroll through before the page ends. */
+  padding: 2.2rem 1.5rem 4rem;
 }
 
 .eyebrow {
@@ -3225,8 +3225,7 @@ textarea,
     border-bottom: 1px solid var(--line);
   }
 
-  /* The sides give their width back where there is none to spare: 6.5rem each
-   * side of a narrow window is more of it than is left over. */
+  /* A little tighter still where the rail has become a strip across the top. */
   .screen {
     padding-inline: 1.2rem;
   }

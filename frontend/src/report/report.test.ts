@@ -1305,6 +1305,7 @@ describe('what a family attempted, for the cards that publish no rate', () => {
       of: 3,
       resisted: 1,
       succeeded: 2,
+      answers: ['resisted', 'succeeded', 'succeeded'],
       not_run: '',
     },
     {
@@ -1313,6 +1314,7 @@ describe('what a family attempted, for the cards that publish no rate', () => {
       of: 3,
       resisted: 3,
       succeeded: 0,
+      answers: ['resisted', 'resisted', 'resisted'],
       not_run: '',
     },
     // A family the declarations dropped: nothing was attempted, so there is no
@@ -1323,6 +1325,7 @@ describe('what a family attempted, for the cards that publish no rate', () => {
       of: 0,
       resisted: 0,
       succeeded: 0,
+      answers: [],
       not_run: 'the canary was planted nowhere',
     },
   ]

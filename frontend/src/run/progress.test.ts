@@ -196,6 +196,9 @@ function holdingItsInterrupt(): RunProgress {
         of: 30,
         resisted: 0,
         succeeded: 0,
+        // Nothing has come back, so there is no order to carry: the empty list and
+        // the zero counts are the same absence said twice.
+        answers: [],
         not_run: '',
       },
     ],

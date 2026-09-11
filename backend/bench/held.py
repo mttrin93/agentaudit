@@ -343,7 +343,7 @@ class HeldRoute:
             payload=tuple(str(turn) for turn in value["payload"]),
             success_condition=SuccessCondition(
                 kind=SuccessConditionKind(str(value["success_condition"])),
-                planted_canary=_canary(value.get("planted_canary")),
+                planted_canary=_planted(value.get("planted_canary")),
             ),
             description=str(value["description"]),
             found_in=str(value["found_in"]),
@@ -475,7 +475,15 @@ beside its first caller.
 
 
 def _digest(text: str) -> str:
-    """A truncated `sha256`, at `decided._digest`'s length and on its terms."""
+    """A truncated `sha256` of the target, for the first half of a record's key.
+
+    Its length is a property of this key and of nothing else: no other store reads
+    it, and the route's half of the key is minted by `decided.RouteKey` and not by
+    this. What the truncation has to be is *fixed-length* — that is what stops one
+    pair of target and route from colliding with another by where the separator
+    landed — and long enough that two of a single tenant's target names do not meet
+    in it.
+    """
     return sha256(text.encode("utf-8")).hexdigest()[:16]
 
 
@@ -489,6 +497,12 @@ def _key(target: str, route: RouteKey) -> str:
     return f"{_digest(target)}-{route.filed_under}"
 
 
-def _canary(value: Any) -> str | None:
-    """The planted canary off a stored record, `None` where the kind reads none."""
+def _planted(value: Any) -> str | None:
+    """The planted canary off a stored record, `None` where the kind reads none.
+
+    Its own function rather than an inline conditional because `SuccessCondition`
+    refuses a canary on a kind that reads none and refuses its absence on a kind
+    that does — so what this returns decides whether a record reads back at all,
+    and `None` and `"None"` are a long way apart.
+    """
     return None if value is None else str(value)

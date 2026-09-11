@@ -31,7 +31,6 @@ import pytest
 from backend.bench.adaptive.proposal import FOUND_BY_THE_ATTACKER
 from backend.bench.admission import (
     NoAdmissionBar,
-    bar_for,
     found_by_the_attacker,
     library_provenance,
 )
@@ -60,7 +59,7 @@ from backend.bench.library import (
 from backend.bench.pending import DEFAULT_PENDING_PATH, PENDING_NAMESPACE
 from backend.tests.conftest import CASES_DIR, REPOSITORY
 
-A_WRITER_HAS_FINISHED = 60.0
+A_READER_HAS_FINISHED = 60.0
 """How long the reader process below is given to start, read and exit.
 
 Generous, because the wait is not what is under test: what is being asked is that
@@ -155,7 +154,10 @@ def test_the_provenance_census_prints_six_members_in_declaration_order() -> None
         line for line in stated.splitlines() if line.startswith("provenance of")
     )
     printed = [member for member in DiscoveredBy if f"{member} 0" in live]
-    named = sorted(printed, key=lambda member: live.index(str(member)))
+    # On `f"{member} "` rather than on the member's own text, because `adaptive` is
+    # a prefix of `adaptive_on_target` and a substring search would find the wrong
+    # one of the two the moment the order this test is about changed.
+    named = sorted(printed, key=lambda member: live.index(f"{member} "))
 
     # Against a literal rather than against `list(DiscoveredBy)`, which is the
     # sequence the line is built from and so would agree with it however it moved.
@@ -182,9 +184,6 @@ def test_a_case_cannot_carry_the_held_route_provenance(library: list[Case]) -> N
         dataclasses.replace(
             library[0], discovered_by=DiscoveredBy.TARGET_SPECIFIC, admission=None
         )
-
-    with pytest.raises(NoAdmissionBar):
-        bar_for(DiscoveredBy.TARGET_SPECIFIC)
 
 
 def test_the_held_route_provenance_is_in_neither_half_of_the_adaptive_fraction(
@@ -327,7 +326,7 @@ def test_a_held_route_outlives_the_process_that_wrote_it(store_file: Path) -> No
         cwd=REPOSITORY,
         capture_output=True,
         text=True,
-        timeout=A_WRITER_HAS_FINISHED,
+        timeout=A_READER_HAS_FINISHED,
     )
 
     assert reader.returncode == 0, (

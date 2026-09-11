@@ -613,7 +613,7 @@ def library_provenance(cases: Iterable[Case]) -> LibraryProvenance:
 
 
 class RejectionKind(StrEnum):
-    """How one decided proposal came out, and the four ways it can fail to enter.
+    """How one decided proposal came out, and the five ways it can fail to enter.
 
     A closed enum rather than three booleans, because ADR-0012 asks for **the count
     of cross-model rejections** and a count means nothing unless the other ways of

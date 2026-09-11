@@ -242,7 +242,7 @@ def test_a_refused_route_is_remembered_with_its_rejection_kind_and_its_counts(
     memory: DecidedRoutes, leakage_case: Case
 ) -> None:
     # ADR-0012 calls a cross-model discard a finding in its own right, and
-    # `RejectionKind` says why the four ways of failing are counted apart: "a count
+    # `RejectionKind` says why the ways of failing are counted apart: "a count
     # means nothing unless the other ways of failing are counted apart from it". So
     # what is kept is the counts, and what comes back is the count *and* the answer
     # the current threshold reaches on it.

@@ -34,7 +34,7 @@ from backend.bench.adaptive.precedent import Precedent
 from backend.bench.adaptive.proposal import ProposedRoute, proposed_from
 from backend.bench.calibration import CalibrationResult, run_calibration
 from backend.bench.decided import DecidedRoute, RouteKey
-from backend.bench.library import Case, Family
+from backend.bench.library import Case, DiscoveredBy, Family
 from backend.bench.pending import (
     PENDING_ROUTES,
     AwaitingDecision,
@@ -97,6 +97,7 @@ def a_route(
         description=description,
         today=RAN_ON,
         broken=True,
+        discovered_by=DiscoveredBy.ADAPTIVE,
     )
 
 
@@ -278,7 +279,7 @@ def test_a_customer_run_files_its_proposals_and_says_so_on_its_own_record(
     assert {record_.filed_on for record_ in held} == {record.recorded_at.date()}
     # And the sentence a poller reads says the queue grew, beside what the run said
     # about precedent and about its review queue.
-    assert "awaiting the cross-model bar" in record.statement
+    assert "awaiting a decision" in record.statement
 
 
 # --- Seam three: the same run from a `__main__` -------------------------------
@@ -329,7 +330,7 @@ def test_a_headless_customer_run_files_its_proposals_and_prints_what_it_filed(
     assert all(isinstance(record, AwaitingDecision) for record in held)
     # The job log says what it filed, in the same run of output that carries the
     # rates and the precedent: an unattended run's output is all anybody reads.
-    assert "awaiting the cross-model bar" in said
+    assert "awaiting a decision" in said
     for record in held:
         assert record.route.stated() in said
 
@@ -527,7 +528,7 @@ def test_a_run_the_ceiling_aborted_still_files_what_its_attacker_had_found(
     }
     assert proposed, "the attacker proposed nothing, so nothing here is under test"
     assert {held.route for held in PENDING_ROUTES.queue()} == proposed
-    assert "awaiting the cross-model bar" in record.statement
+    assert "awaiting a decision" in record.statement
 
 
 def test_a_headless_run_the_ceiling_aborted_files_what_its_attacker_had_found(
@@ -577,4 +578,4 @@ def test_a_headless_run_the_ceiling_aborted_files_what_its_attacker_had_found(
     held = PENDING_ROUTES.queue()
     assert held, "the attacker proposed nothing, so nothing here is under test"
     assert {record.target for record in held} == {A_CUSTOMER}
-    assert "awaiting the cross-model bar" in capsys.readouterr().out
+    assert "awaiting a decision" in capsys.readouterr().out

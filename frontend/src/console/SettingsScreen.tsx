@@ -47,6 +47,7 @@ import {
 } from '../api/bench'
 import {
   settingsScreen,
+  WHAT_THE_ATTACKER_DRIVES,
   type AgentsBlock,
   type CeilingsBlock,
   type LibraryBlock,
@@ -355,15 +356,19 @@ function TheTuning({
 
   return (
     <section>
-      {/* The heading and the block's own paragraph are built and not drawn. It argued why these
+      {/* The block's own paragraph is built and not drawn. It argued why these
           settings may be set here at all — which is ADR-0025's business and the
           commit log's, not a paragraph an operator reads every time they change a
           number. What the page keeps is per-control: each input says what it
           decides, and `block.warning` stays, because that one is not an
           explanation of the screen but a limit on what a run at that setting may
-          be called. */}
+          be called.
+
+          The heading is not drawn either. It named what the six controls have in
+          common — *what the next run is made with* — over a page whose title is
+          *settings* and whose every row is one of those six. */}
       <form
-        className="tuning"
+        className="tuning declaring"
         onSubmit={(event) => {
           // Prevented for the reason `RegisterScreen`'s is: the browser's own submit
           // would reload the console and take the declaration with it.
@@ -411,6 +416,10 @@ function TheTuning({
               </option>
             ))}
           </select>
+          {/* What the layer this model drives is scored on: the one thing a reader of
+              this row needs and the one thing the identifier cannot say. The block's
+              own paragraph is `block.statement`, built and drawn by nothing. */}
+          <span className="aside">{WHAT_THE_ATTACKER_DRIVES}</span>
         </label>
         {/* Drawn only where the model has the setting, and the reading says whether
             an empty list means *no such setting* or *no level chosen*. A select and
@@ -435,6 +444,7 @@ function TheTuning({
                 </option>
               ))}
             </select>
+            <span className="aside">{block.reasoning.decides}</span>
           </label>
         ) : null}
         {/* What an unset level means, what the setting decides, and the sentence a run
@@ -479,6 +489,7 @@ function TheTuning({
                 settle({ model, effort, temperature: event.target.value, numbers })
               }}
             />
+            <span className="aside">{block.sampling.decides}</span>
           </label>
         ) : (
           // The one sentence on this form that is drawn rather than built, and the
@@ -508,6 +519,10 @@ function TheTuning({
                 settle({ model, effort, temperature, numbers: typed })
               }}
             />
+            {/* What this setting decides, beside the box rather than under it: three
+                number rows with a paragraph each is a page, and these are three
+                numbers with one line each. */}
+            <span className="aside">{one.decides}</span>
           </label>
         ))}
 

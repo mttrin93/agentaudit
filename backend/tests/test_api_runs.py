@@ -58,7 +58,13 @@ from backend.bench.completion import (
     TURNS_PER_EPISODE_ENV,
 )
 from backend.bench.contract import TargetConfig, TargetFailure
-from backend.bench.library import Case, Family, LibraryVersion, Precondition
+from backend.bench.library import (
+    Case,
+    DiscoveredBy,
+    Family,
+    LibraryVersion,
+    Precondition,
+)
 from backend.bench.registration import Attestation
 from backend.bench.rule import DECLARED_RULE
 from backend.bench.signing import (
@@ -69,7 +75,7 @@ from backend.bench.signing import (
     generate,
 )
 from backend.graph.approval import Approval
-from backend.graph.budget import Layer, RunBudget
+from backend.graph.budget import Layer, RunBudget, StopRequested
 from backend.graph.runstate import RunState
 from backend.targets.reference.model import ModelConfig
 from backend.targets.reference.operator import nonce_planter
@@ -1287,6 +1293,174 @@ def test_an_abort_mid_episode_records_that_episode_as_censored(
     assert record.spent[Layer.ADAPTIVE] <= record.budget.adaptive_ceiling
 
 
+def test_an_operator_can_stop_a_running_suite(leakage_case: Case) -> None:
+    """The second decision an operator makes about a run, minutes after the first.
+
+    **What this asserts is the signal, not the settling.** The worker runs on a thread
+    and a suite this small can finish inside the request that stops it, so a test that
+    demanded `ABORTED` would pass or fail on how fast a reference agent answered. What
+    is deterministic is that the route takes the stop and the run carries it; that the
+    flag ends the run as an abort is `test_a_stop_is_read_before_the_next_call` below,
+    over the one place the flag is read.
+
+    The route answers `200` with the record as it stands — not the record as it will
+    be. Nothing here writes a status: the worker settles its own run, because a status
+    written by the thread serving this request would race the thread that knows what
+    the run actually did (ADR-0114).
+    """
+    with (
+        watched_reference(name="hardened") as watched,
+        api([leakage_case]) as (client, bench),
+    ):
+        nonce = registered(client, watched)
+        started = client.post("/runs", json=a_request(watched.target, nonce)).json()
+        record = _record(bench, started)
+        client.post(
+            f"/runs/{started['run_id']}/approval",
+            json={"confirmed": True, "identity": "operator"},
+        )
+        stopped = client.post(f"/runs/{started['run_id']}/stop")
+        assert stopped.status_code == 200
+        assert record.run_state.stop_requested is True
+        settled(record)
+
+    # Whatever it settled as, every call it made is one it was authorised to make: the
+    # stop is read before a message goes on the wire, so nothing is cancelled in
+    # flight and the counter cannot have run past the ceiling.
+    assert record.spent[Layer.SCORED] <= record.budget.scored_ceiling
+    # And where the stop did land first, the sentence says who ended the run and what
+    # that leaves: figures over what was attempted, which is not a gate result.
+    if "stopped by the operator" in record.statement:
+        assert record.status is RunStatus.ABORTED
+        assert "not a gate result" in record.statement
+        assert "censored, never as resisted" in record.statement
+
+
+def test_a_stop_is_read_before_the_next_call(leakage_case: Case) -> None:
+    """Where the flag is read, and what it does there.
+
+    One place — `authorise_call`, which every message goes through before it is sent —
+    so a stopped run stops *between* one call and the next and never inside one. A flag
+    read in the transport would abandon a call already on somebody's endpoint and leave
+    the record missing an attempt the target had answered (ADR-0114).
+
+    Read before the ceiling, because they are two facts and the operator's happened
+    first: a run stopped in the same instant it would have breached is a run somebody
+    stopped, and the sentence a reader gets says so.
+    """
+    state = RunState(
+        budget=RunBudget.declare(cases=[leakage_case], targets=[a_target()])
+    )
+
+    # Authorised while nothing has been asked of it.
+    state.authorise_call(Layer.SCORED, sends=1)
+
+    state.stop_requested = True
+    with pytest.raises(StopRequested) as stopped:
+        state.authorise_call(Layer.SCORED, sends=1)
+    assert "stopped by the operator" in str(stopped.value)
+    assert stopped.value.layer is Layer.SCORED
+
+    # And it is the stop that is raised even where the ceiling would have refused the
+    # same call: two facts, and this is the one that happened.
+    state.spent[Layer.SCORED] = 10_000
+    with pytest.raises(StopRequested):
+        state.authorise_call(Layer.SCORED, sends=1)
+
+
+def test_a_stop_inside_an_episode_records_that_episode_as_censored(
+    leakage_case: Case,
+) -> None:
+    """The claim the run's own statement makes, asserted where it is made true.
+
+    Every abort says *an episode the stop cut short is recorded as censored, never as
+    resisted*. That sentence is the whole of ADR-0011 on this path — a target never
+    given the chance to hold must not read as one that did — and a run that settled
+    with the sentence and no episode behind it would be making a claim about a
+    measurement it discarded.
+
+    Where it is recorded is `AdaptiveEpisode.run`, which files the episode on the way
+    out and re-raises. It caught `BudgetExceeded` only, and `StopRequested` is its
+    sibling rather than a subclass, so an episode a stop cut short was leaving no
+    record at all (ADR-0011, ADR-0114).
+
+    The adaptive layer is reached with one scored case and made long enough to press
+    inside: this waits for the layer to be the one spending, so the stop lands in an
+    open episode rather than between two of them.
+    """
+    with (
+        watched_reference(name="hardened") as watched,
+        api(
+            [leakage_case],
+            adaptive=AdaptiveBudget(turns_per_episode=30, episodes_per_family=4),
+        ) as (client, bench),
+    ):
+        nonce = registered(client, watched)
+        started = client.post("/runs", json=a_request(watched.target, nonce)).json()
+        record = _record(bench, started)
+        client.post(
+            f"/runs/{started['run_id']}/approval",
+            json={"confirmed": True, "identity": "operator"},
+        )
+
+        # Pressed once the second layer is the one spending, so there is an episode
+        # open to cut short. A stop that landed between two episodes would assert
+        # nothing about the one this test is about.
+        deadline = time.monotonic() + 30.0
+        while (
+            time.monotonic() < deadline
+            and record.run_state.spent[Layer.ADAPTIVE] < 3
+            and record.status is RunStatus.RUNNING
+        ):
+            time.sleep(0.02)
+        assert record.run_state.spent[Layer.ADAPTIVE] >= 3, "never reached the layer"
+        assert client.post(f"/runs/{started['run_id']}/stop").status_code == 200
+        settled(record)
+
+    assert record.status is RunStatus.ABORTED
+    assert "censored, never as resisted" in record.statement
+    # The episode the press cut short, on the record and named the one way this
+    # bench may name it. Not *broken*: nothing verified a break. Not absent: the
+    # statement above says an episode was recorded, and an empty list makes that
+    # sentence a claim about nothing.
+    assert record.run_state.episodes, "the stop discarded the episode it cut short"
+    assert record.run_state.episodes[-1].outcome is EpisodeOutcome.CENSORED
+
+
+def test_a_run_that_is_not_running_cannot_be_stopped(leakage_case: Case) -> None:
+    """Two states this refuses, and the reason they are refused rather than ignored.
+
+    A run still at its interrupt has sent nothing: it is **declined** by answering the
+    halt, and a stop that quietly did that would record a refusal of the estimate as an
+    abort of a run. A run that has ended has nothing to stop, and a `200` would tell a
+    caller their press did something.
+
+    An id this bench never held is a `404` on `_answer_a_recovered_halt`'s own terms: a
+    restart holds no run, and a run this process never started cannot be stopped by it.
+    """
+    with (
+        watched_reference(name="hardened") as watched,
+        api([leakage_case]) as (client, bench),
+    ):
+        nonce = registered(client, watched)
+        started = client.post("/runs", json=a_request(watched.target, nonce)).json()
+        record = _record(bench, started)
+
+        # At its interrupt, which is the state this refusal is most about.
+        assert record.status is RunStatus.AWAITING_APPROVAL
+        assert client.post(f"/runs/{started['run_id']}/stop").status_code == 409
+
+        assert client.post("/runs/not-a-run/stop").status_code == 404
+
+        client.post(
+            f"/runs/{started['run_id']}/approval",
+            json={"confirmed": True, "identity": "operator"},
+        )
+        settled(record)
+        # And ended: whatever it settled as, there is nothing left to stop.
+        assert client.post(f"/runs/{started['run_id']}/stop").status_code == 409
+
+
 def test_a_nonce_starts_one_run_and_no_more(leakage_case: Case) -> None:
     """One nonce, one run: the value is spent by the run it authorises.
 
@@ -1545,6 +1719,61 @@ def test_a_run_reports_each_family_over_its_own_denominator_while_it_goes(
     # not a gap the caller declared, it is a family this run has nothing to attempt.
     unwritten = families[str(Family.HALT_DEFEAT)]
     assert (unwritten["of"], unwritten["not_run"]) == (0, "")
+
+
+def test_a_family_carries_its_verdicts_in_the_order_they_came_back(
+    leakage_case: Case,
+) -> None:
+    """The sequence, beside the counts it is not a second copy of.
+
+    A screen watching a run draws one cell an attempt, and the cells were laid out
+    from the counts — every resisted one, then every succeeded one — which put a run
+    of green beside a run of red and read as two bars filling independently. The order
+    is a fact this record already holds and the response was throwing away.
+
+    **A sequence and never a trajectory.** Attempts inside a case are independent by
+    construction — fresh session each, which is what makes the quotient of them a rate
+    — so an operator who reads a slope off this order is reading something that is not
+    there. What it is for is watching verdicts land as they land.
+
+    `resisted` and `succeeded` stay: they are the counts the columns print, this list
+    is what the cells are drawn from, and asserting the two agree is what keeps the
+    order from becoming a second, divergent count.
+    """
+    with watched_reference() as watched, api([leakage_case]) as (client, bench):
+        nonce = registered(client, watched)
+        started = client.post("/runs", json=a_request(watched.target, nonce)).json()
+        record = _record(bench, started)
+        _approve(client, started["run_id"])
+        settled(record)
+        body = _progress(client, started["run_id"])
+
+    row = next(
+        one for one in body["families"] if one["family"] == str(leakage_case.family)
+    )
+    answers = row["answers"]
+    # One entry an attempt that came back, and only the two words a verdict has.
+    assert len(answers) == row["attempted"]
+    assert set(answers) <= {"resisted", "succeeded"}
+    # The same partition the counts state, read a second way: a sequence that
+    # disagreed with the columns beside it would be a second scorer.
+    assert answers.count("resisted") == row["resisted"]
+    assert answers.count("succeeded") == row["succeeded"]
+
+    # And it is this run's own order, not a sorted copy of it: the record's attempts
+    # for this family, in the order they were appended.
+    assert answers == [
+        str(attempt.verdict)
+        for attempt in record.run_state.attempts
+        if str(attempt.family) == str(leakage_case.family)
+    ]
+
+    # A family with no plan carries no sequence at all — not a list of zeroes, which
+    # is the same absence its empty bar is.
+    unwritten = next(
+        one for one in body["families"] if one["family"] == str(Family.HALT_DEFEAT)
+    )
+    assert unwritten["answers"] == []
 
 
 @pytest.mark.parametrize("declared", [False, True])
@@ -1956,6 +2185,34 @@ def test_a_completed_run_reports_completion_and_where_its_report_is_served(
     assert body["transport"] is None
 
 
+# --- what each surface declares it is attacking ----------------------------------
+
+
+def test_a_customer_runs_route_is_filed_as_found_against_a_target() -> None:
+    """`POST /runs` attacks somebody's own agent, and says so at the call site.
+
+    A route found there faces the single-model bar, and the declaration is made
+    where the run is started rather than inferred downstream from a `TargetConfig`
+    that describes a reference agent and a user's agent alike (ADR-0107 §3).
+
+    A source assertion is the honest test here: the alternative is a live adaptive
+    run against a real target, and this repository does not spend a provider call
+    to assert a constant. The behavioural proof that the declaration reaches the
+    record is `test_adaptive_attacker.py`'s, which drives the thread on both
+    members.
+    """
+    assert (
+        "discovered_by=DiscoveredBy.ADAPTIVE_ON_TARGET"
+        in (API_DIR / "runs.py").read_text()
+    )
+
+    # And the reference-agent surfaces keep the other member, so the narrowing did
+    # not leak into the loop ADR-0012 was written about.
+    for surface in ("gate_runs.py", "pending_routes.py"):
+        source = (API_DIR / surface).read_text()
+        assert "discovered_by=DiscoveredBy.ADAPTIVE," in source
+
+
 # --- the seam the run state travels through --------------------------------------
 
 
@@ -1976,6 +2233,7 @@ def test_a_run_state_handed_in_is_the_one_the_run_fills() -> None:
         attestation=BENCH_ATTESTATION,
         budget=budget,
         run_state=state,
+        discovered_by=DiscoveredBy.ADAPTIVE,
     )
 
     assert result.run_state is state
@@ -1994,6 +2252,7 @@ def test_a_run_state_counting_against_another_ceiling_is_refused() -> None:
             attestation=BENCH_ATTESTATION,
             budget=budget,
             run_state=RunState(budget=elsewhere, library=LibraryVersion.of(cases)),
+            discovered_by=DiscoveredBy.ADAPTIVE,
         )
 
 

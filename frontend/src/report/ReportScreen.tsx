@@ -85,20 +85,19 @@ import {
 } from '../api/bench'
 import {
   attemptCounts,
+  WHAT_THIS_SECTION_IS,
   exchangesReading,
   reportView,
   routeReading,
   type AdaptiveFamilyReading,
-  type DiscoveriesReading,
   type EpisodeRouteReading,
   type ExchangesReading,
   type FamilyBreakReading,
   type FamilyExchangeReading,
   type FamilyFindingsReading,
   type FamilyRow,
-  type FindingReading,
   type FindingsView,
-  type ElectiveReading,
+  type ElectiveFigures,
   type LabelReading,
   type ReportView,
   type RouteReading,
@@ -148,8 +147,15 @@ interface Held {
    * of the artefact.
    */
   counts: Record<string, string>
-  /** The run's own sentence about why there is no report, carried unedited. */
-  noReport: string
+  /**
+   * Whether the run this page addresses produced no report.
+   *
+   * A flag and not the run's sentence. It used to carry the statement and draw it in
+   * a refusal box, which put the whole of why the run stopped — a ceiling, a stop, a
+   * transport failure — on the screen a reader opened to read a *report*. The run's
+   * own screen is where that sentence belongs and is where this page sends them.
+   */
+  noReport: boolean
   unavailable: string
 }
 
@@ -159,7 +165,7 @@ const NOTHING_YET: Held = {
   episodes: null,
   attempts: null,
   counts: {},
-  noReport: '',
+  noReport: false,
   unavailable: '',
 }
 
@@ -177,7 +183,7 @@ export function ReportScreen() {
         const progress = await runProgress(runId)
         if (progress.report === null) {
           if (current) {
-            setHeld({ ...NOTHING_YET, noReport: progress.statement })
+            setHeld({ ...NOTHING_YET, noReport: true })
           }
           return
         }
@@ -248,15 +254,22 @@ export function ReportScreen() {
         </section>
       ) : null}
 
+      {/*
+        One sentence, and no box around it.
+
+        A run that did not finish has nothing to show here and nothing partial is
+        drawn in its place — half a report reads as a finished one — but that is a
+        reason to say little, not a reason to say it loudly. What stood here was a
+        red refusal panel carrying the run's whole statement, which is where the run
+        stopped and why, on the screen somebody opened to read the document. The
+        sentence that survives is the one fact this page has: there is no report, and
+        the run's own screen says why.
+      */}
       {held.noReport ? (
-        <section className="refusal" role="status">
-          <h2>This run has no report</h2>
-          <p>{held.noReport}</p>
-          <p>
-            Nothing partial is shown in its place: half a report reads as a finished
-            one. <Link to={`/runs/${runId}`}>Watch the run</Link>.
-          </p>
-        </section>
+        <p className="aside" role="status">
+          This run produced no report —{' '}
+          <Link to={`/runs/${runId}`}>the run&rsquo;s own screen</Link> says why.
+        </p>
       ) : null}
 
       {view && held.where ? (
@@ -265,7 +278,6 @@ export function ReportScreen() {
           where={held.where}
           episodes={held.episodes}
           attempts={held.attempts}
-          counts={held.counts}
         />
       ) : null}
     </main>
@@ -310,26 +322,83 @@ function TheReport({
   where,
   episodes,
   attempts,
-  counts,
 }: {
   view: ReportView
   where: ReportLocation
   episodes: RunEpisodes | null
   attempts: RunAttempts | null
-  counts: Record<string, string>
 }) {
   return (
     <>
       <section>
-        <h2>The scored layer, one family at a time</h2>
-        <div className="families per-family">
+        <h2>The scored layer</h2>
+        {/*
+          Six families as rows of one table, where six cards in a grid stood.
+
+          **The figures line up down their own columns.** A reader of this section is
+          comparing one family against the next on the rate, the interval and the band,
+          and in a grid of cards each of those began at a different depth in a different
+          box. The prose each family carries — the counts, the coverage limits, what the
+          search found — is under its own row rather than beside the figures, because it
+          is read one family at a time and they are read down a column.
+
+          **A table that wants no total row, and has none.** That was the argument for
+          cards and it is answered by the table rather than avoided by it: six rates
+          over six denominators are six figures, nothing here sums a column, and there
+          is no cell for a sum to be drawn into (ADR-0005).
+
+          **The three answers stay three shapes.** A withheld family and one the target
+          could not be measured on carry no figures at all, so their rows say so across
+          the figure columns rather than drawing an empty cell a reader would take for a
+          zero — which is the same refusal the cards were built on, kept.
+        */}
+        {/* The scroll box the table sits in when the window is narrower than its
+            columns want — see `.table-wrap`. */}
+        <div className="table-wrap">
+          <table className="per-family">
+          <thead>
+            <tr>
+              <th scope="col">family</th>
+              <th scope="col" className="figure-cell">
+                fail
+              </th>
+              <th scope="col" className="rate-cell">
+                rate
+              </th>
+              <th scope="col" className="figure-cell">
+                interval
+              </th>
+              <th scope="col" className="band-cell">
+                band
+              </th>
+              <th scope="col" className="refs-cell">
+                refs
+              </th>
+            </tr>
+          </thead>
           {view.rows.map((row) => (
-            <TheFamily
-              row={row}
-              counted={counts[row.family] ?? ''}
-              key={`${row.answer.kind}-${row.family}`}
-            />
+            <TheFamily row={row} key={`${row.answer.kind}-${row.family}`} />
           ))}
+          {/*
+            And the elective families this run asked for, in the same table.
+
+            **Two arrays and two maps, as everywhere else in this app.**
+            `ElectiveReading.measured` is its own list and nothing concatenates it into
+            `rows`: the six are what the gate's denominator is fixed at (ADR-0015), the
+            tier decides nothing (ADR-0035), and no figure here is taken against a
+            denominator from the other list. What merges is the table, on ADR-0091's own
+            terms and recorded in
+            [ADR-0113](../../../docs/adr/0113-the-report-screen-draws-the-tier-in-the-per-family-table.md):
+            an elective family's rate against this target is a fact about this target,
+            reported with its interval and its band like any other family (ADR-0088),
+            and a reader comparing it with the six was reading two tables to do it.
+
+            Nothing in a row says which list it came from, and nothing sums either.
+          */}
+          {view.elective.measured.map((one) => (
+            <TheElectiveFamily one={one} key={one.family} />
+          ))}
+          </table>
         </div>
       </section>
 
@@ -338,13 +407,42 @@ function TheReport({
       {attempts ? <TheExchanges exchanges={exchangesReading(attempts)} /> : null}
 
       <section>
-        <h2>The adaptive layer, and what it proposed per family</h2>
-        <p className="consequence">{view.adaptive.label}</p>
+        <h2>The adaptive layer</h2>
+        {/* At the size the same claim takes under *failures and fixes*: it is a
+            standing fact about what this section's figures are not, read once, and it
+            was set larger than the blocks it qualifies. `.asserts` is that treatment
+            and this is its second user. */}
+        <p className="asserts">{view.adaptive.label}</p>
         {view.adaptive.families.length ? (
-          <div className="families per-family">
-            {view.adaptive.families.map((family) => (
-              <TheSearch family={family} key={family.family} />
-            ))}
+          /* The same table the scored layer is read in, so the two sections line up
+             down one edge and a reader moves between them without relearning the
+             shape. What differs is every column but the first: an episode counts in
+             turns and ends in an outcome, and neither is an attempt, a rate or a band
+             (CONTEXT.md, ADR-0010). There is no figure here to read against the table
+             above, which is what the line over this section says. */
+          <div className="table-wrap">
+            <table className="per-family searches">
+              <thead>
+                <tr>
+                  <th scope="col">family</th>
+                  <th scope="col" className="figure-cell">
+                    turns
+                  </th>
+                  <th scope="col" className="outcome-cell">
+                    episode
+                  </th>
+                  {/* What the search proposed in this family, which is what the
+                      section is for and what the cards never printed: the description
+                      `propose_case` was given, or the record's own line where an
+                      episode proposed nothing. Described and never quoted — a route
+                      that beat a target is a working exploit (ADR-0008). */}
+                  <th scope="col">proposed</th>
+                </tr>
+              </thead>
+              {view.adaptive.families.map((family) => (
+                <TheSearch family={family} key={family.family} />
+              ))}
+            </table>
           </div>
         ) : (
           <p className="aside">
@@ -356,15 +454,28 @@ function TheReport({
 
       {episodes ? <TheRoute route={routeReading(episodes)} /> : null}
 
-      <TheElective elective={view.elective} />
+      {/*
+        No elective tier section.
 
+        It carried the payload's sentence about the request, a card per requested family
+        and a line per family nobody asked for — three paragraphs of *not requested* on
+        the common run, which is every run that asked for none of the tier. The measured
+        families are rows of the table above now (ADR-0113); the absences and the
+        bench's sentences about them are in `report.json` and in the `report.md` a
+        recipient reads, which is the document that has to account for every family
+        (ADR-0094). `ElectiveReading` is unchanged and still tested whole.
+      */}
       {/* The three files under the names a verifier already knows, and nothing
           beside them: what a recipient does with them is `scripts/verify` over the
           directory they land in, and the signed-artefacts screen is the list every
           artefact this bench has produced is reached from. */}
       <section>
         <h2>The signed artefact</h2>
-        <ul>
+        {/* Three names on one line, because they are three files of one thing: a
+            recipient saves all three into one directory and runs `verify` over it, and
+            a stacked list read as three separate downloads to choose between. The
+            names are the ones the verifier already knows. */}
+        <ul className="artefact-files">
           <li>
             <a href={where.path}>report.json</a>
           </li>
@@ -381,7 +492,13 @@ function TheReport({
 }
 
 /**
- * Each failure the bench explained, and the fix written for it.
+ * Failures and fixes: each failure the bench explained, and the fix written for it.
+ *
+ * The heading is the screen's and the signed document keeps its own —
+ * `rendering/_explained.py` titles the same material *each failure the bench explained,
+ * and the fix written for it*, and a title in the artefact is bytes a digest covers.
+ * Shortening one does not shorten the other, and neither says anything the other does
+ * not.
  *
  * **The section this screen did not have.** It showed rates, intervals, bands, labels
  * and the coverage limits, and it showed no failure — so an engineer looking at their
@@ -411,22 +528,34 @@ function TheReport({
 function TheFailures({ findings }: { findings: FindingsView }) {
   return (
     <section>
-      <h2>Each failure the bench explained, and the fix written for it</h2>
-      {/* Which of the four readings this run holds, as the name the payload carries
-          and not only as the sentence under it. A reader telling the four apart by
-          prose alone stops telling them apart the day the prose is reworded, which is
-          why the artefact carries a name off a closed set at all (ADR-0070 §4) — and
-          a reading this app has no shape for reaches the page as itself. */}
-      <p className="kind">{findings.reading}</p>
-      {/* Who wrote these sentences, above them and not in a legend: a fact carried
-          somewhere else is a fact a screenshot loses. */}
-      <p className="consequence">{findings.label}</p>
-      <p className="aside">{findings.stated}</p>
-      {/* What the two labels on a fix mean, above the blocks and under every reading —
-          including the common one, where the bench attacked a URL and every fix is
-          *proposed*. A reader who took *proven* for *this family is closed* would have
-          been handed the stronger of two claims by a word (ADR-0073 §4). */}
-      <p className="asserts">{findings.asserts}</p>
+      <h2>Failures and fixes</h2>
+      {/*
+        The reading's own name is not drawn.
+
+        `findings.reading` is the name off the closed set the payload carries — the
+        thing ADR-0070 §4 put there so a reader tells the four readings apart by a name
+        rather than by prose that could be reworded. It is still read, still typed and
+        still what this component branches on; what a reader sees instead is the blocks
+        themselves on the one reading that has them, and the payload's own sentence on
+        the three that do not.
+
+        That the name, and the standing sentences under every finding, live in the
+        artefact and not on this screen is
+        [ADR-0115](../../../docs/adr/0115-the-report-screen-carries-the-figures-and-the-artefact-carries-the-sentences.md).
+      */}
+      {/* One line where three paragraphs stood: who wrote these sentences, that no
+          figure above came from them, and what the label on a fix asserts. The three
+          the screen no longer prints are `A_MODEL_WROTE_THESE_SENTENCES`,
+          `WHAT_A_LABEL_ON_A_FIX_ASSERTS` and the payload's own `stated` — all three
+          still built, still tested, and the payload's still travelling in the artefact
+          a recipient reads. */}
+      <p className="asserts">{WHAT_THIS_SECTION_IS}</p>
+      {/* Except where there is nothing under it. A reading with no block on it has only
+          the payload's own sentence to say why, and that sentence is the section
+          (ADR-0070 §4). */}
+      {findings.kind === 'explained' ? null : (
+        <p className="aside">{findings.stated}</p>
+      )}
       {findings.kind === 'explained' ? (
         <div className="findings">
           {findings.families.map((family) => (
@@ -467,14 +596,28 @@ function TheFamilyFailures({ family }: { family: FamilyFindingsReading }) {
       </summary>
       {family.findings.map((finding) => (
         <article className="finding" key={finding.caseId}>
-          <h4>{finding.caseId}</h4>
-          <p className="kind">
-            {finding.identifier} — {finding.exposure}
-          </p>
-          {/* What this break is read against, in the record's own sentence: whether a
-              control claiming this family was declared, and whether it was broken.
-              Never rebuilt from the three fields under it (ADR-0068 §3). */}
-          <p className="label">{finding.attributedCause}</p>
+          {/*
+            The case, the fix's label beside it, and the two sentences.
+
+            **What is no longer drawn, and where it still is.** The exposure and the
+            identifier, what the failure was attributed to, what informed the fix,
+            whether the two instruments disagreed, whether anything was withheld, where
+            in the caller's source it sits and whether the bench could see that source:
+            eight lines of standing under every finding, three findings a family. They
+            are on `FindingReading` unchanged, every one of them the payload's own
+            sentence, and they travel in the artefact a recipient reads — this screen is
+            where an engineer looks up what broke and what to do about it.
+
+            **The label stays, as a word.** *Proven* and *proposed* are the one pair a
+            reader must not confuse — proven is a claim about this case against one
+            patched revision, never that the family is closed (ADR-0073 §4) — and the
+            sentence over this section says a fix reads proven only where the bench
+            re-attempted the case. A label that word points at has to be on the screen.
+          */}
+          <h4>
+            {finding.caseId}
+            <span className="fix-label">{finding.fixLabel}</span>
+          </h4>
           {/* Two sentences from two instruments, each under the question it answers,
               because neither answers the other's (ADR-0069). The heading is *what went
               wrong* and not *why it failed*: there is no sentence anywhere in a target
@@ -483,86 +626,12 @@ function TheFamilyFailures({ family }: { family: FamilyFindingsReading }) {
           <p>{finding.whatWentWrong}</p>
           <p className="ordinal">what to change</p>
           <p>{finding.whatToChange}</p>
-          {/* And what informed it, which is the whole point of drawing it here: a
-              reader has to be able to tell a fix derived from their own transcript
-              from one derived from a corpus, and on run one *nothing informed this* is
-              a stated absence rather than blank space (ADR-0019). */}
-          <p className="aside">{finding.informedBy}</p>
-          {/* Empty except where the disclosure rule replaced a sentence, which the
-              sentence standing in its place already says: this is the countable half
-              beside it, in the payload's own names (ADR-0070 §2c). */}
-          {finding.withheld ? (
-            <p className="aside">withheld — {finding.withheld}</p>
-          ) : null}
-          <p className="aside">{finding.disagreement}</p>
-          {/* Where it is, when the bench ran where the code is — an Action in the
-              caller's own repository, which is the only place the two are on one disk
-              (ADR-0066, ADR-0071). Most runs draw the sentence alone, and it says the
-              bench could not see this target's source rather than leaving a gap a
-              reader would take for a clean result. The compact `path:line` is drawn
-              only where there is one, and it is the payload's own string. */}
-          {finding.location ? (
-            <p className="location">{finding.location}</p>
-          ) : null}
-          <p className="aside">{finding.sourceAnchor}</p>
-          <TheChange finding={finding} />
         </article>
       ))}
     </details>
   )
 }
 
-/**
- * The label on a fix, and the change under it the way a reviewer reads one.
- *
- * **The label is the load-bearing part and the diff is the presentation.** Every fix
- * carries one of two words and there is no third: *proven* — the bench patched a copy
- * of the caller's own checkout, re-served the target and re-attempted the case — or
- * *proposed* — it could not be tested. A plain hosted endpoint can only ever carry the
- * second, because the bench cannot restart somebody else's server, and blurring the
- * two would put an untested assertion in front of a procurement reader under the word
- * *proven*: the hand-filled questionnaire ADR-0001 exists to displace, reproduced
- * inside the tool meant to replace it (ADR-0073).
- *
- * **What *proven* asserts is on the screen beside it, not in a legend.** *This case no
- * longer succeeds against the patched revision* — not that the family is closed and
- * not that the agent is fixed. A fact carried somewhere else is a fact a screenshot
- * loses, which is why the sentence is drawn under the label rather than once at the
- * top of the section.
- *
- * **Collapsed, expandable, with the label on the header**, which is how every reviewer
- * UI this borrows from draws a change and the one convention worth taking from them —
- * and none of the others: no severity word, no tint that stands for one, no ordering
- * of one change against another and no count of them (D3, D12, ADR-0005). The header
- * carries the label, the file and the line, and nothing else.
- *
- * **The diff is drawn and never assembled.** It arrives already rendered from the
- * patch the run recorded; this component has no *before* and no way to build one,
- * which is `api/report.ts`'s standing rule (ADR-0073 §3). Where the run recorded none
- * — every run this repository's own API serves — there is nothing to expand, and the
- * sentence above still says why the fix is proposed rather than leaving a gap a reader
- * would take for a clean result.
- */
-function TheChange({ finding }: { finding: FindingReading }) {
-  return (
-    <div className="change">
-      <p className="label">{finding.fixLabel}</p>
-      <p className="aside">{finding.fixStanding}</p>
-      {finding.diff ? (
-        <details className="diff">
-          <summary>
-            {/* The label beside the file and the line, on the header a reader opens
-                from — the two facts a reviewer needs before deciding to read a
-                change, and the payload's own strings for both. */}
-            {finding.fixLabel}
-            {finding.location ? ` — ${finding.location}` : ''}
-          </summary>
-          <pre>{finding.diff}</pre>
-        </details>
-      ) : null}
-    </div>
-  )
-}
 
 /**
  * The attacks that worked, one family at a time, with what came back.
@@ -613,312 +682,225 @@ function TheFamilyExchanges({ family }: { family: FamilyExchangeReading }) {
   )
 }
 
+
 /**
- * What a family is labelled with, under the name and above whatever the run made of
- * it.
+ * One elective family, as a row of the table the six are read in.
  *
- * The article first, because it is the claim this project makes and the published
- * entries are a secondary label on somebody else's list (ADR-0002). Both are the
- * payload's own sentences printed verbatim: a screen that rebuilt either from the
- * identifier lists beside them would hold a second copy of a legal mapping in
- * TypeScript, and two copies of one claim are two claims the day one is edited
- * (ADR-0044). Beside the family name and never instead of it — `readFamily` still
- * does one thing, and this is a second column rather than a second vocabulary.
+ * **The same row and a different record.** `ElectiveFigures` is its own type over its
+ * own array (ADR-0035 §2) and this component takes only that — there is no signature
+ * here that accepts either, which is what keeps a seventh family out of the six's
+ * arithmetic. What it shares is the shape a reader reads.
  *
- * Drawn on all three card shapes, the two that carry no figure included: a withheld
- * rate says the evidence behind it cannot be stated and an unmet precondition says
- * nothing was measured, and neither says the duty went away.
+ * **No refs.** An elective label makes no coverage claim and reaches no report
+ * (ADR-0044), so the column is empty rather than filled with something composed here.
+ *
+ * **No discrimination, here or anywhere on this screen.** The bench's `D` on the tier
+ * is a claim about the bench and is stated in the gate run's own document (ADR-0018).
  */
-function TheLabel({ label }: { label: LabelReading }) {
+function TheElectiveFamily({ one }: { one: ElectiveFigures }) {
+  const figures = one.figures
   return (
-    <>
-      <p className="label">{label.bears}</p>
-      <p className="label">{label.claims}</p>
-      <TheClaimedEntries label={label} />
-    </>
+    <tbody>
+      <tr>
+        <th scope="row">{readFamily(one.family)}</th>
+        <td className="figure-cell">{figures.fail}</td>
+        <td className={`rate-cell ${figures.band}`}>
+          <span className="rate">{figures.rate}</span>
+          <span className="track">
+            <span className="segment" style={{ width: figures.rateWidth }} />
+          </span>
+        </td>
+        <td className="figure-cell">
+          {figures.interval}
+          <span className="at"> {figures.intervalAt}</span>
+        </td>
+        <td className={`band-cell ${figures.band}`}>{figures.band}</td>
+        <td className="refs-cell" />
+      </tr>
+      <TheFamilySaid
+        said={[
+          figures.kappa
+            ? `${figures.verdictClass} — κ ${figures.kappa.figure}, ${figures.kappa.counts}`
+            : figures.verdictClass,
+        ]}
+      />
+    </tbody>
   )
 }
 
-/**
- * The published entries as chips, under the sentence that already claims them.
- *
- * **The identifiers and not a second sentence.** `claims` above is the bench's own
- * rendering and says everything a reader needs in prose; what it cannot do is be
- * scanned. An operator holding the OWASP Top 10 for Agentic Applications open in
- * another tab is matching `ASI01:2026` as a key, and finding it inside a paragraph on
- * every card is the thing this row spares them (ADR-0044, ADR-0036).
- *
- * Each list is named where its chips are, because the two vocabularies are two
- * published lists and a column of bare identifiers would leave a reader deciding from
- * the prefix which list `ASI01:2026` is on. The strings are printed exactly as the
- * payload sent them, edition included: the edition is part of the identifier, and a
- * chip reading `ASI01` against a list that reissues yearly is a claim about no
- * particular year.
- *
- * **A list with no entries draws nothing at all.** Disclosure denial claims no
- * agentic entry — the agentic list has no disclosure category, and ADR-0002 refused
- * the nearest one rather than stretching it — so the absence is the absence of a row
- * and never a chip saying *none*, which would read as a claim that the list was
- * consulted and answered.
- */
-function TheClaimedEntries({ label }: { label: LabelReading }) {
-  if (label.agentic.length === 0 && label.llm.length === 0) {
-    return null
-  }
-  return (
-    <ul className="claimed">
-      {label.agentic.length > 0 ? (
-        <li>
-          <span className="list">OWASP ASI</span>
-          {label.agentic.map((entry) => (
-            <span className="entry" key={entry}>
-              {entry}
-            </span>
-          ))}
-        </li>
-      ) : null}
-      {label.llm.length > 0 ? (
-        <li>
-          <span className="list">OWASP LLM</span>
-          {label.llm.map((entry) => (
-            <span className="entry" key={entry}>
-              {entry}
-            </span>
-          ))}
-        </li>
-      ) : null}
-    </ul>
-  )
-}
 
 /**
- * The elective tier, beside the six families and never among them.
+ * One family, as a body of two rows: the figures, and the prose under them.
  *
- * **A section of its own, and that is the whole design.** The grid above is keyed on
- * the six families ADR-0015 fixed the gate's denominator at; an elective family drawn
- * into it would be a seventh card in a row of figures, which is the reading ADR-0035
- * exists to prevent — arriving through a screen rather than through arithmetic. So it
- * sits after the search, with its own heading, and shares no column with anything
- * scored.
+ * **Three shapes and not one row with empty cells.** A family whose rate is withheld
+ * and a family the target could not be measured on carry no figures at all, so their
+ * figure columns are one cell saying why rather than four cells a reader would read a
+ * zero into. That was the argument for cards and it is what the union still buys here:
+ * there is no `figures` on either of those answers for a `0.00` to be drawn from.
  *
- * **A requested family's figures are here; the bench's own are not.** What that family
- * measured against *this target* is a fact about this target and is drawn the way a
- * family card draws one — the rate, the interval, the band
- * ([ADR-0088](../../../docs/adr/0088-an-elective-familys-rate-against-a-target-is-a-fact-about-that-target.md)).
- * What is nowhere in this section, and has no field on the reading it is drawn from,
- * is the bench's discriminating power on the tier: that is a claim about *this bench*
- * and this document is about a *target* (ADR-0018), and an operator who wants it reads
- * the gate run.
- *
- * **All the halves are drawn, including the empty ones.** A run that asked for all
- * three produces no absences at all, and a screen that then drew nothing would be
- * indistinguishable from one reading a document made before the tier existed. So the
- * request line is always here, and what varies is the figures, the families this
- * target could not answer, and the absence list.
+ * **A `tbody` a family, which is what makes the second row possible.** The counts, the
+ * κ counts, the coverage limits and what the search found are sentences, and a sentence
+ * in a figure column is a column that has stopped being one. They sit under the row
+ * they belong to, at the width of the table.
  */
-function TheElective({ elective }: { elective: ElectiveReading }) {
-  return (
-    <section>
-      <h2>The elective tier, which decides nothing on this report</h2>
-      {/* The payload's own sentence about the request, whichever way it went: it is
-          the one place the reason there are no figures here is stated, and it is the
-          bench's wording rather than this app's. */}
-      <p className="consequence">{elective.stated}</p>
-      {/* The figures, in cards of their own under this heading and never in the grid
-          above: that grid is keyed on the six the gate's denominator is fixed at
-          (ADR-0015), and a seventh card in it would be a denominator this bench does
-          not have. Each card carries no label line and no coverage note, because an
-          elective label makes no coverage claim and reaches no report (ADR-0044). */}
-      {elective.measured.length > 0 ? (
-        <div className="families">
-          {elective.measured.map((one) => (
-            <div className="family" key={one.family}>
-              <h3>{readFamily(one.family)}</h3>
-              <div className="rate-line">
-                <p className="score">
-                  <span className="calls">{one.figures.rate}</span>
-                </p>
-                <p className="score">
-                  <span className="kind">band</span>{' '}
-                  <strong>{one.figures.band}</strong>
-                </p>
-              </div>
-              <ul className="rates">
-                <li>
-                  <span className="who">interval</span>{' '}
-                  <span className="rate">{one.figures.interval}</span>{' '}
-                  <span className="who">{one.figures.intervalAt}</span>
-                </li>
-                <li>
-                  <span className="who">verdicts</span>{' '}
-                  <span className="rate">{one.figures.verdictClass}</span>
-                </li>
-              </ul>
-              <p className="aside">{one.figures.counts}</p>
-            </div>
-          ))}
-        </div>
-      ) : null}
-      {elective.notMeasurable.length > 0 ? (
-        <ul className="absences">
-          {elective.notMeasurable.map((one) => (
-            <li key={one.family}>{one.stated}</li>
-          ))}
-        </ul>
-      ) : null}
-      {elective.requested.length > 0 ? (
-        <ul className="claimed requested">
-          <li>
-            <span className="list">requested</span>
-            {elective.requested.map((family) => (
-              <span className="entry" key={family}>
-                {family}
-              </span>
-            ))}
-          </li>
-        </ul>
-      ) : null}
-      {elective.absences.length > 0 ? (
-        <ul className="absences">
-          {elective.absences.map((absence) => (
-            <li key={absence.family}>{absence.stated}</li>
-          ))}
-        </ul>
-      ) : (
-        <p className="aside">
-          Every elective family this bench holds was requested on this run, so there
-          is no absence to state.
-        </p>
-      )}
-    </section>
-  )
-}
-
-/**
- * One family, as a card that opens with its figures.
- *
- * Three shapes rather than one row with empty cells: a family whose rate is
- * withheld and a family the target could not be measured on carry no figures at
- * all, so there is no cell for a `0.00` to be drawn into. Cards rather than a table
- * for the same reason the two cost figures are blocks — a table wants a total row,
- * and this grid has nowhere to put one.
- */
-function TheFamily({ row, counted }: { row: FamilyRow; counted: string }) {
+function TheFamily({ row }: { row: FamilyRow }) {
   const answer = row.answer
   if (answer.kind === 'withheld') {
     return (
-      <div className="family absent">
-        <h3>{readFamily(answer.family)}</h3>
-        <TheLabel label={answer.label} />
-        {/* Why there is no rate here, where the rate would be. What this card does
-            not state is the figure with its interval and its band: the attempts were
-            made and the measurement is on the run, and what it lacks is a statable
-            evidentiary strength (ADR-0006, ADR-0015). It said none of that until now
-            — the counts alone read as a family nobody attacked. */}
-        <p className="at">{answer.reads}</p>
-        {/* And the reading that barred it, in the place and the shape a published
-            family carries its κ, because the number that withheld the rate is the
-            number a reader came for. Absent entirely where nobody measured one: no
-            figure, rather than a κ of zero (ADR-0013). */}
-        {answer.kappa ? (
-          <ul className="rates">
-            <li>
-              <span className="who">κ</span>{' '}
-              <span className="rate">{answer.kappa.figure}</span>
-            </li>
-          </ul>
-        ) : null}
-        {/* Empty where the process no longer holds the run, which is every run after
-            a restart. */}
-        {counted ? <p className="aside">{counted}</p> : null}
-        {answer.kappa ? <p className="aside">{answer.kappa.counts}</p> : null}
-        <TheDiscoveries discoveries={row.discoveries} />
-      </div>
+      <tbody className="absent">
+        <tr>
+          <th scope="row">{readFamily(answer.family)}</th>
+          {/* Why there is no rate here, where the rate would be. The attempts were
+              made and the measurement is on the run; what it lacks is a statable
+              evidentiary strength (ADR-0006, ADR-0015). */}
+          <td className="said-cell" colSpan={4}>
+            {answer.reads}
+            {/* And the reading that barred it, beside the sentence: the number that
+                withheld the rate is the number a reader came for. Absent entirely
+                where nobody measured one — no figure, rather than a κ of zero
+                (ADR-0013). */}
+            {answer.kappa ? (
+              <span className="kappa"> κ {answer.kappa.figure}</span>
+            ) : null}
+          </td>
+          <td className="refs-cell">
+            <TheRefs label={answer.label} />
+          </td>
+        </tr>
+        <TheFamilySaid
+          said={answer.kappa ? [`κ ${answer.kappa.figure} — ${answer.kappa.counts}`] : []}
+        />
+      </tbody>
     )
   }
   if (answer.kind === 'not_measurable') {
     return (
-      <div className="family absent">
-        <h3>{readFamily(answer.family)}</h3>
-        <TheLabel label={answer.label} />
-        <p className="at">not measurable — {answer.reason}</p>
-        <p>{answer.stated}</p>
-        <p className="aside">{answer.note}</p>
-        <TheDiscoveries discoveries={row.discoveries} />
-      </div>
+      <tbody className="absent">
+        <tr>
+          <th scope="row">{readFamily(answer.family)}</th>
+          <td className="said-cell" colSpan={4}>
+            not measurable — {answer.reason}
+          </td>
+          <td className="refs-cell">
+            <TheRefs label={answer.label} />
+          </td>
+        </tr>
+        <TheFamilySaid said={[]} />
+      </tbody>
     )
   }
   const figures = answer.figures
   return (
-    <div className="family">
-      <h3>{readFamily(answer.family)}</h3>
-      <TheLabel label={answer.label} />
-      <div className="rate-line">
-        <p className="score">
-          <span className="calls">{figures.rate}</span>
-        </p>
-        <p className="score">
-          <span className="kind">band</span> <strong>{figures.band}</strong>
-        </p>
-      </div>
-      <ul className="rates">
-        <li>
-          <span className="who">interval</span>{' '}
-          <span className="rate">{figures.interval}</span>{' '}
-          <span className="who">{figures.intervalAt}</span>
-        </li>
-        {figures.kappa ? (
-          <li>
-            <span className="who">κ</span>{' '}
-            <span className="rate">{figures.kappa.figure}</span>
-          </li>
-        ) : null}
-        <li>
-          <span className="who">verdicts</span>{' '}
-          <span className="rate">{figures.verdictClass}</span>
-        </li>
-      </ul>
-      <p className="aside">{figures.counts}</p>
-      {figures.kappa ? <p className="aside">{figures.kappa.counts}</p> : null}
-      <TheDiscoveries discoveries={row.discoveries} />
-    </div>
+    <tbody>
+      <tr>
+        <th scope="row">{readFamily(answer.family)}</th>
+        {/* The two counts the rate came from, so the figure beside them is checkable
+            rather than believable. */}
+        <td className="figure-cell">{figures.fail}</td>
+        {/* The band's class on the rate cell too, so the bar under the figure takes
+            the band's colour: the bar is the quantity the band was read off, and two
+            colours for one reading is a reader deciding which of them to believe
+            (ADR-0112 §4). */}
+        <td className={`rate-cell ${figures.band}`}>
+          <span className="rate">{figures.rate}</span>
+          {/* The same quantity as a length, so six of them are compared down one edge.
+              One colour and never a band's: the band is the column two along, in the
+              bench's own word (ADR-0005, ADR-0014). */}
+          <span className="track">
+            <span className="segment" style={{ width: figures.rateWidth }} />
+          </span>
+        </td>
+        {/* The interval and what it was computed at, in one cell: an interval without
+            its confidence is a range a reader supplies their own confidence to. */}
+        <td className="figure-cell">
+          {figures.interval}
+          <span className="at"> {figures.intervalAt}</span>
+        </td>
+        {/* The band's own word, in the band's own colour — the one figure on any
+            screen of this application that is coloured, and ADR-0112 is why. The word
+            is what carries it; the hue is redundant with it. */}
+        <td className={`band-cell ${figures.band}`}>{figures.band}</td>
+        <td className="refs-cell">
+          <TheRefs label={answer.label} />
+        </td>
+      </tr>
+      <TheFamilySaid
+        said={[
+          figures.kappa
+            ? `${figures.verdictClass} — κ ${figures.kappa.figure}, ${figures.kappa.counts}`
+            : figures.verdictClass,
+        ]}
+      />
+    </tbody>
   )
 }
 
 /**
- * What the search found in this family, under what the suite measured.
+ * The published entries a family claims, as the chips they already were.
  *
- * **Nothing at all where the search never worked in this family**, which is the
- * empty cell #77 asks for: a card that printed *0 episodes* would say the attacker
- * tried and found nothing, and the same refusal is why a family with no attempts
- * carries no rate.
- *
- * **Not styled as a figure.** The count is drawn in the card's plain aside type and
- * not on the `rate-line`; it takes no tint and no class of its own, and the word
- * beside it is *discoveries* — the idiom `SettingsScreen.tsx` states, *colour
- * carries identity and order and
- * never a judgement*, applied to the one number on this screen a reader could
- * mistake for a worse rate (ADR-0056). The sentence saying an episode has no
- * denominator is on the card rather than in a legend, because a fact carried
- * somewhere else is a fact a screenshot loses.
+ * The identifiers and not the two sentences. `label.claims` and `label.bears` are the
+ * bench's own rendering and say everything a reader needs in prose — they are in the
+ * row under this one — and what they cannot do is be scanned. An operator holding the
+ * OWASP list open in another tab is matching `ASI01:2026` as a key (ADR-0044,
+ * ADR-0036).
  */
-function TheDiscoveries({
-  discoveries,
-}: {
-  discoveries: DiscoveriesReading | null
-}) {
-  if (discoveries === null) {
-    return null
-  }
+function TheRefs({ label }: { label: LabelReading }) {
   return (
     <>
-      <p className="aside">
-        discoveries — {discoveries.broke}, {discoveries.censored}
-      </p>
-      <p className="aside">{discoveries.note}</p>
+      {[...label.agentic, ...label.llm].map((entry) => (
+        <span className="entry" key={entry}>
+          {entry}
+        </span>
+      ))}
+      {/* And the articles the family's failure bears on, behind the instrument's name:
+          `15` and `14(4)(e)` are keys into a published instrument and neither names it.
+          The sentence that read them out is off this screen, so these are the only
+          place an article reaches a reader — carried verbatim, never composed. */}
+      {label.articles.length > 0 ? (
+        <span className="entry act">
+          EU AI Act {label.articles.join(' ')}
+        </span>
+      ) : null}
     </>
   )
 }
+
+/**
+ * How a family's verdicts were reached, in a line under its figures.
+ *
+ * **One line, and it is the one the figures cannot carry.** *Deterministic* or
+ * *judged* is what decided every verdict the rate is built from, and on a judged
+ * family κ and the gold set it was measured over come with it — a rate whose verdicts
+ * a model reached is a different kind of fact from one a canary token decided, and
+ * ADR-0004 is that distinction (ADR-0013 for the floor).
+ *
+ * **What used to be here and is not.** The two label sentences, which say in prose what
+ * the identifiers in the row above say as keys; the counts, which are the fraction in
+ * the row above; and what the search found, which is the adaptive layer's own section
+ * further down. Each was a paragraph under every family, six times over, restating
+ * something a reader had just read.
+ *
+ * Nothing at all where there is nothing to say: a family with no figures draws no line
+ * rather than an empty row.
+ */
+function TheFamilySaid({ said }: { said: readonly string[] }) {
+  const lines = said.filter((one) => one !== '')
+  if (lines.length === 0) {
+    return null
+  }
+  return (
+    <tr className="family-said">
+      <td colSpan={6}>
+        {lines.map((one) => (
+          <p className="aside" key={one}>
+            {one}
+          </p>
+        ))}
+      </td>
+    </tr>
+  )
+}
+
 
 /**
  * One family the search worked in: its episodes, and what each proposed.
@@ -1034,22 +1016,28 @@ function TheEpisode({ episode }: { episode: EpisodeRouteReading }) {
   )
 }
 
+/**
+ * One family the search worked in: a row an episode, under the family's name.
+ *
+ * A `tbody` a family, on the scored table's own terms — the family is named once and
+ * its episodes are the rows under it, which is what *grouped and never joined* looks
+ * like when the grouping is a table (ADR-0010). A family that opened two episodes has
+ * two rows and no total: an episode has no denominator, so there is nothing here to
+ * add.
+ */
 function TheSearch({ family }: { family: AdaptiveFamilyReading }) {
   return (
-    <div className="family">
-      <h3>{readFamily(family.family)}</h3>
+    <tbody>
       {family.episodes.map((episode, at) => (
-        <div key={`${at}-${episode.proposed}`}>
-          <div className="rate-line">
-            <p className="score">
-              <span className="calls">{episode.turns}</span>
-            </p>
-            <p className="score">
-              <span className="kind">episode</span> <strong>{episode.outcome}</strong>
-            </p>
-          </div>
-        </div>
+        <tr key={`${at}-${episode.proposed}`}>
+          {/* The name on the first of a family's rows and nothing on the rest, so a
+              family reads as one block rather than as its name repeated. */}
+          <th scope="row">{at === 0 ? readFamily(family.family) : ''}</th>
+          <td className="figure-cell">{episode.turns}</td>
+          <td className="outcome-cell">{episode.outcome}</td>
+          <td className="proposed-cell">{episode.proposed}</td>
+        </tr>
       ))}
-    </div>
+    </tbody>
   )
 }

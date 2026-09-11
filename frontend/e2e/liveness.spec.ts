@@ -134,6 +134,16 @@ const RUNNING = {
       of: 181,
       resisted: 38,
       succeeded: 2,
+      // The verdicts in the order they came back, which is what the strip draws one
+      // cell an attempt from: two got through, and where they did is a fact the
+      // record keeps rather than one this screen arranges.
+      answers: [
+        ...Array<string>(20).fill('resisted'),
+        'succeeded',
+        ...Array<string>(15).fill('resisted'),
+        'succeeded',
+        ...Array<string>(3).fill('resisted'),
+      ],
       not_run: '',
     },
   ],
@@ -172,7 +182,14 @@ test('a poll that stops being answered says so, over the figures it last read', 
   await expect(page).toHaveTitle('Not answering — The run — AgentAudit')
   // And the figures are still there: they are the only evidence of where the run had
   // got to, and the stamp above them is what keeps them honest.
-  await expect(page.getByText('40 / 181')).toBeVisible()
+  //
+  // Asked of the family's own row rather than of the page. This run is one family, so
+  // the fraction the bar over the table draws and the fraction in the row are the same
+  // two numbers in two places — the bar's is the scored layer's, the row's is this
+  // family's, and they coincide only because there is one family here.
+  await expect(
+    page.locator('table.attempts tbody tr').filter({ hasText: 'wrongful commitment' }),
+  ).toContainText('40 / 181')
 
   // The offer is one read, made now. Nothing here restarts a run or touches a target.
   const again = page.getByRole('button', { name: 'Ask the bench now' })

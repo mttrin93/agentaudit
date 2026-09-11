@@ -76,6 +76,7 @@ from backend.bench.judge import Disagreement, Finding
 from backend.bench.library import (
     AnyFamily,
     Case,
+    DiscoveredBy,
     ElectiveFamily,
     Family,
     LibraryVersion,
@@ -795,6 +796,8 @@ def run_calibration(
     proof_waived: bool = False,
     trace: TracedRun | None = None,
     thread_id: str | None = None,
+    *,
+    discovered_by: DiscoveredBy,
 ) -> CalibrationResult:
     """Run the given cases against the given targets and return what was measured.
 
@@ -872,6 +875,14 @@ def run_calibration(
     the run changes either way: the sink is not consulted, no figure comes back from
     it, and a sink that is down or absent is a run that completes normally
     (ADR-0026).
+
+    `discovered_by` is what a route this run's adaptive layer files is recorded as,
+    and so which admission bar it will face. Required and keyword-only, because the
+    two callers it separates are the whole of
+    [ADR-0107](../../docs/adr/0107-a-route-found-against-a-customers-target-faces-the-single-model-bar.md):
+    a surface attacking the three reference agents declares `ADAPTIVE` and one
+    attacking a user's agent declares `ADAPTIVE_ON_TARGET`. It is not derived from
+    the targets, which describe both kinds alike.
 
     **The inherited tracers are turned off here**, at the top of the one entry point,
     ahead of the first LangGraph invocation and long ahead of the first call to an
@@ -964,6 +975,10 @@ def run_calibration(
                     AttackableTarget(
                         target=completed.target,
                         canary=completed.registration.nonce,
+                        # The caller's declaration of what this run attacks, carried
+                        # onto the target the layer opens episodes against and
+                        # decided nowhere below here (ADR-0107 §3).
+                        discovered_by=discovered_by,
                         # What the scored layer learned from this target's own replies.
                         # This layer applies the declared preconditions, so
                         # a declaration the endpoint contradicted has to be

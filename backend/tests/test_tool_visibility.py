@@ -25,7 +25,7 @@ from backend.bench.adaptive.episode import (
 from backend.bench.calibration import CalibrationResult, TargetRun, run_calibration
 from backend.bench.contract import ToolCall, ToolTrace, Transcript
 from backend.bench.evaluator import Verdict, evaluate
-from backend.bench.library import Case, Family, Precondition
+from backend.bench.library import Case, DiscoveredBy, Family, Precondition
 from backend.bench.measurability import NotMeasurable, TraceNotVisible, runnable
 from backend.bench.scorer import discrimination, intervals_overlap, monotonicity
 from backend.tests.blind_target import blind_target
@@ -52,6 +52,7 @@ def run_whole_library_against_blind_target(library: list[Case]) -> TargetRun:
             plant_nonce=blind.plant_nonce,
             approve=CONFIRMING,
             adjudicator=ADJUDICATING,
+            discovered_by=DiscoveredBy.ADAPTIVE,
         )
     [target_run] = result.target_runs
     assert target_run.registration.complete, "the blind target never registered"
@@ -67,6 +68,7 @@ def calibrate_all_three(case: Case) -> CalibrationResult:
             plant_nonce=references.plant_nonce,
             approve=CONFIRMING,
             adjudicator=ADJUDICATING,
+            discovered_by=DiscoveredBy.ADAPTIVE,
         )
 
 
@@ -275,6 +277,7 @@ def test_a_declared_visibility_the_endpoint_contradicts_withdraws_the_two_famili
             plant_nonce=blind.plant_nonce,
             approve=CONFIRMING,
             adjudicator=ADJUDICATING,
+            discovered_by=DiscoveredBy.ADAPTIVE,
         )
 
     [target_run] = result.target_runs

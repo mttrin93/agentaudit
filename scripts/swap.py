@@ -111,7 +111,7 @@ from backend.bench.entry import Entry, enter
 from backend.bench.gate import NotAGateRun, read_gate
 from backend.bench.goldset import load_gold_sets, measure_reliability
 from backend.bench.lease import LibraryBusy
-from backend.bench.library import Case, Family
+from backend.bench.library import Case, DiscoveredBy, Family
 from backend.bench.registration import Attestation
 from backend.bench.retirement import live_library
 from backend.bench.rule import DECLARED_RULE
@@ -171,11 +171,12 @@ SWAP_RUNS_DIR = Path(__file__).resolve().parents[1] / "docs" / "swap-runs"
 DEFAULT_SECOND_MODEL = "openrouter:openai/gpt-4o-mini"
 """This script's default second model, under `completion.SECOND_REFERENCE_MODEL_ENV`.
 
-The variable itself is declared beside the other model names now that a second
-surface reads it: `/pending-routes` measures the cross-model bar on two models
-without a terminal (ADR-0105), so a name only this script knew would have been a
-second definition of one environment variable. What stays here is the *default*,
-because a script's fallback when nothing is declared is the script's own decision.
+The variable is declared beside the other model names in `completion.py` rather
+than here, and it stays there now that this script is the one reader of it again:
+`/pending-routes` read it until ADR-0107 §4 gave that surface a one-model bar, and a
+name moved back into a script the day its second reader went away would be a
+definition that travelled with a ticket. What stays here is the *default*, because a
+script's fallback when nothing is declared is the script's own decision.
 
 It is a deliberate choice rather than a spare string.
 
@@ -521,6 +522,7 @@ def calibrate_on(
                     cases=list(cases), targets=targets, price=price_per_call
                 ),
                 trace=traced_run(reference_model=str(model)),
+                discovered_by=DiscoveredBy.ADAPTIVE,
             )
         except BudgetExceeded as abort:
             print(f"\nRun aborted on budget: {abort}")

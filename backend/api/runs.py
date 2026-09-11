@@ -141,7 +141,7 @@ from backend.bench.adaptive.attacker import AttackerCompletion
 from backend.bench.calibration import CalibrationResult, run_calibration
 from backend.bench.contract import TargetConfig, TargetUnreachable
 from backend.bench.elective import ElectiveSelection
-from backend.bench.library import Family, LibraryVersion
+from backend.bench.library import DiscoveredBy, Family, LibraryVersion
 from backend.bench.narration import NarrativeFailure
 from backend.bench.nonce import issue_nonce
 from backend.bench.payload import GateCitation
@@ -155,6 +155,7 @@ from backend.graph.budget import (
     BudgetExceeded,
     CallPrice,
     RunBudget,
+    StopRequested,
 )
 from backend.graph.runstate import RunState
 from backend.observability import TracedRun
@@ -562,6 +563,34 @@ class BenchRuns:
         record.presented = pending.halted(PRESENT_WAIT_SECONDS)
         return record
 
+    def stop(self, run_id: str) -> RunRecord:
+        """Ask one running suite to stop, and answer with the record as it stands.
+
+        **The flag and nothing else.** This sets `RunState.stop_requested` and returns;
+        it joins no thread, cancels no call and writes no status. The worker reads the
+        flag where it authorises its next call and settles the run itself, which is
+        what keeps a stopped run's record the worker's own — a status written here
+        would be a second writer racing the one that knows what the run actually did
+        (ADR-0114).
+
+        **Only a run that is running.** A run at its interrupt has sent nothing and is
+        declined by answering the halt rather than stopped, and a stop that quietly did
+        that would record a refusal of the estimate as an abort of a run; a run that has
+        already ended has nothing to stop. Both raise `NoLongerWaiting`, which is the
+        answer this API already gives a caller acting on a run that has moved.
+        """
+        with self._lock:
+            record = self._runs.get(run_id)
+        if record is None:
+            # Nothing was ever started under this id in this process, which is the
+            # same `KeyError` `_answer_a_recovered_halt` raises for the same fact: a
+            # run this bench never held cannot be stopped, and a restart holds none.
+            raise KeyError(run_id)
+        if record.status is not RunStatus.RUNNING:
+            raise NoLongerWaiting(record)
+        record.run_state.stop_requested = True
+        return record
+
     def answer(self, run_id: str, approval: Approval) -> RunRecord:
         """Answer one run's interrupt. A yes is the only thing that starts a suite."""
         with self._lock:
@@ -818,6 +847,7 @@ def _run(record: RunRecord, config: BenchConfig, pending: PendingApproval) -> No
             # inside the graph: the record and the checkpoint have to agree, or the
             # id a restart looks the halt up by names nothing (ADR-0034).
             thread_id=record.thread_id,
+            discovered_by=DiscoveredBy.ADAPTIVE_ON_TARGET,
         )
     # Every one of the three ways out below files first. A run the ceiling cut
     # short is the run whose attacker was most likely still finding things, and
@@ -826,6 +856,22 @@ def _run(record: RunRecord, config: BenchConfig, pending: PendingApproval) -> No
     # routes an operator paid the most for. The paths that settle *before* this
     # try block add no such clause: nothing was sent, so there is no attacker to
     # have a reading about.
+    except StopRequested as stopped:
+        # Aborted, like a ceiling-exceeded run, because what an abort names is a run
+        # that stopped rather than finished — and a different sentence, because why it
+        # stopped is the fact a reader needs. An episode cut short by the stop is
+        # censored on the ceiling's own terms: the attacker stopped, and a target never
+        # given the chance to hold must not read as one that did (ADR-0011, ADR-0114).
+        record.settle(
+            RunStatus.ABORTED,
+            (
+                f"{stopped}. The attempts already made are on the record and each "
+                "family is reported over what was attempted, so this run's figures "
+                "are not a gate result. An episode the stop cut short is recorded as "
+                f"censored, never as resisted. {_queued(record)}"
+            ),
+        )
+        return
     except BudgetExceeded as abort:
         record.settle(
             RunStatus.ABORTED,

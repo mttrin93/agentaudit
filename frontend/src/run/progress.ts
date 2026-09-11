@@ -16,17 +16,19 @@
  * `progress.test.ts` asserts the absence by scanning the whole view for the sums
  * it must not contain.
  *
- * **Three things a run can stop on, and none of them is a security result.** A
- * ceiling reached is the budget working, so it is reported as an **abort**, and the
- * episode it cut short is recorded as **censored** — the attacker stopped, and a
- * target that was never given the chance to hold must not read as one that did
- * (ADR-0007, ADR-0011). A transport failure is reported under its own name of the
- * seven the contract defines, because a timeout is capacity, a rejected token is
- * configuration, a malformed body is a contract breach and a quota is a quota, and
- * one word for all of them sends every one to the same wrong place. Neither is a
- * verdict, and `EpisodeOutcome` has exactly one member for the same reason the
- * bench raises `TargetUnreachable` rather than returning it: there is no name in
- * this module for an episode that resisted, so nothing here can assign one.
+ * **Things a run can stop on, and none of them is a security result.** A ceiling
+ * reached is the budget working and an operator pressing stop is a person deciding
+ * (ADR-0007, ADR-0114); both are reported as an **abort**, under that word alone,
+ * because which of the two it was is in the sentence the bench settled the run with
+ * and not in a heading this module writes. That an episode either one cut short is
+ * recorded as **censored** is said there too — the attacker stopped, and a target
+ * never given the chance to hold must not read as one that did (ADR-0011) — and
+ * this module no longer says it a second time in its own words. A transport failure
+ * is reported under its own name of the seven the contract defines, because a
+ * timeout is capacity, a rejected token is configuration, a malformed body is a
+ * contract breach and a quota is a quota, and one word for all of them sends every
+ * one to the same wrong place. None of them is a verdict: there is no name in this
+ * module for an episode that resisted, so nothing here can assign one.
  */
 
 import { readFamily, readName } from '../families'
@@ -39,6 +41,7 @@ import type {
   ScoredProgress,
   TransportOutcome,
 } from '../api/bench'
+import type { RunEpisodes } from '../api/attempts'
 import type { Layer } from './interrupt'
 import { AWAITING_APPROVAL } from './interrupt'
 
@@ -56,34 +59,6 @@ export const SCORED_UNITS = ['family', 'case', 'attempt'] as const
  * screen belongs to (ADR-0099).
  */
 export const ADAPTIVE_UNITS = ['family', 'schedule', 'episode', 'turn'] as const
-
-/**
- * How this screen may describe an episode that ended without breaking a target.
- *
- * One member, and the absence of a second is the whole point: an episode stopped
- * by a turn cap or a ceiling is **censored**, and *resisted* is not a value this
- * type can hold. A widened union here is the failure ADR-0011 names — the
- * attacker's exhaustion read as the target's strength — so it is carried by the
- * type rather than by a comment asking for care.
- */
-export type EpisodeOutcome = 'censored'
-
-export const CENSORED_NOT_RESISTED =
-  'The episode the ceiling cut short is recorded as censored: the attacker ' +
-  'stopped, and an episode that was stopped is evidence about the budget rather ' +
-  'than about the target. A censored episode carries no rate and joins no count.'
-
-/** How an episode this run was inside is recorded, and the sentence for it. */
-export interface EpisodeReading {
-  outcome: EpisodeOutcome
-  note: string
-}
-
-/** The only episode reading this screen can build. */
-const CENSORED: EpisodeReading = {
-  outcome: 'censored',
-  note: CENSORED_NOT_RESISTED,
-}
 
 /** One layer's reading, in that layer's own units and figures. */
 export interface LayerReading {
@@ -222,8 +197,6 @@ export interface Standing {
    */
   heading: string
   statement: string
-  /** How an episode this run was inside is recorded. Never anything but censored. */
-  episode: EpisodeReading | null
   /** Said out loud whenever what stopped the run is not a fact about the target. */
   notASecurityResult: string
   /** Whether there is any point polling again. */
@@ -254,7 +227,6 @@ export function standing(progress: RunProgress): Standing {
         name: progress.status,
         heading: 'What this run will cost',
         statement: progress.statement,
-        episode: null,
         notASecurityResult: '',
         inFlight: true,
       }
@@ -264,7 +236,6 @@ export function standing(progress: RunProgress): Standing {
         name: progress.status,
         heading: 'Running',
         statement: progress.statement,
-        episode: null,
         notASecurityResult: '',
         inFlight: true,
       }
@@ -272,16 +243,18 @@ export function standing(progress: RunProgress): Standing {
       return {
         kind: 'aborted',
         name: progress.status,
-        heading: 'Aborted at the ceiling',
+        // *Aborted*, and not *aborted at the ceiling*: a ceiling is one of two
+        // things that abort a run and an operator pressing stop is the other
+        // (ADR-0114), so a heading naming the ceiling is wrong on half the runs
+        // it is drawn over. Which of the two it was is in the run's own sentence,
+        // where the bench writes it.
+        heading: 'Aborted',
         statement: progress.statement,
-        // The one place this screen names an episode's outcome, and the only name
-        // it has for one.
-        episode: CENSORED,
-        notASecurityResult:
-          'A ceiling reached is the budget working and it is not a result about ' +
-          'the target. The run is void rather than smaller: a suite that stopped ' +
-          'early measured fewer attempts than the rate it would report is ' +
-          'denominated on.',
+        // Neither the censored episode nor the void-rather-than-smaller sentence is
+        // said here any more. The bench settles every abort with both of them in the
+        // statement below, and this screen was saying them a second time in its own
+        // words — the same fact twice, once from the record and once hardcoded.
+        notASecurityResult: '',
         inFlight: false,
       }
     case 'completed':
@@ -290,7 +263,6 @@ export function standing(progress: RunProgress): Standing {
         name: progress.status,
         heading: 'Finished',
         statement: progress.statement,
-        episode: null,
         notASecurityResult: '',
         inFlight: false,
       }
@@ -300,7 +272,6 @@ export function standing(progress: RunProgress): Standing {
         name: progress.status,
         heading: 'Declined',
         statement: progress.statement,
-        episode: null,
         notASecurityResult: '',
         inFlight: false,
       }
@@ -310,7 +281,6 @@ export function standing(progress: RunProgress): Standing {
         name: progress.status,
         heading: 'Unanswered',
         statement: progress.statement,
-        episode: null,
         notASecurityResult:
           'Nobody said no and nobody said anything, which are different facts ' +
           'about the same run. Either way nothing was sent to the target and ' +
@@ -323,7 +293,6 @@ export function standing(progress: RunProgress): Standing {
         name: progress.status,
         heading: 'The nonce was not echoed',
         statement: progress.statement,
-        episode: null,
         notASecurityResult:
           'A target that did not prove control of itself was not measured. This ' +
           'is not a defence and it is not a finding: no attempt was made.',
@@ -335,7 +304,6 @@ export function standing(progress: RunProgress): Standing {
         name: progress.status,
         heading: `Stopped as ${progress.status}`,
         statement: progress.statement,
-        episode: null,
         notASecurityResult:
           'A run that stopped without finishing produced no report and nothing ' +
           'here is a finding about the target.',
@@ -351,7 +319,6 @@ function transportStanding(transport: TransportOutcome): Standing {
     name: transport.failure,
     heading: `The endpoint stopped answering: ${transport.failure}`,
     statement: transport.statement,
-    episode: null,
     notASecurityResult:
       'No attempt is recorded and nothing here is a security result. This is the ' +
       'endpoint, reported under the name of what it did — a timeout is capacity, ' +
@@ -388,6 +355,56 @@ export function progressView(progress: RunProgress): ProgressView {
 // --- the six families, while the run is going ------------------------------------
 
 /**
+ * How much of the scored layer's planned work has been done.
+ *
+ * **A share of the work and never a rate.** The two numbers are attempts *made* over
+ * attempts *planned* — both counts of what this bench has done — and neither is a
+ * reading taken against the target. That is the line
+ * [ADR-0110](../../../docs/adr/0110-a-run-may-show-how-much-of-its-own-work-is-done.md)
+ * draws through ADR-0005's *no total across them*: what may not be added is the
+ * families' **rates**, because a rate has a denominator of its own and a mean over six
+ * of them is a figure no family was ever measured at. A count of attempts made has no
+ * such denominator, and the run's own completion is the one question this screen
+ * exists to answer.
+ *
+ * **The six alone**, because the two tiers are two closed sets this app concatenates
+ * nowhere (ADR-0035 §2). A bar over nine would be a denominator built from both.
+ *
+ * **The scored layer alone**, because an attempt and a turn are different units and no
+ * adaptive quantity may reach a scored one (ADR-0010). The adaptive layer's position is
+ * on its own line, in its own units, as it was.
+ *
+ * Families the plan dropped contribute nothing to either number: their `of` is zero, so
+ * a run that is not attacking a family is not a run that is behind on it.
+ */
+export interface RunShare {
+  made: number
+  planned: number
+  /** The width of the filled part, for the bar. A length, and not a number read. */
+  done: string
+  /** The same length as a whole percent, which is the only figure of it printed. */
+  percent: string
+}
+
+/**
+ * The share, off the six families' served counts and nothing else.
+ *
+ * Rounded down to a whole percent for printing: a run at 99.6% of its plan has not
+ * finished, and a figure that says *100%* over a bar still moving is the one reading
+ * this line must not give.
+ */
+export function scoredShare(progress: RunProgress): RunShare {
+  const made = progress.families.reduce((sum, family) => sum + family.attempted, 0)
+  const planned = progress.families.reduce((sum, family) => sum + family.of, 0)
+  return {
+    made,
+    planned,
+    done: share(made, planned),
+    percent: `${planned === 0 ? 0 : Math.floor((made / planned) * 100)}%`,
+  }
+}
+
+/**
  * One family's row: the counts it was served, and the three lengths they draw.
  *
  * The same reading the gate screen draws for a gate run, over one target instead of
@@ -411,6 +428,162 @@ export interface FamilyRow {
   done: string
   held: string
   broke: string
+  /**
+   * The two counts behind `held` and `broke`, carried and never divided.
+   *
+   * The row prints how many of this family's attempts the target let through beside
+   * how many were made, which is two counts over one denominator and not a rate: a
+   * rate arrives on the report with its interval and its band, over a denominator that
+   * has stopped moving (ADR-0005). Nothing on this screen divides them, and
+   * `progress.test.ts` reads the view for the quotient.
+   */
+  succeeded: number
+  resisted: number
+  /**
+   * How many of this family's answered attempts the target let through, as a percent.
+   *
+   * A **per-family** rate over that family's own denominator, which is the shape
+   * ADR-0005 prescribes — and a point estimate with no interval beside it, over a
+   * denominator that is still moving, which is what makes it a reading of the run and
+   * not the measurement
+   * ([ADR-0111](../../../docs/adr/0111-the-run-screen-shows-a-live-per-family-rate.md)).
+   * The figure a recipient is handed arrives on the report with its Wilson interval,
+   * its verdict class and its band.
+   *
+   * Taken over `attempted` and never over `of`: a rate over the plan would count
+   * attempts that have not been made yet as attempts the target held, which is the one
+   * direction a live figure must not be wrong in.
+   *
+   * `—` until an attempt has come back, on `succeeded_attempts`' own terms: a family
+   * attempted no times has not been let through zero times, and `0%` is the reading
+   * that would say it had.
+   */
+  rate: string
+  /**
+   * One cell an attempt, in this family's own plan.
+   *
+   * `of` cells, each naming what is known about one attempt — answered and held,
+   * answered and broken, sent and not yet back, or not yet sent. What is drawn is the
+   * **counts**, laid out in that order, and never the sequence the attempts actually
+   * ran in: the route serves four counts per family and no per-attempt list, so a
+   * strip that interleaved them would be this app inventing an order for a reader to
+   * read a pattern off.
+   */
+  cells: readonly Cell[]
+  /**
+   * Where this family is in the run, in one word.
+   *
+   * Read off the counts and off the family the scored layer says it is in, and off
+   * nothing else. Not a figure and not a verdict: a family that has finished its plan
+   * has not defended anything, which is what `held` and `broke` are beside it for.
+   */
+  state: FamilyState
+}
+
+/** What is known about one attempt, for the cell that stands for it. */
+export type Cell = 'held' | 'broke' | 'in flight' | 'not attempted'
+
+/** Where a family is in the run's plan. Never a reading of how it answered. */
+export type FamilyState = 'complete' | 'running' | 'queued' | 'not run'
+
+function rateOf(succeeded: number, attempted: number): string {
+  return attempted === 0 ? '—' : `${Math.round((succeeded / attempted) * 100)}%`
+}
+
+/**
+ * The family with an attempt on the wire, or no family at all.
+ *
+ * The position and the status together, because the position alone is not it: it is
+ * the last attempt the scored layer *entered*, and it stays on the reading after the
+ * run has settled — so a finished suite would keep one cell in flight forever, and an
+ * aborted one would show a cell for the attempt it refused to send.
+ *
+ * Only `running`. A run holding its interrupt has sent nothing, and every other
+ * status is a run that has stopped.
+ */
+function sending(progress: RunProgress): string {
+  return progress.status === 'running' ? (progress.scored.position?.family ?? '') : ''
+}
+
+/**
+ * One family's attempts as cells: the verdicts in the order they came back, the one
+ * on the wire, and the ones not sent yet.
+ *
+ * **The order is the bench's and not this app's.** The strip used to be built from
+ * the counts — every held cell, then every broken one — because counts were all the
+ * route served. That put a run of green beside a run of red and read as two bars
+ * filling independently, which is a shape no run ever had. `FamilyRun.answers`
+ * carries the sequence now, so drawing it in order invents nothing; a strip laid out
+ * from counts was the thing inventing a shape.
+ *
+ * It is still not a timeline anybody may read a slope off. Attempts are independent
+ * by construction — a fresh session each, which is what makes their quotient a rate
+ * (CONTEXT.md, ADR-0005) — so what this shows is verdicts landing as they landed, and
+ * nothing on this bench is a figure over a window of them.
+ *
+ * **The in-flight cell comes off the position and never off the counts.** It used to
+ * be `attempted - resisted - succeeded`, which is always zero: `attempted` counts the
+ * attempts on the record, every attempt on the record carries a verdict, and the
+ * route builds `succeeded` by subtracting `resisted` from `attempted` for exactly
+ * that reason. So the arithmetic could not produce the cell, and the legend named a
+ * colour the strip could never draw.
+ *
+ * What does know is `RunState.enter`, which moves the scored position *to the attempt
+ * about to be sent* — so the family the position names has one attempt on the wire,
+ * and no other family has any. `inFlight` is that fact, decided by the caller, and it
+ * draws one cell out of the ones still waiting: a suite attacks one attempt at a time,
+ * and a second cell would be this screen inventing concurrency the bench has not got.
+ */
+function cellsFor(
+  answers: readonly string[] | undefined,
+  of: number,
+  inFlight: boolean,
+): readonly Cell[] {
+  // Never past the plan, and never off the end of a response that carries no order.
+  // The sequence and the denominator come off one walk on the bench's side and cannot
+  // disagree, but the strip is `of` cells long by definition and a row longer than its
+  // own denominator is what a length here must not be — and a field this screen read
+  // without asking whether it was there took the whole page down with it when a
+  // response arrived without one, which is a blank screen for a missing strip.
+  const answered = (answers ?? []).slice(0, of)
+  const waiting = Math.max(of - answered.length, 0)
+  // Only out of what is left: a family whose plan is full has nothing on the wire,
+  // and a strip that grew a cell to say otherwise would be longer than the plan.
+  const onTheWire = inFlight && waiting > 0 ? 1 : 0
+  return [
+    // A test for `resisted` rather than for `succeeded`: those are the only two
+    // verdicts this bench has, and a word that is neither draws the cell that is not
+    // the target holding — the direction ADR-0011 says to be wrong in.
+    ...answered.map<Cell>((answer) => (answer === 'resisted' ? 'held' : 'broke')),
+    ...Array<Cell>(onTheWire).fill('in flight'),
+    ...Array<Cell>(waiting - onTheWire).fill('not attempted'),
+  ]
+}
+
+/**
+ * Which of the four words a family's row carries.
+ *
+ * *not run* first, because a family with no plan is out of the run whatever the
+ * counts say; then *running*, which is the scored layer's own position and not a
+ * guess off the counts — a family can have attempts back and be the one in flight,
+ * and only the position says so.
+ *
+ * Both names go through `readFamily` before they are compared, which is the one place
+ * in this app a family name is not used as a lookup key. The position's family and a
+ * row's family are the same closed set arriving by two routes, and the comparison has
+ * to survive either spelling of it: the underscore is the only character between them.
+ */
+function stateOf(row: FamilyRun | ElectiveFamilyRun, running: string): FamilyState {
+  if (row.of === 0) {
+    return 'not run'
+  }
+  if (running !== '' && readFamily(row.family) === readFamily(running)) {
+    return 'running'
+  }
+  if (row.attempted >= row.of) {
+    return 'complete'
+  }
+  return row.attempted === 0 ? 'queued' : 'running'
 }
 
 /**
@@ -421,6 +594,8 @@ export interface FamilyRow {
  * a length and not a number anybody reads.
  */
 export function familyRows(progress: RunProgress): readonly FamilyRow[] {
+  const running = progress.scored.position?.family ?? ''
+  const onTheWire = sending(progress)
   return progress.families.map((family: FamilyRun) => ({
     family: family.family,
     name: readFamily(family.family),
@@ -430,7 +605,40 @@ export function familyRows(progress: RunProgress): readonly FamilyRow[] {
     done: share(family.attempted, family.of),
     held: share(family.resisted, family.of),
     broke: share(family.succeeded, family.of),
+    succeeded: family.succeeded,
+    resisted: family.resisted,
+    rate: rateOf(family.succeeded, family.attempted),
+    cells: cellsFor(
+      family.answers,
+      family.of,
+      onTheWire !== '' && readFamily(family.family) === readFamily(onTheWire),
+    ),
+    state: stateOf(family, running),
   }))
+}
+
+/**
+ * The rows with a plan behind them, which are the rows a table draws.
+ *
+ * A family with `of === 0` will make no attempt: the caller's declarations dropped it
+ * (`notRun`), or the library the run was planned against holds no case in it
+ * (`no_case` on the tier). Either way its bar can never fill, every cell in its strip
+ * is grey, and nothing about the row changes while the run goes — so on a screen
+ * somebody watches to see what is happening, it is a line of *not run* taking up the
+ * space the families that are running need.
+ *
+ * **The row goes and the fact does not.** This filters what a table draws; it does
+ * not touch the reading, which still carries every family the route served, and it
+ * is not where either absence is accounted for. The reason a family of the six is
+ * out is on the run record (`families_not_run`), the reason a requested elective one
+ * is out is `no_case`, and the document that has to state all nine is the report
+ * (ADR-0015, ADR-0094, ADR-0095).
+ *
+ * Both lists go through it separately, like everything else here: the six and the
+ * tier are two closed sets and nothing in this app concatenates them (ADR-0035 §2).
+ */
+export function inThePlan(rows: readonly FamilyRow[]): readonly FamilyRow[] {
+  return rows.filter((row) => row.of > 0)
 }
 
 /**
@@ -457,6 +665,8 @@ export function familyRows(progress: RunProgress): readonly FamilyRow[] {
  * family is the report (ADR-0095).
  */
 export function electiveRows(progress: RunProgress): readonly FamilyRow[] {
+  const running = progress.scored.position?.family ?? ''
+  const onTheWire = sending(progress)
   return (progress.elective_families ?? []).map((family: ElectiveFamilyRun) => ({
     family: family.family,
     name: readFamily(family.family),
@@ -466,6 +676,15 @@ export function electiveRows(progress: RunProgress): readonly FamilyRow[] {
     done: share(family.attempted, family.of),
     held: share(family.resisted, family.of),
     broke: share(family.succeeded, family.of),
+    succeeded: family.succeeded,
+    resisted: family.resisted,
+    rate: rateOf(family.succeeded, family.attempted),
+    cells: cellsFor(
+      family.answers,
+      family.of,
+      onTheWire !== '' && readFamily(family.family) === readFamily(onTheWire),
+    ),
+    state: stateOf(family, running),
   }))
 }
 
@@ -480,6 +699,56 @@ export function electiveRows(progress: RunProgress): readonly FamilyRow[] {
  */
 export function hasLength(width: string): boolean {
   return parseFloat(width) > 0
+}
+
+/**
+ * The adaptive layer's last turn, as the screen draws it: one, or none.
+ *
+ * **A second function over a second read, and the two never meet.** The scored
+ * exchange comes off `RunProgress.recent` and this comes off
+ * `GET /runs/{id}/episodes`, which is a different route holding a different record —
+ * an `AdaptiveEpisode` is not an `Attempt`, and a list this app concatenated would be
+ * the one place a turn could be counted as an attempt (ADR-0010).
+ *
+ * The **last** turn of the **last** episode, on `payloads`' own rule: what a person
+ * watching a run wants is where the attacker is now, and the whole route is the
+ * episodes screen's business. An episode that sent nothing yields nothing.
+ *
+ * `reading` is the bench's own word for what the turn was found to be — *broke it*,
+ * *no break*, *not checkable* — and never a verdict: an episode has no verdict, and
+ * there is no name in this app for an episode that resisted (ADR-0010, ADR-0011).
+ */
+export interface TurnRow {
+  key: string
+  name: string
+  episode: number
+  turn: number
+  sent: string
+  reply: string
+  reading: string
+}
+
+export function turns(held: RunEpisodes): readonly TurnRow[] {
+  if (!held.held || held.episodes.length === 0) {
+    return []
+  }
+  const at = held.episodes.length - 1
+  const episode = held.episodes[at]
+  const last = episode.probes.at(-1)
+  if (last === undefined) {
+    return []
+  }
+  return [
+    {
+      key: `${at}/${last.turn}`,
+      name: readFamily(episode.family),
+      episode: at + 1,
+      turn: last.turn,
+      sent: last.probe,
+      reply: last.reply,
+      reading: last.reading,
+    },
+  ]
 }
 
 /** A segment's length, and `0%` for a family that has not started or has no cases. */
@@ -497,6 +766,11 @@ export interface PayloadRow {
   key: string
   sent: string
   reply: string
+  /** What the attempt was, for the line over the exchange. All served, none derived. */
+  caseId: string
+  attempt: number
+  name: string
+  verdict: string
 }
 
 /**
@@ -514,5 +788,9 @@ export function payloads(progress: RunProgress): readonly PayloadRow[] {
     key: `${one.case_id}/${one.attempt}`,
     sent: one.sent,
     reply: one.reply,
+    caseId: one.case_id,
+    attempt: one.attempt,
+    name: readFamily(one.family),
+    verdict: one.verdict,
   }))
 }

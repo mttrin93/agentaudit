@@ -6,13 +6,13 @@ is the record that decides it exists at all. A route the adaptive layer found
 against somebody's real agent is filed by the run that found it
 (`bench/queued.py`), waits in `pending/routes.sqlite` (ADR-0104), and is decided
 here: an attestation, an estimate per route, a halt, then the three reference
-agents on two models in **one action**, and a decision per route.
+agents on one declared model in **one action**, and a decision per route.
 
 **It is not a gate run's second job**, and the three reasons are ADR-0105's: the
-admission memory is keyed on the model pair, so readings gathered a gate run at a
-time are `Stale` on arrival; the library lease is exclusive and a gate run holds it
-throughout; and a gate run produces a decision about *this bench*, which nothing
-else takes (ADR-0018).
+admission memory is keyed on the models a reading was taken on, so readings
+gathered a gate run at a time are `Stale` on arrival; the library lease is
+exclusive and a gate run holds it throughout; and a gate run produces a decision
+about *this bench*, which nothing else takes (ADR-0018).
 
 **The bar is `admitting.cross_model_bar` and this module does not have one.** It
 consults the memory, measures what the memory could not answer, decides one
@@ -79,7 +79,7 @@ from backend.bench.decided import RouteKey, criterion_of
 from backend.bench.entry import AlreadyInTheLibrary, Entered, Entry, enter
 from backend.bench.evaluator import Verdict
 from backend.bench.lease import LibraryBusy, held_by, holding_the_library
-from backend.bench.library import AdmissionReading, Case, VerdictClass
+from backend.bench.library import AdmissionReading, Case, DiscoveredBy, VerdictClass
 from backend.bench.pending import (
     PENDING_ROUTES,
     AwaitingDecision,
@@ -110,12 +110,13 @@ routes is shown a figure that is exact and attributable to the three of them.
 AgentsOn = Callable[[str], Equipment | None]
 """How this deployment serves the three reference agents on a named model.
 
-A function of the model rather than the bound `Equipment` a gate run holds, because
-the whole of this action is *two* models: a seam fixed to one could not measure the
-cross-model bar at all, and one that took the pair would hide that they are served
-one at a time. `gate_run_equipment.shipped_agents` is the implementation; `None`
-back is a deployment that ships no reference agents, which is a stated refusal and
-never an error.
+A function of the model rather than the bound `Equipment` a gate run holds, and it
+stays one after ADR-0107 §4: `cross_model_bar` is the one bar function and it walks
+N models, so a seam fixed to a single bound `Equipment` would be this surface
+declaring for the swap what it may measure. What this surface hands it is one model.
+`gate_run_equipment.shipped_agents` is the implementation; `None` back is a
+deployment that ships no reference agents, which is a stated refusal and never an
+error.
 """
 
 
@@ -212,8 +213,10 @@ class PendingRouteBench:
 
     agents: AgentsOn | None = None
     models: tuple[str, ...] = ()
-    """The two underlying models, in the order they are measured. Fewer than two is
-    a bench that cannot reach ADR-0012's bar, and it says so (`NO_SECOND_MODEL`)."""
+    """The underlying models, in the order they are measured. One, as
+    `deployed_pending_routes` builds it: every route here faces the single-model bar
+    (ADR-0107 §4). None at all is a bench that can measure nothing, and it says so
+    (`NO_REFERENCE_MODEL`)."""
 
     queue: PendingRoutes = PENDING_ROUTES
     """The queue this surface reads and decides, at the one git-ignored location.
@@ -235,7 +238,7 @@ class SelectedRoute:
 
     record: AwaitingDecision
     budget: RunBudget
-    """What this one route costs: three reference agents on each of two models.
+    """What this one route costs: the three reference agents, once.
 
     Why per route is `MeasurementRecord.per_route`, which is where these end up.
     """
@@ -319,8 +322,8 @@ class BenchPendingRoutes:
         bench = self._bench
         if bench.agents is None:
             return NotMeasurable.NO_REFERENCE_AGENTS
-        if len(bench.models) < 2:
-            return NotMeasurable.NO_SECOND_MODEL
+        if not bench.models:
+            return NotMeasurable.NO_REFERENCE_MODEL
         if any(bench.equipment_for(model) is None for model in bench.models):
             return NotMeasurable.NO_REFERENCE_AGENTS
         if bench.library is None or not a_library(bench.library):
@@ -465,10 +468,10 @@ class BenchPendingRoutes:
                     MeasurementStatus.MEASURING,
                     (
                         f"Confirmed by {approval.identity}: the selected routes are "
-                        "going to the three reference agents on two models, under "
-                        "the ceiling that was confirmed and aborting rather than "
-                        "exceeding it. This bench's case library is held until the "
-                        "measurement is finished"
+                        "going to the three reference agents, under the ceiling "
+                        "that was confirmed and aborting rather than exceeding it. "
+                        "This bench's case library is held until the measurement "
+                        "is finished"
                     ),
                 )
             else:
@@ -484,7 +487,7 @@ class BenchPendingRoutes:
         """The pending records this request named, or the refusal that stops it.
 
         Every refusal here happens **before** the library is held and before one
-        message is sent: a measurement is three reference agents on two models per
+        message is sent: a measurement is a pass over three reference agents per
         route, and an operator does not pay to be told that a route was already
         decided or that nothing live could score it.
         """
@@ -559,23 +562,26 @@ class BenchPendingRoutes:
         targets: Sequence[TargetConfig],
         price: CallPrice | None,
     ) -> RunBudget:
-        """What measuring those routes costs: the three agents, on each model.
+        """What measuring those routes costs: the three agents, once.
 
         One declaration for the whole measurement and one per route, from this one
         function, so the rows and the total are the same arithmetic rather than two
         that could disagree — `RunBudget.declare` is linear in the cases it is
         given, and the routes are the cases.
 
-        The agents are counted once per model because the pair is measured in one
-        action: the figure the operator confirms is the whole of what deciding a
-        route spends, and never half of it declared twice (ADR-0105 §2). At the
+        The agents are counted once, because the pass is once: the figure the
+        operator confirms is the whole of what deciding a route spends, and never
+        half of it declared twice (ADR-0105 §2). At the
         declared rule and not at this bench's own, for the reason the admission run
         is run at it (`_measuring`) — an estimate at a denominator the run will not
         use is a figure the operator confirms and the bench does not spend.
         """
         return RunBudget.declare(
             cases=[record.draft for record in routes],
-            targets=tuple(targets) * len(self._bench.models),
+            # The three agents once, and no factor for the models: one model after
+            # ADR-0107 §4, and a figure multiplied by a count that is always one is
+            # arithmetic a reader has to check to find out it changes nothing.
+            targets=tuple(targets),
             rule=DECLARED_RULE,
             adaptive=self._config.adaptive,
             price=price,
@@ -584,7 +590,7 @@ class BenchPendingRoutes:
 
 
 def _planned_attempts(cases: int, targets: int) -> int:
-    """How many attempts one model's pass over these cases is planned for.
+    """How many attempts one pass over these cases is planned for.
 
     The declared rule's attempts and never this bench's own, for the reason the
     admission run below gives: `promote` decides every proposal at the declared rule,
@@ -644,7 +650,7 @@ def _decide(
     pending: PendingApproval,
     stack: ExitStack,
 ) -> None:
-    """Halt, measure the selected routes on both models, and answer each of them."""
+    """Halt, measure the selected routes on every declared model, and answer them."""
     # Named against the seam's own type rather than passed straight through, so that
     # a signature drifting away from `Approve` is a typecheck failure here and not a
     # measurement that halts and never resumes.
@@ -806,11 +812,18 @@ class _Written:
         case that leaves a route pending after a measurement that finished, because
         a row saying *admitted* with no record behind it would be a queue
         disagreeing with the library it describes.
+
+        *The bar* and not *the cross-model bar*: which bar a route faced is its
+        provenance's answer since ADR-0107, and every route this surface decides
+        faces the single-model one. The row does not name it because it does not
+        need to — `promotion.outcome.stated()` carries the reading the decision was
+        made on, model by model, which is the fact a reader checks a decision
+        against.
         """
         if promotion.case is None:
             return (
                 RouteState.REJECTED,
-                f"the cross-model bar refused this route: {promotion.outcome.stated()}",
+                f"the bar refused this route: {promotion.outcome.stated()}",
                 "",
             )
         case_id = promotion.proposal.case.id
@@ -818,7 +831,7 @@ class _Written:
         if entered is not None:
             return (
                 RouteState.ADMITTED,
-                f"admitted on the cross-model bar and written into {library} as "
+                f"admitted on the bar and written into {library} as "
                 f"{entered.path.name}: {promotion.outcome.stated()}",
                 entered.path.name,
             )
@@ -826,7 +839,7 @@ class _Written:
         if held is not None:
             return (
                 RouteState.ADMITTED,
-                "admitted on the cross-model bar, and this library already holds "
+                "admitted on the bar, and this library already holds "
                 f"the route as {held.held_as}, so nothing was written: "
                 f"{promotion.outcome.stated()}",
                 held.held_as,
@@ -915,6 +928,7 @@ def _measuring(
                         adjudicator_model=adjudicator_model,
                         reference_model=model,
                     ),
+                    discovered_by=DiscoveredBy.ADAPTIVE,
                 )
             except BudgetExceeded:
                 return Unmeasured.ABORTED

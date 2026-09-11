@@ -261,13 +261,27 @@ describe('what the next run sends', () => {
    */
   const OFFERED = {
     layers: [
-      { layer: 'single_turn', selected: true, sends: 'one message in one session' },
+      {
+        layer: 'single_turn',
+        selected: true,
+        sends: 'one message in one session',
+        holds: '3 cases a family',
+        costs: '1 call an attempt',
+      },
       {
         layer: 'fixed_multi_turn',
         selected: true,
         sends: 'a fixed script of turns in one session',
+        holds: '1 case a family',
+        costs: '4 calls an attempt',
       },
-      { layer: 'adaptive', selected: false, sends: 'the model-driven attacker' },
+      {
+        layer: 'adaptive',
+        selected: false,
+        sends: 'the model-driven attacker',
+        holds: '2 episodes a family',
+        costs: '8 turns an episode',
+      },
     ],
     // The adaptive layer's own two switches, each naming the layer it is switched
     // under for the reason a construction row does: the grouping is the wire's.
@@ -414,16 +428,18 @@ describe('what the next run sends', () => {
 })
 
 
-/** One switch as the route serves it, with the label its row prints. */
+/** One switch as the route serves it, with the label and the count its row prints. */
 const covered = (
   family: string,
   agentic: string[],
   llm: string[],
   articles: string[],
+  holds = '2 cases',
 ): FamilyCovered => ({
   family,
   covered: true,
   labels: { agentic, llm, articles },
+  holds,
 })
 
 describe('the nine families the bench page draws as one list', () => {
@@ -451,10 +467,33 @@ describe('the nine families the bench page draws as one list', () => {
       expect(Object.keys(one).sort()).toEqual([
         'articles',
         'family',
+        'holds',
         'owasp',
         'says',
         'tier',
       ])
+    }
+  })
+
+  it('carries the count the bench served, and nothing where it served none', () => {
+    // The one figure a row is allowed, and it is the bench's sentence rather than a
+    // number this console words: ADR-0108 narrowed ADR-0091 §5 to readings against a
+    // target, and a count of what the library holds is not one.
+    const rows = familyRows(
+      [covered('indirect_prompt_injection', ['ASI01:2026'], [], ['15'], '4 cases')],
+      [],
+    )
+    const found = (family: string) => rows.find((one) => one.family === family)!
+    expect(found('indirect_prompt_injection').holds).toBe('4 cases')
+
+    // A family the settings read did not answer for draws an empty count and never a
+    // guessed one, on the same rule the empty label columns are under: the sentence
+    // and the switch are this console's own, and what the library holds is not
+    // something it may supply.
+    expect(found('scope_creep').holds).toBe('')
+    expect(found('memory_poisoning').holds).toBe('')
+    for (const one of familyRows(null, null)) {
+      expect(one.holds).toBe('')
     }
   })
 
@@ -512,9 +551,11 @@ describe('the screen says nothing about which tier a row is in', () => {
     // undifferentiated, so no cell, label or heading in the families region may name
     // the tier. `tier` is read by the switch — which has to know where a move is
     // written — and printed by nothing.
+    // The families block is the last of the two switch blocks on the screen, so its
+    // region runs from its own heading to the end of the markup.
     const region = screen.slice(
       screen.indexOf('<h2>The families</h2>'),
-      screen.indexOf('How a run attacks, under the families it attacks them about'),
+      screen.indexOf('</main>'),
     )
     expect(region.length).toBeGreaterThan(0)
 

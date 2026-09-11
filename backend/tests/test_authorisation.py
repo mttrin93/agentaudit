@@ -17,7 +17,7 @@ from pathlib import Path
 import pytest
 
 from backend.bench.calibration import run_calibration
-from backend.bench.library import Case
+from backend.bench.library import Case, DiscoveredBy
 from backend.bench.registration import Attestation, endpoint_hash
 from backend.graph.approval import (
     Approval,
@@ -128,6 +128,7 @@ def test_a_run_with_nobody_to_ask_halts_and_spends_nothing(
             targets=[reference.target],
             attestation=BENCH_ATTESTATION,
             plant_nonce=reference.plant_nonce,
+            discovered_by=DiscoveredBy.ADAPTIVE,
         )
 
     assert result.approval.halted
@@ -150,6 +151,7 @@ def test_a_declined_run_spends_nothing_and_says_it_was_declined(
             attestation=BENCH_ATTESTATION,
             plant_nonce=reference.plant_nonce,
             approve=lambda presented: declining("the estimate was too high"),
+            discovered_by=DiscoveredBy.ADAPTIVE,
         )
 
     assert not result.approval.confirmed

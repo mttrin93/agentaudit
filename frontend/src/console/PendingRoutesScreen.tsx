@@ -172,7 +172,6 @@ export function PendingRoutesScreen() {
           empty={view.empty}
           selected={selected}
           choose={choose}
-          statement={view.statement}
         />
       )}
     </main>

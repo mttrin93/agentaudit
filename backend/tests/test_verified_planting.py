@@ -30,7 +30,7 @@ import pytest
 from backend.api.report import ReportConfig, payload_for
 from backend.bench.calibration import CalibrationResult, run_calibration
 from backend.bench.elective import NOTHING_REQUESTED
-from backend.bench.library import Case, Family, Plant
+from backend.bench.library import Case, DiscoveredBy, Family, Plant
 from backend.bench.payload import document
 from backend.bench.planting import (
     NOTHING_WAS_PLANTED_BY_THE_BENCH,
@@ -102,6 +102,7 @@ def _calibrate(
         approve=CONFIRMING,
         proof_waived=proof_waived,
         planted_nonces=planted_nonces,
+        discovered_by=DiscoveredBy.ADAPTIVE,
     )
 
 

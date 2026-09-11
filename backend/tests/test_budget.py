@@ -19,7 +19,7 @@ from backend.bench.adaptive.budget import DECLARED_ADAPTIVE_BUDGET, AdaptiveBudg
 from backend.bench.attacker import run_attempt
 from backend.bench.calibration import run_calibration
 from backend.bench.contract import RetryPolicy
-from backend.bench.library import Case, Family, Transform
+from backend.bench.library import Case, DiscoveredBy, Family, Transform
 from backend.bench.rule import DECLARED_RULE
 from backend.bench.selection import AttackLayer, AttackSelection
 from backend.graph.budget import (
@@ -418,6 +418,7 @@ def test_a_run_held_to_a_ceiling_declared_over_a_smaller_library_aborts(
                 plant_nonce=reference.plant_nonce,
                 approve=CONFIRMING,
                 budget=agreed,
+                discovered_by=DiscoveredBy.ADAPTIVE,
             )
 
     assert abort.value.layer is Layer.SCORED
@@ -444,6 +445,7 @@ def test_a_run_that_retries_every_message_still_fits_inside_its_ceiling(
             attestation=BENCH_ATTESTATION,
             plant_nonce=flaky.plant_nonce,
             approve=CONFIRMING,
+            discovered_by=DiscoveredBy.ADAPTIVE,
         )
 
     scored = result.run_state.spent_in(Layer.SCORED)

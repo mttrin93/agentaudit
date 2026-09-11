@@ -57,6 +57,7 @@ import {
   verificationReading,
 } from './report'
 import { readFamily } from '../families'
+import screen from './ReportScreen.tsx?raw'
 import { SERVED } from './served.fixture'
 
 /** Words no key anywhere in the view may contain (ADR-0005, D12). */
@@ -412,6 +413,11 @@ describe('the label beside a family name', () => {
       // against any payload.
       agentic: ['ASI01:2026'],
       llm: ['LLM01:2026'],
+      // And the articles beside them, on the same terms: `14(4)(e)` is a key into a
+      // published instrument and a screen that composed one from a family name would
+      // hold a second copy of a legal mapping. The sentence above reads them out; the
+      // per-family table prints these.
+      articles: ['15'],
     })
 
     // Both absences carry it too. A withheld rate says the evidence behind it
@@ -759,6 +765,41 @@ describe('the failures the bench explained', () => {
     const [first, second] = SERVED.findings.findings
     expect(alone.informedBy).toBe(first.informed_by_stated)
     expect(reused.informedBy).toBe(second.informed_by_stated)
+  })
+
+  it('carries the sentences the screen stopped drawing, verbatim', () => {
+    // ADR-0115 moved eight standing lines off the failures section and into the
+    // artefact alone. *Into the artefact* is the whole of the decision, so it is
+    // asserted here rather than assumed: every one of them is still on the reading,
+    // still the payload's own words, and none was reworded on the way through.
+    const explained = findingsReading(SERVED.findings)
+    if (explained.kind !== 'explained') {
+      throw new Error('the fixture explains its failures')
+    }
+    const [block] = explained.families[0].findings
+    const [payload] = SERVED.findings.findings
+
+    // The two with no other test on this side. `attributed_cause_stated` is what the
+    // failure was read against and `exposure` is what a reader of it is exposed to,
+    // off the judge's own closed set — neither is composed here, and a screen that no
+    // longer draws them is exactly why they need holding somewhere.
+    expect(block.attributedCause).toBe(payload.attributed_cause_stated)
+    expect(block.exposure).toBe(payload.exposure)
+    expect(block.attributedCause).not.toBe('')
+
+    // And the rest, in one place, so the list this ADR moved is a list something
+    // reads back: the identifier, what informed the fix, whether the instruments
+    // disagreed, what was withheld, the anchor's sentence, and what the label asserts.
+    expect(block.identifier).toBe(payload.external_id)
+    expect(block.informedBy).toBe(payload.informed_by_stated)
+    expect(block.disagreement).toBe(payload.disagreement)
+    expect(block.sourceAnchor).toBe(payload.source_anchor.stated)
+    expect(block.fixStanding).toBe(payload.fix_standing.stated)
+
+    // The reading's own name is the eighth, and it is on the reading rather than on a
+    // block: it names which of the four this section is, which is what ADR-0070 §4
+    // asked for and what the document still says.
+    expect(explained.reading).toBe(SERVED.findings.reading)
   })
 
   it('says where a failure is, and says the bench could not look where it could not', () => {
@@ -1299,6 +1340,7 @@ describe('what a family attempted, for the cards that publish no rate', () => {
       of: 3,
       resisted: 1,
       succeeded: 2,
+      answers: ['resisted', 'succeeded', 'succeeded'],
       not_run: '',
     },
     {
@@ -1307,6 +1349,7 @@ describe('what a family attempted, for the cards that publish no rate', () => {
       of: 3,
       resisted: 3,
       succeeded: 0,
+      answers: ['resisted', 'resisted', 'resisted'],
       not_run: '',
     },
     // A family the declarations dropped: nothing was attempted, so there is no
@@ -1317,6 +1360,7 @@ describe('what a family attempted, for the cards that publish no rate', () => {
       of: 0,
       resisted: 0,
       succeeded: 0,
+      answers: [],
       not_run: 'the canary was planted nowhere',
     },
   ]
@@ -1407,6 +1451,29 @@ describe('the exchanges behind the attacks that worked', () => {
     }
     expect(nothing.stated).toContain('no attempt')
     expect(nothing.note).toBe(NOT_PART_OF_THE_ARTEFACT)
+  })
+})
+
+describe('a run that produced no report', () => {
+  it('is one sentence pointing at the run, and not the run’s whole statement', () => {
+    // A run that stopped — a ceiling, an operator's stop, a transport failure — has
+    // nothing to show on this page, and nothing partial is drawn in its place because
+    // half a report reads as a finished one. What was drawn instead was a red refusal
+    // panel carrying the run's entire statement: where it stopped and why, on the
+    // screen somebody opened to read the document.
+    expect(screen).toContain('This run produced no report')
+    expect(screen).not.toContain('This run has no report')
+    expect(screen).not.toContain('Nothing partial is shown in its place')
+
+    // And the sentence it is replaced by carries the link that does say why, so the
+    // fact is not lost — it is one screen further on, where the run's own words are.
+    expect(screen).toContain('the run&rsquo;s own screen</Link> says why')
+
+    // The statement itself is not carried into this screen's state at all: `noReport`
+    // is a flag, and a screen holding the sentence would be one edit away from
+    // drawing it again.
+    expect(screen).toContain('noReport: boolean')
+    expect(screen).not.toContain('noReport: progress.statement')
   })
 })
 

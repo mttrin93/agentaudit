@@ -27,8 +27,9 @@ adaptive section rather than reported as a family nothing broke.
 requested and no others, and it learns which those are the way it learns the six's
 own switch: from the cases the run planned (`api/run_config.plan_for`). An episode in
 the tier is scored on nothing, exactly as one on the six is (ADR-0010), and it reaches
-the scored side by the one edge that already existed — `propose_case`, into ADR-0012's
-cross-model bar. What does **not** widen is the separation statistic:
+the scored side by the one edge that already existed — `propose_case`, into the
+admission bar the proposal's own provenance selects (ADR-0012, as ADR-0107 narrows
+it). What does **not** widen is the separation statistic:
 [ADR-0089](../../../docs/adr/0089-a-break-is-over-the-six-and-the-tier-is-read-beside-it.md)
 keeps `A_break`'s denominator over the six, so the readings in `docs/validation.md`
 stay comparable across a run that requested the tier and one that did not.
@@ -57,6 +58,7 @@ from backend.bench.contract import TargetConfig, TargetUnreachable
 from backend.bench.library import (
     AnyFamily,
     Case,
+    DiscoveredBy,
     ElectiveFamily,
     Family,
     Transform,
@@ -80,6 +82,17 @@ class AttackableTarget:
 
     target: TargetConfig
     canary: str
+
+    discovered_by: DiscoveredBy
+    """What a route found against this target is filed as, and so which bar it faces.
+
+    Carried on the target rather than passed per episode, because it is a property
+    of *what is being attacked* and not of one episode against it — and required
+    with no default, so a caller that has not said which loop it is running cannot
+    get a bar by omission (ADR-0107 §3). `TargetConfig` deliberately does not tell a
+    reference agent from a user's agent, so this cannot be derived from the field
+    beside it.
+    """
 
     withdrawn: frozenset[Family] = frozenset()
     """Families the scored layer withdrew after the target's own first reply.
@@ -235,6 +248,10 @@ def _open_episode(
                 target=entry.target,
                 objective=Objective(family=family, case=objective, canary=entry.canary),
                 run_state=run_state,
+                # The target's own declaration, carried and not re-decided here: one
+                # place says which loop this is, and every route the episode files
+                # reads it from there (ADR-0107 §3).
+                discovered_by=entry.discovered_by,
                 attacker=attacker,
                 blinding=blinding,
                 budget=budget,

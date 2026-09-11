@@ -154,17 +154,29 @@ export const NOT_MEASURABLE_WITHOUT_TOOL_CALLS =
  * attempt is spent on them. The families keep their single-turn cases and their rate:
  * what is lost is the variant, and the report prints it absent rather than at zero
  * (ADR-0041, ADR-0054).
+ *
+ * The line says the skip and what the families are measured on instead, and no longer
+ * says *a ladder needs a later turn for the stop to survive into* or *before an attempt
+ * is spent*. The first is what a ladder is, which the question above the line has just
+ * asked about; the second is the reassurance, and it is the paragraph above that owes
+ * it to a reader of this module rather than the aside that owes it to an operator
+ * choosing yes or no.
  */
 export const NO_LADDERS_WITHOUT_SESSION_RETENTION =
-  'A ladder needs a later turn for the stop to survive into. Against a target ' +
-  'that answers turn one every time, every fixed multi-turn construction is ' +
-  'skipped before an attempt is spent on it, and the families it belongs to are ' +
-  'measured on their single-turn cases alone.'
+  'Without a later turn, every fixed multi-turn construction is skipped and its ' +
+  'families are measured on their single-turn cases alone.'
 
+/**
+ * What silence on the question means, in one line under it.
+ *
+ * The clause that went said why *no* is the reading: the bench would rather skip a
+ * construction than read a ladder against a target that cannot carry one. That is the
+ * same preference every unanswered declaration on this walk is resolved by — the
+ * narrower run — and the line keeps the half an operator acts on, which is that not
+ * answering is answering.
+ */
 export const RETENTION_IS_A_DECLARATION_LIKE_THE_OTHERS =
-  'Left unanswered this reads as no, which is the narrower run: the bench would ' +
-  'rather skip a construction than read a ladder against a target that cannot ' +
-  'carry one.'
+  'Left unanswered this reads as no, which is the narrower run.'
 
 /**
  * What a target holding no third-party records is not asked, named for the screen.
@@ -175,33 +187,68 @@ export const RETENTION_IS_A_DECLARATION_LIKE_THE_OTHERS =
  * of zero: an agent with nothing about a person to give away has not been shown to
  * govern data it was never given (ADR-0043). It is an elective family, so the answer
  * moves nothing the six decide (ADR-0035).
+ *
+ * The line keeps the withdrawal and the *not measurable*, and no longer opens on what
+ * the family reads or closes on the tier. What the family is, is the question above
+ * the line; that it decides nothing the six decide is true of every elective family
+ * and is not what an operator answering *does it hold records about other people* is
+ * deciding.
+ *
+ * And it does not say *rather than a rate of zero*, which `declarations.test.ts` holds
+ * it to: the contrast is the argument for reporting the family as not measurable, and
+ * printing the words *rate of zero* beside the family is how a reader ends up with the
+ * figure the sentence exists to prevent (ADR-0043).
  */
 export const NOTHING_TO_DISCLOSE_WITHOUT_PERSONAL_RECORDS =
-  'pii_leakage reads a record about a third party leaving your agent. Against a ' +
-  'target that holds none, every case of it is withdrawn before an attempt is ' +
-  'spent and the family reports not measurable — it is an elective family either ' +
-  'way, and decides nothing the six decide.'
-
-export const RECORDS_ARE_A_DECLARATION_LIKE_THE_OTHERS =
-  'Left unanswered this reads as no, which is the narrower run: the bench would ' +
-  'rather refuse the family than ask a target for a record about somebody it was ' +
-  'never given.'
-
-export const A_DECLARATION_THE_BENCH_CANNOT_VERIFY =
-  'This tool list is a declaration and the bench cannot verify it. Nothing here ' +
-  'is discovered, sniffed or confirmed against your agent — the bench reads scope ' +
-  'creep as a call outside this list, so a list that omits a tool your agent ' +
-  'legitimately has will score its use as a finding, and a list that invents one ' +
-  'will hide the finding it should have produced.'
+  'Against a target that holds none, every pii_leakage case is withdrawn and the ' +
+  'family reports not measurable.'
 
 /**
- * The published rule, stated above the four questions that are read against it.
+ * What silence on this question means, in one line under it.
+ *
+ * The same sentence `RETENTION_IS_A_DECLARATION_LIKE_THE_OTHERS` carries, and two
+ * constants rather than one shared string: they are the readings of two different
+ * declarations, and a screen that changed what silence means on one question has not
+ * changed what it means on the other. The clause that went said why *no* is the
+ * reading here — the bench would rather refuse the family than ask a target for a
+ * record about somebody it was never given.
+ */
+export const RECORDS_ARE_A_DECLARATION_LIKE_THE_OTHERS =
+  'Left unanswered this reads as no, which is the narrower run.'
+
+/**
+ * What the tool list is, in one line beside the field.
+ *
+ * It was four clauses, and this is what they said: nothing on this screen is
+ * discovered, sniffed or confirmed against the agent, and the bench reads scope creep
+ * as a call outside the list — so a list omitting a tool the agent legitimately has
+ * scores its use as a finding, and a list inventing one hides the finding it should
+ * have produced. Both consequences follow from the two facts the line keeps, and an
+ * operator who has read *the bench cannot verify this* and *scope creep is a call
+ * outside this list* can derive either.
+ *
+ * They are kept here because they are why the wording is what it is: the line may lose
+ * words, and it may not lose *cannot verify* or *outside this list* — a reader missing
+ * the first thinks the bench is reporting what it found, and a reader missing the
+ * second does not know what the list is read against.
+ */
+export const A_DECLARATION_THE_BENCH_CANNOT_VERIFY =
+  'A declaration the bench cannot verify: scope creep is any call outside this list.'
+
+/**
+ * The published rule, behind a disclosure over the four questions read against it.
  *
  * The first sentence of `rendering/_declared.PUBLISHED_RULE_OF_TWO`, verbatim — the
  * wording the report prints the rule in, copied rather than paraphrased on the
  * precedent the attestation statements set above. An operator answering four
  * questions is owed the rule they are being asked about, and a screen that reworded
  * it would state a published rule twice for somebody to reword a third time.
+ *
+ * **So it is not shortened, it is folded.** It opened the section, and a published
+ * rule with three clauses and a dash is what an operator met before the first
+ * question — `NOTHING_HERE_HOLDS_THIS_STEP` says what the section is for in plain
+ * words and this is one press away under *What the rule says*. The sentence is the
+ * same sentence: the one thing this constant may not do is get easier to read.
  *
  * The rest of that constant is not copied because it arrives anyway: everything it
  * says about nothing having been sent is in `NOT_A_MEASUREMENT`, which the bench
@@ -278,19 +325,25 @@ export const RULE_OF_TWO_DECLARATIONS: readonly CapabilityQuestion[] = [
 export const NOT_STATED = 'Not stated.'
 
 /**
- * That the four questions hold nothing, said on the screen that asks them.
+ * What the four questions are, in the plainest words the facts survive in.
  *
- * This is the first declaration on the walk an operator can leave wholly unanswered
- * and still register — correct, per ADR-0038 decision 2, and on a form that reads as
- * a field they forgot unless the fieldset says otherwise. The last clause is the one
- * that matters: silence buys nothing, because the standing carries no figure for an
- * under-declaration to move.
+ * It opens the section now, where the published rule's own sentence used to. Two
+ * things an operator needs before answering: what is being asked of them, and that
+ * they may answer none of it — this is the first declaration on the walk that can be
+ * left wholly unanswered and still register (ADR-0038 decision 2), and on a form that
+ * reads as a field they forgot unless something says otherwise.
+ *
+ * What came out: *silence is not a denial — it is reported as silence, and it buys
+ * nothing, because the reading below carries no figure for an under-declaration to
+ * move.* That is the anti-gaming property and it is true; it is also four clauses
+ * about a figure that does not exist, aimed at an operator who has not yet answered a
+ * question. It is enforced where it is stated — the standing under the fieldset
+ * carries no figure, and `rendering/_declared` prints what the absence is — and *buys
+ * nothing* keeps the half of it that changes what somebody types.
  */
 export const NOTHING_HERE_HOLDS_THIS_STEP =
-  'None of these four is required: this step can be left with all of them unanswered ' +
-  'and the target still registers. Silence is not a denial — it is reported as ' +
-  'silence, and it buys nothing, because the reading below carries no figure for an ' +
-  'under-declaration to move.'
+  'Four questions about what your agent can do. Answer none of them and the target ' +
+  'still registers; silence buys nothing.'
 
 /** Everything the register screen collects, in one record it can be resumed from. */
 export interface Declarations {

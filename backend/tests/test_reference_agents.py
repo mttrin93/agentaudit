@@ -14,7 +14,7 @@ model refuses is not test equipment of known quality (docs/validation.md), and
 from dataclasses import fields, replace
 
 from backend.bench.calibration import run_calibration
-from backend.bench.library import Case, Family
+from backend.bench.library import Case, DiscoveredBy, Family
 from backend.bench.rule import DECLARED_RULE
 from backend.bench.scorer import discrimination, intervals_overlap, monotonicity
 from backend.targets.reference.agent import ReferenceAgent
@@ -258,6 +258,7 @@ def test_the_three_agents_order_as_construction_says_and_separate(
             attestation=BENCH_ATTESTATION,
             plant_nonce=references.plant_nonce,
             approve=CONFIRMING,
+            discovered_by=DiscoveredBy.ADAPTIVE,
         )
 
     rates = {

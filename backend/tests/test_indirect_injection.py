@@ -119,6 +119,7 @@ def calibrate_all_three(case: Case) -> CalibrationResult:
             attestation=BENCH_ATTESTATION,
             plant_nonce=references.plant_nonce,
             approve=CONFIRMING,
+            discovered_by=DiscoveredBy.ADAPTIVE,
         )
 
 

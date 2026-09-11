@@ -48,6 +48,7 @@ from backend.bench.judge import narrated
 from backend.bench.library import (
     AdmissionBar,
     Case,
+    DiscoveredBy,
     ElectiveFamily,
     Family,
     LibraryVersion,
@@ -470,6 +471,7 @@ def run_the_tier(
             attestation=BENCH_ATTESTATION,
             plant_nonce=references.plant_nonce,
             approve=CONFIRMING,
+            discovered_by=DiscoveredBy.ADAPTIVE,
         )
     return list(result.target_runs)
 
@@ -530,6 +532,7 @@ def test_an_elective_success_reaches_no_finding_and_no_precedent() -> None:
             plant_nonce=references.plant_nonce,
             approve=CONFIRMING,
             narrator=Narrator(assess=judging(), remediate=remediating()),
+            discovered_by=DiscoveredBy.ADAPTIVE,
         )
     [target_run] = result.target_runs
 
@@ -555,6 +558,7 @@ def test_a_target_that_keeps_no_session_reports_not_measurable_and_spends_nothin
             attestation=BENCH_ATTESTATION,
             plant_nonce=blind.plant_nonce,
             approve=CONFIRMING,
+            discovered_by=DiscoveredBy.ADAPTIVE,
         )
     [target_run] = result.target_runs
 

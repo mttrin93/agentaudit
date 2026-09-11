@@ -2,10 +2,14 @@
 
 `promote` decides one proposed route against a declared threshold and writes
 nothing (`adaptive/promotion.py`). So a route the attacker rediscovers next run is
-re-proposed and **re-measured against three reference agents on two underlying
-models** — at the operator's cost, for the same answer — and the `RejectionKind`
+re-proposed and **re-measured against three reference agents on every model the run
+declared** — at the operator's cost, for the same answer — and the `RejectionKind`
 counts behind a refusal are computed and thrown away, when ADR-0012 calls exactly
 those counts a finding in its own right. This module is the memory that stops both.
+How many models that is belongs to the caller and not to the route: two under
+`scripts/swap.py`, one on `/pending-routes` since
+[ADR-0107](../../docs/adr/0107-a-route-found-against-a-customers-target-faces-the-single-model-bar.md),
+and `admitting.py` is where the arithmetic of what the memory saves is argued.
 
 The decision, its alternatives and the hazard it had to be built around are
 [ADR-0032](../../docs/adr/0032-the-admission-memory-holds-the-measurement.md). Two
@@ -362,14 +366,27 @@ class Remembered:
     promotion: Promotion
 
     def stated(self) -> str:
-        """The promotion's own lines, and the sentence that says nothing was spent."""
+        """The promotion's own lines, and the sentence that says nothing was spent.
+
+        What the run did not spend is named by the bar the promotion printed
+        immediately above it was decided under — `decide` puts `bar_for`'s answer on
+        the outcome, so this line reads the mapping rather than restating it and
+        cannot drift from the decision it annotates. A fixed pair of models here
+        would be a second statement of a mapping that has had two answers since
+        [ADR-0107](../../docs/adr/0107-a-route-found-against-a-customers-target-faces-the-single-model-bar.md)
+        (#228).
+
+        The bar named is this run's, which is the one the sentence is about: the line
+        annotates a promotion re-decided here and not the stored measurement, and
+        `Conditions` deliberately holds no provenance.
+        """
         return "\n".join(
             (
                 self.promotion.stated(),
                 f"  reported from memory — {self.decided.route.stated()} was "
                 f"decided on {self.decided.decided_on.isoformat()} as "
-                f"{self.decided.case_id}, and nothing was measured against three "
-                "agents on two models for it here",
+                f"{self.decided.case_id}, and nothing was measured here to ask "
+                f"whether it {self.promotion.outcome.bar.asks}",
                 f"  {self.decided.conditions.stated()}",
             )
         )
@@ -604,7 +621,7 @@ class Consultation:
 
         Deduplicated by route: `docs/validation.md` records one run proposing four
         cases "all describing the same route in prose", and measuring one route twice
-        against three agents on two models buys the second answer nothing. The other
+        against the three reference agents buys the second answer nothing. The other
         proposals of that route are answered from the entry the measurement writes,
         which is the same path a second *run* takes.
         """

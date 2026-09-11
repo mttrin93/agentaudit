@@ -61,6 +61,7 @@ from backend.bench.contract import (
 from backend.bench.evaluator import Verdict
 from backend.bench.library import (
     Case,
+    DiscoveredBy,
     ElectiveFamily,
     Family,
     Transform,
@@ -837,6 +838,7 @@ def _assembled(
         plant_nonce=plant_nonce,
         approve=CONFIRMING,
         adjudicator=ADJUDICATING,
+        discovered_by=DiscoveredBy.ADAPTIVE,
     )
     [target_run] = result.target_runs
     assert target_run.registration.complete, "the target never registered"

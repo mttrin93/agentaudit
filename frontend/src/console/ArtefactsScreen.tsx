@@ -156,13 +156,36 @@ function TheArtefacts({ reading }: { reading: ArtefactsReading }) {
               results and claims its clauses are about are on the report each row
               links to.
             */}
-            <ul className="artefacts">
-              {reading.artefacts.map((artefact) => (
-                <li className="artefact" key={artefact.id}>
-                  <TheArtefact artefact={artefact} />
-                </li>
-              ))}
-            </ul>
+            {/*
+              One row an artefact, where one box an artefact stood.
+
+              A box carried the name on its own line, the id and the instant on a
+              second and the three files on a third, and four of them down a page put
+              the same three shapes in twelve places. In a row the targets line up down
+              one edge, the instants down another and the files down a third — which is
+              what a list of things to send is read for: finding the one to send.
+
+              The table is the idiom the bench page's switches and the report's
+              per-family figures are drawn in. Nothing here is a figure and nothing is
+              summed; there is no column a count could go in.
+            */}
+            <div className="table-wrap">
+              <table className="artefact-rows">
+                <thead>
+                  <tr>
+                    <th scope="col">target</th>
+                    <th scope="col">artefact</th>
+                    <th scope="col">recorded</th>
+                    <th scope="col">files</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {reading.artefacts.map((artefact) => (
+                    <TheArtefact artefact={artefact} key={artefact.id} />
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </>
         ) : (
           <div className="citation uncited">
@@ -203,24 +226,33 @@ function TheArtefacts({ reading }: { reading: ArtefactsReading }) {
  */
 function TheArtefact({ artefact }: { artefact: ArtefactReading }) {
   return (
-    <>
-      <h3>
+    <tr>
+      {/* The target's name is the link to its report, which is what this list is
+          opened to reach. */}
+      <th scope="row">
         <Link to={artefact.reportPath}>{artefact.target}</Link>
-      </h3>
-      <p className="aside">
-        <code>{artefact.id}</code> — recorded {artefact.recordedAt} —{' '}
-        <Link to={artefact.runPath}>the run</Link>
-      </p>
-
-      <ul className="files-line">
-        {artefact.files.map((file) => (
-          <li key={file.filename}>
-            <a href={file.path}>
-              <code>{file.filename}</code>
-            </a>
-          </li>
-        ))}
-      </ul>
-    </>
+      </th>
+      {/* The artefact's own id, and the run it came from behind it: two addresses for
+          one thing, and the id is the one a recipient quotes. */}
+      <td className="id-cell">
+        <code>{artefact.id}</code>
+        <Link className="run" to={artefact.runPath}>
+          the run
+        </Link>
+      </td>
+      <td className="when-cell">{artefact.recordedAt}</td>
+      {/* The three files under the names they will be saved as, on one line: a
+          recipient saves all three into a directory and runs `verify` over it, so they
+          are one thing in three parts and never three downloads to choose between. */}
+      <td>
+        <ul className="artefact-files">
+          {artefact.files.map((file) => (
+            <li key={file.filename}>
+              <a href={file.path}>{file.filename}</a>
+            </li>
+          ))}
+        </ul>
+      </td>
+    </tr>
   )
 }

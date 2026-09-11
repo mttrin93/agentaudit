@@ -202,8 +202,14 @@ const CONFIGURED: BenchSettings = {
         family: 'indirect_prompt_injection',
         covered: true,
         labels: { agentic: ['ASI01:2026'], llm: ['LLM01:2026'], articles: ['15'] },
+        holds: '3 cases',
       },
-      { family: 'scope_creep', covered: false, labels: SOME_LABEL },
+      {
+        family: 'scope_creep',
+        covered: false,
+        labels: SOME_LABEL,
+        holds: 'no cases in this library',
+      },
     ],
     families_off_statement:
       'a family switched off is not run: its cases are not attempted, no episode ' +
@@ -214,11 +220,17 @@ const CONFIGURED: BenchSettings = {
     // put all nine in one array would be modelling a response this bench does not
     // serve (ADR-0015, ADR-0035).
     elective_families: [
-      { family: 'memory_poisoning', covered: false, labels: SOME_LABEL },
+      {
+        family: 'memory_poisoning',
+        covered: false,
+        labels: SOME_LABEL,
+        holds: 'no cases in this library',
+      },
       {
         family: 'pii_leakage',
         covered: true,
         labels: { agentic: [], llm: ['LLM02:2026'], articles: ['10'] },
+        holds: '1 case',
       },
     ],
     elective_statement:
@@ -232,8 +244,20 @@ const CONFIGURED: BenchSettings = {
     // in the fixture, or the scan below is a scan over a narrower response than the
     // route serves.
     layers: [
-      { layer: 'single_turn', selected: true, sends: 'one message in one session' },
-      { layer: 'adaptive', selected: true, sends: 'the model-driven attacker' },
+      {
+        layer: 'single_turn',
+        selected: true,
+        sends: 'one message in one session',
+        holds: '3 cases a family',
+        costs: '1 call an attempt',
+      },
+      {
+        layer: 'adaptive',
+        selected: true,
+        sends: 'the model-driven attacker',
+        holds: '2 episodes a family',
+        costs: '8 turns an episode',
+      },
     ],
     transforms: [
       {
@@ -829,15 +853,18 @@ describe('nothing on this screen changes a setting', () => {
 
     // Carried, never paraphrased: five of the six settings bound a layer that is
     // scored on nothing, and this one moves the number the gate is decided at.
-    // The reasoning effort is carried as the closed list the route enforces, with the
-    // bench's own sentence beside it: two runs of one model at one temperature and
-    // different effort are two different instruments, and the screen may not say one
-    // thing about that while the signed document says another (#5).
+    // The reasoning effort is carried as the closed list the route enforces, and the
+    // bench's own sentences about it are `stated` and `absent` — the screen may not say
+    // one thing about those while the signed document says another (#5).
     expect(tuning.reasoning.levels).toBe(CONFIGURED.tuning.reasoning_efforts)
     expect(tuning.reasoning.chosen).toBe('medium')
     expect(tuning.reasoning.stated).toBe(CONFIGURED.tuning.reasoning_effort_stated)
     expect(tuning.reasoning.absent).toBe(CONFIGURED.tuning.reasoning_effort_absent)
-    expect(tuning.reasoning.decides).toContain('two different instruments')
+    // `decides` is the console's own line beside the control and it says the one thing
+    // the control cannot: that this is a declared input of its own. Why it is not the
+    // temperature — two runs at one temperature and different effort are two different
+    // instruments — is the argument for recording it, and the report records it.
+    expect(tuning.reasoning.decides).toContain('declared input')
 
     expect(tuning.warning).toBe(CONFIGURED.tuning.attempts_warning)
     expect(tuning.warning).toContain('not a gate result')

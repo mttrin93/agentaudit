@@ -14,7 +14,7 @@ from backend.bench import contract
 from backend.bench.calibration import CalibrationResult, run_calibration
 from backend.bench.contract import TargetFailure, TargetUnreachable, send_message
 from backend.bench.evaluator import Verdict
-from backend.bench.library import Case, Family
+from backend.bench.library import Case, DiscoveredBy, Family
 from backend.bench.rule import DECLARED_RULE
 from backend.graph.budget import Layer
 from backend.tests.conftest import BENCH_ATTESTATION, CONFIRMING
@@ -32,6 +32,7 @@ def test_transient_failures_are_retried_and_do_not_count_as_attempts(
             attestation=BENCH_ATTESTATION,
             plant_nonce=flaky.plant_nonce,
             approve=CONFIRMING,
+            discovered_by=DiscoveredBy.ADAPTIVE,
         )
 
     [target_run] = result.target_runs
@@ -63,6 +64,7 @@ def test_an_endpoint_that_never_recovers_stops_the_run_rather_than_scoring_it(
                 attestation=BENCH_ATTESTATION,
                 plant_nonce=flaky.plant_nonce,
                 approve=CONFIRMING,
+                discovered_by=DiscoveredBy.ADAPTIVE,
             )
 
     assert raised.value.failure is TargetFailure.UNAVAILABLE
@@ -78,6 +80,7 @@ def test_a_healthy_endpoint_is_sent_each_message_exactly_once(
             attestation=BENCH_ATTESTATION,
             plant_nonce=flaky.plant_nonce,
             approve=CONFIRMING,
+            discovered_by=DiscoveredBy.ADAPTIVE,
         )
 
     [target_run] = result.target_runs
@@ -104,6 +107,7 @@ def run_against(flaky: ServedFlakyTarget, case: Case) -> CalibrationResult:
         attestation=BENCH_ATTESTATION,
         plant_nonce=flaky.plant_nonce,
         approve=CONFIRMING,
+        discovered_by=DiscoveredBy.ADAPTIVE,
     )
 
 

@@ -69,9 +69,7 @@ import {
 } from '../api/bench'
 import {
   selectionReading,
-  WHAT_THIS_CONSOLE_DOES,
-  WHAT_THIS_INSTRUMENT_IS,
-  type ConsoleDoes,
+  type LayerOffered,
   type SelectionReading,
   familyRows,
 } from './landing'
@@ -100,6 +98,69 @@ interface HeldArtefacts {
 }
 
 const NO_ARTEFACTS_LIST_YET: HeldArtefacts = { list: null, unavailable: '' }
+
+/**
+ * The count words this file spells, and the numeral past the end of them.
+ *
+ * Nine is not a limit on anything — it is where a reader stops reading a word faster
+ * than a numeral — and the wire's own set of layers is closed at three, so the numeral
+ * is a fallback that nothing currently reaches.
+ */
+const IN_WORDS = [
+  'none',
+  'one',
+  'two',
+  'three',
+  'four',
+  'five',
+  'six',
+  'seven',
+  'eight',
+  'nine',
+] as const
+
+/**
+ * How many of the layers the next run sends, for the strip over the switches.
+ *
+ * Spelled in words, and that is the whole of why this function exists rather than an
+ * expression in the markup: the block below it prints no figures on purpose, and `2/3`
+ * over a column of switches is a numeral a reader can take for something the bench
+ * counted. A word cannot be mistaken for a measurement.
+ *
+ * It counts the switches as the reading has them, so it says *will send* rather than
+ * *sent*: nothing here has run yet.
+ */
+function howManySend(layers: readonly LayerOffered[]): string {
+  const word = (count: number): string => IN_WORDS[count] ?? String(count)
+  const sending = layers.filter((layer) => layer.runs).length
+  return `${word(sending)} of ${word(layers.length)} will send`
+}
+
+/**
+ * How many of the nine families the next run covers, for the strip over the switches.
+ *
+ * The same word-not-numeral rule `howManySend` exists for, and counted off the same
+ * thing the ticks below are drawn from — the reading where the bench answered, and the
+ * tier's own default where it has not — so the strip and the column of boxes can never
+ * disagree about how many are on.
+ */
+function howManyCover(
+  families: FamilyCovered[] | null,
+  elective: FamilyCovered[] | null,
+): string {
+  const word = (count: number): string => IN_WORDS[count] ?? String(count)
+  const on = (rows: FamilyCovered[] | null, family: string, fallback: boolean) =>
+    rows === null
+      ? fallback
+      : (rows.find((held) => held.family === family)?.covered ?? fallback)
+  const rows = familyRows(families, elective)
+  const covering = rows.filter((one) =>
+    one.tier === 'six'
+      ? on(families, one.family, true)
+      : on(elective, one.family, false),
+  ).length
+  return `${word(covering)} of ${word(rows.length)} will be covered`
+}
 
 export function LandingScreen() {
   const [runs, setRuns] = useState<HeldRuns>(NO_LIST_YET)
@@ -370,89 +431,279 @@ export function LandingScreen() {
   const heading = useArrivalFocus(THE_BENCH)
   return (
     <main className="screen">
+      {/*
+        The screen's own name at the head of it, and nothing under it.
+
+        `THE_BENCH` and not a sentence about the product: the rail row a reader
+        pressed to get here says *The bench*, the browser tab this screen sets says
+        it through `useScreenTitle`, and a third wording in the one place a reader
+        checks they arrived where they meant to was the odd one out. Taken from
+        `rail.ts` rather than typed, so the row, the tab and the heading cannot drift.
+
+        `WHAT_THIS_INSTRUMENT_IS` stood beneath it under a heading of its own — what
+        the bench attacks, over what denominator, with what reported — and is still
+        built and still tested on `Tuning.elective_statement`'s terms. What it says is
+        the claim a report makes, and it is stated where the figures are; on this
+        screen it was a paragraph between an operator and the switches they came for.
+      */}
       <header>
         <h1 ref={heading} tabIndex={-1}>
-          AgentAudit: an adversarial bench
+          {THE_BENCH}
         </h1>
       </header>
 
-      <section>
-        <h2>The instrument</h2>
-        <p>{WHAT_THIS_INSTRUMENT_IS}</p>
-      </section>
+      {/*
+        No card set under the heading.
 
-      <section>
-        <h2>What this console does</h2>
-        <div className="does">
-          {WHAT_THIS_CONSOLE_DOES.map((card) => (
-            <Card card={card} key={card.path} />
-          ))}
-        </div>
-      </section>
+        Two cards stood here — *Register a target* and *Check an artefact* — each a
+        heading, a sentence and a control opening a screen. Both screens are rows in
+        the rail down the left of every page, and the two blocks at the foot of this
+        one point at them again with the record's own rows in them: three doors to two
+        screens, in the band an operator crossed before reaching the switches that are
+        what this page is for.
 
-      <section>
-        {/*
-          The heading and then the runs.
+        `WHAT_THIS_CONSOLE_DOES` is still built and still tested, on
+        `Tuning.elective_statement`'s terms — the sentences are the bench's vocabulary
+        for what those two screens do, and this screen is not the only thing that
+        could ever print them.
+      */}
+      {/*
+        How a run attacks, over the families it attacks them about.
 
-          Two paragraphs stood here. One said what the two columns are and why they are
-          never added — which the rows say by being two columns with two headings and no
-          third; the reason they are not added is `runs.ts`'s to hold, and it holds it
-          where the columns are built. The other pointed at the signed artefacts screen,
-          which is a row in the rail on the left of this page and a card two sections
-          above it.
-        */}
-        <h2>Your runs</h2>
+        The same switches in the same idiom, one level down: the families say *which
+        failures are asked about* and these say *how they are attacked*. Three layers,
+        and the constructions each one schedules nested under it, because the operator's
+        question is answered by the layers — do I want the encodings, the ladders, or
+        the agent — and the list inside is the finer grain.
 
-        {/* Polite, and so is the artefacts block below it: both are what this screen
-            found when it read the record on arrival, and neither answers a press. The
-            two blocks further down that look identical to these are assertive, because
-            those two *are* answers to a tick (ADR-0080). */}
-        {runs.unavailable ? (
-          <div className="citation uncited" role="status">
-            <h3>This bench did not answer for its runs</h3>
-            <p>{runs.unavailable}</p>
-            <p className="aside">
-              Not the same fact as a bench with no runs on the record: what is
-              unknown here is what it would have listed, so nothing below should be
-              read as <em>none</em>.
-            </p>
-          </div>
-        ) : runs.list === null ? (
-          <p className="aside">Reading the runs on the record…</p>
-        ) : (
-          <Runs reading={runsReading(runs.list)} />
-        )}
-      </section>
+        **One layer to a row, and the row is four columns**: the switch with the
+        layer's name, what a run of that layer sends, the members it may send them in,
+        and how much of the layer there is with what one attempt of it costs. Boxes came first — one layer to a box, one box to a row — and what they cost
+        was the comparison: the three sentences began at three different depths down the
+        page, so *which of the three will the next run send* was read one box at a time.
+        In columns the switches line up down one edge, the sentences down the next and
+        the members down the third, and the question is answered by running an eye down
+        a column. Under a narrow viewport the three columns become three stacked bands
+        and the row is the box it used to be.
 
-      <section>
-        {/*
-          The artefacts, in the shape the runs above them are in.
+        The members sit in the third column behind the word for what they are — the same
+        relation a family's published claims have to the family's sentence, which is the
+        finer grain of the switch beside them and not a second block.
 
-          A summary and not the artefacts screen: the target, when the run went on the
-          record, the one line naming how its three checks settled, and the two links a
-          reader wants — the report a recipient may already hold, and the run it came
-          from. The three results one by one, the two claims and the three files a
-          verifier saves are on the signed artefacts screen, which is a rail row and a
-          card at the top of this page.
-        */}
-        <h2>Your artefacts</h2>
+        Each member is a chip a pointer lands anywhere on rather than a tick with a name
+        set beside it. The control underneath is still the checkbox, so the keyboard and
+        the screen reader get the real one; what changed is what it looks like. Seven
+        boxes in a grid read as a form to fill in, and seven chips read as a set to pick
+        from, and picking from a closed set is what selecting constructions is. The
+        layer's own switch keeps the square box — it is the one control on the row that
+        is not a member of a set, and a reader who has learned the box on the families
+        block has learned it here.
 
-        {signed.unavailable ? (
-          <div className="citation uncited" role="status">
-            <h3>This bench did not answer for its artefacts</h3>
-            <p>{signed.unavailable}</p>
-            <p className="aside">
-              Not the same fact as a bench that has signed nothing: what is unknown
-              here is what it would have listed, so nothing below should be read as{' '}
-              <em>none</em>.
-            </p>
-          </div>
-        ) : signed.list === null ? (
-          <p className="aside">Reading the artefacts on the record…</p>
-        ) : (
-          <Artefacts reading={artefactsReading(signed.list)} />
-        )}
-      </section>
+        The strip above the rows names what the block switches and says how many of the
+        three the next run sends, and that count is spelled in words rather than set as
+        a numeral: this block prints no figures (below), and a reader who found `2/3`
+        here would be reading the first one.
+
+        The adaptive layer holds no construction of its own — what it would hold are the
+        two loops the bench's closed set of constructions deliberately does not name —
+        and it holds **its two schedules** instead, in the column the constructions would
+        have been in and behind the word for what they are, with **the spellings its
+        probes go out in** under them. Those are the scored layer's own members under a
+        second switch, because the question differs: above, send a case in this
+        construction; here, respell a probe the attacker composed (ADR-0097). A layer
+        whose column holds neither says so rather than ending early.
+
+        **What each of those two ticks costs is not printed on this screen.** The route
+        serves both sentences and `landing.ts` still reads them — what a second schedule
+        does to the layer's ceiling, and what a spelling does to it — and they used to
+        run under the chips they are about. Two paragraphs under two rows of chips is
+        most of the block by height, and it turned a set of switches into a page to
+        read: the figure they are warning about is the one an operator confirms before
+        the run starts (ADR-0057, ADR-0096), so it is stated where it is confirmed and
+        not where it is chosen. `schedulesCost` and `spellingsCost` are built and tested
+        and this screen prints neither.
+
+        **The only figures on the block are the last column's**, and they are the
+        bench's own words about the bench's own records: how many cases this library
+        holds for the layer, and what one attempt of it costs in calls or turns. They
+        were not drawn at all until the route stated them, which is the rule they are
+        here under — a figure an operator reads off this screen has to be one a route
+        said, and neither of these is a rate, a denominator or anything two rows could
+        be added over. The two sentences the route does serve beside these switches —
+        what switching a construction off does, and what a run made now would carry into
+        its provenance — are both written for a reader holding a document, and neither is
+        printed here: what an operator on this screen is answering is which of the three
+        the next run will send, and the rows answer it. The artefact still states both,
+        in the artefact.
+      */}
+      {sends === null ? null : (
+        <section>
+          <h2>Attacks</h2>
+          {/* Assertive, on the same terms as the families block below (ADR-0080):
+              this is the answer to a layer's own switch. */}
+          {refusedSelection ? (
+            <div className="citation uncited" role="alert">
+              <h3>Nothing was changed</h3>
+              <p>{refusedSelection}</p>
+            </div>
+          ) : null}
+          <p className="switching">
+            <span className="of">Layers</span>
+            <span>{howManySend(sends.layers)}</span>
+          </p>
+          <dl className="said layers">
+            {sends.layers.map((layer) => (
+              <div key={layer.layer}>
+                <dt>
+                  <input
+                    className="tick"
+                    type="checkbox"
+                    checked={layer.runs}
+                    aria-label={readName(layer.layer)}
+                    onChange={(event) =>
+                      void selectLayer(layer.layer, event.target.checked)
+                    }
+                  />
+                  {readName(layer.layer)}
+                </dt>
+                <dd className="means">{layer.sends}</dd>
+                <dd className="sends">
+                  {layer.constructions.length === 0 &&
+                  layer.schedules.length === 0 &&
+                  layer.spellings.length === 0 ? (
+                    <span className="none">
+                      Nothing to choose inside this layer — the switch beside it is the
+                      whole of it.
+                    </span>
+                  ) : null}
+                  {layer.constructions.length === 0 ? null : (
+                    <>
+                      <span className="of">Constructions</span>
+                      <ul className="sent">
+                        {layer.constructions.map((one) => (
+                          <li key={one.transform}>
+                            <label>
+                              <input
+                                className="tick"
+                                type="checkbox"
+                                checked={one.sent}
+                                onChange={(event) =>
+                                  void selectConstruction(
+                                    one.transform,
+                                    event.target.checked,
+                                  )
+                                }
+                              />
+                              {readName(one.transform)}
+                            </label>
+                          </li>
+                        ))}
+                      </ul>
+                    </>
+                  )}
+                  {/*
+                    The adaptive layer's own two switches, in the column its
+                    constructions would have been in and behind the word for what they
+                    are. Drawn wherever the wire says a schedule belongs, which is that
+                    layer, so this markup names no layer.
+
+                    What ticking the second one costs is not printed beside it — see the
+                    block's own comment above, and the estimate the operator confirms
+                    before a run starts, which is where the figure is (ADR-0096).
+                  */}
+                  {layer.schedules.length === 0 ? null : (
+                    <>
+                      <span className="of">Schedules</span>
+                      <ul className="sent">
+                        {layer.schedules.map((one) => (
+                          <li key={one.schedule}>
+                            <label>
+                              <input
+                                className="tick"
+                                type="checkbox"
+                                checked={one.selected}
+                                onChange={(event) =>
+                                  void selectSchedule(
+                                    one.schedule,
+                                    event.target.checked,
+                                  )
+                                }
+                              />
+                              {readName(one.schedule)}
+                            </label>
+                          </li>
+                        ))}
+                      </ul>
+                    </>
+                  )}
+                  {/*
+                    And the spellings the layer's own probes go out in, under the
+                    schedules and behind their own word. The same members the scored
+                    layer's constructions are, and a switch of their own, because the
+                    question is a different one: *send a case in it* above, and
+                    *respell a probe the attacker composed* here (ADR-0097). Four of
+                    the seven are offered, because the other three need words this
+                    repository writes per family or a ladder built from a case record;
+                    the sentence that said so is off this screen with the other cost
+                    sentence, and what is left is the four that can be picked.
+                  */}
+                  {layer.spellings.length === 0 ? null : (
+                    <>
+                      <span className="of">Spellings</span>
+                      <ul className="sent">
+                        {layer.spellings.map((one) => (
+                          <li key={one.transform}>
+                            <label>
+                              <input
+                                className="tick"
+                                type="checkbox"
+                                checked={one.sent}
+                                onChange={(event) =>
+                                  void selectSpelling(
+                                    one.transform,
+                                    event.target.checked,
+                                  )
+                                }
+                              />
+                              {readName(one.transform)}
+                            </label>
+                          </li>
+                        ))}
+                      </ul>
+                    </>
+                  )}
+                </dd>
+                {/*
+                  How much of the layer there is, and what one attempt of it costs.
+
+                  The fourth column, and the only figures on the block: a count of the
+                  records this library holds for the layer, and the calls or turns one
+                  attempt of it puts on the operator's own endpoint. Both are the
+                  bench's own wording — a console composing either from parts would be
+                  printing a figure no route stated — and both are counts of things
+                  rather than rates: nothing here is read against a denominator and no
+                  two rows may be added (ADR-0005, ADR-0010).
+
+                  Ranged right, so the three rows' figures line up under each other and
+                  a reader comparing what the layers cost runs an eye down one edge
+                  rather than across three sentences. The cost is set under the count in
+                  the quiet the asides take: what an operator picks a layer on is how
+                  much of it there is, and what it costs is the qualifier on that.
+
+                  A layer this library holds no cases for states that in `holds` and has
+                  no cost to state, so the second line is absent rather than empty.
+                */}
+                <dd className="holds">
+                  <span className="much">{layer.holds}</span>
+                  {layer.costs === '' ? null : (
+                    <span className="each">{layer.costs}</span>
+                  )}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        </section>
+      )}
 
       {/*
         The nine families, one to a row, where the questionnaire region was.
@@ -486,21 +737,37 @@ export function LandingScreen() {
             <p>{refused}</p>
           </div>
         ) : null}
+        {/* The same caption the layers block carries, over the same kind of column:
+            what is switched here, and how many of them are on. */}
+        <p className="switching">
+          <span className="of">Families</span>
+          <span>{howManyCover(families, elective)}</span>
+        </p>
         {/*
-          One family to a box, one box to a row.
+          One family to a row, and the row in three columns.
 
-          The boxes are the idiom every other block on this page is made of — paper, a
-          hairline, the same radius — and they were two to a row before, which read as
-          a grid of cards and buried the question the block exists to answer: which of
-          these will the next run cover. One to a row answers it down a single column.
+          The same shape as the layers block above it, for the same reason and by the
+          same argument: boxes came first — two to a row, which read as a grid of cards,
+          then one to a row — and what a box costs is that the switch, the sentence and
+          the claims all begin at a different depth down the page, so *which of these
+          will the next run cover* is read one box at a time. In columns the switches
+          line up down one edge and the sentences down the next, and one frame around
+          the block with a hairline between rows says these nine are one list.
 
-          Four things in each box: the switch with the family's name, what the failure
-          is in a sentence, the OWASP entries it claims and the EU AI Act articles it
-          bears. The labels sit in a footer rather than in columns of their own, so a
-          box stays a box and the two published claims read as what they are — what
-          this family is *read onto*, under the sentence saying what it is.
+          The block is drawn as the layers block is because it is the same question one
+          level up — which of these will the next run ask about — and a reader who has
+          learned the shape on one has learned it on the other. What differs is what
+          the last column holds: layers state counts, and a family states what it is
+          read onto, which is why that column is codes and never figures.
 
-          **Nine boxes and not six and three.** The six and the elective tier are drawn
+          Four things in each row: the switch with the family's name, what the failure
+          is in a sentence, the OWASP entries it claims with the EU AI Act articles it
+          bears, and how much of the family the mounted library holds. Those two sat in a footer under the sentence while a row was a box;
+          the row has a third column now, and they are in it — the same move the layers'
+          members made, and the same relation, which is *what this family is read onto*
+          beside the sentence saying what it is.
+
+          **Nine rows and not six and three.** The six and the elective tier are drawn
           in one list with nothing marking them apart
           ([ADR-0091](../../../docs/adr/0091-the-console-draws-the-nine-families-as-one-list.md)).
           What that decision moved is the presentation and nothing else: the two arrays
@@ -509,7 +776,7 @@ export function LandingScreen() {
           and a family left unticked is still stated on the report as *not requested*
           rather than as a rate of zero (ADR-0015, ADR-0035, ADR-0088).
 
-          No figure in any box. Not a rate, not an interval, not a band, not a `D`: an
+          No figure in any row. Not a rate, not an interval, not a band, not a `D`: an
           article number and an entry's edition year are the only digits here.
         */}
         <dl className="said families">
@@ -552,16 +819,19 @@ export function LandingScreen() {
                 />
                 {readFamily(one.family)}
               </dt>
-              <dd>{one.says}</dd>
+              <dd className="means">{one.says}</dd>
               {/*
-                What the family is read onto, under what it is.
+                What the family is read onto, beside what it is.
 
                 Each list labelled, because `ASI01:2026` and `15` are not self-naming
-                and a reader who has not met the agentic list needs the word. An empty
-                list draws nothing at all — not a dash, which would read as *not looked
-                up*: data leakage claims none of the agentic entries, and halt defeat
-                and disclosure denial none of the LLM ones, and those are refusals
-                `labels.py` argues for rather than gaps.
+                and a reader who has not met the agentic list needs the word — the same
+                words behind the same lists the layers' members are drawn behind. An
+                empty list draws nothing at all — not a dash, which would read as *not
+                looked up*: data leakage claims none of the agentic entries, and halt
+                defeat and disclosure denial none of the LLM ones, and those are
+                refusals `labels.py` argues for rather than gaps. A family claiming
+                nothing on either leaves the column empty, which a column can be and a
+                footer could not.
               */}
               <dd className="claims">
                 {one.owasp.length > 0 ? (
@@ -581,195 +851,98 @@ export function LandingScreen() {
                   </span>
                 ) : null}
               </dd>
+              {/*
+                How much of the family this library holds, in the last column.
+
+                The layers block's own column asked one level up: what an operator
+                ticking a family wants to know beside what it is, is how much there is
+                to send about it. Ranged right and set in the same monospace, so the
+                nine counts are read down one edge against each other and the two
+                blocks' figures stand on the same line of the screen.
+
+                A count of this bench's own records and not a reading of anybody's
+                agent, which is the whole of what makes it admissible where a rate is
+                not (ADR-0108, narrowing ADR-0091 §5). Absent, not empty, where the
+                settings read has not answered: a row still draws its sentence and its
+                switch from this console's own table, and a count is not something it
+                may supply.
+              */}
+              {one.holds === '' ? null : (
+                <dd className="holds">
+                  <span className="much">{one.holds}</span>
+                </dd>
+              )}
             </div>
           ))}
         </dl>
       </section>
 
-      {/*
-        How a run attacks, under the families it attacks them about.
+      <section>
+        {/*
+          The heading and then the runs.
 
-        The same switches in the same idiom, one level down: the families say *which
-        failures are asked about* and these say *how they are attacked*. Three layers,
-        and the constructions each one schedules nested under it, because the operator's
-        question is answered by the layers — do I want the encodings, the ladders, or
-        the agent — and the list inside is the finer grain.
+          At the foot of the screen and no longer near the top: what an operator opens
+          this page to do is move the switches above, and the record of what has already
+          run is what they scroll to afterwards.
 
-        **One layer to a box, one box to a row**, which is the families block's own
-        shape read one level down. Three boxes in an auto-fit grid came out as unequal
-        columns — one tall with the encodings, one short with the ladders, one all but
-        empty — and read as a set of cards rather than as the question the block asks:
-        which of the three will the next run send. One to a row answers it down a
-        single column, and the constructions wrap into as many columns as the box is
-        wide instead of into one tall stack.
+          Two paragraphs stood here. One said what the two columns are and why they are
+          never added — which the rows say by being two columns with two headings and no
+          third; the reason they are not added is `runs.ts`'s to hold, and it holds it
+          where the columns are built. The other pointed at the signed artefacts screen,
+          which is a row in the rail on the left of this page.
+        */}
+        <h2>Your runs</h2>
 
-        The constructions sit in a footer under the layer's sentence, behind the word
-        for what they are, exactly as a family's published claims do: a box holds one
-        subject, and these are the finer grain of the switch above them rather than a
-        second block.
+        {/* Polite, and so is the artefacts block below it: both are what this screen
+            found when it read the record on arrival, and neither answers a press. The
+            two blocks above that look identical to these are assertive, because those
+            two *are* answers to a tick (ADR-0080). */}
+        {runs.unavailable ? (
+          <div className="citation uncited" role="status">
+            <h3>This bench did not answer for its runs</h3>
+            <p>{runs.unavailable}</p>
+            <p className="aside">
+              Not the same fact as a bench with no runs on the record: what is
+              unknown here is what it would have listed, so nothing below should be
+              read as <em>none</em>.
+            </p>
+          </div>
+        ) : runs.list === null ? (
+          <p className="aside">Reading the runs on the record…</p>
+        ) : (
+          <Runs reading={runsReading(runs.list)} />
+        )}
+      </section>
 
-        The adaptive layer holds no construction of its own — what it would hold are the
-        two loops the bench's closed set of constructions deliberately does not name —
-        and it holds **its two schedules** instead, in the footer the constructions
-        would have been in and behind the word for what they are, with **the spellings
-        its probes go out in** under them. Those are the scored layer's own members
-        under a second switch, because the question differs: above, send a case in this
-        construction; here, respell a probe the attacker composed (ADR-0097). Both ticked is two episode sets
-        per family rather than one wider search, which is why the sentence about what
-        the tick costs is printed under them: the second schedule doubles the turns the
-        next run may put on the operator's own endpoint, and that is a figure they
-        confirm rather than discover (ADR-0057, ADR-0096). A layer whose footer holds
-        neither says so rather than ending early.
+      <section>
+        {/*
+          The artefacts, in the shape the runs above them are in.
 
-        No figure in any of it. The two sentences the route serves beside these
-        switches — what switching a construction off does, and what a run made now
-        would carry into its provenance — are both written for a reader holding a
-        document, and neither is printed here: what an operator on this screen is
-        answering is which of the three the next run will send, and the boxes answer
-        it. The artefact still states both, in the artefact.
-      */}
-      {sends === null ? null : (
-        <section>
-          <h2>How a run attacks</h2>
-          {/* Assertive, on the same terms as the families block above (ADR-0080):
-              this is the answer to a layer's own switch. */}
-          {refusedSelection ? (
-            <div className="citation uncited" role="alert">
-              <h3>Nothing was changed</h3>
-              <p>{refusedSelection}</p>
-            </div>
-          ) : null}
-          <dl className="said layers">
-            {sends.layers.map((layer) => (
-              <div key={layer.layer}>
-                <dt>
-                  <input
-                    className="tick"
-                    type="checkbox"
-                    checked={layer.runs}
-                    aria-label={readName(layer.layer)}
-                    onChange={(event) =>
-                      void selectLayer(layer.layer, event.target.checked)
-                    }
-                  />
-                  {readName(layer.layer)}
-                </dt>
-                <dd>{layer.sends}</dd>
-                <dd className="sends">
-                  {layer.constructions.length === 0 &&
-                  layer.schedules.length === 0 &&
-                  layer.spellings.length === 0 ? (
-                    <span className="none">
-                      Nothing to choose inside this layer — the switch above is the
-                      whole of it.
-                    </span>
-                  ) : null}
-                  {layer.constructions.length === 0 ? null : (
-                    <>
-                      <span className="of">Constructions</span>
-                      <ul className="sent">
-                        {layer.constructions.map((one) => (
-                          <li key={one.transform}>
-                            <label>
-                              <input
-                                className="tick"
-                                type="checkbox"
-                                checked={one.sent}
-                                onChange={(event) =>
-                                  void selectConstruction(
-                                    one.transform,
-                                    event.target.checked,
-                                  )
-                                }
-                              />
-                              {readName(one.transform)}
-                            </label>
-                          </li>
-                        ))}
-                      </ul>
-                    </>
-                  )}
-                  {/*
-                    The adaptive layer's own two switches, in the footer its
-                    constructions would have been in and behind the word for what they
-                    are. Drawn wherever the wire says a schedule belongs, which is that
-                    layer, so this markup names no layer.
+          A summary and not the artefacts screen: the target, when the run went on the
+          record, the one line naming how its three checks settled, and the two links a
+          reader wants — the report a recipient may already hold, and the run it came
+          from. The three results one by one, the two claims and the three files a
+          verifier saves are on the signed artefacts screen, which is a row in the rail
+          down the left of this page.
+        */}
+        <h2>Your artefacts</h2>
 
-                    **The one sentence this block prints**, and it is here rather than
-                    under the heading because it is what *this* tick costs: both
-                    schedules is a second episode set per family, so the layer's
-                    ceiling doubles and the doubling reaches the figure the operator
-                    confirms before a run starts. The two document sentences the route
-                    serves are still not printed anywhere on this screen (ADR-0096).
-                  */}
-                  {layer.schedules.length === 0 ? null : (
-                    <>
-                      <span className="of">Schedules</span>
-                      <ul className="sent">
-                        {layer.schedules.map((one) => (
-                          <li key={one.schedule}>
-                            <label>
-                              <input
-                                className="tick"
-                                type="checkbox"
-                                checked={one.selected}
-                                onChange={(event) =>
-                                  void selectSchedule(
-                                    one.schedule,
-                                    event.target.checked,
-                                  )
-                                }
-                              />
-                              {readName(one.schedule)}
-                            </label>
-                          </li>
-                        ))}
-                      </ul>
-                      <span className="aside">{sends.schedulesCost}</span>
-                    </>
-                  )}
-                  {/*
-                    And the spellings the layer's own probes go out in, under the
-                    schedules and behind their own word. The same members the scored
-                    layer's constructions are, and a switch of their own, because the
-                    question is a different one: *send a case in it* above, and
-                    *respell a probe the attacker composed* here (ADR-0097). Four of
-                    the seven are offered, because the other three need words this
-                    repository writes per family or a ladder built from a case record —
-                    the sentence under them says so.
-                  */}
-                  {layer.spellings.length === 0 ? null : (
-                    <>
-                      <span className="of">Spellings</span>
-                      <ul className="sent">
-                        {layer.spellings.map((one) => (
-                          <li key={one.transform}>
-                            <label>
-                              <input
-                                className="tick"
-                                type="checkbox"
-                                checked={one.sent}
-                                onChange={(event) =>
-                                  void selectSpelling(
-                                    one.transform,
-                                    event.target.checked,
-                                  )
-                                }
-                              />
-                              {readName(one.transform)}
-                            </label>
-                          </li>
-                        ))}
-                      </ul>
-                      <span className="aside">{sends.spellingsCost}</span>
-                    </>
-                  )}
-                </dd>
-              </div>
-            ))}
-          </dl>
-        </section>
-      )}
+        {signed.unavailable ? (
+          <div className="citation uncited" role="status">
+            <h3>This bench did not answer for its artefacts</h3>
+            <p>{signed.unavailable}</p>
+            <p className="aside">
+              Not the same fact as a bench that has signed nothing: what is unknown
+              here is what it would have listed, so nothing below should be read as{' '}
+              <em>none</em>.
+            </p>
+          </div>
+        ) : signed.list === null ? (
+          <p className="aside">Reading the artefacts on the record…</p>
+        ) : (
+          <Artefacts reading={artefactsReading(signed.list)} />
+        )}
+      </section>
     </main>
   )
 }
@@ -966,26 +1139,3 @@ function Calls({ column }: { column: ScoredColumn | AdaptiveColumn }) {
   return <td className={`calls-cell ${column.accent}`}>{column.calls}</td>
 }
 
-/**
- * One errand, with the control that starts it.
- *
- * A `Link` and not a `button`, styled as the control it is: it navigates, and a
- * button that navigates is a control a keyboard and a screen reader are told the
- * wrong thing about.
- *
- * All three take the same treatment. The filled one used to be the lead card's alone,
- * which left the other two outlined in the same hairline every block on the page is
- * edged with — three doors, one of them drawn as a door. `lead` still says which errand
- * comes first, and the order of the cards is where a reader sees it.
- */
-function Card({ card }: { card: ConsoleDoes }) {
-  return (
-    <div className="card">
-      <h3>{card.name}</h3>
-      <p>{card.does}</p>
-      <Link className="act" to={card.path}>
-        {card.act}
-      </Link>
-    </div>
-  )
-}

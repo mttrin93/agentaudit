@@ -8,6 +8,12 @@
  * the button it is about: a screen reader in browse mode reading a disabled control
  * would otherwise read *Continue, dimmed* and nothing else, and it did, on the gate.
  *
+ * **The gate walk is the one that draws it now.** The register walk's list said back
+ * what its own screen was already showing — three unticked boxes and the field above
+ * them — and came off; `RegisterScreen.tsx` says so where it stood, including what the
+ * lost citation costs a reader who cannot see the boxes. This component and its id are
+ * unchanged, because the gate's reasons are not all on its screen.
+ *
  * **It sits over the footer rather than under it.** The reader arrives at the button,
  * finds it dead, and the reason is the line their eye has just passed rather than
  * something below the fold or back up the form. That was the register walk's

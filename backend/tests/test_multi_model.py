@@ -63,6 +63,7 @@ from backend.bench.gate import GateResult
 from backend.bench.lease import take_the_library
 from backend.bench.library import (
     EMPTY_LIBRARY,
+    AdmissionBar,
     AdmissionReading,
     Case,
     DiscoveredBy,
@@ -454,7 +455,14 @@ def test_a_remembered_decision_says_so_where_the_promotions_are_reported(
     reported = again[2].reported(again[1])
     assert "discarded" in reported
     assert "reported from memory" in reported
-    assert "nothing was measured against three agents on two models" in reported
+    # And it names the bar this route faced rather than a fixed pair of models. The
+    # proposals here are `DiscoveredBy.ADAPTIVE`, so the clause the line carries is
+    # the cross-model bar's own — asserted through `AdmissionBar.CROSS_MODEL.asks`
+    # and never as prose, because a verbatim sentence is what made this assertion
+    # block the fix in #228 and would block the next rewording the same way. Read off
+    # the enum it also stays a canary: a change that moved this population to the
+    # weaker bar fails here as loudly as the counts above do.
+    assert AdmissionBar.CROSS_MODEL.asks in reported
 
 
 def test_a_promotion_list_that_does_not_pair_with_the_consultation_is_refused(
@@ -499,6 +507,39 @@ def test_one_route_proposed_four_times_in_one_run_is_measured_once(
     assert len(promotions) == 4
     assert rejected.counts[RejectionKind.CROSS_MODEL] == 4
     assert sum(rejected.counts.values()) == 4
+
+
+def test_every_route_is_measured_on_every_model_whatever_bar_it_will_face(
+    memory: DecidedRoutes, leakage_case: Case
+) -> None:
+    # What an admission run costs is set by the caller's model list and not by the
+    # bar any one route faces: this function names neither `bar_for` nor a bar, and
+    # `promote` chooses one only after every model has been measured. So a proposal
+    # that will be decided on ADR-0107's single-model bar still costs a pass on each
+    # declared model here, and what the admission memory saves on a rediscovered
+    # route is that pass count rather than a fixed two. The docstring on
+    # `cross_model_bar` says so, and this is the fact it says it about.
+    asked: list[tuple[str, tuple[str, ...]]] = []
+    on_the_agents = _a_proposal(leakage_case, payload="found against the three agents")
+    on_a_target = _a_proposal(
+        leakage_case,
+        payload="found against a customer's own agent",
+        discovered_by=DiscoveredBy.ADAPTIVE_ON_TARGET,
+    )
+
+    answer = _bar(
+        memory=memory,
+        proposals=(on_the_agents, on_a_target),
+        measure=_measuring(asked, SEPARATING_COUNTS, FLAT_COUNTS),
+    )
+
+    assert not isinstance(answer, int)
+    both = (on_the_agents.case.id, on_a_target.case.id)
+    assert asked == [(FIRST, both), (SECOND, both)], (
+        f"two routes spanning both bars reached the agents as {asked}. Every "
+        "undecided route is measured on every model this caller declared, so the "
+        "cost of one admission run is the length of that list"
+    )
 
 
 def test_a_run_that_proposed_nothing_measures_nothing_and_remembers_nothing(
@@ -561,19 +602,27 @@ def _bar(
     )
 
 
-def _a_proposal(objective: Case) -> ProposedRoute:
+def _a_proposal(
+    objective: Case,
+    *,
+    payload: str = "the probe that actually ran",
+    discovered_by: DiscoveredBy = DiscoveredBy.ADAPTIVE,
+) -> ProposedRoute:
     """One proposal, drafted the way `propose_case` drafts it inside an episode.
 
     A fresh uuid in the case id on every call, because `proposal.py` mints one —
-    which is why the memory is keyed by the route and not by the case.
+    which is why the memory is keyed by the route and not by the case. The payload
+    is a parameter because the key is a digest of it: two proposals that differ in
+    nothing else are one route, so a test that needs two routes varies this.
     """
     return proposed_from(
         objective=objective,
         target=a_target("trivial"),
         family=Family(objective.family),
-        payload="the probe that actually ran",
+        payload=payload,
         description="a route worth promoting",
         broken=True,
+        discovered_by=discovered_by,
     )
 
 
@@ -965,6 +1014,7 @@ def _an_admitted_promotion(objective: Case) -> Promotion:
         payload="the probe that actually ran",
         description="a route worth promoting",
         broken=True,
+        discovered_by=DiscoveredBy.ADAPTIVE,
     )
     readings = [
         AdmissionReading(model=model, attempts=10, hardened=0, weak=5, trivial=10)

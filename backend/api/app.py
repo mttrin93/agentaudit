@@ -242,7 +242,6 @@ from backend.bench.completion import (
     ATTACKER_MODEL_ENV,
     DEFAULT_ATTACKER_TEMPERATURE,
     REFERENCE_MODEL_ENV,
-    SECOND_REFERENCE_MODEL_ENV,
     attacker_completion_for,
     completion_for,
     declared_model,
@@ -1079,6 +1078,23 @@ class FamilyRun(BaseModel):
     of: int
     resisted: int
     succeeded: int
+    answers: list[str] = []
+    """This family's verdicts, in the order the attempts came back.
+
+    The counts above say *how many*; this says *in what order they landed*, which is
+    what a screen drawing one cell an attempt needs. Built from the same walk over
+    `RunState.attempts`, so it cannot disagree with `resisted` and `succeeded` — the
+    two counts partition this list rather than being computed beside it.
+
+    **A sequence and never a trajectory.** Attempts inside a case are independent by
+    construction — a fresh session each, which is what makes their quotient a rate and
+    not a reading of how a target responds to being attacked repeatedly (CONTEXT.md,
+    ADR-0005). Nothing here is a slope, and no figure on this bench is taken over a
+    window of it.
+
+    Empty for a family with no plan, which is the same absence its zero denominator
+    already states.
+    """
     not_run: str = ""
     """Why this family is not in the plan, in the bench's own words, or empty.
 
@@ -1125,6 +1141,23 @@ class ElectiveFamilyRun(BaseModel):
     of: int
     resisted: int
     succeeded: int
+    answers: list[str] = []
+    """This family's verdicts, in the order the attempts came back.
+
+    The counts above say *how many*; this says *in what order they landed*, which is
+    what a screen drawing one cell an attempt needs. Built from the same walk over
+    `RunState.attempts`, so it cannot disagree with `resisted` and `succeeded` — the
+    two counts partition this list rather than being computed beside it.
+
+    **A sequence and never a trajectory.** Attempts inside a case are independent by
+    construction — a fresh session each, which is what makes their quotient a rate and
+    not a reading of how a target responds to being attacked repeatedly (CONTEXT.md,
+    ADR-0005). Nothing here is a slope, and no figure on this bench is taken over a
+    window of it.
+
+    Empty for a requested family the library holds no case in, which is the same
+    absence `no_case` states in words.
+    """
     no_case: str = ""
     """Why this requested family has no denominator, or empty.
 
@@ -1200,7 +1233,7 @@ def _run_families(record: RunRecord, rule: GateRule) -> list[FamilyRun]:
     reply this function cannot see. A row over-counting there is a bar that stops
     short, which is the direction this used to fail in everywhere.
     """
-    made, held = _attempts_by_family(record)
+    made, held, answered = _attempts_by_family(record)
     answerable = _answerable_cases(record)
     rows: list[FamilyRun] = []
     for family in Family:
@@ -1218,13 +1251,16 @@ def _run_families(record: RunRecord, rule: GateRule) -> list[FamilyRun]:
                 # one verdict, so the two are one partition and cannot drift apart by
                 # a verdict this branch had not heard of.
                 succeeded=attempted - held.get(name, 0),
+                answers=answered.get(name, []),
                 not_run="" if gap is None else gap.stated(),
             )
         )
     return rows
 
 
-def _attempts_by_family(record: RunRecord) -> tuple[dict[str, int], dict[str, int]]:
+def _attempts_by_family(
+    record: RunRecord,
+) -> tuple[dict[str, int], dict[str, int], dict[str, list[str]]]:
     """This run's attempts grouped by family name, and how many of them held.
 
     One walk over `RunState.attempts`, keyed on the **name**, which is what lets the
@@ -1235,12 +1271,17 @@ def _attempts_by_family(record: RunRecord) -> tuple[dict[str, int], dict[str, in
     """
     made: dict[str, int] = {}
     held: dict[str, int] = {}
+    answered: dict[str, list[str]] = {}
     for attempt in record.run_state.attempts:
         name = str(attempt.family)
         made[name] = made.get(name, 0) + 1
         if attempt.verdict is Verdict.RESISTED:
             held[name] = held.get(name, 0) + 1
-    return made, held
+        # The same walk, in the order the attempts were appended, so the sequence a
+        # screen draws its cells from and the counts its columns print cannot come
+        # apart: they are one pass over one list.
+        answered.setdefault(name, []).append(str(attempt.verdict))
+    return made, held, answered
 
 
 def _answerable_cases(record: RunRecord) -> list[Case]:
@@ -1271,7 +1312,7 @@ def _run_elective_families(
     library the run was planned against holds nothing in that family, and without the
     sentence the row would read as a family that has not started yet (ADR-0094).
     """
-    made, held = _attempts_by_family(record)
+    made, held, answered = _attempts_by_family(record)
     answerable = _answerable_cases(record)
     rows: list[ElectiveFamilyRun] = []
     for family in record.plan.elective.requested:
@@ -1285,6 +1326,7 @@ def _run_elective_families(
                 of=cases * rule.attempts_per_case,
                 resisted=held.get(name, 0),
                 succeeded=attempted - held.get(name, 0),
+                answers=answered.get(name, []),
                 no_case=("" if cases else A_REQUESTED_ELECTIVE_FAMILY_WITH_NO_CASE),
             )
         )
@@ -1440,6 +1482,14 @@ def _no_report_recorded_for(bench: BenchRuns, run_id: str) -> tuple[ReportRefusa
         f"one. {recovered.statement}",
     )
 
+
+RUN_STOP_ROUTE = "/runs/{run_id}/stop"
+"""Where a running suite is asked to stop (ADR-0114).
+
+A `POST` because it changes what the bench is doing, and its own route rather than a
+field on the approval: an approval is answered once and this is a second decision,
+made minutes later by somebody watching the figures move.
+"""
 
 RUN_EPISODES_ROUTE = "/runs/{run_id}/episodes"
 """Where the probes one run's own episodes sent are read. Memory, and never bytes
@@ -3237,16 +3287,21 @@ def _labelled(label: FamilyLabel) -> FamilyLabelled:
 
 
 class FamilyCovered(BaseModel):
-    """One failure family, whether the next run covers it, and what it is read onto.
+    """One failure family, whether the next run covers it, what it is read onto, and
+    how much of it the mounted library holds.
 
     The label rides on the switch rather than arriving on a route of its own, because
     the screen prints the two in one row: a console that fetched the nine labels
-    separately could draw a tick beside a claim read at a different moment.
+    separately could draw a tick beside a claim read at a different moment. `holds` is
+    on the row for the same reason and on `LayerSelected.holds`'s terms — worded by the
+    bench, because a console composing *3 cases* from a number and a noun would be
+    printing a figure no route stated.
     """
 
     family: str
     covered: bool
     labels: FamilyLabelled
+    holds: str
 
 
 class Tuning(BaseModel):
@@ -3455,11 +3510,41 @@ class Tuning(BaseModel):
 
 
 class LayerSelected(BaseModel):
-    """One layer, whether the next run runs it, and what a run of it sends."""
+    """One layer, whether the next run runs it, what it sends, and what it holds."""
 
     layer: str
     selected: bool
     sends: str
+
+    holds: str
+    """How much of this layer there is to send, in the bench's own words.
+
+    A count of records for the two layers that send cases — the most any one family
+    holds of that layer's cases, which is `_cases_per_family`'s reading one level down
+    — and a count of episodes for the layer that sends none. Both are counts of things
+    the bench *has*, and neither is a rate: what a family measured is read off a
+    report beside its own denominator (ADR-0005), and nothing on this field may be
+    added to anything on another row.
+
+    Composed here rather than on `AttackLayer`, because it is a fact about the library
+    this bench is currently mounted on and not about the layer: a run whose library
+    holds four cases for a family and one whose library holds three send different
+    amounts under the same enum member.
+    """
+
+    costs: str
+    """What one attempt of this layer puts on the target's endpoint, in words.
+
+    One call for a single-turn case, one per turn for a fixed script (`Case.payload`
+    is one element per turn, ADR-0053), and turns rather than calls for the adaptive
+    layer, whose unit is an episode. *At most*, where the layer's cases do not all run
+    to the same length: the figure an operator is shown before they consent is the
+    worst case and never an average (ADR-0007, `budget.turn_ceiling`).
+
+    Empty where there is nothing to spend, which is a layer the mounted library holds
+    no cases for: a layer that will send nothing says so in `holds` and has no cost to
+    state.
+    """
 
 
 class ScheduleSelected(BaseModel):
@@ -3690,6 +3775,7 @@ def tuning(config: BenchConfig) -> Tuning:
                 family=str(family),
                 covered=family in config.families,
                 labels=_labelled(label_for(family)),
+                holds=_what_a_family_holds(family, config.cases, config.elective_cases),
             )
             for family in Family
         ],
@@ -3699,6 +3785,7 @@ def tuning(config: BenchConfig) -> Tuning:
                 family=str(family),
                 covered=family in config.elective.requested,
                 labels=_labelled(elective_label_for(family)),
+                holds=_what_a_family_holds(family, config.cases, config.elective_cases),
             )
             for family in ElectiveFamily
         ],
@@ -3708,6 +3795,8 @@ def tuning(config: BenchConfig) -> Tuning:
                 layer=str(layer),
                 selected=layer in config.selection.layers,
                 sends=layer.stated(),
+                holds=_what_a_layer_holds(layer, config.cases, config.adaptive),
+                costs=_what_an_attempt_costs(layer, config.cases, config.adaptive),
             )
             for layer in AttackLayer
         ],
@@ -3809,6 +3898,122 @@ THE_STAND_IN_ATTACKER = (
     "spend on the bench's own inference. Test equipment, and the honest choice when "
     "what is under test is the plumbing rather than an attacker"
 )
+
+
+def _counted(count: int, noun: str) -> str:
+    """`count` of `noun`, pluralised by adding an `s`.
+
+    Every noun this file counts on a layer's row — case, call, turn, episode — takes
+    a plain `s`, so the helper is the rule and not a table. A noun that does not would
+    have to be worded at its call site rather than added here.
+    """
+    return f"{count} {noun}" if count == 1 else f"{count} {noun}s"
+
+
+def _what_a_family_holds(
+    family: AnyFamily, cases: Sequence[Case], elective: Sequence[Case]
+) -> str:
+    """How much of one family the mounted library holds, for the row that switches it.
+
+    The count of cases filed under the family, across every layer that sends them: what
+    an operator switching a family on is asking is how much there is to send about it,
+    and the layers block one heading up is where the split by layer is read.
+
+    **Both sequences, because the library is two directories.** The tier's cases are
+    loaded out of `cases/elective/` into `BenchConfig.elective_cases` and are
+    deliberately not folded into `cases`, so that a run asking for none of the tier does
+    not move its library digest — read that field for the argument. A row counting only
+    `cases` would therefore say *no cases in this library* under all three elective
+    families while nine records sat in the directory next door. The two are searched
+    together here and nothing is double counted: a family belongs to one tier by its
+    type, and a case of the six loaded out of the elective directory is a refusal
+    `load_elective` raises rather than a row this function has to reconcile.
+
+    A count and never a rate — nothing here is over a denominator and no two rows may be
+    added (ADR-0005, ADR-0010) — and the same figure for a family of either tier, which
+    is `AnyFamily` on the parameter rather than two functions: an elective family's case
+    is an ordinary case, and the tier decides what the gate is read over and not what
+    the library holds (ADR-0035, ADR-0091).
+
+    Counted off what is loaded and never off what is requested, which is the difference
+    between *how much of this is there* and *how much of it did somebody tick*: the row
+    is what an operator reads before ticking.
+
+    The empty library says so in words on the same terms `_what_a_layer_holds` does: a
+    family the next run would attack with nothing is a fact about this bench, and `0`
+    beside a ticked switch reads as a figure that failed to load.
+    """
+    held = [case for case in [*cases, *elective] if case.family == family]
+    if not held:
+        return "no cases in this library"
+    return _counted(len(held), "case")
+
+
+def _layer_cases(cases: Sequence[Case], layer: AttackLayer) -> list[Case]:
+    """The mounted library's cases that the named layer is the one to send.
+
+    Read through `selection.layer_of` off each case's own construction, which is the
+    one join between a construction and the switch that turns it off — the same
+    mapping `transforms` carries on every row, for the same reason: a second answer to
+    *which layer sends this* would only have to disagree once.
+    """
+    return [case for case in cases if layer_of(case.transform) is layer]
+
+
+def _what_a_layer_holds(
+    layer: AttackLayer, cases: Sequence[Case], adaptive: AdaptiveBudget
+) -> str:
+    """How much of one layer there is to send, for the row that switches it.
+
+    Cases for the two layers that send them, and the most any one family holds rather
+    than a total or an average — `_cases_per_family`'s argument one level down: what a
+    reader is being told is what a full family of this layer is attacked with, and a
+    mean over families is a figure no family was ever attacked at (ADR-0005).
+
+    Episodes for the layer that holds no case at all: `episodes_per_family` is the
+    count inside one episode set, and each schedule and each spelling the operator
+    selects is a set of its own (`budget.episode_count`, ADR-0096, ADR-0097). The
+    multiplication belongs to the estimate the operator confirms before a run starts
+    and is deliberately not done here — a figure on this screen that moved as switches
+    moved would be an estimate beside the switches, which is the thing ADR-0007 puts
+    behind a confirmation. The row says *a family* and leaves the per-set qualifier to
+    that estimate, where the set count is a figure rather than a word.
+    """
+    if layer is AttackLayer.ADAPTIVE:
+        return f"{_counted(adaptive.episodes_per_family, 'episode')} a family"
+    held = _layer_cases(cases, layer)
+    if not held:
+        return "no cases in this library"
+    return f"{_counted(_cases_per_family(held), 'case')} a family"
+
+
+def _what_an_attempt_costs(
+    layer: AttackLayer, cases: Sequence[Case], adaptive: AdaptiveBudget
+) -> str:
+    """What one attempt of one layer puts on the operator's own endpoint.
+
+    Calls for the layers that send cases, counted off `Case.payload`, which holds one
+    element per turn and therefore one call per element (ADR-0053). Turns for the
+    adaptive layer, because its unit is an episode and a turn is what an episode
+    spends (`budget.turn_ceiling`).
+
+    *At most*, where the layer's cases do not all run to the same length: this is the
+    figure an operator reads before they consent to a run, and the worst case is what
+    that reader is owed rather than a mean the run may exceed (ADR-0007).
+
+    Empty where the layer will send nothing, which is what a library holding no case
+    of it means: `holds` says there are none, and a cost stated beside that would be
+    the price of something that is not going to happen.
+    """
+    if layer is AttackLayer.ADAPTIVE:
+        return f"{_counted(adaptive.turns_per_episode, 'turn')} an episode"
+    held = _layer_cases(cases, layer)
+    if not held:
+        return ""
+    turns = [len(case.payload) for case in held]
+    if min(turns) == max(turns):
+        return f"{_counted(max(turns), 'call')} an attempt"
+    return f"at most {_counted(max(turns), 'call')} an attempt"
 
 
 def _cases_per_family(cases: Sequence[Case]) -> int:
@@ -4965,7 +5170,7 @@ class ApprovalRequest(BaseModel):
 
 
 PENDING_ROUTES_ROUTE = "/pending-routes"
-"""The queue of routes awaiting the cross-model bar. Its own family, and a third one.
+"""The queue of routes awaiting the admission bar. Its own family, and a third one.
 
 **A pending route is not a run and not a gate run.** A run produces rates about
 somebody's agent, a gate run produces a decision about this bench, and deciding a
@@ -5015,7 +5220,7 @@ class MayMeasure(BaseModel):
     """This bench can decide a pending route, and what doing it costs.
 
     Two facts and no control: the caller learns the affordance is available, which
-    library a decision writes to and which two models the bar is measured on.
+    library a decision writes to and which models the bar is measured on.
     `available` is a literal so this shape and the one below are two facts rather
     than one record with empty fields.
     """
@@ -5023,8 +5228,10 @@ class MayMeasure(BaseModel):
     available: Literal[True] = True
     library: str
     models: list[str]
-    """The two underlying models, in the order they are measured. Two, because the
-    bar is two models measured together (ADR-0012, ADR-0105 §2)."""
+    """The underlying models, in the order they are measured. One, because a route
+    decided here faces the single-model bar (ADR-0107 §4) — and a list, because the
+    bar is measured in one action and the record names what it was measured on
+    (ADR-0105 §2)."""
 
     statement: str
 
@@ -5047,8 +5254,7 @@ class MayNotMeasure(BaseModel):
 
 THE_MEASUREMENT_IS_AVAILABLE = (
     "Deciding a pending route measures it against three agents of known "
-    "construction on two models, then writes the ones that clear the bar into the "
-    "case library."
+    "construction, then writes the ones that clear the bar into the case library."
 )
 
 
@@ -5175,14 +5381,14 @@ def pending_routes_response(pending: BenchPendingRoutes) -> PendingRouteQueue:
 
 THE_ESTIMATE_IS_PER_ROUTE = (
     "one row per route, and the routes are the operator's own selection. Deciding a "
-    "route is three reference agents on each of two models — six endpoints — at the "
-    "declared attempts per case, plus one registration probe each. Exact because it "
-    "is a multiplication: the adaptive layer is switched off for an admission run, "
-    "so there is no bound here and no second figure to add to this one (ADR-0010, "
+    "route is three reference agents — three endpoints — at the declared attempts "
+    "per case, plus one registration probe each. Exact because it is a "
+    "multiplication: the adaptive layer is switched off for an admission run, so "
+    "there is no bound here and no second figure to add to this one (ADR-0010, "
     "ADR-0058). Each row is what that route costs measured on its own, so the rows "
     "add up to more than the total below and never to less: the routes ride in one "
-    "admission run per model, and a registration probe is one per agent per model "
-    "however many of them ride with it"
+    "admission run, and a registration probe is one per agent however many of them "
+    "ride with it"
 )
 """What the estimate says about itself, including why its rows over-add.
 
@@ -5392,15 +5598,15 @@ class StartMeasurementRequest(BaseModel):
     (ADR-0105, spec *Out of scope*).
 
     There is no target here and no nonce: the targets are this bench's own three
-    reference agents on two models, and the run plants its own nonce in equipment
-    it started itself.
+    reference agents, and the run plants its own nonce in equipment it started
+    itself.
     """
 
     attestation: AttestationRequest
     cost: CostRequest
     routes: list[str]
     """The pending route keys this measurement decides. Never defaulted to all of
-    them: three agents on two models each is the operator's money."""
+    them: a pass over three agents per route is the operator's money."""
 
 
 def _cannot_measure(refused: CannotMeasure) -> dict[str, str]:
@@ -5803,29 +6009,31 @@ def deployed_pending_routes(
     nothing — and the mutual refusal ADR-0033 gives is the whole reason this surface
     is safe beside a gate run.
 
-    **The two models are two declarations, and the second is this surface's alone.**
-    `REFERENCE_MODEL_ENV` is what every run and every gate run measures against;
-    `SECOND_REFERENCE_MODEL_ENV` is reached by the cross-model bar and by nothing
-    else (ADR-0012). A deployment that declares one of them can run a gate and
-    cannot decide a route, which is a stated refusal on the screen that would offer
-    the control rather than a bar quietly met on one model.
+    **One declaration, and it is the one every run already reads.**
+    `REFERENCE_MODEL_ENV` is what every run and every gate run measures against, and
+    this surface reads it and nothing else: every route it decides was found against
+    a customer's target, so it faces the single-model bar and a second pass is a call
+    the decision cannot spend
+    ([ADR-0107](../../docs/adr/0107-a-route-found-against-a-customers-target-faces-the-single-model-bar.md)
+    §4). `SECOND_REFERENCE_MODEL_ENV` stays declared and stays required by
+    `scripts/swap.py`, which measures a model *pair* by definition (#15) — what
+    changed is that this surface no longer reaches for it. A deployment that declares
+    no reference model at all still cannot decide a route, and says so.
 
-    The equipment seam is a function of the model rather than the bound `Equipment`
-    a gate run holds, because this action serves the agents twice — once per model,
-    one at a time.
+    The equipment seam stays a function of the model rather than the bound
+    `Equipment` a gate run holds: `PendingRouteBench.models` is still a sequence and
+    `cross_model_bar` still walks it, so what this reading fixes is how long it is
+    and not what the surface can express.
     """
-    declared = [
-        config.report.models.calibration,
-        declared_model(SECOND_REFERENCE_MODEL_ENV) or UNDECLARED_MODEL,
-    ]
-    models = tuple(model for model in declared if model != UNDECLARED_MODEL)
+    declared = config.report.models.calibration
     return PendingRouteBench(
         library=gate_runs.library,
         agents=agents,
-        # Two or none: a pair with a hole in it is not a pair, and a bench that
-        # measured the first model and then found it had no second would have spent
-        # the operator's budget to reach a reading the bar cannot take.
-        models=models if len(models) == 2 else (),
+        # One, and never a pair. A bench that declared nothing declares nothing here
+        # either: an undeclared identifier is a stated absence and not a model, and a
+        # surface that served the agents on it would be attacking a model nobody
+        # named.
+        models=() if declared == UNDECLARED_MODEL else (declared,),
     )
 
 
@@ -5874,9 +6082,9 @@ def create_app(
     gates = BenchGateRuns(bench.config, gate_runs, cites=bench.cite)
     if pending_routes is None:
         # A third declaration, on the second one's terms: a deployment that has said
-        # it can run a gate has not said it can measure on two models, and the second
-        # model is the whole of ADR-0012's bar. A bench that declared its own
-        # configuration decides no pending route unless it was handed the means to.
+        # it can run a gate has not said it ships the equipment a route is decided
+        # against. A bench that declared its own configuration decides no pending
+        # route unless it was handed the means to.
         pending_routes = (
             PendingRouteBench()
             if declared
@@ -6002,6 +6210,38 @@ def create_app(
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT, detail=str(elsewhere)
             ) from elsewhere
+        except NoLongerWaiting as closed:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT, detail=str(closed)
+            ) from closed
+        return response_for(record)
+
+    @app.post(RUN_STOP_ROUTE)
+    def stop_the_run(run_id: Annotated[str, PathParam()]) -> RunResponse:
+        """Ask a running suite to stop. It stops between one call and the next.
+
+        **A stop and never a pause.** The run ends as **aborted**, its attempts stay
+        on the record and its families are reported over what was attempted — which is
+        not a gate result and says so. There is no resuming it: the estimate an
+        operator confirmed was for a run, and a run continued an hour later under
+        whatever the settings say by then is a different run
+        ([ADR-0114](../../docs/adr/0114-an-operator-may-stop-a-running-suite.md)).
+
+        **It spends nothing and it cancels nothing already sent.** The flag is read
+        where the next call is authorised, so a message on the wire is answered and
+        recorded; what stops is the message after it.
+
+        `409` for a run that is not running — one still at its interrupt has sent
+        nothing and is declined rather than stopped, and one that has ended has
+        nothing to stop.
+        """
+        try:
+            record = bench.stop(run_id)
+        except KeyError as unknown:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"no run {run_id} is being held by this bench",
+            ) from unknown
         except NoLongerWaiting as closed:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT, detail=str(closed)
@@ -6754,7 +6994,7 @@ def create_app(
         **The estimate is declared here and inherited from nothing.** Whatever the
         operator attested to for the run that *found* a route was an estimate for
         attacking their own agent, made possibly weeks ago, and it authorised none
-        of this: three reference agents on two models, per route.
+        of this: a pass over three reference agents, per route.
 
         **The routes are named and never defaulted to all of them.** A queue that
         drained itself would be an unbounded spend authorised once.

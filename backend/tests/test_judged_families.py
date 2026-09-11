@@ -50,6 +50,7 @@ from backend.bench.calibration import TargetRun, run_calibration
 from backend.bench.evaluator import NotADeterministicCase, Verdict, evaluate
 from backend.bench.library import (
     Case,
+    DiscoveredBy,
     Family,
     JudgedCondition,
     SuccessCondition,
@@ -424,6 +425,7 @@ def test_a_judged_case_with_no_adjudicator_is_refused_before_anything_is_sent(
                 attestation=BENCH_ATTESTATION,
                 plant_nonce=reference.plant_nonce,
                 approve=recording_approval,
+                discovered_by=DiscoveredBy.ADAPTIVE,
             )
 
     assert not asked, "the operator was asked to confirm a run that cannot be scored"
@@ -557,6 +559,7 @@ def test_attempts_are_recorded_in_send_order_whatever_order_verdicts_arrive_in(
             plant_nonce=flaky.plant_nonce,
             approve=CONFIRMING,
             adjudicator=slowest_for_the_first,
+            discovered_by=DiscoveredBy.ADAPTIVE,
         )
 
     [target_run] = result.target_runs
@@ -599,6 +602,7 @@ def test_a_failed_adjudication_still_stops_the_run_before_the_case_finishes(
                 approve=CONFIRMING,
                 adjudicator=failing_on_the_third,
                 run_state=run_state,
+                discovered_by=DiscoveredBy.ADAPTIVE,
             )
 
     # The registration probe and some of the case, and not all of it: the run stops
@@ -616,6 +620,7 @@ def _run_against_trivial(cases: list[Case]) -> TargetRun:
             plant_nonce=reference.plant_nonce,
             approve=CONFIRMING,
             adjudicator=ADJUDICATING,
+            discovered_by=DiscoveredBy.ADAPTIVE,
         )
     [target_run] = result.target_runs
     assert target_run.registration.complete

@@ -27,7 +27,7 @@ import pytest
 from backend.bench import planting
 from backend.bench.calibration import CalibrationResult, run_calibration
 from backend.bench.contract import TargetConfig
-from backend.bench.library import Case, Family, LibraryVersion, Plant
+from backend.bench.library import Case, DiscoveredBy, Family, LibraryVersion, Plant
 from backend.bench.measurability import NotMeasurable
 from backend.bench.planting import (
     Planting,
@@ -119,6 +119,7 @@ def _calibrate(
         approve=CONFIRMING,
         budget=None if state is None else state.budget,
         run_state=state,
+        discovered_by=DiscoveredBy.ADAPTIVE,
     )
 
 
@@ -162,6 +163,7 @@ def test_a_plant_moves_no_counter_and_the_run_attempts_exactly_its_denominator(
                 approve=CONFIRMING,
                 budget=state.budget,
                 run_state=state,
+                discovered_by=DiscoveredBy.ADAPTIVE,
             )
 
     # An attempt is the unit of the denominator and a send is one message on the

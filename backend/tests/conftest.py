@@ -973,6 +973,7 @@ def calibrate(
             approve=CONFIRMING,
             adjudicator=adjudicator,
             proof_waived=proof_waived,
+            discovered_by=DiscoveredBy.ADAPTIVE,
         )
 
 

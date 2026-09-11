@@ -285,19 +285,37 @@ export interface FamilyCovered {
   family: string
   covered: boolean
   labels: FamilyLabelled
+  /**
+   * How much of this family the mounted library holds, in the bench's own words.
+   *
+   * `LayerSelected.holds` one level up, and worded for the same reason: *3 cases*, or
+   * *no cases in this library* where it holds none. A count of this bench's own
+   * records and never a reading against a target, which is the line ADR-0108 draws
+   * through ADR-0091's *no figure in any column*.
+   */
+  holds: string
 }
 
 /**
- * One layer, whether the next run runs it, and what a run of it sends.
+ * One layer, whether the next run runs it, what it sends and how much of it there is.
  *
  * Three of them: one message in one session, a fixed script of turns, and the
  * model-driven attacker. `sends` is the bench's own sentence about the layer, so a
  * screen states what switching it off costs rather than paraphrasing it.
+ *
+ * `holds` and `costs` are the same arrangement over two figures: how much of the layer
+ * the mounted library holds, and what one attempt of it puts on the target's endpoint.
+ * Both arrive worded, because both are facts about *this* bench — a library holding
+ * four cases for a family and one holding three send different amounts under the same
+ * layer — and a console composing them from parts would be composing a figure the
+ * bench never stated. `costs` is empty where the library holds nothing of the layer.
  */
 export interface LayerSelected {
   layer: string
   selected: boolean
   sends: string
+  holds: string
+  costs: string
 }
 
 /**

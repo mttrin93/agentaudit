@@ -57,6 +57,7 @@ from backend.bench.library import (
     AdmissionBar,
     AdmissionReading,
     Case,
+    DiscoveredBy,
     Family,
     Precondition,
     SuccessCondition,
@@ -110,11 +111,17 @@ def a_route(
     objective: Case,
     payload: str = PROBE,
     description: str = "a route worth promoting",
+    discovered_by: DiscoveredBy = DiscoveredBy.ADAPTIVE,
 ) -> ProposedRoute:
     """One proposal, drafted the way `propose_case` drafts it inside an episode.
 
     A fresh `uuid` in the case id on every call, because `proposal.py` mints one —
     which is the fact that stops the case id being the key.
+
+    `discovered_by` is a parameter because it is the field the bar is read off
+    (`bar_for`), and this file has to be able to put both populations ADR-0107 split
+    to the same memory. It defaults to the provenance every test here had before
+    that split, so nothing above has to restate it.
     """
     return proposed_from(
         objective=objective,
@@ -124,6 +131,7 @@ def a_route(
         description=description,
         today=date(2026, 8, 18),
         broken=True,
+        discovered_by=discovered_by,
     )
 
 
@@ -250,6 +258,33 @@ def test_a_refused_route_is_remembered_with_its_rejection_kind_and_its_counts(
     assert kind_of(answer.promotion.outcome) is RejectionKind.CROSS_MODEL
     assert answer.promotion.case is None
     assert "reported from memory" in answer.stated()
+
+
+def test_a_remembered_decision_names_the_bar_its_own_route_faced(
+    memory: DecidedRoutes, leakage_case: Case
+) -> None:
+    # The sentence that says nothing was spent names a bar, and since ADR-0107 there
+    # are two of them: this is the population that faces the single-model one, on a
+    # surface that serves a single declared model. The clause is the bar's own
+    # (`AdmissionBar.asks`), read off the promotion beside it, so there is no second
+    # statement of the mapping here to go stale (#228).
+    on_target = a_route(leakage_case, discovered_by=DiscoveredBy.ADAPTIVE_ON_TARGET)
+    memory.remember(
+        decided_by_the_bar(on_target, SEPARATING),
+        models=(FIRST_MODEL,),
+        today=DECIDED_ON,
+    )
+
+    answer = memory.recall(
+        a_route(leakage_case, discovered_by=DiscoveredBy.ADAPTIVE_ON_TARGET),
+        models=(FIRST_MODEL,),
+    )
+
+    assert isinstance(answer, Remembered)
+    stated = answer.stated()
+    assert answer.promotion.outcome.bar is AdmissionBar.SINGLE_MODEL
+    assert AdmissionBar.SINGLE_MODEL.asks in stated
+    assert "two models" not in stated
 
 
 def test_an_admitted_route_is_remembered_with_the_measurement_that_admitted_it(
@@ -472,6 +507,7 @@ def test_no_stored_record_carries_payload_text_or_a_target_identity(
         description="the attacker's own prose about what it did",
         today=DECIDED_ON,
         broken=True,
+        discovered_by=DiscoveredBy.ADAPTIVE,
     )
     memory.remember(
         decided_by_the_bar(proposal, SEPARATING, FLAT), models=MODELS, today=DECIDED_ON

@@ -244,7 +244,7 @@ export function usePendingRoutes() {
    * Start the measurement, or refuse to.
    *
    * The guard is asked again here rather than trusted from the disabled state: this
-   * is the one line on this page that can send three reference agents on two models
+   * is the one line on this page that can send a pass over three reference agents
    * per route and write into the case library, and the function that decides it is
    * the one that will not build a body from an incomplete declaration or an empty
    * selection.

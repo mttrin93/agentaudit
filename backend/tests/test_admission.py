@@ -160,6 +160,39 @@ def test_a_retrieved_case_faces_the_single_model_bar_for_a_reason_of_its_own() -
         assert query.strip() not in payloads
 
 
+def test_a_route_found_against_a_target_faces_the_single_model_bar() -> None:
+    # The fifth provenance, and the branch is its own rather than joined to the
+    # three that share its answer. ADR-0012's bar answers a defect in one loop:
+    # the attacker discovers on the three reference agents and the gate admits by
+    # testing separation of those same three. A route found against a user's
+    # target never ran in that loop — CONTEXT.md is explicit that a reference
+    # agent is not a target — so the selection pressure the second bar counters is
+    # not acting on it (ADR-0107).
+    assert bar_for(DiscoveredBy.ADAPTIVE_ON_TARGET) is AdmissionBar.SINGLE_MODEL
+
+    # And the narrowing is asserted from the other side: a route found against the
+    # reference agents keeps the second bar, because there the argument is intact.
+    assert bar_for(DiscoveredBy.ADAPTIVE) is AdmissionBar.CROSS_MODEL
+
+
+def test_a_bar_says_what_clearing_it_asks_for() -> None:
+    # The sentence a surface tells somebody what their route has to do, held on the
+    # bar rather than composed where it is read. The one caller that needs it is
+    # answering the attacker mid-episode (`adaptive/attacker.py`), and a sentence
+    # composed there would be the mapping stated twice — which is the fallback
+    # `bar_for` refuses to have, one layer up (ADR-0107 §2).
+    assert "second model" in AdmissionBar.CROSS_MODEL.asks
+    assert "second model" not in AdmissionBar.SINGLE_MODEL.asks
+    for bar in AdmissionBar:
+        assert "three reference agents" in bar.asks
+
+    # And it is reached through `bar_for`, so a provenance whose bar moves moves the
+    # sentence with it rather than leaving a screen promising the old one.
+    assert (
+        bar_for(DiscoveredBy.ADAPTIVE_ON_TARGET).asks == AdmissionBar.SINGLE_MODEL.asks
+    )
+
+
 def test_an_adaptive_case_that_separates_only_on_the_model_it_was_found_on_is_rejected() -> (  # noqa: E501
     None
 ):

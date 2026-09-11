@@ -58,7 +58,13 @@ from backend.bench.calibration import TargetRun, run_calibration
 from backend.bench.completion import DEFAULT_ADJUDICATOR_MODEL
 from backend.bench.contract import TargetConfig
 from backend.bench.declared_gap import DeclaredGap
-from backend.bench.library import Case, Family, VerdictClass, one_of_the_six
+from backend.bench.library import (
+    Case,
+    DiscoveredBy,
+    Family,
+    VerdictClass,
+    one_of_the_six,
+)
 from backend.bench.narration import Narrator
 from backend.bench.rule import DECLARED_RULE
 from backend.bench.scorer import Rate
@@ -392,6 +398,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             # traces under the run id field (ADR-0018). No record holds the id, so
             # the helper mints one and prints it.
             trace=traced_run(adjudicator_model=adjudicator_model),
+            discovered_by=DiscoveredBy.ADAPTIVE_ON_TARGET,
         )
     except BudgetExceeded as abort:
         print(f"\nRun aborted on budget: {abort}")

@@ -13,9 +13,14 @@ target never saw. What the attacker supplies is the description — which is als
 the only part of a route that is ever written down outside a run (CONTEXT.md,
 **route**; ADR-0008).
 
-Provenance is `adaptive`, which selects the cross-model admission bar by itself
-(ADR-0012): a route discovered against these three reference agents has to
-separate on a model it was not discovered on before it may enter the library.
+Provenance is one of the two adaptive members, and it selects the admission bar by
+itself. A route discovered against the three reference agents is `adaptive` and has
+to separate on a model it was not discovered on before it may enter the library
+(ADR-0012); one discovered against a user's own target is `adaptive_on_target` and
+faces the single-model bar of ADR-0003, because the loop ADR-0012 was written about
+is not the loop it was found in
+([ADR-0107](../../../docs/adr/0107-a-route-found-against-a-customers-target-faces-the-single-model-bar.md)).
+Which of the two is the caller's declaration and never this module's guess.
 """
 
 from __future__ import annotations
@@ -36,8 +41,26 @@ from backend.bench.library import (
     Transform,
     Trigger,
     VerdictClass,
+    bar_for,
+    found_by_the_attacker,
     spells_out,
 )
+
+FOUND_BY_THE_ATTACKER: frozenset[DiscoveredBy] = frozenset(
+    member for member in DiscoveredBy if found_by_the_attacker(member)
+)
+"""The two provenances a proposal may carry, as a set rather than a pair of names.
+
+Derived from `library.found_by_the_attacker` rather than written out, because the
+same question is asked of the same field in `admission.LibraryProvenance` and two
+lists of members drift apart silently. That predicate is a match with no fallback
+branch, so a sixth `DiscoveredBy` member is still a decision somebody makes about
+this set rather than a value that flows through by default — it just fails the type
+check in one place instead of passing quietly in two (#223).
+
+Which of the two a route gets is the caller's declaration and never this module's
+guess (ADR-0107 §3).
+"""
 
 
 class RouteNotFilable(Exception):
@@ -132,6 +155,7 @@ def proposed_from(
     payload: str,
     description: str,
     broken: bool,
+    discovered_by: DiscoveredBy,
     today: date | None = None,
 ) -> ProposedRoute:
     """Draft a case from the probe that worked, under the objective's criterion.
@@ -159,6 +183,15 @@ def proposed_from(
     what a record in that family can carry — an attacker told its family cannot be
     filed learns something a later break will not change, and one told only that it
     has not broken anything yet would ask again with the same result.
+
+    `discovered_by` says which loop this route was found in, and it is required for
+    the reason `broken` is: it is a fact the record cannot be made honestly without.
+    It decides the admission bar — `ADAPTIVE` against the three reference agents
+    keeps ADR-0012's cross-model bar, `ADAPTIVE_ON_TARGET` against a user's own
+    agent faces ADR-0003's single-model one — and it is the caller's declaration
+    rather than a reading of `target`, which describes both kinds alike
+    ([ADR-0107](../../../docs/adr/0107-a-route-found-against-a-customers-target-faces-the-single-model-bar.md)
+    §3).
     """
     kind = (
         None
@@ -174,6 +207,14 @@ def proposed_from(
         )
     if kind in CARRIED_BY_THE_MESSAGE:
         _refuse_a_probe_the_channel_guard_would(objective, family, payload)
+    if discovered_by not in FOUND_BY_THE_ATTACKER:
+        raise ValueError(
+            f"a route proposed here is recorded as {discovered_by}, which is not a "
+            "provenance the adaptive attacker can have found. An authored case was "
+            "written by hand and a retrieved one came out of a published corpus, so "
+            "a proposal carrying either would enter the library under a bar its own "
+            "provenance is a lie about (ADR-0107)"
+        )
     if not broken:
         raise RouteNotFilable(
             f"a route in {family.value} from an episode with no confirmed break is "
@@ -191,7 +232,8 @@ def proposed_from(
                 identifier=objective.external_id.identifier,
                 not_tested=(
                     "A route the adaptive attacker found. It makes no coverage "
-                    "claim until it has cleared the cross-model admission bar"
+                    f"claim until it has cleared the {bar_for(discovered_by)} "
+                    "admission bar"
                 ),
             ),
             # One turn, because a probe is one message the attacker composed:
@@ -207,7 +249,7 @@ def proposed_from(
             # suite is either good or attacked weakly, and an adaptive break is
             # the only evidence that tells those two apart by demonstration.
             trigger=Trigger.TARGET_PASSED_EVERYTHING,
-            discovered_by=DiscoveredBy.ADAPTIVE,
+            discovered_by=discovered_by,
             # A probe the attacker composed, and not a transform of the objective:
             # the payload is new text rather than this record's payload put through
             # a function, so it is a base case and derives from nothing (ADR-0051).

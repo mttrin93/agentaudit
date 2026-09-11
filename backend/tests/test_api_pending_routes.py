@@ -25,9 +25,9 @@ run holds the library, and a gate run is refused while a measurement holds it �
 ADR-0033's property observed from both ends rather than a new one added.
 
 **That a refusal costs nothing and loses nothing.** A declined measurement, one
-whose second model could not be served, and one whose agents on the second model
-never registered all leave every route pending — asserted on the store rather than
-on the response. The last of those is the path a `Measure` answers with a *code*,
+whose declared model could not be served, and one whose agents on that model never
+registered all leave every route pending — asserted on the store rather than on the
+response. The last of those is the path a `Measure` answers with a *code*,
 which is the same path a run aborted on its ceiling takes.
 
 **That the three families stay apart.** No route under `/pending-routes` takes a run
@@ -90,6 +90,7 @@ from backend.api.app import (
     PENDING_ROUTE_ROUTE,
     PENDING_ROUTES_ROUTE,
     create_app,
+    deployed_pending_routes,
 )
 from backend.api.gate_run_equipment import Equipment, ServedAgents, shipped_agents
 from backend.api.gate_runs import GateRunBench
@@ -99,7 +100,7 @@ from backend.api.pending_route_state import (
     NotMeasurable,
 )
 from backend.api.pending_routes import BenchPendingRoutes, PendingRouteBench
-from backend.api.report import ReportConfig
+from backend.api.report import UNDECLARED_MODEL, UNDECLARED_MODELS, ReportConfig
 from backend.api.runs import BenchConfig
 from backend.bench import admitting, entry
 from backend.bench.adaptive.budget import AdaptiveBudget
@@ -154,13 +155,13 @@ from backend.tests.test_api_gate_runs import (
 )
 
 FIRST = "stub:obedient"
-SECOND = "stub:cooperative"
-MODELS = (FIRST, SECOND)
-"""The two underlying models the reference agents are served on here.
+MODELS = (FIRST,)
+"""The underlying model the reference agents are served on here.
 
-Two stubs rather than two models: nothing in this module reaches a provider, and
-the bar it exercises is the *pair* — a measurement that read one model twice would
-be a cross-model admission taken on one model (ADR-0012).
+A stub rather than a model: nothing in this module reaches a provider. One rather
+than a pair, because that is what this surface declares — every route it decides was
+found against a customer's target and faces the single-model bar (ADR-0107 §4), and
+the pair is `scripts/swap.py`'s, which measures one by definition.
 """
 
 A_CUSTOMER = "acme-support-bot"
@@ -277,9 +278,10 @@ def an_equipment(model: str, served: Served) -> Equipment:
 def agents_on(served: Served, broken: str = "") -> Any:
     """This deployment's equipment seam, with one model optionally unreachable.
 
-    `broken` is the second model failing where the first did not, which is the
-    shape spec story 18 asks for: one model read, the other not, and every route
-    still pending afterwards.
+    `broken` is a model whose equipment will not serve at all. Used for the models
+    a test declares beyond the one this surface deploys with; the shape spec story
+    18 asks for on the deployed surface — served for the estimate and gone by the
+    measurement — is `serves_once` below.
     """
 
     def agents(model: str) -> Equipment | None:
@@ -323,7 +325,8 @@ def a_bench(
     """The API over one bench, with the pending-route bench beside it.
 
     A third declaration handed to the factory, on the gate-run bench's terms: a
-    deployment that can run a gate has not said it can measure on two models.
+    deployment that can run a gate has not said it ships the equipment a route is
+    decided against.
     """
     counted = served if served is not None else Served()
     config = BenchConfig(
@@ -401,7 +404,12 @@ def a_route(
     payload: str = A_PROBE,
     description: str = "a route worth deciding",
 ) -> ProposedRoute:
-    """One proposal, drafted the way `propose_case` drafts it inside an episode."""
+    """One proposal, drafted the way `propose_case` drafts it inside an episode.
+
+    `ADAPTIVE_ON_TARGET` and never `ADAPTIVE`, because that is what a customer run
+    declares and this queue holds nothing else (`bench/queued.py`): the route was
+    found against a user's agent, so it faces the single-model bar (ADR-0107 §1).
+    """
     return proposed_from(
         objective=objective,
         target=a_target("trivial"),
@@ -410,6 +418,7 @@ def a_route(
         description=description,
         today=FILED_ON,
         broken=True,
+        discovered_by=DiscoveredBy.ADAPTIVE_ON_TARGET,
     )
 
 
@@ -654,15 +663,15 @@ def test_the_estimate_is_one_row_per_route_and_nothing_has_been_sent(
             first.route.filed_under,
             second.route.filed_under,
         ]
-        # Three reference agents on each of two models, at the declared attempts per
-        # case, plus one registration probe each. Six endpoints per route, and the
-        # figure is a multiplication rather than a bound.
-        per_route = 6 * (1 + DECLARED_RULE.attempts_per_case)
+        # Three reference agents, once, at the declared attempts per case, plus one
+        # registration probe each. Three endpoints per route after ADR-0107 §4 —
+        # where it was six — and the figure is a multiplication rather than a bound.
+        per_route = 3 * (1 + DECLARED_RULE.attempts_per_case)
         assert [row["calls"] for row in estimate["per_route"]] == [per_route] * 2
-        # And the total is the one admission run per model the two routes ride in:
-        # a registration probe is one per agent per model however many routes it
-        # carries, so the rows add up to more than the total and never to less.
-        assert estimate["calls"] == 6 * (1 + 2 * DECLARED_RULE.attempts_per_case)
+        # And the total is the one admission run the two routes ride in: a
+        # registration probe is one per agent however many routes it carries, so the
+        # rows add up to more than the total and never to less.
+        assert estimate["calls"] == 3 * (1 + 2 * DECLARED_RULE.attempts_per_case)
         assert estimate["calls"] < 2 * per_route
         assert estimate["cost"].endswith("USD")
         assert estimate["models"] == list(MODELS)
@@ -798,26 +807,104 @@ def test_a_library_that_cannot_be_read_is_a_refusal_and_not_a_failure(
         assert deciding.served.count == 0
 
 
-def test_a_bench_with_one_declared_model_may_not_measure_at_all(
+def a_deployment_declaring(calibration: str) -> BenchConfig:
+    """A bench configuration whose report names that reference model, and no other.
+
+    The one input `deployed_pending_routes` reads off the configuration. Built here
+    rather than reused from `a_bench` because that helper hands the pending-route
+    bench in ready-made, and what is under test below is the reading that builds it.
+    """
+    return BenchConfig(
+        cases=[],
+        rule=DECLARED_RULE,
+        adaptive=AdaptiveBudget(turns_per_episode=2, episodes_per_family=1),
+        adjudicator=ADJUDICATING,
+        approval_wait_seconds=60.0,
+        report=ReportConfig(models=replace(UNDECLARED_MODELS, calibration=calibration)),
+    )
+
+
+def test_the_surface_reads_one_declared_reference_model_and_not_a_pair(
+    tmp_path: Path,
+) -> None:
+    """ADR-0107 §4: one declared reference model, and the pair is the swap's.
+
+    Every route this surface decides was found against a customer's target, so after
+    ADR-0107 §2 it faces the single-model bar and a second pass is a call the
+    decision cannot spend. `AGENTAUDIT_SECOND_REFERENCE_MODEL` stays declared and
+    stays required by `scripts/swap.py`, which measures a *pair* by definition — it
+    is this surface that stops reading it, which is why nothing here sets it.
+    """
+    declared = deployed_pending_routes(
+        a_deployment_declaring(FIRST), GateRunBench(library=tmp_path)
+    )
+    assert declared.models == (FIRST,)
+
+    # And nothing is invented where nothing was declared: a bench that named no
+    # reference model is a different absence and still a refusal (`why_not`).
+    nothing = deployed_pending_routes(
+        a_deployment_declaring(UNDECLARED_MODEL), GateRunBench(library=tmp_path)
+    )
+    assert nothing.models == ()
+
+
+def test_a_bench_declaring_one_reference_model_may_measure(
     cases_dir: Path, leakage_case: Case
 ) -> None:
-    """The bar is two models measured together, and one is not the bar (ADR-0012).
+    """The inversion of ADR-0012's refusal, and the whole of ADR-0107 §4.
 
-    One declared model and not none, because those are two different absences and
-    only this one looks like a bench that could measure: the agents are shipped, the
-    library is writable, and what is missing is the second half of the pair.
+    One declared model was a bench that could not reach the bar while every route
+    here faced the cross-model one. It reaches it now: the routes this surface
+    decides are `ADAPTIVE_ON_TARGET` and the bar they face is measured on the model
+    the reference agents are served on.
+    """
+    filed(a_route(leakage_case))
+
+    with a_bench(cases_dir, models=(FIRST,)) as deciding:
+        listing = deciding.client.get(PENDING_ROUTES_ROUTE)
+
+    assert listing.json()["measure"]["available"] is True
+    assert listing.json()["measure"]["models"] == [FIRST]
+
+
+def test_the_estimate_counts_one_pass_and_not_two() -> None:
+    """The figure the operator confirms is what the run spends (ADR-0107 §4).
+
+    On the function rather than through the API, because the arithmetic is what is
+    under test: two passes declared against a one-model bar would be a confirmation
+    for calls nothing makes, and `targets` here is the agent count and never the
+    model count.
+    """
+    assert pending_routes._planned_attempts(cases=1, targets=3) == (
+        DECLARED_RULE.attempts_per_case * 3
+    )
+    # Linear in both, so a second route doubles it and a fourth agent does not
+    # arrive from somewhere else.
+    assert pending_routes._planned_attempts(cases=2, targets=3) == (
+        2 * DECLARED_RULE.attempts_per_case * 3
+    )
+
+
+def test_a_bench_declaring_no_reference_model_may_not_measure_at_all(
+    cases_dir: Path, leakage_case: Case
+) -> None:
+    """No model at all, which is the absence that survives ADR-0107 §4.
+
+    Not none of the pair but none at all, because that is the only model-shaped
+    absence left: the agents are shipped, the library is writable, and there is
+    nothing to serve them on.
     """
     record = filed(a_route(leakage_case))
 
-    with a_bench(cases_dir, models=(FIRST,)) as deciding:
+    with a_bench(cases_dir, models=()) as deciding:
         listing = deciding.client.get(PENDING_ROUTES_ROUTE)
         response = deciding.client.post(
             PENDING_MEASUREMENTS_ROUTE, json=a_request([record.route.filed_under])
         )
 
-    assert listing.json()["measure"]["refusal"] == NotMeasurable.NO_SECOND_MODEL
+    assert listing.json()["measure"]["refusal"] == NotMeasurable.NO_REFERENCE_MODEL
     assert response.status_code == 409
-    assert response.json()["detail"]["refusal"] == NotMeasurable.NO_SECOND_MODEL
+    assert response.json()["detail"]["refusal"] == NotMeasurable.NO_REFERENCE_MODEL
 
 
 # --- the memory, asserted as a call count --------------------------------------
@@ -835,7 +922,7 @@ def test_a_remembered_route_is_decided_without_being_measured(
     """
     proposal = a_route(leakage_case)
     record = filed(proposal)
-    remembered(proposal, SEPARATING, SEPARATING)
+    remembered(proposal, SEPARATING)
 
     with a_bench(cases_dir) as deciding:
         reading = answered(deciding, [record.route.filed_under])
@@ -866,7 +953,7 @@ def test_an_admitted_route_enters_the_library_and_its_row_names_the_record(
     """
     proposal = a_route(leakage_case)
     record = filed(proposal)
-    remembered(proposal, SEPARATING, SEPARATING)
+    remembered(proposal, SEPARATING)
     before = {case.id for case in load_library(cases_dir)}
 
     with a_bench(cases_dir) as deciding:
@@ -885,18 +972,22 @@ def test_an_admitted_route_enters_the_library_and_its_row_names_the_record(
 def test_a_rejected_route_keeps_its_row_and_carries_the_gates_reason(
     cases_dir: Path, leakage_case: Case
 ) -> None:
-    """Spec story 12: a route that was a property of one model is a finding.
+    """Spec story 12: a route that separates nothing is a finding, in words.
 
     In the gate's own words, and that is the assertion rather than a non-empty
-    string: ADR-0012 calls a cross-model discard direct evidence that what the
-    attacker found was a property of one model, and a row that said only
-    *rejected* would drop the finding and keep the bookkeeping. The counts here
-    separate on the first model and not on the second, which is exactly that
-    finding, so the row has to say which of the refusals it was.
+    string: a row that said only *rejected* would drop the finding and keep the
+    bookkeeping. The counts here separate no agent from another, so the row has to
+    say which refusal it was, on which model, and against which declared bar.
+
+    **The cross-model discard is no longer the refusal this surface reaches.** It
+    was, and ADR-0012 calls it direct evidence that what the attacker found was a
+    property of one model; after ADR-0107 §4 the routes here are read on one model
+    and that bucket can only read zero. The reason is still the gate's own reading,
+    which is what this asserts.
     """
     proposal = a_route(leakage_case)
     record = filed(proposal)
-    remembered(proposal, SEPARATING, FLAT)
+    remembered(proposal, FLAT)
 
     with a_bench(cases_dir) as deciding:
         answered(deciding, [record.route.filed_under])
@@ -905,13 +996,13 @@ def test_a_rejected_route_keeps_its_row_and_carries_the_gates_reason(
     [row] = listing["routes"]
     assert row["state"] == RouteState.REJECTED
     reason = row["reason"]
-    for said in (*MODELS, "clears", "does not clear", "D >= 0.4"):
+    for said in (*MODELS, "does not clear", "D >= 0.4"):
         assert said in reason, (
             f"the row does not say {said!r}. A rejected route's reason is the gate's "
-            "own reading — which models were read, what each of them said, and the "
-            "declared bar the counts were held against — because a cross-model "
-            "discard is a finding in its own right (ADR-0012) and a row saying only "
-            "*rejected* keeps the bookkeeping and drops the finding"
+            "own reading — which model was read, what it said, and the declared bar "
+            "the counts were held against — because a discard is a finding in its "
+            "own right (ADR-0012 §3) and a row saying only *rejected* keeps the "
+            "bookkeeping and drops the finding"
         )
     decided = PENDING_ROUTES.filed(record.route)
     assert isinstance(decided, Decided)
@@ -931,7 +1022,7 @@ def test_nothing_a_decision_writes_carries_the_target(
     """
     proposal = a_route(leakage_case)
     record = filed(proposal)
-    remembered(proposal, SEPARATING, SEPARATING)
+    remembered(proposal, SEPARATING)
 
     with a_bench(cases_dir) as deciding:
         reading = answered(deciding, [record.route.filed_under])
@@ -996,29 +1087,62 @@ def test_a_second_measurement_is_refused_while_the_first_is_going(
     assert refused.json()["detail"]["refusal"] == NotMeasurable.ALREADY_IN_FLIGHT
 
 
-# --- a partial reading is never a cross-model admission ------------------------
+# --- a pass that did not happen decides nothing --------------------------------
+
+# The cross-model half of spec story 18 — one model read, the other unreachable —
+# is not a state this surface can reach any more: it declares one model
+# (ADR-0107 §4), so there is no second pass to lose. What the story is *about*
+# survives the narrowing and is asserted twice below: an admission run that did not
+# happen decides nothing, leaves every route pending with its payload, and gives the
+# library back. The partial reading itself is `cross_model_bar`'s to refuse and
+# `scripts/swap.py`'s to reach, on the pair it measures by definition.
 
 
-def test_a_measurement_that_read_one_model_and_not_the_second_decides_nothing(
+def serves_once(served: Served) -> Any:
+    """Equipment that serves for the estimate and is gone by the measurement.
+
+    The shape spec story 18 asks for, on a surface with one model: the agents are
+    read once to declare what the operator confirms, and the provider behind them
+    has gone by the time the confirmed pass starts. A seam that refused from the
+    first call would be refused before the halt and would never reach an admission
+    run at all.
+    """
+
+    def agents(model: str) -> Equipment | None:
+        @contextmanager
+        def serving() -> Iterator[ServedAgents]:
+            first = not served.models
+            served.models.append(model)
+            if not first:
+                raise OSError(f"nothing is listening for {model} any more")
+            shipped = shipped_agents(model)
+            assert shipped is not None
+            with shipped() as ready:
+                yield ready
+
+        return cast(Equipment, serving)
+
+    return agents
+
+
+def test_a_measurement_whose_equipment_stopped_serving_decides_nothing(
     cases_dir: Path, leakage_case: Case
 ) -> None:
-    """Spec story 18, with the second model's equipment unreachable.
+    """Spec story 18, with the equipment gone between the estimate and the pass.
 
-    The first model is measured for real — three agents, every attempt the declared
-    rule asks for — and the second cannot be served. Nothing is decided, and every
-    route is still pending with its payload: a reading on one model is not a
-    cross-model admission (ADR-0012).
+    The estimate is declared against agents that were there, the operator confirms
+    it, and the admission run cannot be served. Nothing is decided, and every route
+    is still pending with its payload: an admission run that did not happen is not
+    an admission.
     """
     record = filed(a_route(leakage_case))
     served = Served()
 
-    with a_bench(cases_dir, served=served, agents=agents_on(served, broken=SECOND)) as (
-        deciding
-    ):
+    with a_bench(cases_dir, served=served, agents=serves_once(served)) as deciding:
         reading = answered(deciding, [record.route.filed_under])
 
-    assert served.models == [FIRST, FIRST, SECOND], (
-        "the estimate's reading, the first model measured, and the second refused"
+    assert served.models == [FIRST, FIRST], (
+        "the estimate's reading, and the measurement's serving refused"
     )
     assert reading["status"] in {MeasurementStatus.FAILED, MeasurementStatus.ABORTED}
     still = PENDING_ROUTES.filed(record.route)
@@ -1031,10 +1155,10 @@ def unplanted(model: str, served: Served) -> Equipment:
     """The three agents on one model, with nobody planting the nonce.
 
     A reference agent that was never planted into cannot echo its nonce, so it never
-    registers and is never attacked. That is the second way a model's admission run
-    does not happen — the first being equipment that will not serve — and it is the
-    one that comes back through the `Measure` seam as a code rather than as an
-    exception, which is the path that must decide nothing.
+    registers and is never attacked. That is the second way an admission run does not
+    happen — the first being equipment that will not serve — and it is the one that
+    comes back through the `Measure` seam as a code rather than as an exception,
+    which is the path that must decide nothing.
     """
     shipped = shipped_agents(model)
     assert shipped is not None
@@ -1053,19 +1177,17 @@ def test_a_model_whose_agents_never_registered_decides_nothing(
 ) -> None:
     """The other half of spec story 18, and the path that returns a code.
 
-    The first model is measured; on the second nobody plants the nonce, so all
-    three agents refuse registration and the seam answers with a code rather than
-    with readings. `cross_model_bar` decides nothing on a code, and this asserts the
-    consequence where it matters: every route still pending, with its payload, and
-    the library untouched.
+    Nobody plants the nonce, so all three agents refuse registration and the seam
+    answers with a code rather than with readings. `cross_model_bar` decides nothing
+    on a code — the line that refuses a partial reading, reached here on the one
+    model this surface declares — and this asserts the consequence where it matters:
+    every route still pending, with its payload, and the library untouched.
     """
     record = filed(a_route(leakage_case))
     served = Served()
 
     def agents(model: str) -> Equipment | None:
-        return (
-            unplanted(model, served) if model == SECOND else an_equipment(model, served)
-        )
+        return unplanted(model, served)
 
     before = library_bytes(cases_dir)
     with a_bench(cases_dir, served=served, agents=agents) as deciding:
@@ -1183,8 +1305,8 @@ def test_a_measured_route_is_remembered_so_it_is_never_bought_twice(
     """ADR-0032 from the writing end, which is the end nothing else here asserts.
 
     Every other assertion about the memory on this surface seeds it and watches the
-    consultation read it. This one measures a route for real — three reference
-    agents on two models, whatever they happen to return — and then asks whether
+    consultation read it. This one measures a route for real — the three reference
+    agents, whatever they happen to return — and then asks whether
     the surface *wrote* what it paid for. The proof is the second measurement: the
     attacker rediscovers the route in a later run and files it again, and this time
     no equipment is served to measure with. A refused route is never re-bought, and
@@ -1248,7 +1370,7 @@ def test_a_route_this_library_already_holds_is_reported_as_held_and_not_written_
     """
     proposal = a_route(leakage_case)
     record = filed(proposal)
-    promotion = remembered(proposal, SEPARATING, SEPARATING)
+    promotion = remembered(proposal, SEPARATING)
     assert promotion.case is not None
     standing = replace(promotion.case, id="adaptive-already-in-the-library")
     written = enter([standing], cases_dir, holder="an earlier admission")
@@ -1379,7 +1501,7 @@ def test_neither_the_memory_nor_the_library_is_told_which_agent_was_beaten(
     admitted = a_route(leakage_case, payload="a probe the memory already holds")
     filed(measured)
     filed(admitted)
-    remembered(admitted, SEPARATING, SEPARATING)
+    remembered(admitted, SEPARATING)
 
     told: list[str] = []
     real_remember = DecidedRoutes.remember
@@ -1436,7 +1558,7 @@ def test_an_admission_answered_from_memory_is_dated_the_day_the_agents_ran(
     """
     proposal = a_route(leakage_case)
     record = filed(proposal)
-    remembered(proposal, SEPARATING, SEPARATING, on=MEASURED_ON)
+    remembered(proposal, SEPARATING, on=MEASURED_ON)
 
     with a_bench(cases_dir) as deciding:
         reading = answered(deciding, [record.route.filed_under])
@@ -1496,18 +1618,25 @@ def test_an_admitted_route_is_a_live_adaptive_case_the_next_run_runs(
     then the case is put to a reference agent through the entry point every run
     goes through, so what is asserted is a run *running* it and not only a file
     on disk.
+
+    Counted under `ADAPTIVE_ON_TARGET`, which is the member the census grew for this
+    population (ADR-0107 §1): a route found against a user's agent reports apart
+    from one found against the three reference agents, because the two entered under
+    different bars and a reader of the census has to be able to tell them apart.
     """
     proposal = a_route(leakage_case)
     record = filed(proposal)
-    remembered(proposal, SEPARATING, SEPARATING)
-    before = library_provenance(admitted_library(cases_dir)).live[DiscoveredBy.ADAPTIVE]
+    remembered(proposal, SEPARATING)
+    counted = library_provenance(admitted_library(cases_dir))
+    before = counted.live[DiscoveredBy.ADAPTIVE_ON_TARGET]
 
     with a_bench(cases_dir) as deciding:
         answered(deciding, [record.route.filed_under])
 
     grown = admitted_library(cases_dir)
     provenance = library_provenance(grown)
-    assert provenance.live[DiscoveredBy.ADAPTIVE] == before + 1
+    assert provenance.live[DiscoveredBy.ADAPTIVE_ON_TARGET] == before + 1
+    assert provenance.live[DiscoveredBy.ADAPTIVE] == counted.live[DiscoveredBy.ADAPTIVE]
     live = live_library(grown)
     [admitted] = [case for case in live if case.id == proposal.case.id]
 
@@ -1554,13 +1683,13 @@ def test_the_deciding_surface_writes_no_case_record_of_its_own() -> None:
 def test_the_reading_carries_one_pass_per_model_with_its_attempt_counts(
     cases_dir: Path, leakage_case: Case
 ) -> None:
-    """A bar per model, and it is fed by attempts rather than by a stage name.
+    """A bar per model — one of them here — fed by attempts and not by a stage name.
 
-    The action is minutes long on two models walked one at a time, so *how far into
-    the second model* is the question an operator watching it actually has. A pass
-    carries the attempts it has made and the attempts it was planned for, because a
-    stage word cannot answer that and a percentage would be a figure this surface
-    does not carry (`pending.ts`).
+    The action is minutes long, so *how far into the pass* is the question an
+    operator watching it actually has. A pass carries the attempts it has made and
+    the attempts it was planned for, because a stage word cannot answer that and a
+    percentage would be a figure this surface does not carry (`pending.ts`). One
+    pass, because one model is declared (ADR-0107 §4).
     """
     record = filed(a_route(leakage_case))
     served = Served()
@@ -1569,7 +1698,7 @@ def test_the_reading_carries_one_pass_per_model_with_its_attempt_counts(
         reading = answered(deciding, [record.route.filed_under])
 
     passes = reading["passes"]
-    assert [one["model"] for one in passes] == [FIRST, SECOND], (
+    assert [one["model"] for one in passes] == [FIRST], (
         "one pass per declared model, in the order they are measured"
     )
     for one in passes:
@@ -1583,25 +1712,24 @@ def test_the_reading_carries_one_pass_per_model_with_its_attempt_counts(
 def test_a_pass_that_did_not_happen_is_not_drawn_as_one_still_filling(
     cases_dir: Path, leakage_case: Case
 ) -> None:
-    """The second model's equipment will not serve, so its pass never runs.
+    """Nobody plants the nonce, so the one pass never attacks anything.
 
-    The distinction the four states exist for: the first model's pass happened and
-    keeps its counts, and the second is `unmeasured` rather than left `measuring` on
-    a screen nothing is going to advance. A bar that stayed measuring would report a
-    refusal as a wait.
+    The distinction the four states exist for: a pass that ran keeps its counts, and
+    a pass that did not is `unmeasured` rather than left `measuring` on a screen
+    nothing is going to advance. A bar that stayed measuring would report a refusal
+    as a wait. The pass that ran is asserted by the test above; this is the other
+    side of that pair, and after ADR-0107 §4 the pair is two measurements rather
+    than one measurement's two passes.
     """
     record = filed(a_route(leakage_case))
     served = Served()
 
-    with a_bench(cases_dir, served=served, agents=agents_on(served, broken=SECOND)) as (
-        deciding
-    ):
+    def agents(model: str) -> Equipment | None:
+        return unplanted(model, served)
+
+    with a_bench(cases_dir, served=served, agents=agents) as deciding:
         reading = answered(deciding, [record.route.filed_under])
 
     passes = {one["model"]: one for one in reading["passes"]}
-    assert passes[FIRST]["state"] == "measured"
-    assert passes[FIRST]["attempted"] == passes[FIRST]["of"] > 0, (
-        "the first model's pass ran, and a pass that ran keeps its counts"
-    )
-    assert passes[SECOND]["state"] == "unmeasured"
-    assert passes[SECOND]["attempted"] == 0, "nothing was sent on the second model"
+    assert passes[FIRST]["state"] == "unmeasured"
+    assert passes[FIRST]["attempted"] == 0, "nothing was sent on this model"

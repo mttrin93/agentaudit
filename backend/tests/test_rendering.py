@@ -156,7 +156,7 @@ def test_every_section_states_its_own_reproducibility_and_four_read_the_payload(
 
 # --- The golden digest: one document, pinned to the byte ---------------------
 
-GOLDEN_ONE_FAMILY = "e1b7ea61b41cbaac0142c22b970305f3183a8373c3f0615c65cae8312b9c2a11"
+GOLDEN_ONE_FAMILY = "9179792e22f2f92b75fb91de83c4f7394943a21a0743d2d00800113d40e89d0e"
 """The sha256 of `_one_family()`'s rendering, written down.
 
 **A tripwire, and it is deliberately a strict one.** Every other assertion in this
@@ -408,6 +408,16 @@ spelling would be indistinguishable from a report made before the switch existed
 **The artefact version does not move**, for the reason the schedules key did not move
 it: a key beside the others, carrying no figure, with its own sentence rather than a
 clause on one a version-2 verifier re-derives.
+
+Moved a twenty-second time, and this one is wording alone: the Rule of Two block is
+shorter in every part and says the same things
+([ADR-0109](../../docs/adr/0109-the-rule-of-two-block-is-shortened-and-says-the-same-things.md)).
+Four keys, one reading, one sentence about what none of it is — `scanner.stated()`,
+its five arms, `Supervision.stated()` and `NOT_A_MEASUREMENT`, each losing restatement
+and none losing a distinction. **No figure moves and no key moves**: the block is prose
+a verifier re-derives nothing from, so an older verifier reads this document exactly as
+it reads the one before it. Every report gains the shorter block, because every report
+carries this block.
 """
 
 

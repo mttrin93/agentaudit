@@ -76,7 +76,6 @@ import {
 import { rememberTheFigures, rememberWhoAttested } from '../run/interrupt'
 import { useArrivalFocus, useScreenTitle } from '../console/announce'
 import { REGISTER_A_TARGET } from '../console/rail'
-import { Blocked, STILL_UNDECLARED } from '../blocked'
 
 /*
  * The steps and the rule that decides when one may be left are `WALK_STEPS` and
@@ -661,6 +660,10 @@ export function RegisterScreen() {
         disabled primary submits nothing.
       */}
       <form
+        /* Every field of the walk is a row of three: the name, the control, and what
+           the bench says about it. `.declaring` in the stylesheet is where that is
+           argued; it is on the form because the shape belongs to all four steps. */
+        className="declaring"
         /*
           Where a refused field stops being refused, and the only place it can happen.
 
@@ -727,15 +730,21 @@ export function RegisterScreen() {
         ) : null}
 
         {/*
-          Why the button below is grey, immediately above the button — the list and
-          the citation both out of `blocked.tsx`, which is where the arrangement and
-          its reasons are written down, and which the gate walk draws too.
+          No list of what is still undeclared over the footer.
 
-          On the last step the reasons are the registration guard's own, because that
-          is what disables the button there: the walk may be complete step by step and
-          still be missing a URL, and the operator is owed the field and not the step.
+          `blocked.tsx` drew one here — a line per withheld statement, in the guard's
+          own wording, cited by the disabled button through `aria-describedby`. On this
+          walk every reason it could give is a control the reader is looking at: three
+          unticked boxes on the screen, and the name field above them. It restated the
+          form.
+
+          **What that costs is the citation, and the cost is real.** A screen reader in
+          browse mode reaching the dead button now reads *Continue, dimmed* and nothing
+          about why — which is the failure `blocked.tsx`'s docstring was written about.
+          The gate walk still draws its list, where the reasons are not all on screen.
+          Restoring it here is the element and the `aria-describedby` below, together:
+          one may not come back without the other.
         */}
-        <Blocked reasons={held} />
 
         <footer className="walk">
           <button
@@ -749,7 +758,6 @@ export function RegisterScreen() {
             type="submit"
             className="primary"
             disabled={busy || held.length > 0}
-            aria-describedby={held.length ? STILL_UNDECLARED : undefined}
           >
             {last
               ? busy
@@ -855,15 +863,16 @@ function TargetStep({
   return (
     <section>
       {/*
-        The line, without what an unpriced run reports.
+        No line over the first field.
 
-        It went on: the price is yours to declare, and a run with none reports its cost
-        as *not priced* rather than as zero, because an unknown cost and a free run are
-        different facts. That distinction is real and it is kept where it is enforced —
-        the estimate prints *not priced* on a run with no price, and the record carries
-        no zero for one. It is not something an operator needs told before typing a URL.
+        The step opened on one — *the endpoint the bench will attack, and the price you
+        pay per call on it* — and it said what the four fields under it already say by
+        being a name, a URL, a token and a price. It had already lost the half about
+        what an unpriced run reports, which is a real distinction and is kept where it
+        is enforced: the estimate prints *not priced* on a run with no price, and the
+        record carries no zero for one. Neither half is something an operator needs
+        told before typing a URL, and the title above names the step.
       */}
-      <p>The endpoint the bench will attack, and the price you pay per call on it.</p>
       <Field label="Name" field={FIELDS.name} refusals={refusals}>
         {(marks) => (
           <input
@@ -1458,8 +1467,14 @@ function RuleOfTwoFieldset({ declarations, declare }: StepProps) {
   return (
     <section className="rule-of-two">
       <h2>What this agent can do</h2>
-      <p>{THE_AGENTS_RULE_OF_TWO}</p>
-      <p className="aside">{NOTHING_HERE_HOLDS_THIS_STEP}</p>
+      {/* What the section is for, in plain words, and the published rule itself one
+          press away — see both constants, where the fold is argued. The rule is
+          quoted and not reworded, so it is behind a summary rather than shortened. */}
+      <p>{NOTHING_HERE_HOLDS_THIS_STEP}</p>
+      <details className="plant">
+        <summary>What the rule says</summary>
+        <p className="aside">{THE_AGENTS_RULE_OF_TWO}</p>
+      </details>
       {RULE_OF_TWO_DECLARATIONS.map((asked) => (
         <fieldset key={asked.field}>
           <legend>{asked.question}</legend>
@@ -1486,15 +1501,29 @@ function RuleOfTwoFieldset({ declarations, declare }: StepProps) {
           would be a reading the operator is waiting for, and the one thing this block
           must not do is look like a result that is still being computed. */}
       {read ? (
-        <p className="standing" role="status">
-          {/* The name, and then the sentence. Both, because they are two different
-              things to a reader: the sentence is what this target's shape means, and
-              the name is the word `declared.rule_of_two.standing` carries in the
-              signed payload — so the operator reads here the same word the recipient
-              of the document will. Neither is edited and neither is chosen: they came
-              off the wire together (ADR-0092, decision 4). */}
-          <code>{read.standing}</code> — {read.stated}
-        </p>
+        <div className="standing" role="status">
+          {/*
+            The name, and the sentence one press behind it.
+
+            Both are still here and neither is edited, which is the constraint: the
+            sentence is the block the signed report prints — `scanner.stated()`, all
+            four answers and `NOT_A_MEASUREMENT` — and a screen that shortened it would
+            be wording the reading, which is the backend's (ADR-0092 decision 4). So it
+            is folded and not cut, on the same terms as the published rule above it.
+
+            The name stays in the open because it is the word
+            `declared.rule_of_two.standing` carries in the payload: the operator reads
+            here the same word the recipient of the document will. What is behind the
+            summary is what it means and that nothing was sent to establish it — the
+            two arrive together, in one element, as they do on the wire.
+          */}
+          <details>
+            <summary>
+              <code>{read.standing}</code> — what the bench read
+            </summary>
+            <p>{read.stated}</p>
+          </details>
+        </div>
       ) : null}
     </section>
   )

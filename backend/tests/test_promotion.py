@@ -43,9 +43,15 @@ FLAT = {"attempts": 10, "hardened": 9, "weak": 9, "trivial": 10}
 
 
 def a_route(
-    objective: Case, description: str = "a route worth promoting"
+    objective: Case,
+    discovered_by: DiscoveredBy = DiscoveredBy.ADAPTIVE,
+    description: str = "a route worth promoting",
 ) -> ProposedRoute:
-    """One proposal, drafted the way `propose_case` drafts it inside an episode."""
+    """One proposal, drafted the way `propose_case` drafts it inside an episode.
+
+    `discovered_by` defaults to the reference-agent loop, which is what every
+    assertion in this file about the cross-model bar was written against.
+    """
     return proposed_from(
         objective=objective,
         target=a_target("trivial"),
@@ -54,6 +60,7 @@ def a_route(
         description=description,
         today=date(2026, 8, 18),
         broken=True,
+        discovered_by=discovered_by,
     )
 
 
@@ -102,6 +109,45 @@ def test_a_promoted_case_carries_discovered_by_adaptive(leakage_case: Case) -> N
     assert promoted.case is not None
     assert promoted.case.discovered_by is DiscoveredBy.ADAPTIVE
     assert bar_for(promoted.case.discovered_by) is AdmissionBar.CROSS_MODEL
+
+
+# --- The provenance a proposal carries is the caller's declaration -----------
+
+
+def test_a_proposal_records_what_the_route_was_found_against(
+    leakage_case: Case,
+) -> None:
+    # The provenance is the caller's declaration and not this function's guess:
+    # `TargetConfig` describes a target and a reference agent alike and holds no
+    # field that tells them apart, so a bar derived from it would move when
+    # somebody renamed a fixture (ADR-0107 §3).
+    against_a_target = a_route(leakage_case, DiscoveredBy.ADAPTIVE_ON_TARGET)
+
+    assert against_a_target.case.discovered_by is DiscoveredBy.ADAPTIVE_ON_TARGET
+    assert bar_for(against_a_target.case.discovered_by) is AdmissionBar.SINGLE_MODEL
+
+    # And from the other side, because a thread carrying a constant would pass a
+    # test that only ever looked at one member.
+    against_the_agents = a_route(leakage_case, DiscoveredBy.ADAPTIVE)
+
+    assert against_the_agents.case.discovered_by is DiscoveredBy.ADAPTIVE
+    assert bar_for(against_the_agents.case.discovered_by) is AdmissionBar.CROSS_MODEL
+
+
+def test_a_proposal_refuses_a_provenance_the_attacker_cannot_have_found(
+    leakage_case: Case,
+) -> None:
+    # An authored case was written by hand and a retrieved one came out of a
+    # published corpus. Neither is a thing this function can produce, and a
+    # proposal carrying one would enter the library on a bar its provenance is a
+    # lie about.
+    for member in (
+        DiscoveredBy.AUTHORED,
+        DiscoveredBy.USER_GAP,
+        DiscoveredBy.RETRIEVED,
+    ):
+        with pytest.raises(ValueError, match="the adaptive attacker"):
+            a_route(leakage_case, member)
 
 
 # --- The cross-model bar, which is the whole of ADR-0012 ---------------------
@@ -262,6 +308,40 @@ def test_the_retirement_rate_is_grouped_by_discovered_by() -> None:
     assert provenance.retirement_rate(DiscoveredBy.ADAPTIVE) == 0.75
     assert provenance.adaptive_fraction() == 0.25
     assert "retirement rate, adaptive: 0.75" in provenance.stated()
+
+
+def test_the_adaptive_fraction_counts_both_adaptive_provenances() -> None:
+    # ADR-0012 §2 asks for the share of the live library *the attacker wrote*, and
+    # ADR-0107 splits which bar the attacker's routes face without splitting the
+    # attacker. A fraction that counted one member would put a target-discovered
+    # case in the denominator and never in the numerator, so the headline share
+    # would fall as the attacker wrote more of the library (#223).
+    provenance = LibraryProvenance(
+        live=dict.fromkeys(DiscoveredBy, 0)
+        | {
+            DiscoveredBy.AUTHORED: 2,
+            DiscoveredBy.ADAPTIVE: 1,
+            DiscoveredBy.ADAPTIVE_ON_TARGET: 1,
+        },
+        retired=dict.fromkeys(DiscoveredBy, 0),
+    )
+
+    assert provenance.live_total == 4
+    assert provenance.adaptive_fraction() == 0.5
+    assert "0.50 adaptive-discovered" in provenance.stated()
+
+
+def test_a_target_discovered_case_alone_moves_the_adaptive_fraction() -> None:
+    # The sharper half of the claim above, and the one that is wrong today: a
+    # library whose only attacker-written case is `adaptive_on_target` reads as a
+    # library the attacker wrote none of.
+    provenance = LibraryProvenance(
+        live=dict.fromkeys(DiscoveredBy, 0)
+        | {DiscoveredBy.AUTHORED: 3, DiscoveredBy.ADAPTIVE_ON_TARGET: 1},
+        retired=dict.fromkeys(DiscoveredBy, 0),
+    )
+
+    assert provenance.adaptive_fraction() == 0.25
 
 
 def test_a_provenance_with_no_case_written_has_no_retirement_rate() -> None:

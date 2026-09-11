@@ -41,7 +41,7 @@ from backend.bench.adjudication import Completion
 from backend.bench.calibration import CalibrationResult, run_calibration
 from backend.bench.contract import TargetFailure, TargetUnreachable
 from backend.bench.evaluator import Verdict
-from backend.bench.library import Case, Family
+from backend.bench.library import Case, DiscoveredBy, Family
 from backend.bench.signing import SIGNING_KEY_VARIABLE, encoded_private, generate
 from backend.bench.usage import ModelUsage, UsageLedger
 from backend.graph.budget import Layer
@@ -124,6 +124,7 @@ def traced_calibration(
             plant_nonce=reference.plant_nonce,
             approve=CONFIRMING,
             trace=trace,
+            discovered_by=DiscoveredBy.ADAPTIVE,
         )
         return result, list(exporter.get_finished_spans())
 
@@ -241,6 +242,7 @@ def a_run_that_reports_usage(
             attacker=attacking(Reporting(ledger, Layer.ADAPTIVE, every_call)),
             usage=ledger,
             trace=trace,
+            discovered_by=DiscoveredBy.ADAPTIVE,
         )
         return result, list(exporter.get_finished_spans())
 
@@ -324,6 +326,7 @@ def test_the_emitted_fields_are_exactly_the_declared_allowlist(
                 plant_nonce=flaky.plant_nonce,
                 approve=CONFIRMING,
                 trace=A_RUN,
+                discovered_by=DiscoveredBy.ADAPTIVE,
             )
         failed = list(exporter.get_finished_spans())
 
@@ -658,6 +661,7 @@ def test_no_adjudicator_narrative_precedent_or_remediation_is_emitted(
             approve=CONFIRMING,
             adjudicator=narrating(AN_ADJUDICATORS_PROSE),
             trace=A_RUN,
+            discovered_by=DiscoveredBy.ADAPTIVE,
         )
         spans = list(exporter.get_finished_spans())
 
@@ -704,6 +708,7 @@ def test_a_transport_failure_is_a_class_and_never_the_exception_that_names_the_u
                 plant_nonce=flaky.plant_nonce,
                 approve=CONFIRMING,
                 trace=A_RUN,
+                discovered_by=DiscoveredBy.ADAPTIVE,
             )
         spans = list(exporter.get_finished_spans())
         url = flaky.target.url
@@ -780,6 +785,7 @@ def test_with_no_sink_configured_the_run_completes_and_nothing_is_emitted(
             plant_nonce=reference.plant_nonce,
             approve=CONFIRMING,
             trace=A_RUN,
+            discovered_by=DiscoveredBy.ADAPTIVE,
         )
 
     [target_run] = result.target_runs
@@ -810,6 +816,7 @@ def test_a_sink_that_cannot_be_reached_does_not_fail_or_alter_a_run(
                 plant_nonce=reference.plant_nonce,
                 approve=CONFIRMING,
                 trace=A_RUN,
+                discovered_by=DiscoveredBy.ADAPTIVE,
             )
     finally:
         observability.install(None)
@@ -843,6 +850,7 @@ def test_every_attempt_is_recorded_with_tracing_off_on_and_sampled_to_nothing(
             plant_nonce=reference.plant_nonce,
             approve=CONFIRMING,
             trace=A_RUN,
+            discovered_by=DiscoveredBy.ADAPTIVE,
         )
         dropped = list(exporter.get_finished_spans())
 
@@ -900,6 +908,7 @@ def test_a_run_is_sampled_by_the_declared_fraction_and_never_by_a_span_it_is_und
                     plant_nonce=reference.plant_nonce,
                     approve=CONFIRMING,
                     trace=A_RUN,
+                    discovered_by=DiscoveredBy.ADAPTIVE,
                 )
                 dropped = list(exporter.get_finished_spans())
         finally:
@@ -933,6 +942,7 @@ def test_a_run_that_aborted_still_pushes_its_trace_before_the_process_moves_on(
                     plant_nonce=flaky.plant_nonce,
                     approve=CONFIRMING,
                     trace=A_RUN,
+                    discovered_by=DiscoveredBy.ADAPTIVE,
                 )
         pushed = list(exporter.get_finished_spans())
     finally:
@@ -953,6 +963,7 @@ def _untraced(case: Case) -> tuple[CalibrationResult, None]:
                 attestation=BENCH_ATTESTATION,
                 plant_nonce=reference.plant_nonce,
                 approve=CONFIRMING,
+                discovered_by=DiscoveredBy.ADAPTIVE,
             ),
             None,
         )
@@ -1093,6 +1104,7 @@ def test_an_attempt_in_flight_when_the_run_stops_still_reaches_the_sink(
                     approve=CONFIRMING,
                     adjudicator=blocking,
                     trace=A_RUN,
+                    discovered_by=DiscoveredBy.ADAPTIVE,
                 )
             spans = list(exporter.get_finished_spans())
     finally:

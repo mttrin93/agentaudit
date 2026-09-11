@@ -145,6 +145,37 @@
    * The distance is capped as a share of the bar so that a short segment fades over
    * its own length instead of being swallowed by the fade.
    */
+  /*
+   * The three bands, on the one screen that colours them (ADR-0112).
+   *
+   * Aliases and not new hues: a band is read against the two reference agents' own
+   * constructed rates (ADR-0014), so `holds` takes the colour a held verdict takes and
+   * `fails` the colour a broken one does — a fourth green and a fourth red would be a
+   * second answer to *which green means held*. `weak` borrows the amber the weak
+   * reference agent already carries, which is the same *between the two anchors* it
+   * means here.
+   */
+  /*
+   * The three states a pending route can be in, on the queue that lists them.
+   *
+   * Their own tokens rather than the page's `--ink`, `--accent` and `--refusal`: those
+   * are pitched for prose and for an edge, and at the size of one word in a column they
+   * read as three greys. These are the same three identities at the chroma the accent
+   * ramp above is drawn at, which is what makes them legible as three things at a
+   * glance.
+   *
+   * Identity and never a grade (`.routes-queue`, ADR-0005): amber is the one waiting on
+   * somebody, mint the one that became a case, rose the one the bar refused. No ramp
+   * between them, and the word prints at every state.
+   */
+  --state-pending: oklch(0.88 0.15 92);
+  --state-admitted: oklch(0.82 0.18 162);
+  --state-rejected: oklch(0.72 0.19 18);
+
+  --band-holds: var(--resisted);
+  --band-weak: var(--agent-weak);
+  --band-fails: var(--succeeded);
+
   --verdict-blend: color-mix(in oklch, var(--resisted), var(--succeeded));
   --verdict-join: min(0.85rem, 45%);
   /*
@@ -153,6 +184,29 @@
    * Named rather than repeated: `3px` was written at eleven places in this file,
    * which is eleven chances for a card and the button inside it to disagree.
    */
+  /*
+   * The measure a paragraph is set to, now that the page itself is the window.
+   *
+   * The screens lay their rows out across the whole frame, and a paragraph that is
+   * only a paragraph is not a row: 62rem of this type is about 110 characters, which
+   * is long and is where a block of prose stops being read at all. Applied to `p` and
+   * to nothing else, so a sentence inside a cell, a card or a column takes the width
+   * of what it is inside and only the free-standing prose is capped.
+   */
+  /*
+   * The width the report screen's blocks share.
+   *
+   * The per-family table is sized by its own columns and the findings under it by the
+   * page, and two framed blocks one above the other at two widths read as two things
+   * that failed to line up. One measure, both centred: the table fills it and the
+   * findings match it, at every window wide enough to hold it.
+   *
+   * Not `--reading`, which is the measure prose is set at — 62rem is a line an eye
+   * reads a sentence along, and this is what six columns of figures need.
+   */
+  --report-block: 69rem;
+
+  --reading: 62rem;
   --radius: 10px;
   --radius-sm: 6px;
   /* Round enough to read as a pill whatever the text in it is. */
@@ -200,24 +254,33 @@ body {
 
 /* One step tighter than the browser's `1em`, which is a page-of-prose measure. Every
  * rule in this file that sets its own paragraph margins still wins. */
+/* Free-standing prose is capped at a measure; see `--reading`. A paragraph inside
+ * something narrower is already narrower, so the cap only reaches the ones the page
+ * would otherwise run to the frame. */
 p {
   margin: 0.75rem 0;
+  max-width: var(--reading);
 }
 
 /*
- * One width for everything on the page.
+ * One width for everything on the page, and the page is the window.
  *
  * The prose and the grids share it: a paragraph runs the same length as the row of
  * cards under it, so nothing on a screen reads as a column that has slipped inside a
- * wider one. 64rem, which is what two family cards side by side need.
+ * wider one.
  *
- * **The cost is line length and it is real.** 64rem of this type is about 130
- * characters, well past the 60-to-90 a reader tracks accurately, and this stylesheet
- * used to cap prose at 44rem for exactly that reason. The screens are losing their
- * prose — the rail says its names and stops explaining itself, the front door is a
- * title and three cards — and one width across the page is the choice made here. If a
- * screen ever reads badly, the lever is the page width and not a second measure
- * inside it.
+ * It was 72rem centred in 12rem gutters, and what that cost was the rows. A screen of
+ * this console is a row of switches, a row of figures or a row of chips beside the
+ * sentence that explains it, and three columns inside 48rem of content came out as
+ * three gutters: a sentence broke every five words and a set of seven chips wrapped
+ * into four lines. The gutters are 1.5rem now and the content is the window.
+ *
+ * **The cost is line length and it is real**, and it is the same cost the 72rem
+ * version was already paying — 130 characters then, more than that on a wide monitor
+ * now. What holds it is `--reading`: a paragraph that is *only* a paragraph is capped
+ * at a measure, and everything laid out in columns takes the window. The cap below is
+ * the ultra-wide backstop and not the page width; at any window a person works in it
+ * does not bite.
  */
 .screen {
   /*
@@ -229,33 +292,14 @@ p {
    * and the gutter is the gutter.
    */
   box-sizing: border-box;
-  max-width: 72rem;
+  max-width: 130rem;
   margin: 0 auto;
-  /* 12rem a side, and less above and below than the 3rem and 6rem it was: the tail of
-   * a page of rows is the last row, and six rems under it is a screen of nothing to
-   * scroll through before the page ends.
-   * The rail is a hard edge on one side and the window is on the other,
-   * and a block of figures needs air between it and both — more of it than the 10rem
-   * this was, because the screens now hold rows and lines rather than paragraphs and a
-   * row set close to the frame reads as a page that ran out of room. */
-  padding: 2.2rem 12rem 4rem;
-}
-
-/*
- * Between the phone and the desk, the gutter gives way before the content does.
- *
- * A 12rem gutter inside a frame this size would leave the family cards too narrow to
- * sit two abreast, and the cards are what the width is for. 7.5rem, up from 6rem with
- * the type: at 4rem, which it was before that, the content ran almost to the frame's
- * edge on a laptop and the page read as a screen filled rather than a page set, and two
- * cards still have room to spare at this width. A narrow window gives it back further down, where the rail
- * becomes a strip and 6rem a side is more of the page than is left over. The
- * breakpoint is on the frame rather than the window because the rail is beside it.
- */
-@media (max-width: 78rem) {
-  .screen {
-    padding-inline: 7.5rem;
-  }
+  /* Enough that nothing touches the frame, and no more: the rail is a hard edge on one
+   * side and the window is on the other, and what a row needs between it and both is a
+   * gutter rather than a margin. Less above and below than the 3rem and 6rem it was:
+   * the tail of a page of rows is the last row, and six rems under it is a screen of
+   * nothing to scroll through before the page ends. */
+  padding: 2.2rem 1.5rem 4rem;
 }
 
 .eyebrow {
@@ -284,11 +328,13 @@ h1 {
 /* The margins are set rather than left to the browser, which gives a heading room in
  * proportion to its own size: on this page a heading belongs to what is under it, so it
  * sits closer to that than to the block above. */
+/* The space above is half of what separates two sections — `section`'s own padding is
+ * the other half, and the comment there is where the distance is argued. */
 h2 {
   font-size: 1.15rem;
   font-weight: 700;
   letter-spacing: -0.012em;
-  margin: 0.9rem 0 0.4rem;
+  margin: 0.55rem 0 0.4rem;
 }
 
 h3 {
@@ -328,14 +374,19 @@ h4 {
  * citation, a figure — and there an edge says *this is one object* rather than
  * *these two things are different*.
  *
- * 1.5rem, down from 2.6 in two steps. The gap was set when a section opened on a
+ * 1.1rem, down from 2.6 in three steps. The gap was set when a section opened on a
  * heading and a paragraph explaining it; a screen of rows and short lines needs less of
  * it before the space reads as a section that lost its content rather than one that
- * ended. Below this the heading of the next section starts to belong to the block above
- * it, which is where the floor is.
+ * ended. The last step came with the front door's two prose blocks: with no paragraph
+ * under any heading, the gap was the widest thing left on the screen, and the heading
+ * below it carries its own caption strip which reads as part of the block it labels.
+ *
+ * The floor is where the next heading starts to belong to the block above it, and the
+ * `h2` margin above is the other half of the distance — the two are set together or the
+ * total moves twice.
  */
 section {
-  padding-top: 1.5rem;
+  padding-top: 1.1rem;
 }
 
 label {
@@ -400,6 +451,95 @@ textarea[aria-invalid='true'] {
 }
 
 /*
+ * A field of the registration walk: the name, the control, and the aside, in a row.
+ *
+ * They were stacked — a small grey caption, a box across the full reading column, and
+ * a sentence under it — three lines and a full-width control for a field holding *3*.
+ * A reader answering *what does this form want of me* read a column of captions with a
+ * box between each pair of them, and the boxes were as wide as the URL whatever they
+ * held.
+ *
+ * In a row the names line up down one edge, the controls down the next at a width that
+ * says what kind of value goes in them, and the bench's own sentence about a field sits
+ * beside that field rather than under it. A hairline between rows, so the page reads as
+ * a list of things being declared and not as a stack of cards — the same idiom the two
+ * switch blocks on the bench page are drawn in, for the same reason.
+ *
+ * The label's own text is the first child and an anonymous grid item: it is placed by
+ * auto-flow into the first column because the other two children name their columns.
+ * That is why the control and the aside are placed and the name is not.
+ *
+ * `label.declaration` is excluded, and that is the distinction the selector is here to
+ * keep: a declaration is a sentence somebody is making with a box beside it, and a
+ * field is a value somebody is typing. Two shapes, because they are two acts.
+ */
+.declaring label:not(.declaration) {
+  display: grid;
+  grid-template-columns: 11rem minmax(0, 28rem) minmax(0, 1fr);
+  align-items: center;
+  gap: 0.35rem 1.15rem;
+  margin: 0;
+  padding: 0.6rem 0;
+  border-top: 1px solid var(--line);
+  font-size: 0.95rem;
+  color: var(--ink);
+}
+
+.declaring label:not(.declaration) > input,
+.declaring label:not(.declaration) > select,
+.declaring label:not(.declaration) > textarea {
+  grid-column: 2;
+  margin-top: 0;
+}
+
+/* A box sized to what goes in it: a count and a price are a few characters, and a box
+ * of twenty-four rems around three of them is a box that says the wrong thing about
+ * what it wants. Ranged right, because they are figures. */
+.declaring label:not(.declaration) > input[type='number'] {
+  width: 7rem;
+  text-align: right;
+}
+
+.declaring label:not(.declaration) > select {
+  width: auto;
+  min-width: 13rem;
+}
+
+/* The bench's sentence about the field, and the message where the API refused it, in
+ * the column beside the control. Both land in the third column; where a field carries
+ * both, the refusal takes the first row of it and the aside the second, which is the
+ * order they are read in. */
+.declaring label:not(.declaration) > .aside,
+.declaring label:not(.declaration) > .field-refused {
+  grid-column: 3;
+  margin-top: 0;
+}
+
+/*
+ * The band over a run of fields: what the fields under it have in common.
+ *
+ * The same small upper case this file labels every list in, on the ground rather than
+ * in a well of its own. A form of six controls under a page title saying *settings* and
+ * nothing else left a reader to work out what the six had in common; the band says it
+ * once, in the reading's own word, and the rows say the rest.
+ */
+.band {
+  margin: 0.9rem 0 0.2rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--quiet);
+}
+
+/* The temperature slider is a control and not a box, so it takes the control column's
+ * width rather than a box's: a range input at its intrinsic size is a track a third of
+ * the way across the column it sits in. */
+.declaring label:not(.declaration) > input[type='range'] {
+  width: 100%;
+}
+
+/*
  * A declaration is a sentence somebody is making, so it is set as one: the box is
  * beside the words at reading size rather than under a caption in small grey type.
  */
@@ -429,8 +569,20 @@ h3.field-name {
   color: var(--quiet);
 }
 
+
 h3.field-name + label.declaration {
   margin-top: 0.3rem;
+}
+
+/* The hairline the field rows each carry above them, carried by the field that is a
+ * heading and a box rather than a name and a control: it closes the run of typed
+ * values above it — the last of them is the currency — and opens the declaration
+ * below. Without it the run of rows ended in mid-air and the family's name read as a
+ * caption on the currency box. */
+.declaring h3.field-name {
+  margin-top: 0;
+  padding-top: 1.1rem;
+  border-top: 1px solid var(--line);
 }
 
 label.declaration input {
@@ -561,6 +713,23 @@ legend {
   color: var(--quiet);
 }
 
+/* The standing's name in the open and the report's own block behind it. Shut, because
+ * the block is four answers and three sentences and the name is what an operator
+ * checks; the sentence is what it means, and it is the wording the document carries,
+ * so it is folded rather than shortened. */
+.standing summary {
+  cursor: pointer;
+  color: var(--quiet);
+}
+
+.standing summary:hover {
+  color: var(--ink);
+}
+
+.standing p {
+  margin: 0.6rem 0 0;
+}
+
 /*
  * The content to plant, folded away under the box that declares it is in place.
  *
@@ -662,9 +831,10 @@ pre {
  *
  * Not `display: none` and not `hidden`: either would take it out of the accessibility
  * tree and there would be nothing to announce. A one-pixel clipped box is the way a
- * region stays in the tree with nothing on the page. It is one of two rules in this
- * stylesheet whose purpose is to make something invisible, and the other one —
- * `.skip` — is invisible only until the keyboard reaches it.
+ * region stays in the tree with nothing on the page. It is one of three rules in this
+ * stylesheet whose purpose is to make something invisible, and the other two are
+ * invisible in a weaker sense: `.skip` until the keyboard reaches it, and the checkbox
+ * inside a construction chip, which the chip it is wrapped in is the visible face of.
  *
  * The screen says the same thing in its own heading, which is why this is not drawn:
  * a second copy in the reading column would be the console saying everything twice.
@@ -782,69 +952,13 @@ button:disabled {
 }
 
 /*
- * The three things this console does, side by side on the front door.
- *
- * Cards rather than prose, because each one is an errand with a control at the end
- * of it and a reader who came to start one should not have to read the other two to
- * find it. `auto-fit` and not three fixed columns: the reading column is 44rem, so
- * three cards are narrow by design and one column is what a phone gets.
- *
- * **Nothing in a card is a figure**, so there is no rule here for a rate, a band or
- * a tint — the front door says what the console does, and every figure in this
- * application belongs to the screen that measured it.
- */
-.does {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
-  gap: 1rem;
-  margin: 1.5rem 0 0;
-}
-
-.does .card {
-  display: flex;
-  flex-direction: column;
-  padding: 1.15rem 1.3rem;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-}
-
-.does .card h3 {
-  margin-top: 0;
-}
-
-/* The description takes the slack, so the controls sit on one line across the row
- * however unevenly the three sentences wrap. */
-.does .card p {
-  flex: 1;
-  margin: 0 0 1.1rem;
-  font-size: 0.9rem;
-  color: var(--quiet);
-}
-
-/*
- * A link that opens a screen, set as the control it is.
- *
- * `button`'s own rule is left alone: these are anchors, because they navigate, and
- * the styling is where the resemblance stops. `.lead` is the filled one — one per
- * card set, on the errand to do first.
- */
-/*
- * The three errands' controls, and all three are drawn the same.
- *
- * The filled mint was spent on the lead card alone — register first, because an
- * operator with nothing registered can usefully do one of the three — and the other two
- * were outlined in the hairline every block on the page is edged with, which made them
- * read as the disabled halves of a set. All three are doors, they are the only doors on
- * this screen, and the order of the cards is what says which to open first.
- */
-/*
  * The idiom the two switch blocks share: a tick, a name, and what it means.
  *
- * `.said` carries the tick and its hover, and the two blocks that use it both lay
- * themselves out as one box to a row under it — nine boxes of families, then three of
- * layers. What is shared is the control, which is the thing that must not drift:
- * the same square box in both, so a reader who has learned what one means on one block
- * has learned it on the other.
+ * `.said` carries the tick and its hover, and the two blocks that use it are drawn the
+ * same way under it: one frame, one row to a member, and the row in columns with the
+ * switch first — three layers, then nine families. What is shared is the control,
+ * which is the thing that must not drift: the same square box in both, so a reader who
+ * has learned what one means on one block has learned it on the other.
  */
 .said {
   display: grid;
@@ -854,38 +968,73 @@ button:disabled {
 }
 
 /*
- * The nine families, one to a box and one box to a row.
+ * The nine families, one to a row, and the row in three columns.
  *
- * The same paper-and-hairline box every other block on this page is made of, in a
- * single column rather than the two the auto-fit grid gave them. Two to a row read as
- * a grid of cards and buried the question the block exists to answer — which of these
- * will the next run cover — which is a question a reader answers by running an eye
- * down one column of switches.
+ * The shape the layers block above settled on, on the same argument: boxes came first
+ * — two to a row, which read as a grid of cards, then one to a row — and what a box
+ * costs is that the switch, the sentence and the claims each begin at a different
+ * depth down the page, so *which of these will the next run cover* is read one box at
+ * a time. In columns the switches line up down one edge and the sentences down the
+ * next, and the eye answers by running down a column.
  *
- * The label footer is inside the box, under the sentence, because what a family
- * claims is a fact about the family and not a fifth column: a box holds one subject.
+ * One frame with a hairline between rows and no box of its own for any row: nine
+ * framed boxes in a column read as nine cards, and what this is is one list. Which is
+ * also the other half of ADR-0091 — the tier is drawn undifferentiated, and nine rows
+ * inside one frame are harder to read as six and three than nine boxes were. What
+ * stays split is the pair of arrays the switches write to.
  *
- * One list and not two: the tier is drawn undifferentiated (ADR-0091), and what stays
- * split is the pair of arrays the switches write to.
+ * The switch column is the layers block's width to the character, so the two blocks'
+ * switches stand on the same edge down the whole screen. `minmax(0, …)` on the
+ * sentence, or a long word in it pushes the codes off the row.
+ *
+ * The codes get a **fixed** track wide enough for the longest pair of entries on one
+ * line, and the sentence takes every remaining pixel. Two things fall out of that, and
+ * both are the point: the codes end close to the counts beside them rather than across
+ * a lane of space, and they start on the same edge in all nine rows. `max-content`
+ * would size the track to the widest cell — but each row is its own grid, not a
+ * subgrid, so it sizes per row, and a family claiming one entry had its codes set 70px
+ * to the right of a family claiming two. A column that does not line up is not a
+ * column.
+ *
+ * The column gap is tighter than the row gap for the same reason the codes moved: four
+ * columns across 44rem, and the space between them was reading as the widest thing in
+ * the row.
  */
 .said.families {
   grid-template-columns: 1fr;
-  gap: 0.6rem;
+  gap: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--paper);
 }
 
-/* The published entries and the articles, at the foot of the box that names them. Each
- * is set as what it is — a string a recipient matches against a stored copy, not prose
- * — behind the word for the list it is on, because neither `ASI01:2026` nor `15` names
- * its own register. A family claiming nothing on a list draws nothing: an empty run of
- * codes, and never a dash, which would read as *not looked up*. */
+.said.families > div {
+  display: grid;
+  grid-template-columns: 10.5rem minmax(0, 1fr) 13.25rem 8rem;
+  align-items: start;
+  gap: 1.1rem 0.85rem;
+  background: none;
+  border: 0;
+  border-top: 1px solid var(--line);
+  border-radius: 0;
+}
+
+.said.families > div:first-child {
+  border-top: 0;
+}
+
+/* The published entries and the articles, in the third column of the row that names
+ * them — where the layers' members are, and the same relation to the sentence beside
+ * them. Each is set as what it is — a string a recipient matches against a stored
+ * copy, not prose — behind the word for the list it is on, because neither
+ * `ASI01:2026` nor `15` names its own register. A family claiming nothing on a list
+ * draws nothing: an empty run of codes, and never a dash, which would read as *not
+ * looked up*. */
 .said.families .claims {
   display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 0.35rem 1.1rem;
-  margin-top: 0.55rem;
-  padding-top: 0.55rem;
-  border-top: 1px solid var(--line);
+  flex-direction: column;
+  gap: 0.4rem;
+  margin: 0;
 }
 
 .said.families .claims > span {
@@ -895,6 +1044,11 @@ button:disabled {
   gap: 0.35rem;
 }
 
+/* The list's word in front of its codes and not over them. Over them is how the
+ * layers' members are labelled, and it cost four lines in a column whose row is two:
+ * the switch and the sentence both ended halfway up an empty row. Inline, the two
+ * lists are two lines, the row is the height of its own sentence, and a list long
+ * enough to wrap wraps under its word rather than being given one. */
 .said.families .claims .of {
   font-size: 0.72rem;
   font-weight: 600;
@@ -908,33 +1062,67 @@ button:disabled {
   color: var(--ink);
 }
 
-/*
- * The three layers, one to a box and one box to a row.
+/* The family's sentence, in the column between the switch and the codes. */
+.said.families .means {
+  margin: 0;
+}
+
+/* The last column, on the layers block's own terms: ranged right and set in the
+ * monospace, so nine counts are read down one edge rather than as nine more sentences
+ * to start. `.holds .much` is styled once, for both blocks, below.
  *
- * The families' shape read one level down, and for the families' reason: three boxes
- * in the auto-fit grid came out as unequal columns — one tall with the encodings, one
- * short with the ladders, one all but empty — which read as a set of cards and buried
- * the question the block asks, which of the three will the next run send. Down one
- * column the three switches line up under each other, and the constructions wrap into
- * as many columns as the box is wide rather than into one tall stack.
+ * A fixed width and not `max-content`, which is the layers block's rule and cannot be
+ * this one's: three of the nine hold nothing and say so in a sentence, and a column
+ * sized to its widest cell would set those three rows' codes on a different edge from
+ * the other six — which is the alignment the columns exist for. The empty answer wraps
+ * instead. */
+.said.families .holds {
+  margin: 0;
+  text-align: right;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+/*
+ * Narrow, the row is the box it used to be — the layers block's rule, at its width, so
+ * the two blocks stack at the same moment and the screen never holds one of each.
  */
-.said.layers {
-  grid-template-columns: 1fr;
-  gap: 0.6rem;
+@media (max-width: 60rem) {
+  .said.families > div {
+    grid-template-columns: 1fr;
+    gap: 0.55rem;
+  }
+
+  /* Stacked, the count is a line under the codes rather than a column beside them, so
+   * it is set where the eye already is — the layers block's own rule at this width. */
+  .said.families .holds {
+    text-align: left;
+  }
+
+  /* Stacked, the codes are a footer under the sentence again, and the hairline that
+   * separated them inside the box comes back with the shape. */
+  .said.families .claims {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.35rem 1.1rem;
+    padding-top: 0.55rem;
+    border-top: 1px solid var(--line);
+  }
 }
 
-/* The constructions at the foot of the box whose switch schedules them, behind the
- * word for what they are — the same footer a family's published claims sit in, because
- * the two blocks are the same idiom one level apart. */
-.said.layers .sends {
-  margin-top: 0.55rem;
-  padding-top: 0.55rem;
-  border-top: 1px solid var(--line);
-}
-
-.said.layers .sends .of {
-  display: block;
-  margin-bottom: 0.45rem;
+/*
+ * The strip over the switches: what the block switches, and how much of it is on.
+ *
+ * Set in the small upper case the rest of the file labels lists in, and on the ground
+ * rather than in a well of its own — it is a caption over the rows and not a row. Both
+ * parts describe what is on the screen; nothing here instructs a pointer.
+ */
+.switching {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.35rem 1rem;
+  margin: 0 0 0.7rem;
   font-size: 0.72rem;
   font-weight: 600;
   letter-spacing: 0.04em;
@@ -942,16 +1130,220 @@ button:disabled {
   color: var(--quiet);
 }
 
-/* The adaptive layer's footer, which holds no switch. Set as prose and not as a
+/* Which of the three will send, in the ink: it is the one part of the strip that
+ * changes as switches are moved, so it is the one part that is not grey. */
+.switching span:nth-child(2) {
+  color: var(--ink);
+}
+
+/*
+ * The three layers, one to a row, and the row in three columns.
+ *
+ * Boxes came first — one layer to a box, one box down a single column — and what they
+ * cost was the comparison the block exists for: the three sentences began at three
+ * different depths, so *which of the three will the next run send* was read one box at
+ * a time. In columns the switches line up down one edge, the sentences down the next
+ * and the members down the third, and the eye answers the question by running down a
+ * column.
+ *
+ * The switch column is fixed and the other two share what is left, weighted toward the
+ * members: the sentences are two or three lines either way, and a layer offering seven
+ * chips is what needs the width. `minmax(0, …)` on both, or a long word in a sentence
+ * pushes the chips off the row.
+ *
+ * The weighting moved toward the chips, and the column gap is tighter than the row gap,
+ * to close the lane that stood between the last chip and the figures beside it: the
+ * chips wrap where their own widths fall, so the space at the end of that column is
+ * whatever the last row of chips left, and a wider track leaves less of it.
+ */
+.said.layers {
+  grid-template-columns: 1fr;
+  gap: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--paper);
+}
+
+.said.layers > div {
+  display: grid;
+  grid-template-columns:
+    10.5rem minmax(0, 0.95fr) minmax(0, 1.35fr)
+    minmax(8rem, max-content);
+  align-items: start;
+  gap: 1.1rem 0.85rem;
+  /* One frame around the block and a hairline between rows, rather than a box each:
+   * three framed boxes in a column read as three cards, which is the shape this block
+   * was moved out of. */
+  background: none;
+  border: 0;
+  border-top: 1px solid var(--line);
+  border-radius: 0;
+}
+
+.said.layers > div:first-child {
+  border-top: 0;
+}
+
+/* The members of the layer beside them, behind the word for what they are — the same
+ * relation a family's published claims have to the family's sentence, turned from a
+ * footer into a column now that the row has one. */
+.said.layers .sends {
+  margin: 0;
+}
+
+.said.layers .sends .of {
+  display: block;
+  margin-bottom: 0.4rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--quiet);
+}
+
+/* A second word in the column — the adaptive layer's spellings under its schedules —
+ * is set off from the list above it rather than butting against it. */
+.said.layers .sends .of ~ .of {
+  margin-top: 0.75rem;
+}
+
+
+/*
+ * The fourth column: how much of the layer there is, and what an attempt of it costs.
+ *
+ * Ranged right, which is what makes it a column of figures rather than a fourth
+ * sentence: three counts under each other along one edge are read against each other
+ * at a glance, and the same three set flush left are three more lines to start.
+ *
+ * The count leads in the ink and the cost sits under it in the quiet the asides take.
+ * That is the order the two are chosen in — how much of this layer there is, and then
+ * what each attempt of it will cost — and it is one figure to a line because they are
+ * counts of two different things: cases and calls, or episodes and turns, with nothing
+ * in common to add (ADR-0010).
+ */
+.said.layers .holds {
+  margin: 0;
+  text-align: right;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.said.layers .holds .much,
+.said.families .holds .much {
+  display: block;
+  font-size: 0.82rem;
+  color: var(--ink);
+}
+
+.said.layers .holds .each {
+  display: block;
+  margin-top: 0.2rem;
+  font-size: 0.75rem;
+  color: var(--quiet);
+}
+
+/*
+ * A member as a chip, and not a tick with its name set beside it.
+ *
+ * Seven boxes in a grid read as a form to fill in; seven chips read as a set to pick
+ * from, and picking from a closed set is what selecting constructions is. The checkbox
+ * is still the control — it is taken out of the flow rather than out of the document,
+ * so the keyboard reaches it and a screen reader still reads a checked box — and the
+ * chip is its label, which is what a pointer was landing on already.
+ *
+ * Selected is the mint's own dark companion under the mint, the one fill this file
+ * gives a control (`button.primary`), because these chips and that button are the same
+ * statement: this is the thing that will happen next.
+ */
+.said.layers .sends .sent {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.said.layers .sends .sent label {
+  gap: 0;
+  margin: 0;
+  padding: 0.2rem 0.55rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.78rem;
+  color: var(--quiet);
+  background: var(--page);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+
+/* The box the chip is the face of, taken out of the flow rather than out of the
+ * document. Its padding and its border go with it: under `border-box` a declared
+ * width cannot fall below them, so a box left with the page's own input padding is
+ * eighteen pixels wide however small the width says it is. */
+.said.layers .sends .sent .tick {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  clip-path: inset(50%);
+}
+
+.said.layers .sends .sent label:has(.tick:checked) {
+  color: var(--accent);
+  background: var(--accent-paper);
+  border-color: var(--accent);
+}
+
+/* ADR-0082's one step, in whichever direction the chip currently is: an unselected
+ * chip's edge moves to the accent, and a selected one's — already there — moves to the
+ * ink. Never the fill, which is what says whether it is in the next run. */
+.said.layers .sends .sent label:hover {
+  border-color: var(--accent);
+}
+
+.said.layers .sends .sent label:has(.tick:checked):hover {
+  border-color: var(--ink);
+}
+
+/* The ring the browser would have drawn around the box, drawn around the chip that
+ * holds it instead. */
+.said.layers .sends .sent label:has(.tick:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/*
+ * Narrow, the row is the box it used to be.
+ *
+ * Three columns need about fifty characters each before the sentences start breaking
+ * mid-phrase, so under that the row stacks: the switch, its sentence, its members. The
+ * hairline between rows is doing more work here than it does wide, which is why it is
+ * the thing that separates them at both widths.
+ */
+@media (max-width: 60rem) {
+  .said.layers > div {
+    grid-template-columns: 1fr;
+    gap: 0.55rem;
+  }
+
+  /* Stacked, the figures are a line under the chips rather than a column beside
+   * them, so they are set where the eye already is: to the left, in the reading
+   * direction of everything above them. */
+  .said.layers .holds {
+    text-align: left;
+  }
+}
+
+/* The adaptive layer's column when it holds no switch. Set as prose and not as a
  * label, because it is a sentence about the layer and not the name of a list: what
  * the layer would hold are the two loops the closed set of constructions deliberately
- * does not name, so the switch above is the whole of what there is to ask. */
+ * does not name, so the switch beside it is the whole of what there is to ask. */
 .said.layers .sends .none {
   font-style: italic;
 }
 
-/* One construction to a box, in the idiom every other block on the page is made of:
- * paper, a hairline, and the same radius. */
+/* The box a row is when a block does not frame the whole list, in the idiom every
+ * other block on the page is made of: paper, a hairline, and the same radius. Both
+ * blocks that use `.said` override it — they frame the list and rule between rows —
+ * and it is what a third one would get. */
 .said > div {
   padding: 0.9rem 1rem;
   background: var(--paper);
@@ -962,8 +1354,8 @@ button:disabled {
 .said dt {
   display: flex;
   align-items: center;
-  /* The tick box leads and the name follows it, so the two columns of boxes line up
-   * down the left edge — which is what makes *which of these will run* readable at a
+  /* The tick box leads and the name follows it, so the switches line up down the left
+   * edge of both blocks — which is what makes *which of these will run* readable at a
    * glance instead of one line at a time. */
   gap: 0.6rem;
   font-weight: 600;
@@ -1106,21 +1498,6 @@ button:disabled {
   background: var(--paper);
 }
 
-.act {
-  align-self: start;
-  padding: 0.45rem 1rem;
-  font-size: 0.9rem;
-  text-decoration: none;
-  color: var(--accent);
-  background: var(--accent-paper);
-  border: 1px solid var(--accent);
-  border-radius: var(--radius);
-}
-
-.act:hover {
-  border-color: var(--ink);
-}
-
 a {
   color: inherit;
 }
@@ -1141,9 +1518,20 @@ a:hover {
  * and the arithmetic under it is set small but not grey-on-grey — it is the part
  * that makes the number checkable rather than believable.
  */
+/*
+ * The two figures at the halt, side by side.
+ *
+ * Never one on top of the other, which is `.layers`' own rule one screen later and
+ * the same argument: a stacked pair reads as a column that wants adding, and these
+ * two may not be added — a scored call and an adaptive turn are two units, and the
+ * absence of a third figure is the decision (ADR-0007, ADR-0010). Beside each other
+ * they are two quantities a reader compares; the grid stacks them under 36rem, where
+ * two columns would break the figures across lines.
+ */
 .figures {
   display: grid;
-  gap: 0.6rem;
+  grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
+  gap: 0.8rem;
   margin: 1.5rem 0 1rem;
 }
 
@@ -1152,17 +1540,27 @@ a:hover {
   border-radius: var(--radius);
 }
 
+/* The layer's name, and the kind of figure it is ranged right against it: *exact* and
+ * *ceiling* qualify everything in the box, so they sit at the head of it. */
 .figure dt {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.3rem 0.8rem;
   font-weight: 600;
 }
 
 .figure dd {
-  margin: 0.4rem 0 0;
+  margin: 0.55rem 0 0;
 }
 
+/* One figure to a line: the calls, then the money, then what they were read off. The
+ * two boxes hold numbers of different widths, so anything trailing on the same line
+ * would sit at a different place in each of them — down the box they line up across
+ * the pair. */
 .figure .calls {
-  display: inline-block;
-  margin-right: 0.8rem;
+  display: block;
   font-size: 1.5rem;
   font-variant-numeric: tabular-nums;
 }
@@ -1182,14 +1580,26 @@ a:hover {
 }
 
 .figure .money {
-  display: inline-block;
-  margin-right: 0.8rem;
+  display: block;
+  margin-top: 0.15rem;
   font-size: 1.1rem;
+  font-variant-numeric: tabular-nums;
 }
 
 .figure .kind {
-  font-size: 0.85rem;
+  font-size: 0.8rem;
+  font-weight: 400;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
   color: var(--quiet);
+}
+
+/* What the figure was read off, at the foot of the box and set apart from the numbers
+ * above it: it is the sentence that makes the number checkable, and not a third
+ * quantity. */
+.figure .aside {
+  display: block;
+  margin-top: 0.55rem;
 }
 
 /*
@@ -1205,7 +1615,6 @@ a:hover {
 
 /* Every card-like block is made of paper and sits on the page. One rule, so a new
  * block cannot arrive as a tinted region with a line round it. */
-.does .card,
 .family,
 .signed,
 .artefact,
@@ -1387,6 +1796,341 @@ select option {
  * by `D` would be the ranking across six families this bench does not stand behind
  * (ADR-0005).
  */
+/* Narrower than the columns want, the table scrolls inside its own box rather than the
+ * page scrolling sideways: a figure a reader has to pan the whole screen to reach is a
+ * figure beside a family they can no longer see. */
+.table-wrap {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+/*
+ * The six families as rows of one table, and the prose under each row.
+ *
+ * Cards two abreast stood here. What a reader of this section does is compare one
+ * family against the next on the rate, the interval and the band, and in a grid of
+ * cards each of those began at a different depth inside a different box. In columns
+ * they line up, and each family's sentences sit in a row of their own underneath —
+ * quiet, at the width of the table, and out of the figure columns they would otherwise
+ * have to widen.
+ *
+ * One frame with a hairline between families, which is this file's list idiom. The
+ * hairline is on the said row rather than on the figure row, because a family is the
+ * two rows together and a rule between them would split it.
+ *
+ * **Every column is sized and the table is the sum of them.** Under `auto` over the
+ * page's full width the name column took the slack and the figures sat in a huddle at
+ * the right edge, a third of a row away from the family they belong to; sized columns
+ * in a full-width table moved the slack to whichever column was left `auto`, which is
+ * the same gap somewhere else. So the table is `max-content` — it ends where its last
+ * column's content ends, and there is no slack in it to put anywhere. `max-width` keeps
+ * it inside the page when the window is narrower than the columns want.
+ *
+ * **No total row, and no cell for one.** That was the argument for cards and the table
+ * answers it rather than avoiding it: six rates over six denominators are six figures
+ * and nothing here sums a column (ADR-0005).
+ */
+.per-family {
+  width: min(100%, var(--report-block));
+  margin-inline: auto;
+  margin-top: 1.2rem;
+  border-collapse: separate;
+  border-spacing: 0;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  font-size: 0.9rem;
+}
+
+.per-family th,
+.per-family td {
+  padding: 0.55rem 0.7rem;
+  text-align: left;
+  vertical-align: baseline;
+}
+
+.per-family th:first-child,
+.per-family td:first-child {
+  width: 12.5rem;
+  padding-left: 1rem;
+}
+
+.per-family th:last-child,
+.per-family td:last-child {
+  padding-right: 1rem;
+}
+
+.per-family thead th {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--quiet);
+  border-bottom: 1px solid var(--line);
+}
+
+.per-family tbody th {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+/* The figures, tabular and ranged right so six of them are read down one edge. */
+.per-family .figure-cell {
+  width: 4rem;
+  text-align: right;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-variant-numeric: tabular-nums;
+  color: var(--quiet);
+}
+
+/* The interval needs room for two figures and the confidence they were computed at, so
+ * it is the one figure column that is not the width of a count — and the room is what
+ * sets it apart from the rate's own bar, which ends where this column begins. Two
+ * quantities touching read as one. */
+.per-family thead th:nth-child(4),
+.per-family tbody td:nth-child(4) {
+  width: 13rem;
+}
+
+/* What the interval was computed at, beside it and one size down: an interval without
+ * its confidence is a range a reader supplies their own confidence to. */
+.per-family .figure-cell .at {
+  font-size: 0.78rem;
+}
+
+/* The rate, and the same quantity as a length beside it.
+ *
+ * `tbody` and not the column, so the ink stays on the figures: the header is a column
+ * name like the five beside it, and one of the six printed brighter than the others
+ * read as the column that mattered most. Nothing on this screen ranks a figure. */
+.per-family tbody .rate-cell {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+
+.per-family tbody .rate-cell .track {
+  display: block;
+  height: 0.3rem;
+  margin-top: 0.3rem;
+  background: var(--line);
+  border-radius: var(--radius-pill);
+}
+
+/*
+ * The bar in the band's own colour (ADR-0112 §4).
+ *
+ * The band is read off this quantity — the interval's position against the declared
+ * cut points (ADR-0014) — so the bar and the word two columns along are one reading,
+ * and two colours for one reading is a reader deciding which of them to believe. It
+ * takes the hue rather than setting one: a bar that changed colour at a cut point of
+ * its own would be a second band, drawn by this stylesheet.
+ *
+ * The figure takes it too. A number in ink over a coloured length read as two figures
+ * — the rate, and something else the bar was saying — and the three marks of one
+ * reading are now one colour: the number, the length, and the word two columns along.
+ *
+ * What holds the line is elsewhere: the band's word is printed beside every hue, no
+ * cell is filled, and the signed artefact has no colour in it (ADR-0112).
+ */
+.per-family tbody .rate-cell .segment {
+  display: block;
+  height: 100%;
+  background: var(--scored);
+  border-radius: var(--radius-pill);
+}
+
+.per-family tbody .rate-cell.holds .segment {
+  background: var(--band-holds);
+}
+
+.per-family tbody .rate-cell.weak .segment {
+  background: var(--band-weak);
+}
+
+.per-family tbody .rate-cell.fails .segment {
+  background: var(--band-fails);
+}
+
+.per-family tbody .rate-cell.holds .rate {
+  color: var(--band-holds);
+}
+
+.per-family tbody .rate-cell.weak .rate {
+  color: var(--band-weak);
+}
+
+.per-family tbody .rate-cell.fails .rate {
+  color: var(--band-fails);
+}
+
+/*
+ * The band in the bench's own word, ranged right at the end of the figures, and in
+ * that band's own colour (ADR-0112).
+ *
+ * The word is printed whatever the hue does, so nothing here is carried by colour
+ * alone and a reader who cannot tell the three apart loses nothing. The colour is on
+ * the word and not on a fill behind it: a tinted cell is a status pill, and a pill in
+ * a row of six is the badge the report refuses.
+ */
+.per-family .band-cell {
+  width: 4.5rem;
+  text-align: right;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--quiet);
+}
+
+/* Only the figures, so the column's own name is not printed in a band's colour. */
+.per-family tbody .band-cell.holds {
+  color: var(--band-holds);
+}
+
+.per-family tbody .band-cell.weak {
+  color: var(--band-weak);
+}
+
+.per-family tbody .band-cell.fails {
+  color: var(--band-fails);
+}
+
+/* The width the rate column takes, header and figures alike. */
+.per-family .rate-cell {
+  width: 6.5rem;
+}
+
+/* The artefact's three files on one line: one thing in three parts, not three
+ * downloads to choose between. No marker, because a bullet down the left of three
+ * names set across a line is a list that has lost its column. */
+.artefact-files {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 1.6rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.9rem;
+}
+
+/*
+ * The searches table: the scored table's frame and columns, and none of its figures.
+ *
+ * It borrows `.per-family` so the two sections' family columns stand on one edge and a
+ * reader moves between them without relearning the shape. What it does not borrow is
+ * anything about a rate: there is no rate, interval or band cell in it, so none of
+ * those rules reach it — and an episode's turn count is not a quantity this file gives
+ * a bar (ADR-0010).
+ *
+ * Every row rules against the next, where the scored table rules against the family:
+ * the rows here are episodes and a family is however many of them it opened.
+ *
+ * Four columns and the last one takes the slack, because the last one is prose: a
+ * family, a turn count and an outcome are all short, and a table of three short columns
+ * across the page's width is two thirds empty. What the search proposed is the sentence
+ * that fills it.
+ */
+/* Fixed, and in shares of the table rather than in rems.
+ *
+ * Under `auto` the browser read the wrapped sentence in the last column as demand and
+ * widened the three before it, putting a third of a row between a family and its turn
+ * count. Under `fixed` with widths in rems it did the same thing for the opposite
+ * reason: declared widths that do not add up to the table are topped up across every
+ * column, so the short ones grew too. Shares that sum to the whole leave nothing to
+ * distribute, and the prose gets the half it needs. */
+.per-family.searches {
+  table-layout: fixed;
+}
+
+.per-family.searches th:first-child,
+.per-family.searches td:first-child {
+  width: 22%;
+}
+
+.per-family.searches .figure-cell {
+  width: 9%;
+}
+
+.per-family.searches .outcome-cell {
+  width: 15%;
+}
+
+.per-family.searches .proposed-cell,
+.per-family.searches thead th:last-child {
+  width: 54%;
+}
+
+.per-family.searches .proposed-cell {
+  color: var(--quiet);
+}
+
+.per-family.searches tbody th,
+.per-family.searches tbody td {
+  border-bottom: 1px solid var(--line);
+}
+
+.per-family.searches tbody:last-child tr:last-child th,
+.per-family.searches tbody:last-child tr:last-child td {
+  border-bottom: 0;
+}
+
+/* The published entries as the chips they already were.
+ *
+ * Ranged **left**, and it is the one column that is: the figures before it are ranged
+ * right so their digits line up, and this is a run of keys rather than a quantity.
+ * Ranged right it sat against the far edge of a page-wide table with a third of the row
+ * empty between it and the band; ranged left it starts where the band ends, and the
+ * slack falls outside the last column instead of between two of them. */
+.per-family .refs-cell {
+  width: auto;
+  text-align: left;
+  padding-left: 1.4rem;
+}
+
+.per-family .refs-cell .entry {
+  display: inline-block;
+  margin-right: 0.45rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--quiet);
+}
+
+/* Where a family carries no figures at all: the sentence saying why, across the four
+ * columns a measured family fills. Not a cell left empty — a blank under *rate* is a
+ * zero to anybody scanning the column. */
+.per-family .said-cell {
+  color: var(--quiet);
+}
+
+.per-family .said-cell .kappa {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--ink);
+}
+
+/* The family's own sentences, under its figures and set apart from the next family by
+ * the hairline this row carries.
+ *
+ * `family-said` and not `said`, which is the bench page's switch-block class and is a
+ * grid: a `tr` blockified by it drops out of the table's columns, and a cell spanning
+ * six of them becomes one column wide. The class names in this file are global, so a
+ * new one that reads naturally is a new one that may already mean something. */
+.per-family tr.family-said > td {
+  padding-top: 0;
+  padding-bottom: 0.9rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.per-family tbody:last-child tr.family-said > td {
+  border-bottom: 0;
+}
+
+.per-family tr.family-said p {
+  max-width: none;
+  margin: 0.2rem 0 0;
+  font-size: 0.82rem;
+  color: var(--quiet);
+}
+
 /*
  * The six families, two abreast: one card on the left and its neighbour on the right.
  *
@@ -2032,6 +2776,244 @@ code {
 }
 
 /*
+ * The artefacts as rows of one table.
+ *
+ * A box an artefact stood here, each carrying the name on one line, the id and the
+ * instant on a second and the three files on a third — the same three shapes repeated
+ * down the page, which is a document rather than a list of things to send. In rows the
+ * targets line up down one edge, the instants down another and the files down a third,
+ * and finding the one to send is running an eye down a column.
+ *
+ * One frame with a hairline between rows, which is the idiom the bench page's switches
+ * and the report's per-family figures are drawn in. Nothing here is a figure and there
+ * is no column a count of them could go in — the numbering the box list dropped is
+ * dropped for the same reason (ADR-0005).
+ *
+ * **Still no result and no claim on this screen.** The three results, the two claims,
+ * whose check these are and what a recipient's own run of `verify` settles are on the
+ * report every target's name links to; a column of them here would be the single mark
+ * ADR-0017 refuses, and a row is exactly the shape that invites one.
+ */
+.artefact-rows {
+  width: 100%;
+  margin-top: 1.2rem;
+  border-collapse: separate;
+  border-spacing: 0;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  font-size: 0.9rem;
+}
+
+.artefact-rows th,
+.artefact-rows td {
+  padding: 0.6rem 0.7rem;
+  text-align: left;
+  vertical-align: baseline;
+  border-bottom: 1px solid var(--line);
+}
+
+.artefact-rows th:first-child,
+.artefact-rows td:first-child {
+  padding-left: 1rem;
+}
+
+.artefact-rows th:last-child,
+.artefact-rows td:last-child {
+  padding-right: 1rem;
+}
+
+.artefact-rows thead th {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--quiet);
+}
+
+.artefact-rows tbody tr:last-child th,
+.artefact-rows tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.artefact-rows tbody th {
+  font-weight: 600;
+}
+
+/* The artefact's own id, and the run it came from under it: two addresses for one
+ * thing, and the id is the one a recipient quotes. */
+.artefact-rows .id-cell code {
+  font-size: 0.8rem;
+  color: var(--quiet);
+}
+
+.artefact-rows .id-cell .run {
+  display: block;
+  margin-top: 0.2rem;
+  font-size: 0.8rem;
+}
+
+.artefact-rows .when-cell {
+  white-space: nowrap;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.85rem;
+  color: var(--quiet);
+}
+
+/* The deciding box holds one sentence and one button, and a paragraph is capped at the
+ * reading measure — so a box at the width of the page kept a third of itself empty to
+ * the right of its own prose. The box takes the measure its content has. */
+.citation.deciding {
+  max-width: var(--reading);
+}
+
+/*
+ * The queue of routes awaiting a decision, as rows of one table.
+ *
+ * A block a route stood here — the family, the prose, four labelled facts and two
+ * sentences — and a queue of five put the same six shapes in thirty places. The table
+ * is the idiom this console reads every list in; what a queue is opened for is picking
+ * the routes to measure, and that is a column of checkboxes and a column of states.
+ *
+ * **Colour by state, and it is identity rather than a grade.** `pending`, `admitted`
+ * and `rejected` are three things that happened to a route, not a better and a worse
+ * one — which is the line this file's colour tokens already draw: hue carries identity
+ * and order, and never a judgement. So the three take the colours this application
+ * already means them in — the mint it paints what will happen next, the quiet it paints
+ * what is waiting, the refusal ink it paints every refusal in — and never a green-to-red
+ * ramp, which would be the severity scale ADR-0005 refuses applied to somebody's
+ * findings.
+ *
+ * The word is printed at every state, so nothing here is carried by hue alone. No cell
+ * is filled: a tinted row is a status pill, and a column of pills is a grade.
+ *
+ * The route's own prose and the gate's reason are the row under each, at the width of
+ * the table: a sentence in a column is a column that has stopped being one.
+ */
+.routes-queue {
+  width: 100%;
+  margin-top: 1.2rem;
+  border-collapse: separate;
+  border-spacing: 0;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  font-size: 0.9rem;
+}
+
+.routes-queue th,
+.routes-queue td {
+  padding: 0.55rem 0.7rem;
+  text-align: left;
+  vertical-align: baseline;
+}
+
+.routes-queue th:first-child,
+.routes-queue td:first-child {
+  padding-left: 1rem;
+}
+
+.routes-queue thead th {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--quiet);
+  border-bottom: 1px solid var(--line);
+}
+
+.routes-queue tbody th {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+/* The checkbox sits in the family's own cell, because the family is what an operator
+ * triages on: the name they read and the box they tick are one thing to reach for. */
+.routes-queue tbody th label.declaration {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  align-items: baseline;
+  font-size: inherit;
+}
+
+.routes-queue .when-cell,
+.routes-queue .id-cell code,
+.routes-queue .state-cell {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.82rem;
+  color: var(--quiet);
+}
+
+/* The word carries the state, so it is set to be read as one: the colour and a little
+ * weight, and no fill behind it. */
+.routes-queue .state-cell.pending,
+.routes-queue .state-cell.admitted,
+.routes-queue .state-cell.rejected {
+  font-weight: 600;
+}
+
+/* Waiting on somebody — the one state whose row still carries a checkbox. */
+.routes-queue .state-cell.pending {
+  color: var(--state-pending);
+}
+
+/* Written into the case library: it became a case. */
+.routes-queue .state-cell.admitted {
+  color: var(--state-admitted);
+}
+
+/* Refused by the bar. A finding and not a failure: the route was a property of one
+ * model (ADR-0012). */
+.routes-queue .state-cell.rejected {
+  color: var(--state-rejected);
+}
+
+/* The gate's own record, in its own lines: the decision, then one line a model with
+ * that model's `D`, its intervals and the cut. Wrapped rather than scrolled, because
+ * the lines are long and a reader opening this is reading them rather than scanning a
+ * column of them. */
+.routes-queue tr.route-said .reason {
+  margin: 0.4rem 0 0;
+  padding: 0;
+  background: none;
+  border: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 0.78rem;
+  color: var(--quiet);
+}
+
+/* The route's prose and the gate's reason, under the row they belong to and ruled off
+ * from the next route. */
+.routes-queue tr.route-said > td {
+  padding-top: 0;
+  padding-bottom: 0.9rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.routes-queue tbody:last-child tr.route-said > td {
+  border-bottom: 0;
+}
+
+.routes-queue tr.route-said p {
+  max-width: none;
+  margin: 0.2rem 0 0;
+}
+
+.routes-queue tr.route-said summary {
+  cursor: pointer;
+  margin-top: 0.35rem;
+  font-size: 0.8rem;
+  color: var(--quiet);
+}
+
+.routes-queue tr.route-said summary:hover {
+  color: var(--ink);
+}
+
+/*
  * The queue of routes awaiting a decision: the artefact box, with a checkbox in the
  * name and a decided row that has lost it.
  *
@@ -2164,6 +3146,418 @@ code {
  * different question and is not the seventh row of either. */
 .payloads {
   margin-top: 1.8rem;
+}
+
+/*
+ * A run being watched: the nine families as rows of one framed table.
+ *
+ * Two columns of bars stood here — how far each family has got, and how each is
+ * answering — which is one question about one family asked in two places with the name
+ * written twice. In a table the counts line up down their own columns and the attempts
+ * themselves are the last column, so a reader takes one row and has the whole of what
+ * is known about that family.
+ *
+ * **The attempts column takes the slack and the figures do not.** The counts are a few
+ * characters and the strip is as many cells as the family's plan is long, so the strip
+ * is what a wider window gives room to. Tabular figures, so nine rows of them read as a
+ * column rather than as nine separate numbers.
+ *
+ * One frame with a hairline between rows, which is the idiom the two switch blocks on
+ * the bench page are drawn in and is here for the same reason: the table is the scored
+ * layer's whole plan and it reads as one object, not as six rows loose on the page
+ * between two other readings. The layer lines above and below it are outside the frame,
+ * because they are not rows of it — they are positions, in units the table does not
+ * count in (ADR-0010).
+ */
+.attempts {
+  width: 100%;
+  margin-top: 1.2rem;
+  /* `separate` and not `collapse`, so the frame's own corners are drawn: a collapsed
+   * table merges its outer edge into the cells' and the radius is lost with it. The
+   * hairline between rows is then the cells' own bottom edge, which is what
+   * `border-spacing: 0` keeps to one line rather than two. */
+  border-collapse: separate;
+  border-spacing: 0;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  font-size: 0.9rem;
+}
+
+.attempts th,
+.attempts td {
+  padding: 0.5rem 0.7rem;
+  text-align: left;
+  border-bottom: 1px solid var(--line);
+}
+
+/* The frame is the table's, so the first and last rows do not draw their own edge into
+ * it: the head's top is the frame, and the last row's bottom is too. */
+.attempts thead th {
+  border-top: 0;
+}
+
+.attempts th:first-child,
+.attempts td:first-child {
+  padding-left: 1rem;
+}
+
+.attempts th:last-child,
+.attempts td:last-child {
+  padding-right: 1rem;
+}
+
+/* The column names, in the small upper case this file labels lists in. */
+.attempts thead th {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--quiet);
+}
+
+.attempts tbody th {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.attempts tbody tr:last-child th,
+.attempts tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+/* The counts, ranged right and tabular so the column is read down one edge. */
+.attempts .figure-cell {
+  width: 5.5rem;
+  text-align: right;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-variant-numeric: tabular-nums;
+  color: var(--quiet);
+}
+
+/* How many of this family's attempts the target let through, in the colour the cells
+ * for those attempts are drawn in. A count and not a rate: what it is over is the
+ * fraction in the column beside it, and the quotient is the report's (ADR-0005). */
+.attempts td.figure-cell.broke {
+  color: var(--succeeded);
+}
+
+.attempts .attempts-cell {
+  width: auto;
+}
+
+/* Where the family has got to, ranged right at the end of the row — the one word in
+ * the row that is neither a count nor an attempt. */
+.attempts .state-cell {
+  width: 7rem;
+  text-align: right;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--quiet);
+}
+
+/* The one that is moving, in the ink: a reader scanning the column for *where is this
+ * run* is looking for exactly one row. */
+.attempts td.state-cell.running {
+  color: var(--scored);
+}
+
+/*
+ * One cell an attempt.
+ *
+ * The strip is the family's whole plan drawn at one cell each, so the length of it is
+ * the denominator and the colours in it are the counts — which is the same thing the
+ * bar it replaces said, with the unit visible. They wrap rather than squeeze: a plan of
+ * thirty at a legible cell width is wider than a phone, and a strip that scaled its
+ * cells to fit would be a bar again.
+ */
+.attempts .cells {
+  display: flex;
+  gap: 2px;
+  /* The strip is a share of the widest plan in the table (`widest`), so the cells
+   * divide whatever width that share gives them: every row's cell is the same size and
+   * a family with half the plan takes half the room. `min-width: 0` on the cells, or a
+   * long plan pushes the column past the page. */
+  width: 100%;
+}
+
+.attempts .cell {
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: 10px;
+  height: 15px;
+  border-radius: 1px;
+  background: var(--line);
+}
+
+.attempts .cell.held {
+  background: var(--resisted);
+}
+
+.attempts .cell.broke {
+  background: var(--succeeded);
+}
+
+.attempts .cell.in-flight {
+  background: var(--scored);
+}
+
+/* Named in the legend under the table, like every other colour on this screen. */
+.swatch.in-flight {
+  background: var(--scored);
+}
+
+.swatch.waiting {
+  background: var(--line);
+}
+
+/*
+ * The four words under the table, and what one cell is.
+ *
+ * One legend for the whole table rather than one a column: the four states are four
+ * states of the same thing, and nothing here is carried by hue alone.
+ */
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.9rem;
+  margin: 0.7rem 0 0;
+  font-size: 0.76rem;
+  color: var(--quiet);
+}
+
+.legend .key {
+  display: inline-flex;
+  gap: 0.35rem;
+  align-items: center;
+  white-space: nowrap;
+}
+
+.legend .unit {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+/*
+ * The run's state, over the line saying where it is.
+ *
+ * The standing's own word — the same word `standing` gives the `h1`, in the vocabulary
+ * the record keeps — with a mark beside it, where a heading describing the section used
+ * to be. The mark is filled while the run is going and hollow once it has stopped, so
+ * *is this still moving* is answered at the top of the screen without reading a word.
+ *
+ * It carries no figure. What the run has spent is on the layer lines under it, one
+ * layer at a time (ADR-0007, ADR-0010), and what each family has done is the table.
+ */
+.run-state {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  max-width: none;
+  margin: 0 0 0.2rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.9rem;
+  color: var(--quiet);
+}
+
+/* The one control on this screen, on the line that says what the run is doing: a stop
+ * belongs beside the state it ends, not in a footer under the table. Small and outlined
+ * — it is not the thing a reader came to press, and the primary fill on this bench is
+ * reserved for what will happen next. */
+.run-state button {
+  margin-left: 0.4rem;
+  padding: 0.15rem 0.6rem;
+  font-size: 0.78rem;
+}
+
+/* What stands where the button was once the bench has taken the stop. Quiet, and not
+ * a control: there is nothing left to press. */
+.run-state .taken {
+  margin-left: 0.4rem;
+  font-size: 0.78rem;
+  color: var(--quiet);
+}
+
+.run-state .dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: var(--line);
+}
+
+/* Going, and the one state on this screen that is still moving. */
+.run-state.running {
+  color: var(--scored);
+}
+
+.run-state.running .dot {
+  background: var(--scored);
+}
+
+/* Stopped and complete, which is not a verdict about anybody: it is the run that
+ * finished, and how the target answered is the table and then the report. */
+.run-state.completed .dot {
+  background: var(--resisted);
+}
+
+/* Stopped and not complete — a ceiling reached, a declined estimate, an hour run out,
+ * an endpoint that stopped answering. None of them is a security result and the
+ * section under the heading says which it was in the bench's own words. */
+.run-state.aborted .dot,
+.run-state.transport .dot,
+.run-state.declined .dot,
+.run-state.unanswered .dot,
+.run-state.registration_refused .dot {
+  background: var(--refusal);
+}
+
+/*
+ * How much of the run's own work is done: the bar, and the two counts under it.
+ *
+ * The full width of the page, because it is the one thing on this screen that is about
+ * the run rather than about a family — the six rows below it each have their own
+ * strip, and this is what they add up to as *work*, never as a rate (ADR-0110).
+ *
+ * In the scored layer's own colour and in neither verdict colour. A bar that filled
+ * green into red would be the reading the cells in the table are for, drawn at the top
+ * of the screen over a denominator that spans the families.
+ */
+/* Over the scored layer's own line and under the run's state: how much of the plan is
+ * done, and then where in it the layer has got to. The bar counts scored attempts and
+ * nothing else (ADR-0110), and the line naming that layer is what says so — it reads
+ * as the caption under the bar it belongs to.
+ *
+ * The rule that opens this block is here rather than on the line below, because the
+ * block starts at the bar: the two of them are one reading of one layer, and a hairline
+ * between them would divide the figure from the layer it is a figure of. */
+.run-share {
+  margin: 0.9rem 0 0;
+  padding-top: 0.8rem;
+  border-top: 1px solid var(--line);
+}
+
+/* The layer line directly under the bar takes no rule of its own — the block's rule is
+ * above the bar. The adaptive line, which follows the table rather than a bar, keeps
+ * the one `.layer-line` gives it. */
+.run-share + .layer-line {
+  margin-top: 0.5rem;
+  padding-top: 0;
+  border-top: 0;
+}
+
+.run-share .track {
+  height: 0.4rem;
+}
+
+.run-share .counts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.3rem 0.9rem;
+  max-width: none;
+  margin: 0.45rem 0 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.85rem;
+  color: var(--quiet);
+}
+
+/* The one figure of the three that is read at a glance, so it is the one in the ink. */
+.run-share .counts .percent {
+  font-size: 0.95rem;
+  color: var(--ink);
+}
+
+/*
+ * One layer on one line: its name, where it is in its own units, and what it spent.
+ *
+ * A panel a layer stood here. The line keeps every part of the panel and none of its
+ * height — the units are the layer's own and the two lines never share a column, which
+ * is the whole of what kept them two panels (ADR-0010).
+ *
+ * A rule above each of them, which is the same hairline the table's rows carry and is
+ * doing the same work: the two lines sit above and below a table, and without an edge
+ * of their own the first reads as the table's caption and the second as its last row.
+ * What they are is two readings that are not the table's at all — the table counts
+ * attempts over families, and these count a position and a spend inside one layer.
+ */
+.layer-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.3rem 1.1rem;
+  /* Off the reading measure `p` caps every paragraph at, so the rule above it runs the
+   * width of the table it separates rather than stopping five rems short of it. A
+   * line that ends before the thing it divides reads as an underline on the words to
+   * its left. */
+  max-width: none;
+  margin: 0.9rem 0 0;
+  padding-top: 0.8rem;
+  border-top: 1px solid var(--line);
+  font-size: 0.85rem;
+  color: var(--quiet);
+}
+
+.layer-line .of {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.layer-line .at {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--ink);
+}
+
+.layer-line .at .unit {
+  font-family: inherit;
+  color: var(--quiet);
+}
+
+.layer-line .spent {
+  margin-left: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--ink);
+}
+
+/*
+ * Which attempt the exchange below it was.
+ *
+ * Over the two turns and in the monospace the record's own identifiers are set in: a
+ * case id and an attempt number are values, not prose. The verdict is pushed to the far
+ * edge because it is the one part of the line that is an answer rather than an address.
+ */
+.payload .which {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.3rem 0.9rem;
+  margin: 0 0 0.8rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.8rem;
+  color: var(--quiet);
+}
+
+.payload .which .of {
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.payload .which code {
+  color: var(--ink);
+}
+
+.payload .which .verdict {
+  margin-left: auto;
+  color: var(--ink);
+}
+
+/* What a turn was found to be, which is a sentence rather than a word: it takes the
+ * whole of its own line at the left edge, where an attempt's one-word verdict is
+ * ranged right. */
+.payload .which .reading {
+  flex-basis: 100%;
+  color: var(--ink);
 }
 
 /*
@@ -2476,45 +3870,57 @@ code {
   font-size: 0.85rem;
 }
 
-/* One turn: the mark and the box it belongs to, the answer's pair reversed and pushed
- * to the other side so the two read as a dialogue and not as two paragraphs. */
+/*
+ * One turn: who said it, and what they said under a rule down the left.
+ *
+ * A mark beside a box on alternating sides said whose turn it was, which is a
+ * difference a reader decodes; the speaker's name says it. The rule is the turn's own
+ * colour and it runs the height of what was said, so the two turns are told apart at
+ * the edge of the block as well as at the word.
+ */
 .payload .turn {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.6rem;
   margin-bottom: 0.7rem;
+  padding-left: 0.75rem;
+  border-left: 2px solid var(--line);
+}
+
+.payload .turn.sent {
+  border-left-color: var(--sent);
 }
 
 .payload .turn.reply {
-  justify-content: flex-end;
+  border-left-color: var(--reply);
 }
 
-/* Short of the full width, so each box is visibly against its own side of the card
- * rather than filling it and leaving only the mark to say whose turn it is. */
-.payload .bubble {
-  max-width: 85%;
-  margin: 0;
-  padding: 0.5rem 0.65rem;
-  background: var(--page);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
+/* The speaker, in that turn's own colour and at the size the file labels lists in. */
+.payload .who {
+  margin: 0 0 0.3rem;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  overflow-wrap: anywhere;
+  font-size: 0.78rem;
 }
 
-.payload .speaker {
-  flex: none;
-  width: 1.25rem;
-  height: 1.25rem;
-  margin-top: 0.5rem;
-}
-
-.payload .turn.sent .speaker {
+.payload .turn.sent .who {
   color: var(--sent);
 }
 
-.payload .turn.reply .speaker {
+.payload .turn.reply .who {
   color: var(--reply);
+}
+
+/* What went on the wire, at the width of the card: the box and its own edge are gone
+ * with the alternating sides, because the rule beside it is what says where the turn
+ * starts and ends.
+ *
+ * Off the reading measure, which `p` caps every paragraph at. That measure is for this
+ * application's prose — a length an eye reads a sentence at — and these are the bytes
+ * an attacker sent and a target answered. Capped, a card at the width of the page held
+ * a column of traffic with five rems of nothing down its right side. */
+.payload .bubble,
+.payload .which {
+  max-width: none;
+  margin: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  overflow-wrap: anywhere;
 }
 
 /*
@@ -2582,16 +3988,32 @@ code {
   white-space: pre-wrap;
 }
 
+/* The fix's label beside the case it is a fix for: one word, on the line the case is
+ * named on, rather than a block of its own under two paragraphs. *Proven* and
+ * *proposed* are the pair a reader must not confuse (ADR-0073 §4), and the standing
+ * that used to spell each of them out is in the artefact. */
+.finding h4 .fix-label {
+  margin-left: 0.7rem;
+  font-size: 0.8rem;
+  font-weight: 400;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--quiet);
+}
+
 /* Each failure the bench explained, one card per family, in one column.
  *
  * One column and not the two the scored cards sit in: what is inside a card here is
  * prose in two sentences from two instruments, and prose set in a half-width column
  * beside another column of prose is a page nobody reads. The scored cards are figures
  * and figures pair. */
+/* The same measure the per-family table takes, and centred on it: the two framed blocks
+ * are the same section's two halves and they line up down both edges. */
 .findings {
   display: grid;
   gap: 1rem;
-  margin: 1.5rem 0;
+  width: min(100%, var(--report-block));
+  margin: 1.5rem auto;
 }
 
 /* Collapsed to begin with: n = 30 per family, so a flat list is unreadable at exactly
@@ -2663,11 +4085,11 @@ code {
   font-size: 0.85rem;
 }
 
-/* What the two labels on a fix mean, above the blocks. Its own class rather than the
- * page's `.consequence`, because there is already one of those in this section — who
- * wrote these sentences — and two paragraphs under one name is two claims a selector
- * cannot tell apart. Set quieter than the blocks it explains: it is a standing fact
- * about what the words mean, read once, and not a finding. */
+/* What a section's words are not, above the blocks they qualify — what the two labels
+ * on a fix mean, and that the adaptive layer's figures are scored on nothing. Its own
+ * class rather than the page's `.consequence`, which is a size up from the body and
+ * was reading as the more important line of the two. Set quieter than the blocks it
+ * explains: a standing fact about what the words mean, read once, and not a finding. */
 section > .asserts {
   margin-top: 0.4rem;
   font-size: 0.9rem;
@@ -2869,7 +4291,8 @@ summary,
 input,
 select,
 textarea,
-.said .tick {
+.said .tick,
+.said.layers .sends .sent label {
   transition:
     color 120ms ease,
     background-color 120ms ease,
@@ -3072,8 +4495,7 @@ textarea,
     border-bottom: 1px solid var(--line);
   }
 
-  /* The sides give their width back where there is none to spare: 6.5rem each
-   * side of a narrow window is more of it than is left over. */
+  /* A little tighter still where the rail has become a strip across the top. */
   .screen {
     padding-inline: 1.2rem;
   }

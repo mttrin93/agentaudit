@@ -49,6 +49,7 @@ from backend.bench.library import (
     DiscoveredBy,
     ElectiveFamily,
     bar_for,
+    found_by_the_attacker,
     load_elective,
     load_library,
 )
@@ -83,6 +84,7 @@ __all__ = [
     "bar_for",
     "counted",
     "decide",
+    "found_by_the_attacker",
     "kind_of",
     "library_provenance",
     "outcome_for",
@@ -90,13 +92,18 @@ __all__ = [
     "read",
     "rejections",
 ]
-"""`bar_for` is re-exported rather than defined here.
+"""`bar_for` and `found_by_the_attacker` are re-exported rather than defined here.
 
 ADR-0012's mapping from provenance to bar lives in `library.py` because the record
 enforces it at load — a record may not claim to have entered under a bar its
 provenance does not require — and the record cannot import the arithmetic that
 applies the bar without the scorer importing it back. Callers of the two-bar rule
 find the name here, where the rule is applied.
+
+`found_by_the_attacker` follows it for the smaller reason that it reads the same
+field and belongs beside the branch it is the other half of: both are statements
+about what a `DiscoveredBy` member *means*, and splitting them would leave a
+reader who found one with no way to know the other existed.
 """
 
 
@@ -493,13 +500,34 @@ class LibraryProvenance:
     def adaptive_fraction(self) -> float | None:
         """What share of the live library the adaptive attacker found.
 
+        **A sum over both adaptive provenances.** ADR-0012 §2 asks for the share
+        the attacker wrote, and after
+        [ADR-0107](../../docs/adr/0107-a-route-found-against-a-customers-target-faces-the-single-model-bar.md)
+        the attacker writes under two members: `ADAPTIVE` for a route found against
+        the three reference agents, `ADAPTIVE_ON_TARGET` for one found against a
+        user's own. That ADR narrows only §1's choice of bar and leaves §2 counting
+        "what fraction of the live library the attacker wrote" over all five
+        provenances, so the split is a split of the *bar* and not of this fraction.
+        Counting one member would put a target-discovered case in the denominator
+        and never in the numerator, and the headline share would fall as the
+        attacker wrote more of the library.
+
+        The two are still told apart on the line this fraction prints on: `stated()`
+        lists every provenance's live count beside it, and the retirement rate is
+        per member. What is summed here is the drift figure only.
+
         `None` over an empty library rather than zero: a library with no case in it
         has no composition, and reporting 0.00 would say the attacker found none of
         something that does not exist.
         """
         if self.live_total == 0:
             return None
-        return self.live[DiscoveredBy.ADAPTIVE] / self.live_total
+        found = sum(
+            count
+            for member, count in self.live.items()
+            if found_by_the_attacker(member)
+        )
+        return found / self.live_total
 
     def retirement_rate(self, discovered_by: DiscoveredBy) -> float | None:
         """The share of this provenance's cases that have retired.

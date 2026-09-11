@@ -588,15 +588,30 @@ readings outside it are kept, printed, and never deleted.
 _Avoid_: the last two runs, the recent history, the retirement history
 
 **Provenance**:
-Who found a case — `authored`, `adaptive`, `user_gap` or `retrieved` — held as
-`discovered_by` on the record, and the field that selects its **admission** bar
+Who found a case — `authored`, `adaptive`, `user_gap`, `retrieved` or
+`adaptive_on_target` — held as `discovered_by` on the record, and the field that
+selects its **admission** bar
 ([ADR-0012](./docs/adr/0012-adaptive-discovered-cases-face-a-cross-model-admission-bar.md),
-[ADR-0047](./docs/adr/0047-a-retrieved-case-cites-its-row-and-a-person-signs-for-its-family.md)).
+[ADR-0047](./docs/adr/0047-a-retrieved-case-cites-its-row-and-a-person-signs-for-its-family.md),
+[ADR-0107](./docs/adr/0107-a-route-found-against-a-customers-target-faces-the-single-model-bar.md)).
+**Two of the five are adaptive, and *adaptive* alone no longer says which bar.** A
+route the attacker found against the three **reference agents** is `adaptive` and
+faces the cross-model bar, because discovery and admission ran on the same set and a
+payload fitted to it has to prove itself on a model it was not fitted to (ADR-0012,
+`scripts/swap.py`). A route the same attacker found against a **target** — a user's
+own agent — is `adaptive_on_target` and faces the single-model bar of
+[ADR-0003](./docs/adr/0003-gate-decision-rule-and-sample-size.md): the reference
+agents were never in its discovery loop, so the selection pressure the second bar
+counters is not acting on it. Declared by whoever built the target and never sniffed
+from it, because a bar derived from a URL or a fixture's name is a bar that moves when
+somebody renames a fixture (ADR-0107 §3).
 Not a **trigger**, which is *why* the case exists, and the two are deliberately
 independent in all but one direction. Not a **provenance block** either, which is the
 part of a **signed report** recording who ran it — that is about a run and this is about
 a case, and no type carries both.
-_Avoid_: origin, discovered_by (in prose), where the case came from
+_Avoid_: origin, discovered_by (in prose), where the case came from, *the adaptive
+provenance* (there are two), using `adaptive` for a route found against a customer's
+agent
 
 **Trigger**:
 The stated reason a case was added to the library. One of seven — PLAN §6's six, plus

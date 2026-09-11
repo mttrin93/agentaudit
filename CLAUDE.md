@@ -20,6 +20,7 @@ Do not restate these here — read them.
 | The build spec — the MCP server | [docs/specs/mcp-server.md](./docs/specs/mcp-server.md) |
 | The build spec — a route found against a customer's agent | [docs/specs/pending-routes.md](./docs/specs/pending-routes.md) |
 | The build spec — the door, and the name in the report | [docs/specs/the-authenticated-operator.md](./docs/specs/the-authenticated-operator.md) |
+| The build spec — a confirmed break the gate refused | [docs/specs/the-target-library.md](./docs/specs/the-target-library.md) |
 
 Terms in CONTEXT.md are load-bearing arithmetic, not synonyms. An **attempt** is
 the unit of the denominator; a turn is not an attempt.

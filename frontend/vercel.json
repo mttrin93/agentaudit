@@ -1,0 +1,21 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "rewrites": [
+    { "source": "/nonces", "destination": "https://agentaudit-api-362055134735.europe-west1.run.app/nonces" },
+    { "source": "/nonces/:path*", "destination": "https://agentaudit-api-362055134735.europe-west1.run.app/nonces/:path*" },
+    { "source": "/rule-of-two", "destination": "https://agentaudit-api-362055134735.europe-west1.run.app/rule-of-two" },
+    { "source": "/rule-of-two/:path*", "destination": "https://agentaudit-api-362055134735.europe-west1.run.app/rule-of-two/:path*" },
+    { "source": "/runs", "destination": "https://agentaudit-api-362055134735.europe-west1.run.app/runs" },
+    { "source": "/runs/:path*", "destination": "https://agentaudit-api-362055134735.europe-west1.run.app/runs/:path*" },
+    { "source": "/report", "destination": "https://agentaudit-api-362055134735.europe-west1.run.app/report" },
+    { "source": "/report/:path*", "destination": "https://agentaudit-api-362055134735.europe-west1.run.app/report/:path*" },
+    { "source": "/artefacts", "destination": "https://agentaudit-api-362055134735.europe-west1.run.app/artefacts" },
+    { "source": "/artefacts/:path*", "destination": "https://agentaudit-api-362055134735.europe-west1.run.app/artefacts/:path*" },
+    { "source": "/bench", "destination": "https://agentaudit-api-362055134735.europe-west1.run.app/bench" },
+    { "source": "/bench/:path*", "destination": "https://agentaudit-api-362055134735.europe-west1.run.app/bench/:path*" },
+    { "source": "/gate-runs", "destination": "https://agentaudit-api-362055134735.europe-west1.run.app/gate-runs" },
+    { "source": "/gate-runs/:path*", "destination": "https://agentaudit-api-362055134735.europe-west1.run.app/gate-runs/:path*" },
+    { "source": "/pending-routes", "destination": "https://agentaudit-api-362055134735.europe-west1.run.app/pending-routes" },
+    { "source": "/pending-routes/:path*", "destination": "https://agentaudit-api-362055134735.europe-west1.run.app/pending-routes/:path*" }
+  ]
+}

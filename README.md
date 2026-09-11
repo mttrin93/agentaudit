@@ -257,6 +257,41 @@ place at run two, which is what makes it long-term memory rather than a second
 name for the run state
 ([ADR-0031](./docs/adr/0031-a-run-files-its-deterministic-findings-after-it-has-read-them.md)).
 
+## Try it live
+
+| | URL | Deployed with |
+| --- | --- | --- |
+| the console | <https://frontend-psi-three-16.vercel.app> | `vercel --prod` from `frontend/` |
+| the API | <https://agentaudit-api-362055134735.europe-west1.run.app> | `gcloud run deploy agentaudit-api --source .` |
+
+**The console fetches same-origin paths and nothing else, on Vercel as in dev.**
+`create_app` installs no CORS middleware and never will — that would be a header
+added to the deployed surface forever, bought to make one browser happy — so
+`frontend/vercel.json` rewrites the eight prefixes `frontend/vite.config.ts` proxies
+to the Cloud Run service, and the app's fetch code has no deployment branch in it.
+The prefixes are named one by one there for the reason the Vite config gives: a
+route this app has no business calling should not silently start working through
+the proxy.
+
+Two things the live deployment does not do, and both are properties of *this
+deployment* rather than of the bench:
+
+- **No gate run, and no pending-route decision.** Those write into the case
+  library, and `gate_run_equipment.DEPLOYED_LIBRARY` is a mount point with nothing
+  mounted on it. The bench reads its library out of the image, declares *no
+  writable library*, and offers no control that would write. Run a gate on a clone
+  instead — `uv run python -m scripts.gate`.
+- **Signed artefacts do not outlive the instance.** A run's artefact lives on its
+  record in memory and is never written to disk, and the service scales to zero, so
+  `Signed artefacts` is empty again once it has been idle a while. Download the
+  three files while the run is in front of you; they verify anywhere, which is the
+  whole of what *portable* means here.
+
+Anyone with the URL can start a run, and a run spends this deployment's OpenRouter
+credit. Every run still halts for an explicit confirmation of the estimate before
+it sends anything — that control is the consent record (ADR-0007) and no
+environment variable on this surface turns it off.
+
 ## Try it
 
 You need [uv](https://docs.astral.sh/uv/), Node 22+ (Vite 8), and an

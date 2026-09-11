@@ -27,3 +27,11 @@ playwright-report
 # keys/agentaudit-signing.pub and this is never that: a per-run key belongs to one
 # process, and a private half is written nowhere at all.
 e2e/dev-signing.pub
+
+# What `vercel link` wrote to remember which project this directory deploys to: the
+# organisation id and the project id. Written by the CLI, not by hand, and it names
+# one person's Vercel account rather than anything about this app — a clone should
+# link to its own project rather than inherit mine. `vercel.json` beside it is the
+# opposite and is committed: the rewrites are how the console reaches the bench, and
+# a deployment that lost them would serve a console that calls nothing.
+.vercel

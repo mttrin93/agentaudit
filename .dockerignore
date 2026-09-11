@@ -1,0 +1,60 @@
+# What the build context does not carry. Three kinds of thing, and the reasons
+# differ.
+
+# 1. Secrets and keys. `.env` holds the signing key, the provider credential and a
+#    target's bearer token; the deployment passes those as environment variables
+#    instead, so a copy inside the image would be a second place they exist and the
+#    one nobody rotates.
+#
+#    `keys/` is deliberately *not* excluded, and finding that out cost a boot. The
+#    committed public half is the key a recipient pins, and this bench reads it to
+#    state its own two fingerprints (`GET /bench/settings`) and to run the
+#    recipient's three checks over its own artefacts (`GET /report/{id}/verification`,
+#    `signing.PUBLIC_KEY_PATH`). It is a public key in a public repository; the half
+#    that must never be copied in is the private one, and that arrives as an
+#    environment variable or the factory refuses to boot (ADR-0020).
+.env
+.env.*
+!.env.example
+agentaudit.toml
+
+# 2. The five SQLite stores and the case library's lease. Each of these is a fact
+#    about *this machine's* runs — a halted approval, a finding about somebody's
+#    real agent, a route the attacker found. Copying them into an image would
+#    publish them (ADR-0008) and would seed a deployment with another machine's
+#    state.
+runs/
+checkpoints/
+precedent/
+decisions/
+pending/
+corpus/
+.gate-run.lease
+
+# 3. Everything the API does not import. The frontend is deployed separately; the
+#    prose, the scripts and the tests are read by people and by CI and never by
+#    `create_app`.
+.git/
+.github/
+.venv/
+frontend/
+docs/
+notes/
+scripts/
+backend/tests/
+.claude/
+*.md
+!README.md
+
+# Caches and build output, which would be copied in and then ignored.
+__pycache__/
+*.py[oc]
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.deepeval/
+.deepeval-cache.json
+build/
+dist/
+wheels/
+*.egg-info

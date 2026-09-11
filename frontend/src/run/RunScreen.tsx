@@ -718,13 +718,33 @@ function Progress({
           <span className="unit">one cell = one attempt</span>
         </p>
 
-        <LayerLine reading={adaptiveReading(progress.adaptive)} />
+        {/*
+          The last call the scored layer made, under that layer's own table.
 
-        {/* The call it is on, under both columns and at the width of the page: an
-            exchange is a paragraph of somebody's traffic and it reads badly in half
-            a column. */}
+          At the width of the page, because an exchange is a paragraph of somebody's
+          traffic and it reads badly in half a column.
+
+          **One block a layer, and the types stay two.** This one and the adaptive
+          layer's below are both a call this run put on the operator's endpoint; what
+          differs is what the call belongs to. The scored one is an **attempt** — the unit of a
+          denominator — and carries a case and a verdict; the adaptive one is a **turn**
+          inside an episode, which is deliberately not a unit of anything, and carries a
+          reading. They arrive on two routes, go through two functions and are drawn by
+          two components, so there is no list in this app a turn could be counted in and
+          no signature that takes either (CONTEXT.md, ADR-0010). What they share is a
+          region of the screen, on ADR-0091's own terms: the presentation joins and the
+          types do not. Each block's own label is what names its unit.
+
+          The adaptive block is absent until that layer has sent something. A block
+          saying *nothing yet* for the layer that runs last would stand empty under the
+          whole of a scored run, and its own line above the table already says where it
+          is.
+        */}
         <div className="payloads">
-          <h3>The last call</h3>
+          {/* No heading over the blocks. Each of them opens on its own label — `LAST
+              CALL` on the attempt and `LAST TURN` on the turn — which says what the
+              block is and which layer made it, where a heading over both could only
+              name one of the two units. */}
           {payloads(progress).length === 0 ? (
             <p className="aside">
               Nothing has come back yet. The exchange appears here as it does.
@@ -733,26 +753,19 @@ function Progress({
             payloads(progress).map((one) => <Payload one={one} key={one.key} />)
           )}
         </div>
+        <LayerLine reading={adaptiveReading(progress.adaptive)} />
 
-        {/*
-          And the adaptive layer's last turn, in a block of its own.
-
-          **Two blocks and never one list.** The scored exchange above is an attempt —
-          the unit of a denominator — and this is a turn inside an episode, which is
-          deliberately not one (CONTEXT.md, ADR-0010). They are read off two routes and
-          drawn by two components, so there is no list in this app a turn could be
-          counted in.
-
-          Drawn only when the layer has sent something. A block saying *nothing yet*
-          for the layer that runs last would stand empty under the whole of a scored
-          run, and the layer's own line above the table already says where it is.
-        */}
+        {/* And that layer's last turn, under the line naming the layer that sent it —
+            the scored block above sits under the scored layer's line and its table for
+            the same reason. Each block is beside the layer it belongs to, which is what
+            keeps the two units apart on the screen as the types keep them apart in the
+            app (ADR-0010). */}
         {turns(episodes ?? { held: false, run_id: '', stated: '' }).map((one) => (
           <div className="payloads" key={one.key}>
-            <h3>The last turn</h3>
             <Turn one={one} />
           </div>
         ))}
+
       </section>
 
       {/*

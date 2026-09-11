@@ -147,8 +147,15 @@ interface Held {
    * of the artefact.
    */
   counts: Record<string, string>
-  /** The run's own sentence about why there is no report, carried unedited. */
-  noReport: string
+  /**
+   * Whether the run this page addresses produced no report.
+   *
+   * A flag and not the run's sentence. It used to carry the statement and draw it in
+   * a refusal box, which put the whole of why the run stopped — a ceiling, a stop, a
+   * transport failure — on the screen a reader opened to read a *report*. The run's
+   * own screen is where that sentence belongs and is where this page sends them.
+   */
+  noReport: boolean
   unavailable: string
 }
 
@@ -158,7 +165,7 @@ const NOTHING_YET: Held = {
   episodes: null,
   attempts: null,
   counts: {},
-  noReport: '',
+  noReport: false,
   unavailable: '',
 }
 
@@ -176,7 +183,7 @@ export function ReportScreen() {
         const progress = await runProgress(runId)
         if (progress.report === null) {
           if (current) {
-            setHeld({ ...NOTHING_YET, noReport: progress.statement })
+            setHeld({ ...NOTHING_YET, noReport: true })
           }
           return
         }
@@ -247,15 +254,22 @@ export function ReportScreen() {
         </section>
       ) : null}
 
+      {/*
+        One sentence, and no box around it.
+
+        A run that did not finish has nothing to show here and nothing partial is
+        drawn in its place — half a report reads as a finished one — but that is a
+        reason to say little, not a reason to say it loudly. What stood here was a
+        red refusal panel carrying the run's whole statement, which is where the run
+        stopped and why, on the screen somebody opened to read the document. The
+        sentence that survives is the one fact this page has: there is no report, and
+        the run's own screen says why.
+      */}
       {held.noReport ? (
-        <section className="refusal" role="status">
-          <h2>This run has no report</h2>
-          <p>{held.noReport}</p>
-          <p>
-            Nothing partial is shown in its place: half a report reads as a finished
-            one. <Link to={`/runs/${runId}`}>Watch the run</Link>.
-          </p>
-        </section>
+        <p className="aside" role="status">
+          This run produced no report —{' '}
+          <Link to={`/runs/${runId}`}>the run&rsquo;s own screen</Link> says why.
+        </p>
       ) : null}
 
       {view && held.where ? (

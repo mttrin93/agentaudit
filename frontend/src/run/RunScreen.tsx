@@ -582,22 +582,21 @@ function Progress({
    *
    * What is kept is everything the heading does *not* say: the run's own sentence
    * when it differs from the standing's, which is how a transport failure reports
-   * where the run was when the endpoint stopped answering; the episode a ceiling cut
-   * short; and the sentence saying the stop was not a result about the target. The
-   * section is drawn only when one of them has something in it.
+   * where the run was when the endpoint stopped answering, and the sentence saying
+   * the stop was not a result about the target. The section is drawn only when one
+   * of them has something in it.
+   *
+   * An abort's censored episode was drawn here too, in this screen's own words. It
+   * is not any more: the bench settles every abort with that sentence in the run's
+   * statement, so the paragraph was the same fact a second time.
    */
   const alsoSaid = progress.statement === at.statement ? '' : progress.statement
-  const anythingElse = alsoSaid || at.episode !== null || at.notASecurityResult
+  const anythingElse = alsoSaid || at.notASecurityResult
   return (
     <>
       {anythingElse ? (
         <section>
           {alsoSaid ? <p className="aside">{alsoSaid}</p> : null}
-          {at.episode ? (
-            <p className="consequence">
-              The episode: <strong>{at.episode.outcome}</strong>. {at.episode.note}
-            </p>
-          ) : null}
           {at.notASecurityResult ? (
             <p className="aside">{at.notASecurityResult}</p>
           ) : null}

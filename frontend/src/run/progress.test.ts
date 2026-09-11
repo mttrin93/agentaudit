@@ -243,8 +243,8 @@ describe('the two layers together', () => {
   })
 })
 
-describe('a budget abort', () => {
-  it('is shown as an abort, and its episode as censored', () => {
+describe('an abort', () => {
+  it('is headed by the word alone, and says nothing the bench has not said', () => {
     const aborted: RunProgress = {
       ...inTheScoredLayer(),
       status: 'aborted',
@@ -259,26 +259,25 @@ describe('a budget abort', () => {
 
     expect(reading.kind).toBe('aborted')
     expect(reading.name).toBe('aborted')
-    expect(reading.episode?.outcome).toBe('censored')
-    expect(reading.episode?.note).toContain('censored')
-    expect(reading.episode?.note).toContain('the attacker stopped')
-    // This screen's own words about the abort, checked apart from the bench's
-    // statement — which says "censored, never as resisted" and would satisfy a
-    // search for the word by containing the sentence that forbids it.
-    const ours = [reading.heading, reading.notASecurityResult, reading.episode?.note]
-    for (const said of ours) {
-      expect(said).not.toContain('resisted')
-      expect(said).not.toContain('defended')
-    }
-    expect(reading.notASecurityResult).toContain('not a result about the target')
+    // *Aborted*, not *aborted at the ceiling*: a ceiling is one of the two things
+    // that abort a run and an operator pressing stop is the other (ADR-0114), so a
+    // heading naming the ceiling would be wrong on half the runs it is drawn over.
+    expect(reading.heading).toBe('Aborted')
+    expect(reading.heading).not.toContain('ceiling')
+
+    // And the screen says nothing of its own about the abort: the censored episode
+    // and the void-rather-than-smaller sentence are both in the run's statement,
+    // where the bench wrote them, and were being said a second time here.
+    expect(reading.notASecurityResult).toBe('')
     expect(reading.statement).toBe(aborted.statement)
   })
 
-  it('is the only standing that names an episode outcome at all', () => {
-    // Nothing else this screen can draw has an episode reading on it, so there is
-    // no branch where an episode acquires a second outcome — and `EpisodeOutcome`
-    // has no second member for one to be spelled with.
+  it('never says a target resisted, whichever of the two stopped it', () => {
+    // The word ADR-0011 forbids, checked over this screen's own words rather than
+    // over the bench's statement — which contains "censored, never as resisted" and
+    // would satisfy a search for the word by containing the sentence that forbids it.
     for (const status of [
+      'aborted',
       'awaiting_approval',
       'running',
       'completed',
@@ -288,7 +287,10 @@ describe('a budget abort', () => {
       'failed',
     ]) {
       const reading = standing({ ...inTheScoredLayer(), status })
-      expect(reading.episode).toBeNull()
+      for (const said of [reading.heading, reading.notASecurityResult]) {
+        expect(said).not.toContain('resisted')
+        expect(said).not.toContain('defended')
+      }
     }
   })
 })
@@ -441,14 +443,27 @@ describe('the six families, while the run is going', () => {
       // nobody has made yet as attempts the target held (ADR-0111).
       rate: '40%',
       // One cell an attempt, over the family's own plan: twelve held, eight broken,
-      // none in flight, and ten not yet attempted — thirty cells, which is `of`.
+      // one on the wire, and nine not yet sent — thirty cells, which is `of`.
       cells: [
         ...Array<string>(12).fill('held'),
         ...Array<string>(8).fill('broke'),
-        ...Array<string>(10).fill('not attempted'),
+        'in flight',
+        ...Array<string>(9).fill('not attempted'),
       ],
       state: 'running',
     })
+    // The in-flight cell is the family the position names, and one cell of it: the
+    // bench attacks one attempt at a time. It cannot come off the counts — `attempted`
+    // counts attempts on the record, every one of those carries a verdict, and the
+    // route builds `succeeded` by subtracting `resisted` from `attempted` — so a strip
+    // built from the four counts alone never drew this colour at all, while the legend
+    // went on naming it.
+    expect(leakage.cells.filter((cell) => cell === 'in flight')).toHaveLength(1)
+    // And it is taken out of what was waiting rather than added to the strip.
+    expect(leakage.cells.indexOf('in flight')).toBeGreaterThan(
+      leakage.cells.lastIndexOf('broke'),
+    )
+
     // The strip is the plan and not the attempts made, so it is `of` cells long
     // however few have come back.
     expect(leakage.cells).toHaveLength(leakage.of)
@@ -476,6 +491,36 @@ describe('the six families, while the run is going', () => {
     // And no rate at all where no attempt has come back: a family attempted no times
     // has not been let through zero times, and `0%` is the reading that says it has.
     expect(injection.rate).toBe('—')
+  })
+
+  it('puts nothing on the wire outside the family the position names', () => {
+    // One position, one family. Read over both lists, because the six alone cannot
+    // tell this apart: the other family in them has no plan and so draws no cell
+    // whatever is passed, while `pii_leakage` is ten of thirty and would take one.
+    const going = inTheScoredLayer()
+    const elsewhere = [...familyRows(going), ...electiveRows(going)].filter(
+      (row) => row.family !== 'data_leakage',
+    )
+
+    // The fixture has to be able to fail this, or it asserts nothing: somebody
+    // outside the position's family with attempts still waiting.
+    expect(elsewhere.some((row) => row.of > row.attempted)).toBe(true)
+    for (const row of elsewhere) {
+      expect(row.cells).not.toContain('in flight')
+    }
+  })
+
+  it('has nothing in flight once the run has stopped', () => {
+    // The position is the last attempt the scored layer *entered* and it stays on the
+    // reading after the run settles, so the status has to be read with it: a finished
+    // suite would otherwise hold one cell in flight forever, and an aborted one would
+    // draw a cell for the attempt it refused to send (ADR-0007, ADR-0114).
+    for (const status of ['completed', 'aborted', 'failed', 'awaiting_approval']) {
+      const stopped = { ...inTheScoredLayer(), status }
+      for (const row of [...familyRows(stopped), ...electiveRows(stopped)]) {
+        expect(row.cells).not.toContain('in flight')
+      }
+    }
   })
 
   it('says where each family is, off the counts and the scored position alone', () => {

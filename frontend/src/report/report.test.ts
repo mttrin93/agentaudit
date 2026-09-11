@@ -57,6 +57,7 @@ import {
   verificationReading,
 } from './report'
 import { readFamily } from '../families'
+import screen from './ReportScreen.tsx?raw'
 import { SERVED } from './served.fixture'
 
 /** Words no key anywhere in the view may contain (ADR-0005, D12). */
@@ -1412,6 +1413,29 @@ describe('the exchanges behind the attacks that worked', () => {
     }
     expect(nothing.stated).toContain('no attempt')
     expect(nothing.note).toBe(NOT_PART_OF_THE_ARTEFACT)
+  })
+})
+
+describe('a run that produced no report', () => {
+  it('is one sentence pointing at the run, and not the run’s whole statement', () => {
+    // A run that stopped — a ceiling, an operator's stop, a transport failure — has
+    // nothing to show on this page, and nothing partial is drawn in its place because
+    // half a report reads as a finished one. What was drawn instead was a red refusal
+    // panel carrying the run's entire statement: where it stopped and why, on the
+    // screen somebody opened to read the document.
+    expect(screen).toContain('This run produced no report')
+    expect(screen).not.toContain('This run has no report')
+    expect(screen).not.toContain('Nothing partial is shown in its place')
+
+    // And the sentence it is replaced by carries the link that does say why, so the
+    // fact is not lost — it is one screen further on, where the run's own words are.
+    expect(screen).toContain('the run&rsquo;s own screen</Link> says why')
+
+    // The statement itself is not carried into this screen's state at all: `noReport`
+    // is a flag, and a screen holding the sentence would be one edit away from
+    // drawing it again.
+    expect(screen).toContain('noReport: boolean')
+    expect(screen).not.toContain('noReport: progress.statement')
   })
 })
 

@@ -39,6 +39,7 @@ import type {
   ScoredProgress,
   TransportOutcome,
 } from '../api/bench'
+import type { RunEpisodes } from '../api/attempts'
 import type { Layer } from './interrupt'
 import { AWAITING_APPROVAL } from './interrupt'
 
@@ -388,6 +389,56 @@ export function progressView(progress: RunProgress): ProgressView {
 // --- the six families, while the run is going ------------------------------------
 
 /**
+ * How much of the scored layer's planned work has been done.
+ *
+ * **A share of the work and never a rate.** The two numbers are attempts *made* over
+ * attempts *planned* — both counts of what this bench has done — and neither is a
+ * reading taken against the target. That is the line
+ * [ADR-0110](../../../docs/adr/0110-a-run-may-show-how-much-of-its-own-work-is-done.md)
+ * draws through ADR-0005's *no total across them*: what may not be added is the
+ * families' **rates**, because a rate has a denominator of its own and a mean over six
+ * of them is a figure no family was ever measured at. A count of attempts made has no
+ * such denominator, and the run's own completion is the one question this screen
+ * exists to answer.
+ *
+ * **The six alone**, because the two tiers are two closed sets this app concatenates
+ * nowhere (ADR-0035 §2). A bar over nine would be a denominator built from both.
+ *
+ * **The scored layer alone**, because an attempt and a turn are different units and no
+ * adaptive quantity may reach a scored one (ADR-0010). The adaptive layer's position is
+ * on its own line, in its own units, as it was.
+ *
+ * Families the plan dropped contribute nothing to either number: their `of` is zero, so
+ * a run that is not attacking a family is not a run that is behind on it.
+ */
+export interface RunShare {
+  made: number
+  planned: number
+  /** The width of the filled part, for the bar. A length, and not a number read. */
+  done: string
+  /** The same length as a whole percent, which is the only figure of it printed. */
+  percent: string
+}
+
+/**
+ * The share, off the six families' served counts and nothing else.
+ *
+ * Rounded down to a whole percent for printing: a run at 99.6% of its plan has not
+ * finished, and a figure that says *100%* over a bar still moving is the one reading
+ * this line must not give.
+ */
+export function scoredShare(progress: RunProgress): RunShare {
+  const made = progress.families.reduce((sum, family) => sum + family.attempted, 0)
+  const planned = progress.families.reduce((sum, family) => sum + family.of, 0)
+  return {
+    made,
+    planned,
+    done: share(made, planned),
+    percent: `${planned === 0 ? 0 : Math.floor((made / planned) * 100)}%`,
+  }
+}
+
+/**
  * One family's row: the counts it was served, and the three lengths they draw.
  *
  * The same reading the gate screen draws for a gate run, over one target instead of
@@ -411,6 +462,115 @@ export interface FamilyRow {
   done: string
   held: string
   broke: string
+  /**
+   * The two counts behind `held` and `broke`, carried and never divided.
+   *
+   * The row prints how many of this family's attempts the target let through beside
+   * how many were made, which is two counts over one denominator and not a rate: a
+   * rate arrives on the report with its interval and its band, over a denominator that
+   * has stopped moving (ADR-0005). Nothing on this screen divides them, and
+   * `progress.test.ts` reads the view for the quotient.
+   */
+  succeeded: number
+  resisted: number
+  /**
+   * How many of this family's answered attempts the target let through, as a percent.
+   *
+   * A **per-family** rate over that family's own denominator, which is the shape
+   * ADR-0005 prescribes — and a point estimate with no interval beside it, over a
+   * denominator that is still moving, which is what makes it a reading of the run and
+   * not the measurement
+   * ([ADR-0111](../../../docs/adr/0111-the-run-screen-shows-a-live-per-family-rate.md)).
+   * The figure a recipient is handed arrives on the report with its Wilson interval,
+   * its verdict class and its band.
+   *
+   * Taken over `attempted` and never over `of`: a rate over the plan would count
+   * attempts that have not been made yet as attempts the target held, which is the one
+   * direction a live figure must not be wrong in.
+   *
+   * `—` until an attempt has come back, on `succeeded_attempts`' own terms: a family
+   * attempted no times has not been let through zero times, and `0%` is the reading
+   * that would say it had.
+   */
+  rate: string
+  /**
+   * One cell an attempt, in this family's own plan.
+   *
+   * `of` cells, each naming what is known about one attempt — answered and held,
+   * answered and broken, sent and not yet back, or not yet sent. What is drawn is the
+   * **counts**, laid out in that order, and never the sequence the attempts actually
+   * ran in: the route serves four counts per family and no per-attempt list, so a
+   * strip that interleaved them would be this app inventing an order for a reader to
+   * read a pattern off.
+   */
+  cells: readonly Cell[]
+  /**
+   * Where this family is in the run, in one word.
+   *
+   * Read off the counts and off the family the scored layer says it is in, and off
+   * nothing else. Not a figure and not a verdict: a family that has finished its plan
+   * has not defended anything, which is what `held` and `broke` are beside it for.
+   */
+  state: FamilyState
+}
+
+/** What is known about one attempt, for the cell that stands for it. */
+export type Cell = 'held' | 'broke' | 'in flight' | 'not attempted'
+
+/** Where a family is in the run's plan. Never a reading of how it answered. */
+export type FamilyState = 'complete' | 'running' | 'queued' | 'not run'
+
+/**
+ * One family's attempts as cells, from the four counts the route serves.
+ *
+ * In one order every time — held, broken, in flight, not yet attempted — because that
+ * order is the only one the served counts support. The strip is a count made legible
+ * and it is deliberately not a timeline.
+ */
+function rateOf(succeeded: number, attempted: number): string {
+  return attempted === 0 ? '—' : `${Math.round((succeeded / attempted) * 100)}%`
+}
+
+function cellsFor(
+  resisted: number,
+  succeeded: number,
+  attempted: number,
+  of: number,
+): readonly Cell[] {
+  const inFlight = Math.max(attempted - resisted - succeeded, 0)
+  const waiting = Math.max(of - attempted, 0)
+  return [
+    ...Array<Cell>(resisted).fill('held'),
+    ...Array<Cell>(succeeded).fill('broke'),
+    ...Array<Cell>(inFlight).fill('in flight'),
+    ...Array<Cell>(waiting).fill('not attempted'),
+  ]
+}
+
+/**
+ * Which of the four words a family's row carries.
+ *
+ * *not run* first, because a family with no plan is out of the run whatever the
+ * counts say; then *running*, which is the scored layer's own position and not a
+ * guess off the counts — a family can have attempts back and be the one in flight,
+ * and only the position says so.
+ *
+ * Both names go through `readFamily` before they are compared, which is the one place
+ * in this app a family name is not used as a lookup key. The position's family and a
+ * row's family are the same closed set arriving by two routes, and the comparison has
+ * to survive either spelling of it: the underscore is the only character between them.
+ */
+function stateOf(row: FamilyRun | ElectiveFamilyRun, running: string): FamilyState {
+  if (row.of === 0) {
+    return 'not run'
+  }
+  if (running !== '' && readFamily(row.family) === readFamily(running)) {
+    return 'running'
+  }
+  if (row.attempted >= row.of) {
+    return 'complete'
+  }
+  return row.attempted === 0 ? 'queued' : 'running'
 }
 
 /**
@@ -421,6 +581,7 @@ export interface FamilyRow {
  * a length and not a number anybody reads.
  */
 export function familyRows(progress: RunProgress): readonly FamilyRow[] {
+  const running = progress.scored.position?.family ?? ''
   return progress.families.map((family: FamilyRun) => ({
     family: family.family,
     name: readFamily(family.family),
@@ -430,6 +591,11 @@ export function familyRows(progress: RunProgress): readonly FamilyRow[] {
     done: share(family.attempted, family.of),
     held: share(family.resisted, family.of),
     broke: share(family.succeeded, family.of),
+    succeeded: family.succeeded,
+    resisted: family.resisted,
+    rate: rateOf(family.succeeded, family.attempted),
+    cells: cellsFor(family.resisted, family.succeeded, family.attempted, family.of),
+    state: stateOf(family, running),
   }))
 }
 
@@ -457,6 +623,7 @@ export function familyRows(progress: RunProgress): readonly FamilyRow[] {
  * family is the report (ADR-0095).
  */
 export function electiveRows(progress: RunProgress): readonly FamilyRow[] {
+  const running = progress.scored.position?.family ?? ''
   return (progress.elective_families ?? []).map((family: ElectiveFamilyRun) => ({
     family: family.family,
     name: readFamily(family.family),
@@ -466,6 +633,11 @@ export function electiveRows(progress: RunProgress): readonly FamilyRow[] {
     done: share(family.attempted, family.of),
     held: share(family.resisted, family.of),
     broke: share(family.succeeded, family.of),
+    succeeded: family.succeeded,
+    resisted: family.resisted,
+    rate: rateOf(family.succeeded, family.attempted),
+    cells: cellsFor(family.resisted, family.succeeded, family.attempted, family.of),
+    state: stateOf(family, running),
   }))
 }
 
@@ -480,6 +652,56 @@ export function electiveRows(progress: RunProgress): readonly FamilyRow[] {
  */
 export function hasLength(width: string): boolean {
   return parseFloat(width) > 0
+}
+
+/**
+ * The adaptive layer's last turn, as the screen draws it: one, or none.
+ *
+ * **A second function over a second read, and the two never meet.** The scored
+ * exchange comes off `RunProgress.recent` and this comes off
+ * `GET /runs/{id}/episodes`, which is a different route holding a different record —
+ * an `AdaptiveEpisode` is not an `Attempt`, and a list this app concatenated would be
+ * the one place a turn could be counted as an attempt (ADR-0010).
+ *
+ * The **last** turn of the **last** episode, on `payloads`' own rule: what a person
+ * watching a run wants is where the attacker is now, and the whole route is the
+ * episodes screen's business. An episode that sent nothing yields nothing.
+ *
+ * `reading` is the bench's own word for what the turn was found to be — *broke it*,
+ * *no break*, *not checkable* — and never a verdict: an episode has no verdict, and
+ * there is no name in this app for an episode that resisted (ADR-0010, ADR-0011).
+ */
+export interface TurnRow {
+  key: string
+  name: string
+  episode: number
+  turn: number
+  sent: string
+  reply: string
+  reading: string
+}
+
+export function turns(held: RunEpisodes): readonly TurnRow[] {
+  if (!held.held || held.episodes.length === 0) {
+    return []
+  }
+  const at = held.episodes.length - 1
+  const episode = held.episodes[at]
+  const last = episode.probes.at(-1)
+  if (last === undefined) {
+    return []
+  }
+  return [
+    {
+      key: `${at}/${last.turn}`,
+      name: readFamily(episode.family),
+      episode: at + 1,
+      turn: last.turn,
+      sent: last.probe,
+      reply: last.reply,
+      reading: last.reading,
+    },
+  ]
 }
 
 /** A segment's length, and `0%` for a family that has not started or has no cases. */
@@ -497,6 +719,11 @@ export interface PayloadRow {
   key: string
   sent: string
   reply: string
+  /** What the attempt was, for the line over the exchange. All served, none derived. */
+  caseId: string
+  attempt: number
+  name: string
+  verdict: string
 }
 
 /**
@@ -514,5 +741,9 @@ export function payloads(progress: RunProgress): readonly PayloadRow[] {
     key: `${one.case_id}/${one.attempt}`,
     sent: one.sent,
     reply: one.reply,
+    caseId: one.case_id,
+    attempt: one.attempt,
+    name: readFamily(one.family),
+    verdict: one.verdict,
   }))
 }

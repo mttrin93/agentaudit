@@ -116,14 +116,21 @@ class Supervision(StrEnum):
         return cls.CONFIRMED if stated else cls.UNSUPERVISED
 
     def stated(self) -> str:
-        """This declaration in the words the report prints it in."""
+        """This declaration in the words the report prints it in.
+
+        Three words each, where it was a clause each: the key in front of it is
+        *supervision*, so the answer does not have to name its own question
+        (ADR-0109). *Not stated* rather than a sentence about nobody having said, on
+        the same terms as the `not stated:` key above it — the third answer is a third
+        answer and never a silence to be read as *unsupervised*.
+        """
         match self:
             case Supervision.CONFIRMED:
-                return "a human confirms what it does inside the session"
+                return "a human confirms"
             case Supervision.UNSUPERVISED:
-                return "no human confirms what it does inside the session"
+                return "no human confirms"
             case Supervision.NOT_STATED:
-                return "nobody said whether a human confirms what it does"
+                return "not stated"
 
 
 class RuleOfTwoStanding(StrEnum):
@@ -272,6 +279,13 @@ class RuleOfTwo:
         that named only what was held would leave a reader unable to tell a property
         declared absent from one nobody was asked about, which is the distinction the
         record exists to keep.
+
+        **Every part of it is shorter than it was, and none of it says less**
+        ([ADR-0109](../../docs/adr/0109-the-rule-of-two-block-is-shortened-and-says-the-same-things.md)).
+        Four keys, one reading, one sentence about what none of it is: what came out
+        was restatement — an absence located on the operator's side of a boundary, an
+        attempt named twice in three clauses — and what is kept is every distinction
+        the arms and the three keys turn on.
         """
         return f"{self._declaration()} — {self._reading()}. {NOT_A_MEASUREMENT}"
 
@@ -289,30 +303,26 @@ class RuleOfTwo:
         match self.standing:
             case RuleOfTwoStanding.NOT_DECLARED:
                 return (
-                    "not declared, so the rule was not read. An absence on the "
-                    "operator's side of the boundary, and nothing was attempted "
-                    "against it"
+                    "not declared, so the rule was not read, and nothing was "
+                    "attempted against it"
                 )
             case RuleOfTwoStanding.PARTLY_DECLARED:
                 return (
-                    "partly declared: nothing here is declared absent and something "
-                    "is unsaid, so what this target holds could still be two of the "
-                    "three or all three, and the scan does not say which shape this "
-                    "is. Declared, never inferred — the bench does not guess a "
-                    "capability from a tool name"
+                    "partly declared: something is unsaid and nothing is declared "
+                    "absent, so this target could hold two of the three or all "
+                    "three, and the scan does not say which. Declared, never "
+                    "inferred"
                 )
             case RuleOfTwoStanding.AT_MOST_TWO:
                 return (
                     "at most two of the three, which is the shape the rule permits: "
-                    "a property the operator declares this agent does not have is "
-                    "one it cannot hold, whatever else went unsaid. The rule warns "
-                    "about an agent holding all three unsupervised"
+                    "a property declared absent is one this agent cannot hold, "
+                    "whatever else went unsaid"
                 )
             case RuleOfTwoStanding.THREE_UNDER_SUPERVISION:
                 return (
-                    "all three, under human supervision. The rule warns about an "
-                    "agent holding all three *unsupervised*, so what is declared "
-                    "here is not that shape"
+                    "all three, under human supervision — the rule warns about all "
+                    "three *unsupervised*, which is not this shape"
                 )
             case RuleOfTwoStanding.THREE_UNSUPERVISED:
                 return (
@@ -322,9 +332,8 @@ class RuleOfTwo:
 
 
 NOT_A_MEASUREMENT = (
-    "Nothing was sent to establish any of this: it is what the operator declared "
-    "about their own agent, read against a published rule. No attempt was made "
-    "against it, no verdict lies behind it, and it is not a finding"
+    "Nothing was sent to establish any of this: it is the operator's own declaration, "
+    "read against a published rule. No verdict lies behind it and it is not a finding"
 )
 """What every reading above says about itself, in one wording rather than five.
 
@@ -332,6 +341,11 @@ Appended once by `stated()` instead of hand-written on each arm, on the discipli
 `contract.NOT_A_SECURITY_RESULT` follows: a sentence this load-bearing, written five
 times, only has to drift once for one standing to be presented as something the bench
 established. The arm that most needs it is the one that reads most like a finding.
+
+Three claims and no fourth, since ADR-0109: nothing was sent, no verdict lies behind
+it, it is not a finding. *No attempt was made against it* was the fourth and it was the
+second of those twice over — a verdict is what an attempt would have produced — and the
+one arm where an attempt is worth naming in its own right names it (`NOT_DECLARED`).
 """
 
 

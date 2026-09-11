@@ -58,16 +58,21 @@ import {
   adaptiveReading,
   electiveRows,
   familyRows,
-  hasLength,
   payloads,
   scoredReading,
+  scoredShare,
   standing,
   stillGoing,
+  turns,
   type FamilyRow,
   type LayerReading,
   type PayloadRow,
   type Standing,
+  type TurnRow,
 } from './progress'
+// The adaptive layer's probes, off the route that holds them: a second record, read
+// beside the progress and never folded into it (ADR-0010).
+import { runEpisodes, type RunEpisodes } from '../api/attempts'
 // The two verdict colours and the two words beside them, from the one place they are
 // declared. A second copy here would be a second answer to *which green is resisted*,
 // and the two would only have to disagree once.
@@ -88,6 +93,7 @@ import {
 export function RunScreen() {
   const { runId = '' } = useParams()
   const [progress, setProgress] = useState<RunProgress | null>(null)
+  const [episodes, setEpisodes] = useState<RunEpisodes | null>(null)
   const [unavailable, setUnavailable] = useState('')
   const [refused, setRefused] = useState('')
   const [busy, setBusy] = useState(false)
@@ -127,6 +133,23 @@ export function RunScreen() {
       const now = await runProgress(runId)
       setProgress(now)
       setUnavailable('')
+      /*
+        The adaptive layer's probes, read on the same tick and kept apart.
+
+        A second request against a second route, because they are two records: the
+        progress reading holds the scored layer's last exchange, and this holds the
+        episodes the process is still carrying — committed nowhere, gone at a restart,
+        and reaching no artefact (ADR-0008, amended, and the route's own `stated`).
+        Nothing merges the two, and an episode that has not started leaves the block
+        undrawn rather than empty.
+
+        Its failure is swallowed on purpose: this is the one read on the screen whose
+        answer is not load-bearing, and a run whose progress is arriving perfectly well
+        should not report itself unavailable because the probes did not.
+      */
+      void runEpisodes(runId)
+        .then(setEpisodes)
+        .catch(() => setEpisodes(null))
       // The moment the bench answered, which is what dates every figure below.
       // Recorded on the answer and never on the asking: a poll that never comes back
       // is exactly the failure the stamp is here to make visible.
@@ -340,7 +363,7 @@ export function RunScreen() {
       ) : null}
 
       {at !== null && progress !== null && at.kind !== 'holding' ? (
-        <Progress at={at} progress={progress} runId={runId} />
+        <Progress at={at} progress={progress} episodes={episodes} />
       ) : null}
 
       {progress?.status === REGISTRATION_REFUSED ? (
@@ -406,11 +429,29 @@ function TheInterrupt({
           <dl className="figures">
             {view.figures.map((figure) => (
               <div className="figure" key={figure.layer}>
-                <dt>{figure.label}</dt>
+                {/*
+                  The layer's name, and what kind of figure it is on the same line.
+
+                  `kind` was the third thing on the line under the number — after the
+                  calls and the cost, in the quiet — which put *exact* and *ceiling*
+                  where a reader had already passed both figures they qualify. It is
+                  the qualifier on everything in the box, so it is at the head of the
+                  box, ranged right against the name.
+
+                  The number still carries its own `≤` (`CostFigure`), so nothing here
+                  is the only place the epistemic status is said.
+                */}
+                <dt>
+                  <span className="what">{figure.label}</span>
+                  <span className="kind">{figure.kind}</span>
+                </dt>
+                {/* The calls, the money under them, and the basis under that: one
+                    figure to a line, so the two boxes' numbers sit at the same height
+                    beside each other and a reader compares down a column rather than
+                    across a wrapped line. */}
                 <dd>
                   <span className="calls">{figure.calls} calls</span>
                   <span className="money">{figure.cost}</span>
-                  <span className="kind">{figure.kind}</span>
                   <span className="aside">{figure.basis}</span>
                 </dd>
               </div>
@@ -483,11 +524,11 @@ function TheInterrupt({
 function Progress({
   at,
   progress,
-  runId,
+  episodes,
 }: {
   at: Standing
   progress: RunProgress
-  runId: string
+  episodes: RunEpisodes | null
 }) {
   /*
    * The standing's own status word and sentence are not drawn.
@@ -522,78 +563,162 @@ function Progress({
       ) : null}
 
       <section>
-        <h2>Where the run has got to, one layer at a time</h2>
-        <div className="layers">
-          <LayerPanel reading={scoredReading(progress.scored)} />
-          <LayerPanel reading={adaptiveReading(progress.adaptive)} />
+        {/*
+          The run's own state and where it is, in place of a heading.
+
+          *Where the run has got to, one layer at a time* stood here — a sentence that
+          described the two things under it, over a screen whose `h1` already says what
+          the run is doing. What a person watching a run wants at the top is the state
+          and the position, which is what this line is: the standing's own word with a
+          mark beside it, then the scored layer's position, then what that layer has
+          spent.
+
+          **What is not in it, and why.** A bar across the whole run, a percentage, a
+          count of attempts over every family, one blended call figure and a cost: those
+          are a total across families, which this instrument does not have — every
+          family is reported over its own denominator and there is no total across them
+          (ADR-0005) — and a call count spanning the layers, which hides which half of
+          the run is spending (ADR-0007, ADR-0010). Elapsed and remaining are not on the
+          wire at all. The per-family figures are the table below, in the columns they
+          belong to.
+        */}
+        <p className={`run-state ${at.kind}`}>
+          <span className="dot" aria-hidden="true" />
+          {at.name}
+        </p>
+
+        {/*
+          How much of the scored layer's plan has been done, as a bar and as its two
+          counts.
+
+          **The work done, and not a rate.** Attempts made over attempts planned, both
+          counts of what this bench has done against the six — see `scoredShare`, and
+          ADR-0110, which is where the line through ADR-0005's *no total across them*
+          is drawn: what may not be added is the families' rates.
+
+          Drawn in the scored layer's own colour and never in the two verdict colours,
+          so the length cannot be read as how the target is answering. That reading is
+          the cells in the table, one an attempt.
+        */}
+        <div className="run-share">
+          <div className="track">
+            <span
+              className="segment scored"
+              style={{ width: scoredShare(progress).done }}
+            />
+          </div>
+          <p className="counts">
+            <span className="percent">{scoredShare(progress).percent}</span>
+            <span>
+              {scoredShare(progress).made} / {scoredShare(progress).planned} attempts
+            </span>
+          </p>
         </div>
 
         {/*
-          The same two readings the gate screen draws while a gate run goes, over one
-          target instead of three agents: how far each family has got, and how each is
-          answering. Both are drawn against the same denominator — this run's plan, one
-          family at a time — so no length on the right can outrun the one for the same
-          family on the left, and what is left of either bar is what has not been
-          attempted yet.
+          The scored layer's position on one line over the table, and the adaptive
+          layer's under it.
+
+          Two panels stood here, side by side, each naming its layer's units and the
+          calls spent in it. They are the same two readings — `scoredReading` and
+          `adaptiveReading`, unchanged — set as lines rather than as boxes: the table
+          below is now the thing a person watching a run looks at, and two cards above
+          it pushed the six families off the first screenful.
+
+          **Still one reading a layer, and still nothing across them.** The scored
+          line carries the scored layer's calls and the adaptive line the adaptive
+          layer's, on their own rows in their own units. Nothing here adds them
+          (ADR-0007, ADR-0010).
         */}
-        <div className="watching">
-          <div className="progress">
-            <h3>How far each family has got</h3>
-            {/* One key, because one target made these attempts. It earns its line
-                anyway: nothing on this bench is carried by hue alone, and it holds
-                the six rows here level with the six beside them. */}
-            <p className="legend">
-              <span className="key">
-                <span className="swatch scored" aria-hidden="true" />
+        <LayerLine reading={scoredReading(progress.scored)} />
+
+        {/*
+          The six families as rows of one table, and the elective ones under them.
+
+          Two columns of bars stood here — *how far each family has got*, and *how each
+          family is answering* — which is one question a reader asks of one family, in
+          two places, with the name written twice. In a table the counts line up down
+          their own columns and the attempts themselves are the last column, so what
+          has been made and how it went are read across one row.
+
+          **The strip is counts and never a sequence.** `FamilyRow.cells` lays out the
+          four served counts in one order; the route serves no per-attempt list, so an
+          interleaved strip would be a pattern this app made up for somebody to read
+          something into.
+
+          **No rate in any row.** Two counts over one denominator — the attempts made,
+          and how many of them the target let through — and the quotient of them is a
+          measurement that arrives on the report with its interval and its band, over a
+          denominator that has stopped moving (ADR-0005).
+
+          **Two lists and nowhere they meet.** `electiveRows` reads the route's second
+          list and the two maps stay two maps, so no count here is taken against a
+          denominator from the other tier and nothing on the screen is a figure over
+          the nine (ADR-0035 §2, ADR-0088).
+        */}
+        <table className="attempts">
+          <thead>
+            <tr>
+              <th scope="col">family</th>
+              <th scope="col" className="figure-cell">
                 attempted
-              </span>
-            </p>
-            {familyRows(progress).map((row) => (
-              <FamilyBar row={row} key={row.family} />
-            ))}
+              </th>
+              <th scope="col" className="figure-cell">
+                succeeded
+              </th>
+              <th scope="col" className="figure-cell">
+                rate
+              </th>
+              <th scope="col" className="attempts-cell">
+                attempts
+              </th>
+              <th scope="col" className="state-cell">
+                state
+              </th>
+            </tr>
+          </thead>
+          <tbody>
             {/*
-              And the elective families this run asked for, directly under the six
-              and drawn by the same component.
+              `widest` is the longest plan in the table, and every strip is drawn as a
+              share of it: a family of four attempts takes four fifths of the width a
+              family of five does, so *one cell = one attempt* holds across the rows
+              and not only inside one. Without it the cells were a fixed few pixels and
+              the column was mostly empty at every plan this bench actually runs.
 
-              **Two lists and nowhere they meet.** `electiveRows` reads the route's
-              second list, and the two maps stay two maps: this app concatenates the
-              tiers nowhere, so no length here is taken against a denominator from
-              the other list and nothing on the screen is a figure over the nine
-              (ADR-0035 §2, ADR-0088). What they share is a bar, which is a length
-              and not a rate anybody reads.
-
-              Empty for a run that asked the tier for nothing, and empty for a run
-              made before the tier could be asked for: the six are always six rows,
-              and three rows of *not asked for* under a person's own bars say nothing
-              about where their run has got to. The absences the tier owes a reader
-              are stated in the artefact, which is the document that has to account
-              for every family (ADR-0094).
+              A maximum across both lists and not a denominator built from them: it is
+              a length, nothing is added, and no figure is read off it. The two maps
+              stay two maps (ADR-0035 §2).
             */}
-            {electiveRows(progress).map((row) => (
-              <FamilyBar row={row} key={row.family} />
-            ))}
-          </div>
-          <div className="answering">
-            <h3>How each family is answering</h3>
-            <p className="legend">
-              {ANSWER_KEYS.map((key) => (
-                <span className="key" key={key.answer}>
-                  <span className={`swatch ${key.accent}`} aria-hidden="true" />
-                  {key.answer}
-                </span>
-              ))}
-            </p>
             {familyRows(progress).map((row) => (
-              <FamilyAnswer row={row} key={row.family} />
+              <FamilyLine row={row} widest={widestPlan(progress)} key={row.family} />
             ))}
-            {/* The same nine rows on this side, in the same order and by the
-                same rule: two maps, and no verdict length taken against the other
-                tier's denominator. */}
             {electiveRows(progress).map((row) => (
-              <FamilyAnswer row={row} key={row.family} />
+              <FamilyLine row={row} widest={widestPlan(progress)} key={row.family} />
             ))}
-          </div>
-        </div>
+          </tbody>
+        </table>
+
+        {/* The two verdict words and the two states of an attempt, named rather than
+            left to hue: nothing on this bench is carried by colour alone. */}
+        <p className="legend">
+          {ANSWER_KEYS.map((key) => (
+            <span className="key" key={key.answer}>
+              <span className={`swatch ${key.accent}`} aria-hidden="true" />
+              {key.answer}
+            </span>
+          ))}
+          <span className="key">
+            <span className="swatch in-flight" aria-hidden="true" />
+            in flight
+          </span>
+          <span className="key">
+            <span className="swatch waiting" aria-hidden="true" />
+            not yet attempted
+          </span>
+          <span className="unit">one cell = one attempt</span>
+        </p>
+
+        <LayerLine reading={adaptiveReading(progress.adaptive)} />
 
         {/* The call it is on, under both columns and at the width of the page: an
             exchange is a paragraph of somebody's traffic and it reads badly in half
@@ -608,105 +733,130 @@ function Progress({
             payloads(progress).map((one) => <Payload one={one} key={one.key} />)
           )}
         </div>
+
+        {/*
+          And the adaptive layer's last turn, in a block of its own.
+
+          **Two blocks and never one list.** The scored exchange above is an attempt —
+          the unit of a denominator — and this is a turn inside an episode, which is
+          deliberately not one (CONTEXT.md, ADR-0010). They are read off two routes and
+          drawn by two components, so there is no list in this app a turn could be
+          counted in.
+
+          Drawn only when the layer has sent something. A block saying *nothing yet*
+          for the layer that runs last would stand empty under the whole of a scored
+          run, and the layer's own line above the table already says where it is.
+        */}
+        {turns(episodes ?? { held: false, run_id: '', stated: '' }).map((one) => (
+          <div className="payloads" key={one.key}>
+            <h3>The last turn</h3>
+            <Turn one={one} />
+          </div>
+        ))}
       </section>
 
-      {progress.report ? (
-        <section>
-          {/*
-            The three artefacts, as three links and their names.
+      {/*
+        No report section on this screen.
 
-            `report.statement` is not drawn: it named the three files and said what
-            `scripts/verify.py` does with a directory containing them, which is a
-            paragraph above a list of exactly those three links. The sentence is still
-            on the wire and the report screen is where it is read.
-          */}
-          <h2>The report</h2>
-          <p className="consequence">
-            <Link to={`/runs/${runId}/report`}>Read the report</Link> — the finding,
-            the per-family figures and whether the artefact verifies.
-          </p>
-          <ul>
-            <li>
-              <a href={progress.report.path}>the signed payload</a>
-            </li>
-            <li>
-              <a href={progress.report.rendering}>the rendered view</a>
-            </li>
-            <li>
-              <a href={progress.report.signature}>the detached signature</a>
-            </li>
-          </ul>
-        </section>
-      ) : null}
+        Three artefact links and a link to the report screen stood here, under a
+        heading. They are one press away in the rail — *Signed artefacts* lists every
+        artefact this bench has signed, with the same three files and the same
+        verification beside each — and this screen is where a run is *watched*: a
+        block that appears only once the run is over, at the foot of a page somebody
+        has been watching for an hour, is a destination and not a reading.
+
+        `progress.report` is still served and still typed, and `report.statement` is
+        still the sentence naming the three files and what `scripts/verify.py` does
+        with a directory holding them. Nothing here reads either.
+      */}
     </>
   )
 }
 
 /**
- * One family, and how much of its work is done: one bar over its own denominator.
+ * The longest plan in the table, for the strips to be drawn as a share of.
  *
- * The count beside the name is the two figures the bar is drawn from, so the length
- * is checkable rather than believable. A family the plan dropped has no bar at all —
- * an empty track over a denominator of zero reads as one that has not started yet,
- * and this one is never going to.
+ * A length and not a figure: it sizes a cell and nothing on the screen is read off it.
+ * Taken over both lists because the strips share one column and a scale that differed
+ * between the six and the tier would put two cell sizes under one heading — which is
+ * the one thing *one cell = one attempt* cannot survive.
  */
-function FamilyBar({ row }: { row: FamilyRow }) {
-  return (
-    <div className="family-bar">
-      <p className="family-name">
-        <span className="name">{row.name}</span>
-        <span className="count">
-          {row.notRun ? 'not run' : `${row.attempted} / ${row.of}`}
-        </span>
-      </p>
-      {/* The empty track is drawn for a family that is not run as well, so the rows
-          here and the rows beside them stay level with each other. Which of the two
-          kinds of empty it is, is the word in the slot above — `not run` rather than
-          `0 / 30`. **Why** it was not run is not on this screen: the reasons are one
-          sentence per family and there are nine families, so a run in flight would
-          carry a page of prose about the attempts it is not making. They are in the
-          report, which is the document that has to account for every family
-          (ADR-0035, ADR-0094). */}
-      <div className="track">
-        <span className="segment scored" style={{ width: row.done }} />
-      </div>
-    </div>
+function widestPlan(progress: RunProgress): number {
+  return Math.max(
+    0,
+    ...familyRows(progress).map((row) => row.of),
+    ...electiveRows(progress).map((row) => row.of),
   )
 }
 
 /**
- * One family, and how it is answering: one bar, green into red, over the same
- * denominator.
+ * One family as a row: the counts, the attempts themselves, and where it has got to.
  *
- * The one place this screen colours a verdict, which is why the two colours are named
- * in words above the six. It is a live reading of a run and not a measurement: what is
- * left of the bar is what has not been attempted yet, and the rate — with its interval
- * and its band — is on the report the run signs (ADR-0005).
+ * Two bars stood here, in two columns, each with the family's name beside it — one for
+ * how much of the work was done and one for how it was going. They are one row now,
+ * and the counts are read down their own columns instead of off the ends of bars.
  *
- * No figure beside the name. The slot to its right holds `20 / 30` on the bar to the
- * left, and a second pair of numbers in the same place meaning something else is a
- * fraction a reader would read as that one.
+ * **The counts are the bench's and this row divides none of them.** *Attempted* is the
+ * family's own denominator with the attempts made against it, and *succeeded* is how
+ * many of those the target let through. The quotient of the two is a rate, and a rate
+ * arrives on the report with its interval and its band, over a denominator that has
+ * stopped moving (ADR-0005).
+ *
+ * A family the plan dropped says `not run` where the fraction goes and draws a strip
+ * of nothing: an empty strip over a denominator of zero would read as one that has not
+ * started yet, and this one is never going to. **Why** it was not run is not on this
+ * screen — one sentence per family over nine families, on a run in flight — and it is
+ * in the report, which is the document that has to account for every family
+ * (ADR-0035, ADR-0094).
  */
-function FamilyAnswer({ row }: { row: FamilyRow }) {
+function FamilyLine({ row, widest }: { row: FamilyRow; widest: number }) {
   return (
-    <div className="family-bar">
-      <p className="family-name">
-        <span className="name">{row.name}</span>
-      </p>
+    <tr>
+      <th scope="row">{row.name}</th>
+      <td className="figure-cell">
+        {row.notRun ? 'not run' : `${row.attempted} / ${row.of}`}
+      </td>
+      {/* Nothing rather than a zero where no attempt has come back: a family that has
+          been attempted no times has not been let through zero times, and `0` in this
+          column is a count somebody would read as one. */}
+      <td className="figure-cell broke">
+        {row.attempted === 0 ? '—' : row.succeeded}
+      </td>
       {/*
-        Only the segments that have a length. Where both are there the CSS crosses one
-        colour into the other, and it finds the join by asking whether the green has a
-        red after it — a `0%` span left in the markup would answer yes.
+        The share of this family's answered attempts the target let through — a
+        per-family rate over that family's own denominator, which is the shape
+        ADR-0005 prescribes, and a point estimate over a denominator that is still
+        moving, which is why ADR-0111 calls it a reading of the run. The measurement a
+        recipient is handed is on the report, with its Wilson interval, its verdict
+        class and its band.
+
+        Nothing sums this column, and there is nothing under it to sum it into: six
+        rates over six denominators are six figures, and the one number this project
+        exists to refuse is their mean (ADR-0005).
       */}
-      <div className="track">
-        {hasLength(row.held) ? (
-          <span className="segment resisted" style={{ width: row.held }} />
-        ) : null}
-        {hasLength(row.broke) ? (
-          <span className="segment succeeded" style={{ width: row.broke }} />
-        ) : null}
-      </div>
-    </div>
+      <td className="figure-cell broke">{row.rate}</td>
+      <td className="attempts-cell">
+        {/*
+          One cell an attempt, in the four states one attempt can be in. Counts laid
+          out in one order and never the order they ran in (`FamilyRow.cells`), and
+          each cell carries its state as a word for a reader who cannot tell the hues
+          apart — the legend under the table names all four.
+        */}
+        <span
+          className="cells"
+          style={{ width: widest === 0 ? '0' : `${(row.of / widest) * 100}%` }}
+        >
+          {row.cells.map((cell, index) => (
+            <span
+              className={`cell ${cell.replace(' ', '-')}`}
+              key={index}
+              title={cell}
+            />
+          ))}
+        </span>
+      </td>
+      <td className={`state-cell ${row.state.replace(' ', '-')}`}>{row.state}</td>
+    </tr>
   )
 }
 
@@ -722,84 +872,111 @@ function FamilyAnswer({ row }: { row: FamilyRow }) {
 function Payload({ one }: { one: PayloadRow }) {
   return (
     <div className="payload">
+      {/*
+        Which attempt this was, over the two turns of it.
+
+        The case, the attempt's number within it, the family it belongs to, and the
+        verdict the bench reached — all four served on the exchange and none derived.
+        The exchange was drawn with nothing saying which attempt it was, so a reader
+        watching a run could not tell the call on the screen from the one before it.
+
+        The verdict is a word at the end of the line and the turns stay uncoloured:
+        *succeeded* and *resisted* are the two answers this bench counts, and a green
+        turn beside a red one is the severity scale ADR-0005 exists to refuse.
+      */}
+      <p className="which">
+        <span className="of">last call</span>
+        <code>{one.caseId}</code>
+        <span>attempt {one.attempt}</span>
+        <span>{one.name}</span>
+        <span className="verdict">verdict: {one.verdict}</span>
+      </p>
+      {/*
+        Who said it, over what they said, rather than a mark beside it.
+
+        Both ends are agents — the bench's attacker and the target answering it — and
+        the two words are this project's own for them (CONTEXT.md), so neither turn is
+        told from the other by which side of the card it sits on. A reader coming to
+        the exchange cold now reads the speaker rather than decoding the layout.
+      */}
       <div className="turn sent">
-        <Speaker />
+        <p className="who">attacker</p>
         <p className="bubble">{one.sent}</p>
       </div>
       <div className="turn reply">
+        <p className="who">target</p>
         <p className="bubble">{one.reply}</p>
-        <Speaker />
       </div>
     </div>
   )
 }
 
 /**
- * One speaker's mark: the same drawing on both turns, in that turn's own colour.
+ * One turn of an episode: what the attacker composed, and what came back.
  *
- * The same glyph deliberately. Both ends of this exchange are agents — the bench's
- * attacker and the target answering it — and drawing them as two different creatures
- * would say something about the pair that is not true. What differs is which side of
- * the card the turn sits on, which is the order the two happened in: the attack, then
- * the answer to it.
+ * `Payload`'s shape and not `Payload` itself, which is the split the two records are
+ * under: an attempt names a case and carries a verdict, and a turn names an episode and
+ * carries a reading — *broke it*, *no break*, *not checkable* — because an episode has
+ * no verdict and there is no name in this app for one that resisted (ADR-0011).
  *
- * Hand-drawn at 16px in `currentColor`, the rail's own idiom, so the colour comes off
- * the stylesheet and no dependency arrives to draw one glyph.
+ * The probe is the attacker's own words rather than a case the library committed, so
+ * what this block shows reaches no artefact and is on no disk: it is held by the
+ * process that ran the run and is gone when that process stops (ADR-0008, amended).
  */
-function Speaker() {
+function Turn({ one }: { one: TurnRow }) {
   return (
-    <svg
-      className="speaker"
-      viewBox="0 0 16 16"
-      width="16"
-      height="16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.25"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-      focusable="false"
-    >
-      <circle cx="8" cy="1.9" r="0.85" />
-      <path d="M8 2.75V4.6" />
-      <rect x="3" y="4.6" width="10" height="8.4" rx="2.2" />
-      <path d="M1.4 8.2v2.2M14.6 8.2v2.2" />
-      <path d="M6.3 8.1v1.3M9.7 8.1v1.3" />
-      <path d="M6.5 11.3h3" />
-    </svg>
+    <div className="payload">
+      <p className="which">
+        <span className="of">last turn</span>
+        <span>episode {one.episode}</span>
+        <span>turn {one.turn}</span>
+        <span>{one.name}</span>
+        {/* Not pushed to the far edge the way an attempt's verdict is: a verdict is a
+            word and this is a sentence — the objective's condition was met, or read
+            and not met, or carried nothing to read — so it takes its own line at the
+            left rather than being ranged right and wrapping into the middle. */}
+        <span className="reading">{one.reading}</span>
+      </p>
+      <div className="turn sent">
+        <p className="who">attacker</p>
+        <p className="bubble">{one.sent}</p>
+      </div>
+      <div className="turn reply">
+        <p className="who">target</p>
+        <p className="bubble">{one.reply}</p>
+      </div>
+    </div>
   )
 }
 
-/** One layer, in that layer's own units. Never a row in a shared table. */
-function LayerPanel({ reading }: { reading: LayerReading }) {
+
+/**
+ * One layer on one line: where it is, in its own units, and what it has spent there.
+ *
+ * A panel to a layer stood here, side by side. The units and the values are the same
+ * reading — a layer's position is its own three or four words and never a row in a
+ * table shared with the other layer's (CONTEXT.md, ADR-0010) — set along a line so
+ * that the families below start on the first screenful.
+ *
+ * The bench's sentence about the position is not drawn: *family wrongful_commitment,
+ * case wrongful-commitment-003, attempt 10: the position the scored layer has
+ * reached* is these values read out in prose. The field stays on the reading because
+ * the gate screen draws it where there is no position to draw.
+ */
+function LayerLine({ reading }: { reading: LayerReading }) {
   return (
-    <div className="layer">
-      <h3>{reading.title}</h3>
+    <p className="layer-line">
+      <span className="of">{reading.title}</span>
       {reading.at === null ? (
-        <p className="at">not started</p>
+        <span className="at">not started</span>
       ) : (
-        <dl className="at">
-          {reading.units.map((unit, index) => (
-            <div key={unit}>
-              <dt>{unit}</dt>
-              <dd>{reading.at?.[index]}</dd>
-            </div>
-          ))}
-        </dl>
+        reading.units.map((unit, index) => (
+          <span className="at" key={unit}>
+            <span className="unit">{unit}</span> {reading.at?.[index]}
+          </span>
+        ))
       )}
-      {/*
-        The bench's sentence about the position is not drawn here, and the `dl` above
-        is the reason: *family wrongful_commitment, case wrongful-commitment-003,
-        attempt 10: the position the scored layer has reached* is the three values
-        beside it, read out in prose. The field stays on the reading because the gate
-        screen draws it where there is no position to draw — a layer the run has not
-        reached says so in a sentence, and there the sentence is the only thing there
-        is.
-      */}
-      <p>
-        <strong>{reading.callsSpent} calls</strong> spent in this layer.
-      </p>
-    </div>
+      <span className="spent">{reading.callsSpent} calls</span>
+    </p>
   )
 }

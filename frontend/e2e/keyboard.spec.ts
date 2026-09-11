@@ -4,8 +4,8 @@
  * **A third spec beside the walkthrough, because these claims are about the form and
  * not about a run.** `walkthrough.spec.ts` drives the whole path once with the
  * pointer and proves the joins; what is asserted here is the surface underneath it —
- * that Enter advances a step, that a dead primary button says what it is waiting for,
- * that a `422` naming a field reaches that field, and that Enter in the settings
+ * that Enter advances a step, that a dead primary button cites nothing it does not
+ * draw, that a `422` naming a field reaches that field, and that Enter in the settings
  * screen's number boxes sends. None of the four is observable in node: `npm test`
  * runs with no DOM by the spec's own choice, so a unit test can hold the sentence and
  * the field name and nothing can hold the rendering of either.
@@ -88,7 +88,7 @@ test('a step the walk may leave is left by pressing Enter in it', async ({ page 
   await expect(page.getByRole('heading', { name: 'Plant the nonce' })).toBeVisible()
 })
 
-test('a step the walk may not leave says what it is waiting for, over the button', async ({
+test('a step the walk may not leave holds its button, and cites nothing for it', async ({
   page,
 }) => {
   await page.goto('/#/register')
@@ -96,25 +96,20 @@ test('a step the walk may not leave says what it is waiting for, over the button
 
   const primary = page.getByRole('button', { name: 'Continue' })
   await expect(primary).toBeDisabled()
-  // The three unmade statements and the unrecorded name, in the wording the
-  // registration guard refuses in — and above the button rather than anywhere else,
-  // which is the arrangement the gate walk already uses.
-  const reasons = page.locator('ul.blocked')
-  await expect(reasons.locator('li')).toHaveCount(4)
-  await expect(reasons).toContainText('an attestation has to record who made it')
-  await expect(reasons).toContainText('not attested: I am authorised to test this')
-  // Bound to the button, so a reader who never sees the list is told the same thing
-  // on reaching the control it is about.
-  await expect(primary).toHaveAttribute(
-    'aria-describedby',
-    (await reasons.getAttribute('id')) ?? '',
-  )
 
-  // And the list goes when the conditions do. A reason left standing over an enabled
-  // button is worse than no reason at all.
+  // The list of what the walk is waiting for came off this screen at the operator's
+  // request: every reason it gave is a control the reader is looking at — three
+  // unticked boxes and the field above them. `RegisterScreen.tsx` says so where it
+  // stood, and says what the lost description costs a reader who cannot see them.
+  await expect(page.locator('ul.blocked')).toHaveCount(0)
+  // And the citation went with the list. An `aria-describedby` naming an id nothing on
+  // the page carries resolves to nothing, which is worse than the silence it fills.
+  await expect(primary).not.toHaveAttribute('aria-describedby', /./)
+
+  // The button still answers the conditions, which is what the list was only ever a
+  // reading of.
   await completeTheEndpointStep(page)
   await expect(primary).toBeEnabled()
-  await expect(reasons).toHaveCount(0)
 })
 
 /**

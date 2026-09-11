@@ -35,6 +35,14 @@ at the write, and the routes it would have written stay **pending** — nothing
 measured is lost, because the memory now holds the reading and a second measurement
 of them sends nothing (ADR-0032).
 
+**One approval, two independent answers, and the second one is a person's.** A
+route the bar refuses is held against the target it beat
+([ADR-0117](../../docs/adr/0117-a-refused-break-is-held-against-the-target-it-beat-and-is-scored-beside-the-six.md)),
+and a route it admits is not — a library case is already sent to every target
+including this one. The bar itself is untouched by that: no new threshold, no
+second arithmetic, and no `D` computed for a held route. `bench/holding.py` is the
+door and this module only tells it what the bar said.
+
 **The adaptive layer is switched off for an admission run on this surface.**
 `cross_model_bar` discards any proposal made while measuring a proposal — "a
 proposal made while measuring a proposal has had no admission run of its own, and
@@ -78,6 +86,7 @@ from backend.bench.contract import TargetConfig
 from backend.bench.decided import RouteKey, criterion_of
 from backend.bench.entry import AlreadyInTheLibrary, Entered, Entry, enter
 from backend.bench.evaluator import Verdict
+from backend.bench.holding import hold_refused
 from backend.bench.lease import LibraryBusy, held_by, holding_the_library
 from backend.bench.library import AdmissionReading, Case, DiscoveredBy, VerdictClass
 from backend.bench.pending import (
@@ -744,6 +753,18 @@ def _decide(
                 )
             continue
         state, reason, entered_as = answer
+        # The second door, taken before the queue is told anything, so the reason
+        # the row keeps says which of the two this route went through
+        # (ADR-0117 §3). The bar is unchanged and no `D` is computed here: what the
+        # held record rests on is the evaluator-confirmed break the route was filed
+        # on and the name on this approval, and `hold_refused` refuses both halves
+        # rather than assuming them. A queue that then refuses the decision leaves
+        # the held record standing and the route pending, which is the honest pair
+        # — the bar did refuse the route — and a re-decision holds nothing twice,
+        # because one route is one held record per target.
+        holding = hold_refused(one, decided_as=state, approved_by=record.confirmed_by)
+        record.say(holding.stated())
+        reason = f"{reason}. {holding.stated()}"
         try:
             bench.queue.decide(one.route, state=state, reason=reason)
         except (KeyError, ValueError) as refused:

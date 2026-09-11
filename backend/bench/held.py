@@ -63,7 +63,6 @@ from hashlib import sha256
 from pathlib import Path
 from typing import Any
 
-from backend.bench.decided import RouteKey
 from backend.bench.library import (
     AnyFamily,
     DiscoveredBy,
@@ -71,6 +70,7 @@ from backend.bench.library import (
     SuccessConditionKind,
     family_named,
 )
+from backend.bench.route_key import RouteKey
 from backend.bench.store import DatabaseStore
 
 HELD_NAMESPACE = ("agentaudit", "held")

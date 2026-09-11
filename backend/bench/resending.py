@@ -71,11 +71,11 @@ from backend.bench.contract import (
     Transcript,
     send_message,
 )
-from backend.bench.decided import RouteKey
 from backend.bench.evaluator import Verdict, read_condition, stop_signal_arrived
 from backend.bench.held import HELD_ROUTES, HeldRoute, HeldRoutes, HeldState
 from backend.bench.library import SuccessConditionKind
 from backend.bench.measurability import condition_checkable
+from backend.bench.route_key import RouteKey
 from backend.graph.budget import Layer
 from backend.graph.runstate import RunState
 

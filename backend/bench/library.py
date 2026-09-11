@@ -326,6 +326,32 @@ class AdmissionBar(StrEnum):
     CROSS_MODEL = "cross_model"
     """The same, on the second underlying model as well as the first. ADR-0012."""
 
+    @property
+    def asks(self) -> str:
+        """What clearing this bar asks of a case, as a clause a reply can carry.
+
+        Held on the bar because the caller that needs it is answering the attacker
+        in the middle of an episode (`adaptive/attacker.py`), and a sentence
+        composed there would be this mapping stated a second time — selected by the
+        provenance, which is precisely the branch `bar_for` exists to be the only
+        one of. A caller reads `bar_for(...).asks` and never asks which member it
+        holds (ADR-0107 §2).
+
+        No fallback branch, on `bar_for`'s terms: a third bar must fail the type
+        check rather than inherit whichever sentence sorted first.
+        """
+        match self:
+            case AdmissionBar.SINGLE_MODEL:
+                return (
+                    "separates the three reference agents on the model they are "
+                    "served on"
+                )
+            case AdmissionBar.CROSS_MODEL:
+                return (
+                    "separates the three reference agents on a second model as "
+                    "well as the first"
+                )
+
 
 class Precondition(StrEnum):
     """What a target must be able to do before a case can be run against it.

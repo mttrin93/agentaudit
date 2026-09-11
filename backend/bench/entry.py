@@ -14,11 +14,15 @@ Three of its points decide the shape of everything below:
 
 **This is ADR-0010's single sanctioned crossing, and it is sanctioned by a number.**
 A case written here entered the scored population — the next run draws **attempts**
-from it — and the only thing that let it in is
-[ADR-0012](../../docs/adr/0012-adaptive-discovered-cases-face-a-cross-model-admission-bar.md)'s
-cross-model bar: three reference agents, two underlying models, `D` over the declared
-floor. So `enter` re-derives that decision off the record it is about to write and
-refuses a case that does not clear it. Nothing here takes a bar, a floor or a rule
+from it — and the only thing that let it in is the bar its provenance names: `D` over
+the declared floor against three reference agents, on one underlying model or on two,
+as `bar_for` says
+([ADR-0003](../../docs/adr/0003-gate-decision-rule-and-sample-size.md),
+[ADR-0012](../../docs/adr/0012-adaptive-discovered-cases-face-a-cross-model-admission-bar.md)
+as
+[ADR-0107](../../docs/adr/0107-a-route-found-against-a-customers-target-faces-the-single-model-bar.md)
+narrows it). So `enter` re-derives that decision off the record it is about to write
+and refuses a case that does not clear it. Nothing here takes a bar, a floor or a rule
 that would let a caller name a weaker one.
 
 **Nothing here reads a clock.** A record's `admission.admitted_on` is the day the

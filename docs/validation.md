@@ -5586,3 +5586,63 @@ document exists to refuse.
   still has none to group. The dead end
   is gone and the machinery is complete and tested; the measurement has still never been
   taken, and until it is, *the loop closes* stays a claim about a mechanism.
+
+### A target-discovered route faces one model, and nothing was measured (#214, 2026-09-10)
+
+**This entry records a decision and not a reading.** Nothing was sent to a provider for
+it, no `D` was taken, no rate moved and no gate run was made. It is here because
+[ADR-0107](./adr/0107-a-route-found-against-a-customers-target-faces-the-single-model-bar.md)
+narrowed [ADR-0012](./adr/0012-adaptive-discovered-cases-face-a-cross-model-admission-bar.md)
+§1, and a reader comparing a gate run made after it to one made before will see a line
+change shape. What changed the line is this change, and not a measurement.
+
+- **What ADR-0107 narrowed.** ADR-0012 §1 sent every adaptive-discovered case to the
+  cross-model bar, selecting it off `Case.discovered_by`, which had one adaptive member.
+  Its argument is about a closed loop — the attacker discovers by exploiting the three
+  reference agents and the gate admits by testing separation of those same three — and
+  that loop is `scripts/swap.py`'s. A route found against a **customer's** target never
+  ran in it. So `discovered_by` grew a fifth member, `adaptive_on_target`, declared last;
+  `adaptive` keeps ADR-0012's bar and its original meaning, and the new member faces the
+  single-model bar of [ADR-0003](./adr/0003-gate-decision-rule-and-sample-size.md) in a
+  branch of its own. ADR-0012 §2 and §3 are untouched.
+- **The provenance census reports five members where it reported four.** `library_provenance`
+  counts what it always counted and was not edited; what grew is the set it counts over.
+  A reader holding two gate runs across this change sees the split appear in the
+  adaptive-fraction line, and that appearance is this entry and not a finding.
+- **No case in the library changed.** All 21 live cases are `authored` under
+  `single_model`, and no adaptive case of either provenance has ever been admitted, so
+  there was no record to migrate and no admission to re-decide. The adaptive fraction of
+  the live library is still 0.00.
+- **The queue needed a re-stamp, and it was one row.** `pending/routes.sqlite` stores the
+  drafted case, so a route filed before this change carries a provenance, and every route
+  in that store was filed by a customer run — the backfill is a constant and not a
+  judgement (`scripts/restamp_filed_routes.py`, #219). Run on 2026-09-10 against the live
+  store, which held three keys: `data_leakage-77663dfb1f9ba666` was `pending` with
+  `adaptive` on its draft and is now `adaptive_on_target`; `scope_creep-e14f521b37ec13e7`
+  and `halt_defeat-df377d79ca7b492a` were decided on 2026-09-10 and are `rejected`, and a
+  decided record has no draft (ADR-0104 §4), so they carry no stored provenance to
+  rewrite and nothing on them is at risk from a one-model surface. **One re-stamped, two
+  needing nothing** — and not the three the ticket anticipated, because the queue had
+  moved between the ticket being written and the script being run. `--dry-run` reported 1,
+  the run re-stamped 1, and a second run returned 0, so the idempotency the tests assert
+  on a fixture also holds against the live record.
+- **The admission memory needed nothing, and that is worth stating.** A reader who knows
+  the queue needed a rewrite will ask whether `decisions/routes.sqlite` did.
+  `decided.criterion_of` excludes `discovered_by` by name — it "does not change what the
+  three reference agents would return" — so no stored measurement is keyed on the
+  provenance and none is invalidated.
+- **`/pending-routes` now measures on one declared reference model.** Every route that
+  surface decides faces the one-model bar after the narrowing, so the second pass was a
+  call the decision could not spend: the estimate an operator confirms halves, and a
+  deployment declaring one reference model decides routes where it used to refuse.
+  `AGENTAUDIT_SECOND_REFERENCE_MODEL` stays declared and stays required by
+  `scripts/swap.py`, which measures a model pair by definition.
+- **What is now *not* measured, and it should not be softened.** Model-dependence is no
+  longer caught at admission for target-discovered routes. A route that separates the
+  three reference agents on one model and would not on another now enters the library,
+  and ADR-0012's "the discard is itself a finding" is not available for this population.
+  What remains is after the fact: the retirement-rate-by-provenance signal of ADR-0012 §3,
+  which applies to both adaptive members, and the per-case `D` series every gate run
+  appends to `Case.history`. Detection moved from admission time to the next gate run that
+  reads the case — and that signal still has no adaptive records to group, so it is a
+  control named rather than a control exercised.

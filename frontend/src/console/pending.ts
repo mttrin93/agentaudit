@@ -15,7 +15,9 @@
  * ([ADR-0010](../../../docs/adr/0010-two-layers-in-one-run-the-adaptive-layer-is-never-scored.md)),
  * and the `D` the bar measures is the *case's* own discriminating power against
  * three agents of known construction — never a reading about the target the route
- * beat ([ADR-0012](../../../docs/adr/0012-adaptive-discovered-cases-face-a-cross-model-admission-bar.md)).
+ * beat ([ADR-0107](../../../docs/adr/0107-a-route-found-against-a-customers-target-faces-the-single-model-bar.md),
+ * which is what decides this surface's bar, narrowing
+ * [ADR-0012](../../../docs/adr/0012-adaptive-discovered-cases-face-a-cross-model-admission-bar.md)).
  * So the numbers on this surface are counts of calls and a cost, and there is
  * nowhere in any type below to put anything else. `pending.test.ts` scans the whole
  * built view for one.
@@ -26,7 +28,7 @@
  * the store holds it as. This module is a transformation: it reads the wire, joins
  * two served readings, and refuses to build a request body out of an incomplete
  * declaration. That last one is the only guard it owns, and it is the one that
- * decides whether three reference agents on two models are paid for.
+ * decides whether a pass over three reference agents is paid for.
  *
  * **The attestation is the one this app already has.** `ATTESTATION_STATEMENTS` is
  * the register screen's wording, copied from `registration.py` so that the prompt
@@ -189,8 +191,8 @@ export function theEmptyQueue(): EmptyQueue {
     heading: 'No route is awaiting a decision',
     statement:
       'The adaptive attacker proposed no route that is still waiting on the ' +
-      'cross-model bar. A zero here is a reading about the attacker and about ' +
-      'the families it worked in, never a reading about the target (ADR-0011).',
+      'bar. A zero here is a reading about the attacker and about the families ' +
+      'it worked in, never a reading about the target (ADR-0011).',
     aside:
       'A route reaches this queue only from a run against somebody’s own agent, ' +
       'and only where the attacker composed a probe the fixed suite does not ' +
@@ -201,7 +203,7 @@ export function theEmptyQueue(): EmptyQueue {
 
 // --- whether a measurement may start --------------------------------------------
 
-/** The one control this page offers, and the two models a decision is made on. */
+/** The one control this page offers, and the model a decision is made on. */
 export interface MeasureHere {
   available: true
   label: string
@@ -304,18 +306,18 @@ export function queueView(
 const FOR_A_MEASUREMENT: Record<keyof Attested, string> = {
   authorised_to_test:
     'The endpoints a measurement attacks are this bench’s own three reference ' +
-    'agents, on two underlying models — never the target the route was found ' +
-    'against. That target is not touched again by anything on this page.',
+    'agents — never the target the route was found against. That target is not ' +
+    'touched again by anything on this page.',
   not_production:
     'The reference agents are test equipment and never reach a user. What a ' +
     'measurement changes is the case library: a route that clears the bar is ' +
     'written into it as a case record, and that library is the one every run on ' +
     'this bench is measured with.',
   accepts_provider_policy_and_cost:
-    'The probes reach your model provider under your credentials, on both models, ' +
-    'so the policy violations are recorded against your account and the inference ' +
-    'is billed to it. Whatever you attested to for the run that found the route ' +
-    'authorised none of this.',
+    'The probes reach your model provider under your credentials, so the policy ' +
+    'violations are recorded against your account and the inference is billed to ' +
+    'it. Whatever you attested to for the run that found the route authorised ' +
+    'none of this.',
 }
 
 /** One statement as this page asks it: the record's wording, this consequence. */
@@ -373,8 +375,8 @@ export type MeasurementRequest =
  * The order of the checks is the order of the walk, so the first thing an operator
  * is told about is the earliest step they have to go back to. Every branch that is
  * not a complete declaration over a non-empty selection returns the blocked outcome
- * and no body: this is the function that decides whether three reference agents on
- * two models are paid for, per route.
+ * and no body: this is the function that decides whether a pass over three
+ * reference agents is paid for, per route.
  *
  * **The routes are the operator's own selection and never all of them.** A queue
  * that drained itself would be an unbounded spend authorised once (ADR-0105, the
@@ -389,8 +391,8 @@ export function measurementRequest(
 
   if (routes.length === 0) {
     missing.push(
-      'no route is selected. A measurement is per route — three reference agents ' +
-        'on two models each — so the routes are chosen by whoever reads the queue ' +
+      'no route is selected. A measurement is per route — the three reference ' +
+        'agents, once each — so the routes are chosen by whoever reads the queue ' +
         'and never defaulted to all of them',
     )
   }
@@ -540,12 +542,13 @@ const PASS_READINGS: Record<string, string> = {
 }
 
 /**
- * One bar per model, in the order the models are measured.
+ * One bar per model, in the order the models are measured — one of them here.
  *
  * The question an operator watching this actually has, and the one `progressRows`
- * cannot answer: the action is minutes long over two models walked strictly one at
- * a time (ADR-0012), so *how far into the second model* is a fact about the pass and
- * not about any route in it.
+ * cannot answer: the action is minutes long, so *how far in* is a fact about the
+ * pass and not about any route in it. One pass, because this surface declares one
+ * model (ADR-0107 §4); a list all the same, because the record carries the models
+ * it was measured on and this reads what it carries.
  *
  * **The counts are carried and never recomputed.** `attempted` and `of` are the
  * record's own — attempts made against the attempts the declared rule asked for —
@@ -578,8 +581,8 @@ export const AWAITING_APPROVAL = 'awaiting_approval'
  *
  * `confirmed` is compared against `true` rather than tested for truthiness, on
  * `gateConfirmation`'s reasoning: a truthy-looking value spending somebody's
- * inference budget on two models and writing into their case library is the failure
- * to guard against. The status is checked here as well, so a measurement that has
+ * inference budget and writing into their case library is the failure to guard
+ * against. The status is checked here as well, so a measurement that has
  * already been answered cannot be answered twice from a page left open.
  */
 export function measurementConfirmation(

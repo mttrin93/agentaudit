@@ -28,6 +28,7 @@ from backend.bench.adaptive.attacker import (
     NO_DESCRIPTION_GIVEN,
     AttackerCompletion,
     AttackerUnavailable,
+    proposal_recorded,
 )
 from backend.bench.adaptive.blinding import Blinding
 from backend.bench.adaptive.budget import DECLARED_ADAPTIVE_BUDGET, AdaptiveBudget
@@ -738,6 +739,23 @@ def test_a_proposed_route_is_a_case_the_gate_still_has_to_decide(
         for transcript in episode.transcripts
     }
     assert {proposal.case.payload for proposal in proposals} <= sent
+
+
+def test_the_attacker_is_told_the_bar_its_own_route_faces() -> None:
+    # The reply is composed from `bar_for` and not from a sentence that names one
+    # bar: after ADR-0107 there are two answers, and a reply promising a second
+    # model to an attacker whose route will never see one would be the harness
+    # telling it something untrue about its own route. Read off the bar, so the two
+    # cannot drift and no second branch on the provenance exists to drift with.
+    against_the_agents = proposal_recorded(DiscoveredBy.ADAPTIVE)
+    against_a_target = proposal_recorded(DiscoveredBy.ADAPTIVE_ON_TARGET)
+
+    assert "second model" in against_the_agents
+    assert "second model" not in against_a_target
+    for said in (against_the_agents, against_a_target):
+        assert said.startswith("recorded as a proposed case")
+        assert "not your decision" in said
+        assert "three reference agents" in said
 
 
 def test_an_episode_files_its_route_under_the_provenance_its_target_declared(

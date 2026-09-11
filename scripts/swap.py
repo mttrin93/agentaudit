@@ -171,11 +171,12 @@ SWAP_RUNS_DIR = Path(__file__).resolve().parents[1] / "docs" / "swap-runs"
 DEFAULT_SECOND_MODEL = "openrouter:openai/gpt-4o-mini"
 """This script's default second model, under `completion.SECOND_REFERENCE_MODEL_ENV`.
 
-The variable itself is declared beside the other model names now that a second
-surface reads it: `/pending-routes` measures the cross-model bar on two models
-without a terminal (ADR-0105), so a name only this script knew would have been a
-second definition of one environment variable. What stays here is the *default*,
-because a script's fallback when nothing is declared is the script's own decision.
+The variable is declared beside the other model names in `completion.py` rather
+than here, and it stays there now that this script is the one reader of it again:
+`/pending-routes` read it until ADR-0107 §4 gave that surface a one-model bar, and a
+name moved back into a script the day its second reader went away would be a
+definition that travelled with a ticket. What stays here is the *default*, because a
+script's fallback when nothing is declared is the script's own decision.
 
 It is a deliberate choice rather than a spare string.
 

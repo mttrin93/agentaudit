@@ -417,7 +417,7 @@ def test_only_the_two_settings_routes_write_under_the_bench_prefix() -> None:
     #
     # **The third spend arrived with ADR-0105** and is named here on the same terms
     # as the second: deciding a pending route measures it against three reference
-    # agents on two models and writes an admitted one into the case library, so it
+    # agents and writes an admitted one into the case library, so it
     # is its own `POST` under its own prefix — nothing moved under `/bench` to do
     # it, and its halt is answered at a route of its own rather than by a field on
     # the request that started it.

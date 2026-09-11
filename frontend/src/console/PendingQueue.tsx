@@ -180,8 +180,8 @@ export function TheControl({
           </button>
           {selected.length === 0 ? (
             <p className="aside">
-              Nothing is selected. A measurement is per route — three reference
-              agents on two models each — so the routes are chosen here and never
+              Nothing is selected. A measurement is per route — the three
+              reference agents, once each — so the routes are chosen here and never
               defaulted to all of them.
             </p>
           ) : (

@@ -15,8 +15,15 @@ filing there would put routes fitted to the three reference agents, the exact
 population
 [ADR-0012](../../docs/adr/0012-adaptive-discovered-cases-face-a-cross-model-admission-bar.md)
 built the cross-model bar around, into a queue whose whole purpose is routes no
-surface decides. `scripts/swap.py` already walks the whole path for those. So the
-callers are the customer-run entry points — the API's run service and
+surface decides. The consequence of that separation, since
+[ADR-0107](../../docs/adr/0107-a-route-found-against-a-customers-target-faces-the-single-model-bar.md):
+every route this module files was found against a user's own agent, carries
+`ADAPTIVE_ON_TARGET`. Which bar that provenance faces stays `bar_for`'s answer and
+is nowhere composed in this module: the sentence a filed route is reported with says
+it is awaiting *a decision*, because what this module knows is what it wrote down and
+not what the bar will make of it. `scripts/swap.py` already walks the whole path for
+the routes this does not file. So the callers are the customer-run
+entry points — the API's run service and
 `scripts/bench.py` — and a function here rather than a field on `CalibrationResult`
 is what makes that difference something a reader can see at the call site.
 
@@ -46,9 +53,9 @@ from backend.bench.decided import RouteKey
 from backend.bench.pending import PENDING_ROUTES, AwaitingDecision, PendingRoutes
 
 NOTHING_WAS_PROPOSED = (
-    "the attacker proposed no route, so this run filed nothing to await the "
-    "cross-model bar. A zero here is a reading about the attacker and about the "
-    "families it worked in, never a reading about the target (ADR-0011)"
+    "the attacker proposed no route, so this run filed nothing to await the bar. "
+    "A zero here is a reading about the attacker and about the families it worked "
+    "in, never a reading about the target (ADR-0011)"
 )
 """What a run that proposed nothing says, said out loud rather than left absent.
 
@@ -107,9 +114,10 @@ class Queued:
         if self.filed:
             said.append(
                 f"{len(self.filed)} route(s) the attacker found are filed and "
-                "awaiting the cross-model bar: "
+                "awaiting a decision: "
                 + ", ".join(record.route.stated() for record in self.filed)
-                + ". A filed route is not admitted by having been filed (ADR-0012)"
+                + ". A filed route is not admitted by having been filed (ADR-0012 "
+                "as ADR-0107 narrows it)"
             )
         if self.refusals:
             said.append(

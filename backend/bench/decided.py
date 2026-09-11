@@ -369,6 +369,12 @@ class Remembered:
                 f"  reported from memory — {self.decided.route.stated()} was "
                 f"decided on {self.decided.decided_on.isoformat()} as "
                 f"{self.decided.case_id}, and nothing was measured against three "
+                # "on two models" is stale on the `/pending-routes` half of this
+                # sentence since ADR-0107 §4, where the pass is over one model. Left
+                # standing rather than fixed here: the wording is asserted verbatim
+                # in `test_multi_model.py`, which #220 must leave green *untouched*
+                # — the canary for a change leaking into the cross-model bar — so
+                # correcting it is a ticket of its own and not a line in that one.
                 "agents on two models for it here",
                 f"  {self.decided.conditions.stated()}",
             )
@@ -604,7 +610,7 @@ class Consultation:
 
         Deduplicated by route: `docs/validation.md` records one run proposing four
         cases "all describing the same route in prose", and measuring one route twice
-        against three agents on two models buys the second answer nothing. The other
+        against the three reference agents buys the second answer nothing. The other
         proposals of that route are answered from the entry the measurement writes,
         which is the same path a second *run* takes.
         """

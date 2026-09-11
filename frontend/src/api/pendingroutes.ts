@@ -46,7 +46,8 @@ export const MEASUREMENTS_PATH = '/pending-routes/measurements'
 export interface MayMeasure {
   available: true
   library: string
-  /** The two underlying models, in the order they are measured (ADR-0012). */
+  /** The underlying models, in the order they are measured. One, because a route
+   * decided here faces the single-model bar (ADR-0107 §4). */
   models: string[]
   statement: string
 }
@@ -206,7 +207,7 @@ export interface MeasurementReading {
 export interface StartMeasurementBody {
   attestation: AttestationBody
   cost: CostBody
-  /** Never all of them by default: three agents on two models each is money. */
+  /** Never all of them by default: a pass over three agents per route is money. */
   routes: string[]
 }
 

@@ -681,8 +681,8 @@ def test_three_routes_under_the_bench_prefix_write_and_all_are_declared_inputs()
         # And the pending-route family, since ADR-0105, in the same two shapes and
         # for the same reason: one route records the attestation and declares the
         # estimate per route, one answers the halt. Deciding a pending route measures
-        # it against three reference agents on two models and writes an admitted one
-        # into the case library — a spend and a write, and still not a setting, so it
+        # it against three reference agents and writes an admitted one into the
+        # case library — a spend and a write, and still not a setting, so it
         # is its own `POST` and nothing moved under `/bench` to make room for it.
         PENDING_MEASUREMENTS_ROUTE,
         PENDING_MEASUREMENT_APPROVAL_ROUTE,

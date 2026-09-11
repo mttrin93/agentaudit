@@ -92,7 +92,7 @@ export const GATE_PATH = '/gate'
 export const ARTEFACTS_PATH = '/artefacts'
 
 /**
- * Where the routes awaiting the cross-model bar are read and decided.
+ * Where the routes awaiting the admission bar are read and decided.
  *
  * The same path the API serves the queue at, on the terms `/runs` and `/artefacts`
  * already are: the screens are behind a `#` and no document request carries one, so

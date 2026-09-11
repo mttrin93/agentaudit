@@ -47,12 +47,12 @@ class NotMeasurable(StrEnum):
     `/gate-runs` can never be handed one of them.
 
     A route-shaped refusal is refused before anything is sent and before the
-    library is held: measuring is three reference agents on two models per route,
-    and the operator does not pay to find out that a route was already decided.
+    library is held: measuring is three reference agents, once, per route, and the
+    operator does not pay to find out that a route was already decided.
     """
 
     NO_REFERENCE_AGENTS = "no_reference_agents"
-    NO_SECOND_MODEL = "no_second_model"
+    NO_REFERENCE_MODEL = "no_reference_model"
     NO_WRITABLE_LIBRARY = "no_writable_library"
     NO_ADJUDICATOR = "no_adjudicator"
     ALREADY_IN_FLIGHT = "already_in_flight"
@@ -76,14 +76,14 @@ class NotMeasurable(StrEnum):
                     "construction (ADR-0012), and a build that leaves them out is a "
                     "legitimate deployment that cannot decide a route"
                 )
-            case NotMeasurable.NO_SECOND_MODEL:
+            case NotMeasurable.NO_REFERENCE_MODEL:
                 return (
-                    "this bench declares one reference model and the bar needs two. "
-                    "A route the attacker found is admitted only on a second "
-                    "underlying model as well (ADR-0012), because the attacker "
-                    "discovers its route by exploiting the same three agents "
-                    "admission then tests it against — so a bench that cannot "
-                    "measure on two models measures none of this at all"
+                    "this bench declares no reference model, so there is nothing to "
+                    "serve the three reference agents on. One is enough and one is "
+                    "required: a route filed here was found against a customer's "
+                    "target and faces the single-model bar of ADR-0003 "
+                    "(ADR-0107 §4), and a bench that names no model at all cannot "
+                    "measure that bar either"
                 )
             case NotMeasurable.NO_WRITABLE_LIBRARY:
                 return (
@@ -109,9 +109,9 @@ class NotMeasurable(StrEnum):
             case NotMeasurable.NOTHING_SELECTED:
                 return (
                     "this request named no route to measure. A measurement is per "
-                    "route — three reference agents on two models each — so the "
-                    "routes are selected by the operator who reads the queue and "
-                    "never defaulted to all of them"
+                    "route — the three reference agents, once each — so the routes "
+                    "are selected by the operator who reads the queue and never "
+                    "defaulted to all of them"
                 )
             case NotMeasurable.NOT_IN_THE_QUEUE:
                 return (
@@ -135,7 +135,7 @@ class NotMeasurable(StrEnum):
                     "the verdict class and the preconditions — and a route drafted "
                     "under one that no live case carries any more is a probe "
                     "nothing here can score. Refused rather than measured, so "
-                    "nobody pays three agents on two models for it"
+                    "nobody pays for a pass over three agents for it"
                 )
 
 
@@ -266,10 +266,12 @@ class ModelPassState(StrEnum):
 class ModelPass:
     """One model's pass over the selected routes, and how far into it the run is.
 
-    Per model because the bar is two models walked strictly one at a time
-    (ADR-0012) and the action is minutes long: *measuring on the second model* is
-    the fact `RouteProgress.where` already reports in prose, and this is the same
-    fact as the two counts a length can be drawn from.
+    Per model because the models are walked strictly one at a time and the action is
+    minutes long: *how far into the pass* is the fact `RouteProgress.where` already
+    reports in prose, and this is the same fact as the two counts a length can be
+    drawn from. One pass on this surface after ADR-0107 §4, and still a sequence
+    rather than a single record, because `cross_model_bar` walks N models and the
+    swap walks two of them.
 
     **The counts are attempts, and the ceiling is the declared rule's.** An attempt
     is the unit of the denominator (CONTEXT.md), so `of` is what the rule asks for
@@ -331,12 +333,13 @@ class MeasurementRecord:
     attestation: Attestation
     library: Path
     models: tuple[str, ...]
-    """The two underlying models the reference agents are run on, in order.
+    """The underlying models the reference agents are run on, in order.
 
-    Two, because the bar is two models measured together and a reading assembled
-    across runs is a reading no run's configuration matches (ADR-0032, ADR-0105 §2).
-    Carried on the record so the estimate, the measurement and the memory the
-    measurement writes all name the same pair.
+    One on this surface (ADR-0107 §4) and a sequence all the same, because the bar
+    is measured in **one action**: a reading assembled across runs is a reading no
+    run's configuration matches (ADR-0032, ADR-0105 §2). Carried on the record so
+    the estimate, the measurement and the memory the measurement writes all name
+    the same models.
     """
 
     routes: tuple[AwaitingDecision, ...]
@@ -350,8 +353,8 @@ class MeasurementRecord:
     """Each route's own share of the estimate, declared before anything is sent.
 
     Per route because that is the unit the operator selects in and the unit the
-    spend is incurred in — three reference agents on two models, once per route —
-    and a single total would ask them to confirm a figure they cannot attribute to
+    spend is incurred in — the three reference agents, once per route — and a
+    single total would ask them to confirm a figure they cannot attribute to
     anything they chose (ADR-0105 §4).
     """
 
@@ -362,8 +365,8 @@ class MeasurementRecord:
     Beside `progress` and not folded into it, because the two answer different
     questions about the same minutes: a row says where *one route* got to, and a
     pass says how far into *one model* the run is. A measurement of three routes on
-    two models has three rows and two passes, and neither count is derivable from
-    the other.
+    one model has three rows and one pass, and neither count is derivable from the
+    other.
     """
 
     recorded_at: datetime = field(default_factory=lambda: datetime.now(tz=UTC))

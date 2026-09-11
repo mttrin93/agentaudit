@@ -242,7 +242,6 @@ from backend.bench.completion import (
     ATTACKER_MODEL_ENV,
     DEFAULT_ATTACKER_TEMPERATURE,
     REFERENCE_MODEL_ENV,
-    SECOND_REFERENCE_MODEL_ENV,
     attacker_completion_for,
     completion_for,
     declared_model,
@@ -5075,7 +5074,7 @@ class ApprovalRequest(BaseModel):
 
 
 PENDING_ROUTES_ROUTE = "/pending-routes"
-"""The queue of routes awaiting the cross-model bar. Its own family, and a third one.
+"""The queue of routes awaiting the admission bar. Its own family, and a third one.
 
 **A pending route is not a run and not a gate run.** A run produces rates about
 somebody's agent, a gate run produces a decision about this bench, and deciding a
@@ -5125,7 +5124,7 @@ class MayMeasure(BaseModel):
     """This bench can decide a pending route, and what doing it costs.
 
     Two facts and no control: the caller learns the affordance is available, which
-    library a decision writes to and which two models the bar is measured on.
+    library a decision writes to and which models the bar is measured on.
     `available` is a literal so this shape and the one below are two facts rather
     than one record with empty fields.
     """
@@ -5133,8 +5132,10 @@ class MayMeasure(BaseModel):
     available: Literal[True] = True
     library: str
     models: list[str]
-    """The two underlying models, in the order they are measured. Two, because the
-    bar is two models measured together (ADR-0012, ADR-0105 §2)."""
+    """The underlying models, in the order they are measured. One, because a route
+    decided here faces the single-model bar (ADR-0107 §4) — and a list, because the
+    bar is measured in one action and the record names what it was measured on
+    (ADR-0105 §2)."""
 
     statement: str
 
@@ -5157,8 +5158,7 @@ class MayNotMeasure(BaseModel):
 
 THE_MEASUREMENT_IS_AVAILABLE = (
     "Deciding a pending route measures it against three agents of known "
-    "construction on two models, then writes the ones that clear the bar into the "
-    "case library."
+    "construction, then writes the ones that clear the bar into the case library."
 )
 
 
@@ -5285,14 +5285,14 @@ def pending_routes_response(pending: BenchPendingRoutes) -> PendingRouteQueue:
 
 THE_ESTIMATE_IS_PER_ROUTE = (
     "one row per route, and the routes are the operator's own selection. Deciding a "
-    "route is three reference agents on each of two models — six endpoints — at the "
-    "declared attempts per case, plus one registration probe each. Exact because it "
-    "is a multiplication: the adaptive layer is switched off for an admission run, "
-    "so there is no bound here and no second figure to add to this one (ADR-0010, "
+    "route is three reference agents — three endpoints — at the declared attempts "
+    "per case, plus one registration probe each. Exact because it is a "
+    "multiplication: the adaptive layer is switched off for an admission run, so "
+    "there is no bound here and no second figure to add to this one (ADR-0010, "
     "ADR-0058). Each row is what that route costs measured on its own, so the rows "
     "add up to more than the total below and never to less: the routes ride in one "
-    "admission run per model, and a registration probe is one per agent per model "
-    "however many of them ride with it"
+    "admission run, and a registration probe is one per agent however many of them "
+    "ride with it"
 )
 """What the estimate says about itself, including why its rows over-add.
 
@@ -5502,15 +5502,15 @@ class StartMeasurementRequest(BaseModel):
     (ADR-0105, spec *Out of scope*).
 
     There is no target here and no nonce: the targets are this bench's own three
-    reference agents on two models, and the run plants its own nonce in equipment
-    it started itself.
+    reference agents, and the run plants its own nonce in equipment it started
+    itself.
     """
 
     attestation: AttestationRequest
     cost: CostRequest
     routes: list[str]
     """The pending route keys this measurement decides. Never defaulted to all of
-    them: three agents on two models each is the operator's money."""
+    them: a pass over three agents per route is the operator's money."""
 
 
 def _cannot_measure(refused: CannotMeasure) -> dict[str, str]:
@@ -5913,29 +5913,31 @@ def deployed_pending_routes(
     nothing — and the mutual refusal ADR-0033 gives is the whole reason this surface
     is safe beside a gate run.
 
-    **The two models are two declarations, and the second is this surface's alone.**
-    `REFERENCE_MODEL_ENV` is what every run and every gate run measures against;
-    `SECOND_REFERENCE_MODEL_ENV` is reached by the cross-model bar and by nothing
-    else (ADR-0012). A deployment that declares one of them can run a gate and
-    cannot decide a route, which is a stated refusal on the screen that would offer
-    the control rather than a bar quietly met on one model.
+    **One declaration, and it is the one every run already reads.**
+    `REFERENCE_MODEL_ENV` is what every run and every gate run measures against, and
+    this surface reads it and nothing else: every route it decides was found against
+    a customer's target, so it faces the single-model bar and a second pass is a call
+    the decision cannot spend
+    ([ADR-0107](../../docs/adr/0107-a-route-found-against-a-customers-target-faces-the-single-model-bar.md)
+    §4). `SECOND_REFERENCE_MODEL_ENV` stays declared and stays required by
+    `scripts/swap.py`, which measures a model *pair* by definition (#15) — what
+    changed is that this surface no longer reaches for it. A deployment that declares
+    no reference model at all still cannot decide a route, and says so.
 
-    The equipment seam is a function of the model rather than the bound `Equipment`
-    a gate run holds, because this action serves the agents twice — once per model,
-    one at a time.
+    The equipment seam stays a function of the model rather than the bound
+    `Equipment` a gate run holds: `PendingRouteBench.models` is still a sequence and
+    `cross_model_bar` still walks it, so what this reading fixes is how long it is
+    and not what the surface can express.
     """
-    declared = [
-        config.report.models.calibration,
-        declared_model(SECOND_REFERENCE_MODEL_ENV) or UNDECLARED_MODEL,
-    ]
-    models = tuple(model for model in declared if model != UNDECLARED_MODEL)
+    declared = config.report.models.calibration
     return PendingRouteBench(
         library=gate_runs.library,
         agents=agents,
-        # Two or none: a pair with a hole in it is not a pair, and a bench that
-        # measured the first model and then found it had no second would have spent
-        # the operator's budget to reach a reading the bar cannot take.
-        models=models if len(models) == 2 else (),
+        # One, and never a pair. A bench that declared nothing declares nothing here
+        # either: an undeclared identifier is a stated absence and not a model, and a
+        # surface that served the agents on it would be attacking a model nobody
+        # named.
+        models=() if declared == UNDECLARED_MODEL else (declared,),
     )
 
 
@@ -5984,9 +5986,9 @@ def create_app(
     gates = BenchGateRuns(bench.config, gate_runs, cites=bench.cite)
     if pending_routes is None:
         # A third declaration, on the second one's terms: a deployment that has said
-        # it can run a gate has not said it can measure on two models, and the second
-        # model is the whole of ADR-0012's bar. A bench that declared its own
-        # configuration decides no pending route unless it was handed the means to.
+        # it can run a gate has not said it ships the equipment a route is decided
+        # against. A bench that declared its own configuration decides no pending
+        # route unless it was handed the means to.
         pending_routes = (
             PendingRouteBench()
             if declared
@@ -6864,7 +6866,7 @@ def create_app(
         **The estimate is declared here and inherited from nothing.** Whatever the
         operator attested to for the run that *found* a route was an estimate for
         attacking their own agent, made possibly weeks ago, and it authorised none
-        of this: three reference agents on two models, per route.
+        of this: a pass over three reference agents, per route.
 
         **The routes are named and never defaulted to all of them.** A queue that
         drained itself would be an unbounded spend authorised once.

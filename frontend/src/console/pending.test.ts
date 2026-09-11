@@ -66,7 +66,7 @@ function aQueue(over: Partial<PendingRouteQueue> = {}): PendingRouteQueue {
     measure: {
       available: true,
       library: '/var/lib/agentaudit/cases',
-      models: ['model-one', 'model-two'],
+      models: ['model-one'],
       statement: 'Deciding a pending route measures it against three agents.',
     },
     routes: [aRoute()],
@@ -98,12 +98,12 @@ describe('the queue an operator reads', () => {
     // (ADR-0012, spec story 12), so the row stays and carries the sentence.
     const rejected = aRoute({
       state: REJECTED,
-      reason: 'the cross-model bar refused this route: it held on the second model',
+      reason: 'the bar refused this route: it separated no reference agent',
     })
     const [row] = queueRows(aQueue({ routes: [rejected] }), null)
 
     expect(row.state).toBe(REJECTED)
-    expect(row.reason).toContain('the cross-model bar refused this route')
+    expect(row.reason).toContain('the bar refused this route')
     // Decided, so it may never be selected again: its payload went with the
     // decision (ADR-0104 §4) and a second answer would rest on no reading at all.
     expect(row.chooseable).toBe(false)
@@ -114,7 +114,7 @@ describe('the queue an operator reads', () => {
     // read off the measurement that wrote it and never parsed out of the reason.
     const admitted = aRoute({
       state: ADMITTED,
-      reason: 'admitted on the cross-model bar and written into /cases as x.toml',
+      reason: 'admitted on the bar and written into /cases as x.toml',
     })
     const reading = aReading({
       routes: [
@@ -168,13 +168,15 @@ describe('an empty queue is a reading and not a blank screen', () => {
 })
 
 describe('whether a measurement may start here', () => {
-  it('offers one control where the bench says it can, and names the two models', () => {
+  it('offers one control where the bench says it can, and names the model', () => {
     const control = measureControl(aQueue().measure)
 
     expect(control.available).toBe(true)
     if (control.available) {
       expect(control.label).toBe('Measure the selected routes')
-      expect(control.models).toEqual(['model-one', 'model-two'])
+      // One, and it is the bench's own declaration rather than this page's: the
+      // routes here face the single-model bar (ADR-0107 §4).
+      expect(control.models).toEqual(['model-one'])
     }
   })
 
@@ -201,14 +203,15 @@ describe('whether a measurement may start here', () => {
   it('does not offer waiting for a refusal that waiting does not answer', () => {
     const control = measureControl({
       available: false,
-      refusal: 'no_second_model',
-      stated: 'this bench declares one reference model and the bar needs two.',
+      refusal: 'no_reference_model',
+      stated: 'this bench declares no reference model, so there is nothing to ' +
+        'serve the three reference agents on.',
     })
 
     expect(control.available).toBe(false)
     if (!control.available) {
       expect(control.waiting).toBe(false)
-      expect(control.statement).toContain('one reference model')
+      expect(control.statement).toContain('no reference model')
     }
   })
 })
@@ -299,7 +302,7 @@ describe('the estimate an operator answers', () => {
     expect(view.calls).toBe('36')
     expect(view.ceiling).toBe('≤ 72')
     expect(view.cost).toBe('$0.07')
-    expect(view.models).toEqual(['model-one', 'model-two'])
+    expect(view.models).toEqual(['model-one'])
     // The served sentence, which is where the rows over-adding is explained.
     expect(view.statement).toContain('one row per route')
   })
@@ -323,6 +326,39 @@ describe('while it goes', () => {
     expect(stillMeasuring('aborted')).toBe(false)
     expect(stillMeasuring('failed')).toBe(false)
     expect(stillMeasuring('unanswered')).toBe(false)
+  })
+})
+
+describe('the reading is one pass, over the three reference agents', () => {
+  it('says nothing anywhere about a second model, or about a pair', () => {
+    // Every route this surface decides was found against a customer's target, so
+    // it faces the single-model bar and there is no second pass to describe
+    // (ADR-0107 §4). The scan is over the built value rather than the markup, for
+    // the reason the rate scan below is: a sentence added to this module that
+    // promises a pair fails on this line.
+    const everything = [
+      ...said(queueView(aQueue(), aReading())),
+      ...said(measurementEstimateView(anEstimate())),
+      ...said(progressRows(aReading())),
+      ...said(modelBars(aReading())),
+      ...said(theEmptyQueue()),
+      ...said(MEASUREMENT_STATEMENTS),
+      ...said(measurementRequest(nothingAttested(), [])),
+    ]
+
+    for (const one of everything) {
+      expect(one).not.toMatch(/two models/i)
+      expect(one).not.toMatch(/both models/i)
+      expect(one).not.toMatch(/second (underlying )?model/i)
+      // The rejection ADR-0012 called a finding cannot fill here any more: a route
+      // is read on one model, so 'cleared on one model and not on another' is a
+      // line that could only ever read zero on this surface.
+      expect(one).not.toMatch(/cross-model/i)
+    }
+  })
+
+  it('draws one bar, because there is one pass', () => {
+    expect(modelBars(aReading())).toHaveLength(1)
   })
 })
 
@@ -388,9 +424,9 @@ function aReading(over: Partial<MeasurementReading> = {}): MeasurementReading {
   return {
     measurement_id: 'm-1',
     status: 'measuring',
-    statement: 'measuring the selected routes on the first model',
+    statement: 'measuring the selected routes against the three reference agents',
     recorded_at: '2026-02-02T10:00:00+00:00',
-    models: ['model-one', 'model-two'],
+    models: ['model-one'],
     library: '/var/lib/agentaudit/cases',
     routes: [
       {
@@ -403,11 +439,8 @@ function aReading(over: Partial<MeasurementReading> = {}): MeasurementReading {
         entered_as: '',
       },
     ],
-    passes: [
-      { model: 'model-one', state: 'measured', attempted: 30, of: 30 },
-      { model: 'model-two', state: 'measuring', attempted: 12, of: 30 },
-    ],
-    lines: ['consulted the admission memory: nothing held for this pair'],
+    passes: [{ model: 'model-one', state: 'measuring', attempted: 12, of: 30 }],
+    lines: ['consulted the admission memory: nothing held for this reading'],
     ...over,
   }
 }
@@ -421,7 +454,7 @@ function anEstimate(): MeasurementEstimate {
         family: 'indirect_prompt_injection',
         target: 'acme-support-agent',
         calls: 24,
-        basis: '3 agents on 2 models at 4 attempts each, plus a probe per agent',
+        basis: '3 agents at 4 attempts each, plus a probe per agent',
         cost: '$0.05',
       },
       {
@@ -429,11 +462,11 @@ function anEstimate(): MeasurementEstimate {
         family: 'tool_misuse',
         target: 'acme-support-agent',
         calls: 24,
-        basis: '3 agents on 2 models at 4 attempts each, plus a probe per agent',
+        basis: '3 agents at 4 attempts each, plus a probe per agent',
         cost: '$0.05',
       },
     ],
-    models: ['model-one', 'model-two'],
+    models: ['model-one'],
     calls: 36,
     ceiling: 72,
     cost: '$0.07',
@@ -485,13 +518,26 @@ function counted(value: unknown, name = ''): [string, number][] {
 }
 
 describe('one bar per model, and it says how far into that model the run is', () => {
-  it('carries each pass in the order the models are measured', () => {
+  it('carries a bar per pass, in the order the record holds them', () => {
     const bars = modelBars(aReading())
 
-    expect(bars.map((bar) => bar.model)).toEqual(['model-one', 'model-two'])
-    expect(bars[0].attempted).toBe(30)
+    expect(bars.map((bar) => bar.model)).toEqual(['model-one'])
+    expect(bars[0].attempted).toBe(12)
     expect(bars[0].of).toBe(30)
-    expect(bars[1].attempted).toBe(12)
+
+    // The order is the record's and not this module's, asserted where there is an
+    // order to get wrong. One pass is what this surface serves (ADR-0107 §4); the
+    // reading's `passes` is still a list, and a screen that sorted it would be a
+    // screen disagreeing with the run about which pass came first.
+    const two = modelBars(
+      aReading({
+        passes: [
+          { model: 'model-two', state: 'measured', attempted: 30, of: 30 },
+          { model: 'model-one', state: 'measuring', attempted: 12, of: 30 },
+        ],
+      }),
+    )
+    expect(two.map((bar) => bar.model)).toEqual(['model-two', 'model-one'])
   })
 
   it('says in words which of the four states a pass is in', () => {

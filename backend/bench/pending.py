@@ -3,8 +3,10 @@
 The fourth store on the `DatabaseStore` seam, and the one the disclosure posture has
 a stated exception for. A route the adaptive layer found against a customer's agent
 cannot be decided by the run that found it — the bar is `D` against the three
-reference agents on two models (ADR-0012), and a customer run touched one endpoint,
-the customer's. Until this store existed the route reached one printed line and died
+reference agents (ADR-0012 as
+[ADR-0107](../../docs/adr/0107-a-route-found-against-a-customers-target-faces-the-single-model-bar.md)
+narrows it), and a customer run touched one endpoint, the customer's. Until this
+store existed the route reached one printed line and died
 with the run: `AdaptiveEpisode.proposals` is a field on a record of a run that ended,
 `precedent/findings.sqlite` holds prose and no target identity (ADR-0008, ADR-0011),
 and `decisions/routes.sqlite` holds what the gate *measured*, which for an undecided

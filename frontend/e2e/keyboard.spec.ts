@@ -246,9 +246,10 @@ test('the rail is skippable, and the skip is the first thing the keyboard finds'
   page,
 }) => {
   await page.goto('/#/')
-  await expect(
-    page.getByRole('heading', { name: 'AgentAudit: an adversarial bench' }),
-  ).toBeVisible()
+  // `THE_BENCH` off `rail.ts`, which is what the front door is headed by since the
+  // page became the switches: the rail row, the browser tab and the page's own name
+  // are one string and cannot drift.
+  await expect(page.getByRole('heading', { name: 'The bench', level: 1 })).toBeVisible()
 
   // The thing being skipped. Seven is what `rail.ts` names off a screen that is not a
   // run's; asserting *more than two* rather than exactly seven keeps this test about

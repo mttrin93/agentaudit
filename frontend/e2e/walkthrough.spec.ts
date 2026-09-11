@@ -299,10 +299,14 @@ test('an operator registers a target, is blocked, confirms, and reads the report
 
   // ── Completion: the run stopped, and it stopped by finishing ───────────────────
   await expect(page.getByRole('heading', { name: 'Finished' })).toBeVisible()
-  await expect(page.getByRole('heading', { name: 'The report' })).toBeVisible()
 
   // ── The report: signed, served, and about the target that was registered ───────
-  await page.getByRole('link', { name: 'Read the report' }).click()
+  // Reached from the rail rather than from a block on the run screen. That screen
+  // carried a *The report* section with the three artefact links under it; the links
+  // are the report screen's own and the rail already points at the page, so the
+  // section was a second way to the same place, drawn under the figures somebody is
+  // watching. `ITS_REPORT` is the row's name.
+  await page.getByRole('link', { name: 'Its report' }).click()
   await expect(page.getByRole('heading', { level: 1, name: served.name })).toBeVisible()
   // The family that was covered, on its scored card and with a rate on it rather
   // than a heading alone. Scoped to the scored section on purpose: this page names
@@ -311,16 +315,25 @@ test('an operator registers a target, is blocked, confirms, and reads the report
   const scored = page
     .locator('section')
     .filter({ has: page.getByRole('heading', { level: 2, name: /^The scored layer/ }) })
+  // A row of the per-family table, where a card in a grid stood (ADR-0113). Each
+  // family is its own `tbody`, so the row is found by the header cell that names it
+  // rather than by a heading that is no longer drawn.
   const family = scored
-    .locator('div.family')
-    .filter({ has: page.getByRole('heading', { level: 3, name: 'data leakage' }) })
+    .locator('table.per-family tbody')
+    .filter({ has: page.getByRole('rowheader', { name: 'data leakage' }) })
   await expect(family).toHaveCount(1)
   await expect(family.locator('span.rate').first()).not.toBeEmpty()
-  // PLAN §4's central column, on a card drawn from a document this walk signed. It
-  // is the one end-to-end proof that the article reaches a screen: it is read off
-  // `labels.LABELS` into the payload, printed in the Markdown, and drawn here beside
-  // the family name rather than instead of it (#52, ADR-0044).
-  await expect(family.getByText('bears article 15 of the EU AI Act')).toBeVisible()
+  // PLAN §4's central column, on a row drawn from a document this walk signed. It is
+  // the one end-to-end proof that the article reaches a screen: it is read off
+  // `labels.LABELS` into the payload, printed in the Markdown, and drawn here in the
+  // row's refs cell beside the family's figures rather than instead of them (#52,
+  // ADR-0044).
+  //
+  // As the identifier and no longer as the sentence. *bears article 15 of the EU AI
+  // Act* said in prose what `15` says as a key into a published instrument, and the
+  // sentence carrying both was saying it twice; the identifiers are now the only
+  // place an article reaches a reader, which is why this asks for them.
+  await expect(family.locator('td.refs-cell')).toContainText('EU AI Act 15')
   // The failures section, under the reading this walk actually produces. The harness
   // deletes every model variable before the factory runs, so this bench declares no
   // narrative instrument and wrote no sentence about anything — and the section says
@@ -328,11 +341,17 @@ test('an operator registers a target, is blocked, confirms, and reads the report
   // paragraphs on and ADR-0070 §4 carried into the document. A screen that drew
   // nothing here would be indistinguishable from a run whose judge broke.
   const failures = page.locator('section').filter({
-    has: page.getByRole('heading', { level: 2, name: /^Each failure the bench/ }),
+    has: page.getByRole('heading', { level: 2, name: 'Failures and fixes' }),
   })
   await expect(failures).toHaveCount(1)
   await expect(failures.getByText('no_narrative_instrument_declared')).toBeVisible()
-  await expect(failures.getByText('not reproducible')).toBeVisible()
+  // The standing claim about whatever is under this section, in the screen's own one
+  // line. It replaced `A_MODEL_WROTE_THESE_SENTENCES` and two paragraphs beside it,
+  // which opened on *not reproducible*; all three are still built and still tested,
+  // and what is asserted here is the claim rather than the wording.
+  await expect(
+    failures.getByText('would not write the same ones again'),
+  ).toBeVisible()
   await expect(
     failures.getByText('no narrative instrument was declared for this run'),
   ).toBeVisible()

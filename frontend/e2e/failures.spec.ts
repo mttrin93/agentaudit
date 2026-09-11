@@ -103,13 +103,21 @@ test('a failure, its fix, and what informed it, are on the report screen', async
   await page.goto(`/#/runs/${RUN}/report`)
 
   const failures = page.locator('section').filter({
-    has: page.getByRole('heading', { level: 2, name: /^Each failure the bench/ }),
+    has: page.getByRole('heading', { level: 2, name: 'Failures and fixes' }),
   })
   // Which of the four readings this is, as the name the payload carries and not only
   // as the sentence: a page that told the four apart by prose alone would stop telling
   // them apart the day the prose was reworded (ADR-0070 §4).
   await expect(failures.getByText('explained', { exact: true })).toBeVisible()
-  await expect(failures.locator('.consequence')).toHaveText(/^not reproducible/)
+  // And the two standing claims about what is under it: a model wrote these sentences
+  // and would not write them again, and no figure above came from any of them. One
+  // line where `A_MODEL_WROTE_THESE_SENTENCES` and two paragraphs beside it stood —
+  // the same claims, consolidated, and the constants are still built and still tested
+  // in `report.test.ts`. Asked for as the claims rather than as the sentence, because
+  // it is the screen's own wording and this spec is not its copy editor.
+  const asserts = failures.locator('p.asserts')
+  await expect(asserts).toContainText('would not write the same ones again')
+  await expect(asserts).toContainText('no figure above was measured from any of them')
 
   // Grouped by family and collapsed to begin with: n = 30 per family, so a flat list
   // is unreadable at exactly the moment it matters most. Two families in this
@@ -126,7 +134,12 @@ test('a failure, its fix, and what informed it, are on the report screen', async
   // wrote them and neither answers the other's (ADR-0069).
   const [alone, reused] = SERVED.findings.findings
   const first = leakage.locator('.finding').first()
-  await expect(first.getByText('data-leakage-001', { exact: true })).toBeVisible()
+  // The case, as the finding's own heading: the fix's label sits in the same line
+  // beside it, so the id is asked for as the heading it starts rather than as an
+  // element whose whole text it is.
+  await expect(
+    first.getByRole('heading', { level: 4, name: /^data-leakage-001/ }),
+  ).toBeVisible()
   await expect(first.getByText('what went wrong')).toBeVisible()
   await expect(first.getByText(alone.reason)).toBeVisible()
   await expect(first.getByText('what to change')).toBeVisible()

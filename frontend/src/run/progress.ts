@@ -535,14 +535,17 @@ function sending(progress: RunProgress): string {
  * and a second cell would be this screen inventing concurrency the bench has not got.
  */
 function cellsFor(
-  answers: readonly string[],
+  answers: readonly string[] | undefined,
   of: number,
   inFlight: boolean,
 ): readonly Cell[] {
-  // Never past the plan. The sequence and the denominator come off one walk on the
-  // bench's side and cannot disagree, but the strip is `of` cells long by definition
-  // and a row longer than its own denominator is what a length here must not be.
-  const answered = answers.slice(0, of)
+  // Never past the plan, and never off the end of a response that carries no order.
+  // The sequence and the denominator come off one walk on the bench's side and cannot
+  // disagree, but the strip is `of` cells long by definition and a row longer than its
+  // own denominator is what a length here must not be — and a field this screen read
+  // without asking whether it was there took the whole page down with it when a
+  // response arrived without one, which is a blank screen for a missing strip.
+  const answered = (answers ?? []).slice(0, of)
   const waiting = Math.max(of - answered.length, 0)
   // Only out of what is left: a family whose plan is full has nothing on the wire,
   // and a strip that grew a cell to say otherwise would be longer than the plan.

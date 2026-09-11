@@ -27,7 +27,7 @@ from opentelemetry import trace as otel_trace
 
 from backend.api import recorded
 from backend.api.recorded import RECORDED_RUNS
-from backend.bench import decided, pending
+from backend.bench import decided, held, pending
 from backend.bench.adaptive import precedent
 from backend.bench.adaptive.precedent import DURABLE_PRECEDENT
 from backend.bench.adjudication import Completion
@@ -41,6 +41,7 @@ from backend.bench.calibration import (
 from backend.bench.contract import RetryPolicy, TargetConfig, Transcript
 from backend.bench.decided import DECIDED_ROUTES
 from backend.bench.evaluator import Verdict
+from backend.bench.held import HELD_ROUTES
 from backend.bench.judge import (
     Exposure,
     Finding,
@@ -668,6 +669,47 @@ def pending_elsewhere(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     would depend on its order.
     """
     _pending_at(monkeypatch, tmp_path / "pending" / "routes.sqlite")
+
+
+def _held_at(patch: pytest.MonkeyPatch, elsewhere: Path) -> None:
+    """Point every route to the target libraries at `elsewhere`.
+
+    Two of them, on `_pending_at`'s reasoning: the module constant, which is what a
+    freshly constructed `HeldDatabase` reads, and the shared module-level object —
+    which captured the real path at import and would answer with it however the
+    constant moved.
+    """
+    patch.setattr(held, "DEFAULT_HELD_PATH", elsewhere)
+    patch.setattr(HELD_ROUTES.store, "path", elsewhere)
+
+
+@pytest.fixture(scope="session", autouse=True)
+def held_elsewhere_for_the_session(
+    tmp_path_factory: pytest.TempPathFactory,
+) -> Iterator[None]:
+    """The redirection below, from a scope a module-scoped fixture cannot escape.
+
+    Session-scoped for the reason `pending_elsewhere_for_the_session` is, and the
+    stake is the same: what a module-scoped run reaching the real file would leave
+    in the working copy is a working probe and the name of the agent it beat, which
+    ADR-0104 grants an exception for keeping and no exception at all for committing.
+    """
+    patch = pytest.MonkeyPatch()
+    _held_at(patch, tmp_path_factory.mktemp("held") / "routes.sqlite")
+    yield
+    patch.undo()
+
+
+@pytest.fixture(autouse=True)
+def held_elsewhere(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """No test writes into the target libraries a real run reads.
+
+    Autouse and unconditional, on `pending_elsewhere`'s reasoning. A fresh database
+    per test, because a target library accumulates by design: a route one test held
+    would be a route the next test's run re-sent, and the suite's result would
+    depend on its order.
+    """
+    _held_at(monkeypatch, tmp_path / "held" / "routes.sqlite")
 
 
 def _run_records_at(patch: pytest.MonkeyPatch, elsewhere: Path) -> None:

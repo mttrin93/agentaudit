@@ -70,6 +70,19 @@ wheels/
 # holds both of the two fields the exception is about.
 /pending/
 
+# Confirmed breaks the admission bar refused, held against the target each one beat
+# and re-sent on every run of it (backend/bench/held.py, ADR-0117). Like /pending/
+# this directory holds a **working probe and the name of the agent it beat**, under
+# the same stated exception and with one difference that makes the ignore rule matter
+# more rather than less: a pending route's payload is emptied by the decision, and a
+# held route's is kept for as long as the route is open, because being re-sent is the
+# whole of what holding it buys (ADR-0008, ADR-0104 §5, ADR-0117 §4). Its own
+# directory and its own database on ADR-0029 decision 6 — the queue holds what nothing
+# has measured yet and this holds what a decision produced — and a directory rather
+# than a file name because SQLite writes `-wal` and `-shm` sidecars beside the
+# database, which here hold both of the two fields the exception is about.
+/held/
+
 # Node
 node_modules/
 

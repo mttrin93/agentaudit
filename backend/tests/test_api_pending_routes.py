@@ -169,6 +169,14 @@ A_CUSTOMER = "acme-support-bot"
 
 FILED_ON = date(2026, 8, 30)
 
+THE_RUN_THAT_FOUND_IT = "run-2026-08-30-0004"
+"""The run the routes here were found in, as the run service names its own.
+
+What a route held against a target is found in (`held.HeldRoute.found_in`), so it
+travels from the run that filed the route to the decision that holds it and is
+never minted by this surface.
+"""
+
 A_PROBE = "the probe that actually beat somebody's agent"
 """The payload the pending store is the one place in this repository allowed to hold.
 
@@ -427,7 +435,9 @@ def a_route(
 
 def filed(proposal: ProposedRoute, target: str = A_CUSTOMER) -> AwaitingDecision:
     """That route, in the queue, as the run that found it left it."""
-    return PENDING_ROUTES.file(proposal, target=target, today=FILED_ON)
+    return PENDING_ROUTES.file(
+        proposal, target=target, found_in=THE_RUN_THAT_FOUND_IT, today=FILED_ON
+    )
 
 
 def decided_row(route: RouteKey) -> dict[str, Any]:

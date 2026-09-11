@@ -131,6 +131,7 @@ def file_proposals(
     episodes: Iterable[AdaptiveEpisode],
     *,
     today: date,
+    found_in: str,
     queue: PendingRoutes = PENDING_ROUTES,
 ) -> Queued:
     """File every route this run's episodes proposed, and report what refused.
@@ -154,6 +155,13 @@ def file_proposals(
     every test does, and how the suite's redirection reaches this (`conftest`
     moves the store's path rather than rebinding the name).
 
+    **`found_in` is the run, and it has no default for `today`'s reason**: the
+    entry point is the one thing that knows which run this is, and nothing between
+    it and the row could reconstruct one. It is what a route this queue decides
+    is later held under (`held.HeldRoute.found_in`), and a route filed under a run
+    id somebody invented here would send a reader of a held route to a record that
+    does not exist.
+
     **No default for `today`**, for `PendingRoutes.file`'s reason: nothing between
     the entry point and the row reads a clock, so a route filed by a replayed run is
     dated to the run rather than to the morning it was replayed. The entry point is
@@ -164,7 +172,12 @@ def file_proposals(
     for episode in episodes:
         for proposal in episode.proposals:
             try:
-                record = queue.file(proposal, target=episode.target_name, today=today)
+                record = queue.file(
+                    proposal,
+                    target=episode.target_name,
+                    found_in=found_in,
+                    today=today,
+                )
             except Exception as refused:  # noqa: BLE001 - never fails the run
                 refusals.append(
                     f"{RouteKey.of(proposal.case).stated()} was not filed: {refused}"

@@ -56,6 +56,14 @@ A_CUSTOMER = "acme-support-bot"
 """The target identity the queue is triaged on — ADR-0104 §2, and the one field no
 other store in this repository carries."""
 
+THE_RUN_THAT_FOUND_IT = "run-2026-08-30-0004"
+"""The run whose attacker found the route, as the entry point names it.
+
+A run id and not a date: `filed_on` is already the day, and what a route held
+against a target later needs is the record a reader can open — its target, its
+declaration and its own date (`held.HeldRoute.found_in`).
+"""
+
 
 def a_route(
     objective: Case,
@@ -105,7 +113,9 @@ def test_a_filed_route_carries_the_draft_the_prose_the_target_and_the_date(
     # needs, and what triage needs.
     proposal = a_route(leakage_case)
 
-    filed = queue.file(proposal, target=A_CUSTOMER, today=FILED_ON)
+    filed = queue.file(
+        proposal, target=A_CUSTOMER, found_in=THE_RUN_THAT_FOUND_IT, today=FILED_ON
+    )
 
     assert filed.route == RouteKey.of(proposal.case)
     assert filed.draft.payload == proposal.case.payload
@@ -116,6 +126,72 @@ def test_a_filed_route_carries_the_draft_the_prose_the_target_and_the_date(
     assert filed.state is RouteState.PENDING
 
 
+def test_a_filed_route_names_the_run_that_found_it(
+    queue: PendingRoutes, leakage_case: Case
+) -> None:
+    """The record a reader opens for the date, the target and the declaration.
+
+    On the row rather than derivable from it, because nothing else on a pending
+    record names a run: `filed_on` is a day, and a day is not a record anybody can
+    go and read. It is what a route held against a target later is found in
+    (`held.HeldRoute.found_in`), and the decision that holds it has only what the
+    run that found the route wrote down.
+    """
+    proposal = a_route(leakage_case)
+
+    filed = queue.file(
+        proposal,
+        target=A_CUSTOMER,
+        found_in=THE_RUN_THAT_FOUND_IT,
+        today=FILED_ON,
+    )
+
+    assert filed.found_in == THE_RUN_THAT_FOUND_IT
+    read_back = queue.filed(filed.route)
+    assert read_back is not None
+    assert read_back.found_in == THE_RUN_THAT_FOUND_IT
+
+
+def test_a_route_filed_under_no_run_at_all_is_refused(
+    queue: PendingRoutes, leakage_case: Case
+) -> None:
+    """Refused at the writer, so a blank can only be a record older than the field.
+
+    The refusal is here and not on the record, and the asymmetry is deliberate: a
+    row written before this field existed still has to read back, because a triage
+    page that raised on one old record would show the operator none of the new ones
+    (`read_filed`). What must not happen is a *new* record with nothing in it —
+    that is a route no later decision could say where it came from.
+    """
+    with pytest.raises(ValueError, match="run"):
+        queue.file(
+            a_route(leakage_case), target=A_CUSTOMER, found_in="  ", today=FILED_ON
+        )
+
+
+def test_a_route_filed_before_the_run_was_recorded_still_reads_back(
+    queue: PendingRoutes, leakage_case: Case
+) -> None:
+    """An old row is readable, and says it names no run rather than raising.
+
+    The companion of the refusal above and the reason it is not on the record: the
+    queue holds rows written before this field, and `read_filed` is what a page,
+    a decision and the re-stamp script all go through.
+    """
+    proposal = a_route(leakage_case)
+    record = queue.file(
+        proposal, target=A_CUSTOMER, found_in=THE_RUN_THAT_FOUND_IT, today=FILED_ON
+    )
+    stored = dict(record.stored())
+    del stored["found_in"]
+    queue.store.put(queue.namespace, record.route.filed_under, stored)
+
+    read_back = queue.filed(record.route)
+
+    assert read_back is not None
+    assert read_back.found_in == ""
+
+
 def test_a_filed_route_read_back_out_of_the_database_still_carries_its_probe(
     queue: PendingRoutes, leakage_case: Case
 ) -> None:
@@ -123,7 +199,9 @@ def test_a_filed_route_read_back_out_of_the_database_still_carries_its_probe(
     # bar is decided by sending the probe. A queue that lost the payload on the way
     # to disk is the present failure with a database in front of it.
     proposal = a_route(leakage_case)
-    queue.file(proposal, target=A_CUSTOMER, today=FILED_ON)
+    queue.file(
+        proposal, target=A_CUSTOMER, found_in=THE_RUN_THAT_FOUND_IT, today=FILED_ON
+    )
 
     found = queue.filed(RouteKey.of(proposal.case))
 
@@ -161,8 +239,10 @@ def test_a_route_filed_twice_is_one_record_and_the_second_replaces_the_first(
     second = a_route(leakage_case, description="found it again")
     assert first.case.id != second.case.id
 
-    queue.file(first, target=A_CUSTOMER, today=FILED_ON)
-    queue.file(second, target=A_CUSTOMER, today=FILED_ON)
+    queue.file(first, target=A_CUSTOMER, found_in=THE_RUN_THAT_FOUND_IT, today=FILED_ON)
+    queue.file(
+        second, target=A_CUSTOMER, found_in=THE_RUN_THAT_FOUND_IT, today=FILED_ON
+    )
 
     assert len(queue.queue()) == 1
     found = queue.filed(RouteKey.of(second.case))
@@ -176,11 +256,15 @@ def test_two_probes_against_two_targets_are_two_records(
     # Three routes filed against three agents and three filed against one are
     # different situations and call for different decisions (ADR-0104 §2).
     queue.file(
-        a_route(leakage_case, payload="one probe"), target=A_CUSTOMER, today=FILED_ON
+        a_route(leakage_case, payload="one probe"),
+        target=A_CUSTOMER,
+        found_in=THE_RUN_THAT_FOUND_IT,
+        today=FILED_ON,
     )
     queue.file(
         a_route(leakage_case, payload="another probe"),
         target="other-bot",
+        found_in=THE_RUN_THAT_FOUND_IT,
         today=FILED_ON,
     )
 
@@ -205,7 +289,9 @@ def test_a_decision_replaces_the_record_and_the_payload_is_gone_from_the_store(
     # decision: mitigation 5 is that the two fields this exception was granted for
     # exist only for routes still awaiting a decision.
     proposal = a_route(leakage_case)
-    queue.file(proposal, target=A_CUSTOMER, today=FILED_ON)
+    queue.file(
+        proposal, target=A_CUSTOMER, found_in=THE_RUN_THAT_FOUND_IT, today=FILED_ON
+    )
     route = RouteKey.of(proposal.case)
 
     decided = queue.decide(route, state=RouteState.ADMITTED, reason="D = 1.00 on both")
@@ -231,7 +317,9 @@ def test_a_rejected_route_keeps_the_gates_own_reason(
     # rejected route stays on the page with the reason it was rejected for (spec,
     # user story 12).
     proposal = a_route(leakage_case)
-    queue.file(proposal, target=A_CUSTOMER, today=FILED_ON)
+    queue.file(
+        proposal, target=A_CUSTOMER, found_in=THE_RUN_THAT_FOUND_IT, today=FILED_ON
+    )
 
     decided = queue.decide(
         RouteKey.of(proposal.case),
@@ -250,7 +338,9 @@ def test_a_decision_with_no_reason_is_refused(
     # says only "rejected" is the finding thrown away — which is the defect the
     # store exists to remove, one field further in.
     proposal = a_route(leakage_case)
-    queue.file(proposal, target=A_CUSTOMER, today=FILED_ON)
+    queue.file(
+        proposal, target=A_CUSTOMER, found_in=THE_RUN_THAT_FOUND_IT, today=FILED_ON
+    )
 
     with pytest.raises(ValueError, match="no reason"):
         queue.decide(
@@ -279,7 +369,9 @@ def test_deciding_a_route_twice_is_refused(
     # store no longer holds — nothing could have measured it — so it is refused
     # rather than allowed to overwrite the first answer.
     proposal = a_route(leakage_case)
-    queue.file(proposal, target=A_CUSTOMER, today=FILED_ON)
+    queue.file(
+        proposal, target=A_CUSTOMER, found_in=THE_RUN_THAT_FOUND_IT, today=FILED_ON
+    )
     route = RouteKey.of(proposal.case)
     queue.decide(route, state=RouteState.ADMITTED, reason="admitted")
 
@@ -299,6 +391,7 @@ def test_a_decided_state_is_not_pending(
             criterion="whatever",
             description="a route",
             target=A_CUSTOMER,
+            found_in=THE_RUN_THAT_FOUND_IT,
             filed_on=FILED_ON,
             state=RouteState.PENDING,
             reason="undecided",
@@ -314,7 +407,9 @@ def test_a_filed_route_survives_the_process_that_filed_it(
     # and the file is the authority (ADR-0029 decision 2).
     path = tmp_path / "pending" / "routes.sqlite"
     proposal = a_route(leakage_case)
-    PendingRoutes.at(path).file(proposal, target=A_CUSTOMER, today=FILED_ON)
+    PendingRoutes.at(path).file(
+        proposal, target=A_CUSTOMER, found_in=THE_RUN_THAT_FOUND_IT, today=FILED_ON
+    )
 
     found = PendingRoutes.at(path).filed(RouteKey.of(proposal.case))
 
@@ -486,7 +581,9 @@ def test_a_route_filed_before_the_narrowing_is_restamped_not_reinterpreted(
     # reader that translated on the way out would leave the stored record saying
     # one thing while the surface acted on another (ADR-0032 §4).
     proposal = a_route(leakage_case, discovered_by=DiscoveredBy.ADAPTIVE)
-    queue.file(proposal, target=A_CUSTOMER, today=FILED_ON)
+    queue.file(
+        proposal, target=A_CUSTOMER, found_in=THE_RUN_THAT_FOUND_IT, today=FILED_ON
+    )
 
     restamped = restamp(queue)
 
@@ -504,7 +601,9 @@ def test_restamping_is_idempotent_and_leaves_the_rest_of_the_draft_alone(
     # one — a TOML round-trip that dropped a payload or a precondition passes the
     # test above and fails this one.
     proposal = a_route(leakage_case, discovered_by=DiscoveredBy.ADAPTIVE)
-    queue.file(proposal, target=A_CUSTOMER, today=FILED_ON)
+    queue.file(
+        proposal, target=A_CUSTOMER, found_in=THE_RUN_THAT_FOUND_IT, today=FILED_ON
+    )
     before = queue.filed(RouteKey.of(proposal.case))
     assert isinstance(before, AwaitingDecision)
 
@@ -526,7 +625,9 @@ def test_a_decided_route_has_no_provenance_left_to_restamp(
     # drafted went with the decision (ADR-0104 §4) — so there is no stored
     # provenance on it, and the bar it faced was applied while it was pending.
     proposal = a_route(leakage_case, discovered_by=DiscoveredBy.ADAPTIVE)
-    queue.file(proposal, target=A_CUSTOMER, today=FILED_ON)
+    queue.file(
+        proposal, target=A_CUSTOMER, found_in=THE_RUN_THAT_FOUND_IT, today=FILED_ON
+    )
     queue.decide(
         RouteKey.of(proposal.case),
         state=RouteState.REJECTED,

@@ -22,6 +22,7 @@ import type { RunProgress } from '../api/bench'
 import screen from './RunScreen.tsx?raw'
 import {
   ADAPTIVE_UNITS,
+  inThePlan,
   SCORED_UNITS,
   adaptiveReading,
   electiveRows,
@@ -557,6 +558,35 @@ describe('the six families, while the run is going', () => {
     // And no rate at all where no attempt has come back: a family attempted no times
     // has not been let through zero times, and `0%` is the reading that says it has.
     expect(injection.rate).toBe('—')
+  })
+
+  it('leaves the families with no plan out of the table', () => {
+    // A family the declarations dropped, and a requested elective family the library
+    // holds no case in, are both `0 / 30` rows whose bar can never fill and whose
+    // every cell is grey. They were six words of *not run* down a table somebody
+    // watches to see what is happening, and nothing about them changes while it runs.
+    //
+    // What is dropped is the row and not the fact: `of === 0` is the whole test, the
+    // reading still carries every family, and the document that has to account for
+    // all of them is the report (ADR-0015, ADR-0094, ADR-0095).
+    const going = inTheScoredLayer()
+    const six = inThePlan(familyRows(going))
+    const tier = inThePlan(electiveRows(going))
+
+    expect(six.map((row) => row.family)).toEqual(['data_leakage'])
+    expect(tier.map((row) => row.family)).toEqual(['pii_leakage'])
+    // The rows themselves are untouched — this drops, it does not rewrite.
+    expect(six[0]).toEqual(familyRows(going)[1])
+
+    // And the reading it filters still holds all of them, which is what keeps this a
+    // decision about the table rather than about what the run covers.
+    expect(familyRows(going)).toHaveLength(2)
+    expect(electiveRows(going)).toHaveLength(2)
+
+    // Both lists go through it on the screen, and separately: a filter applied to one
+    // would leave the other drawing the rows this one drops.
+    expect(screen).toContain('inThePlan(familyRows(progress))')
+    expect(screen).toContain('inThePlan(electiveRows(progress))')
   })
 
   it('puts nothing on the wire outside the family the position names', () => {

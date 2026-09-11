@@ -615,6 +615,30 @@ export function familyRows(progress: RunProgress): readonly FamilyRow[] {
 }
 
 /**
+ * The rows with a plan behind them, which are the rows a table draws.
+ *
+ * A family with `of === 0` will make no attempt: the caller's declarations dropped it
+ * (`notRun`), or the library the run was planned against holds no case in it
+ * (`no_case` on the tier). Either way its bar can never fill, every cell in its strip
+ * is grey, and nothing about the row changes while the run goes — so on a screen
+ * somebody watches to see what is happening, it is a line of *not run* taking up the
+ * space the families that are running need.
+ *
+ * **The row goes and the fact does not.** This filters what a table draws; it does
+ * not touch the reading, which still carries every family the route served, and it
+ * is not where either absence is accounted for. The reason a family of the six is
+ * out is on the run record (`families_not_run`), the reason a requested elective one
+ * is out is `no_case`, and the document that has to state all nine is the report
+ * (ADR-0015, ADR-0094, ADR-0095).
+ *
+ * Both lists go through it separately, like everything else here: the six and the
+ * tier are two closed sets and nothing in this app concatenates them (ADR-0035 §2).
+ */
+export function inThePlan(rows: readonly FamilyRow[]): readonly FamilyRow[] {
+  return rows.filter((row) => row.of > 0)
+}
+
+/**
  * The elective families this run asked for, as rows, in the order the route served
  * them.
  *

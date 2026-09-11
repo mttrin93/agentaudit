@@ -59,6 +59,7 @@ import {
   adaptiveReading,
   electiveRows,
   familyRows,
+  inThePlan,
   payloads,
   scoredReading,
   scoredShare,
@@ -758,6 +759,13 @@ function Progress({
           list and the two maps stay two maps, so no count here is taken against a
           denominator from the other tier and nothing on the screen is a figure over
           the nine (ADR-0035 §2, ADR-0088).
+
+          **Only the families with a plan.** A family the declarations dropped and a
+          requested elective family the library holds no case in are both rows that
+          can never fill, and they sat here saying *not run* while the families that
+          are running were pushed down the table. `inThePlan` drops the row; what it
+          does not drop is the fact, which is on the run record and on the report that
+          has to account for all nine (ADR-0015, ADR-0094, ADR-0095).
         */}
         <table className="attempts">
           <thead>
@@ -792,10 +800,10 @@ function Progress({
               a length, nothing is added, and no figure is read off it. The two maps
               stay two maps (ADR-0035 §2).
             */}
-            {familyRows(progress).map((row) => (
+            {inThePlan(familyRows(progress)).map((row) => (
               <FamilyLine row={row} widest={widestPlan(progress)} key={row.family} />
             ))}
-            {electiveRows(progress).map((row) => (
+            {inThePlan(electiveRows(progress)).map((row) => (
               <FamilyLine row={row} widest={widestPlan(progress)} key={row.family} />
             ))}
           </tbody>

@@ -98,11 +98,19 @@ export function RunScreen() {
   const [unavailable, setUnavailable] = useState('')
   const [refused, setRefused] = useState('')
   const [busy, setBusy] = useState(false)
-  /* The stop's own two pieces of state, beside the interrupt's and never folded into
-     them: `busy` is an answer to the halt going out, and this is a second decision made
-     minutes later. A screen that shared one flag would grey the halt's buttons while a
-     stop was in flight. */
+  /* The stop's own state, beside the interrupt's and never folded into it: `busy` is
+     an answer to the halt going out, and this is a second decision made minutes later.
+     A screen that shared one flag would grey the halt's buttons while a stop was in
+     flight.
+
+     Two flags and not one, because the press outlives its request. `stopping` is the
+     request in flight and clears in milliseconds; `stopped` is the fact that the bench
+     took the stop, and it is never unset — the run goes on running until the bench
+     reaches its next `authorise_call`, which on a real target is a whole attempt away.
+     A screen holding only the first re-armed the button in that gap and asked for the
+     press again (ADR-0114). */
   const [stopping, setStopping] = useState(false)
+  const [stopped, setStopped] = useState(false)
   const [refusedStop, setRefusedStop] = useState('')
   const [confirmed, setConfirmed] = useState(false)
   /**
@@ -258,7 +266,13 @@ export function RunScreen() {
     setStopping(true)
     setRefusedStop('')
     const outcome = await stopTheRun(runId)
-    if (outcome.kind !== 'answered') {
+    if (outcome.kind === 'answered') {
+      // The bench has the flag, and this screen keeps that fact for the rest of the
+      // run. What has not happened yet is the run ending: the stop is read where the
+      // next call is authorised, so the message already on the wire is answered and
+      // recorded first.
+      setStopped(true)
+    } else {
       setRefusedStop(outcome.statement)
     }
     await read()
@@ -398,6 +412,7 @@ export function RunScreen() {
           episodes={episodes}
           stop={stopTheSuite}
           stopping={stopping}
+          stopped={stopped}
           refusedStop={refusedStop}
         />
       ) : null}
@@ -563,6 +578,7 @@ function Progress({
   episodes,
   stop,
   stopping,
+  stopped,
   refusedStop,
 }: {
   at: Standing
@@ -570,6 +586,7 @@ function Progress({
   episodes: RunEpisodes | null
   stop: () => Promise<void>
   stopping: boolean
+  stopped: boolean
   refusedStop: string
 }) {
   /*
@@ -643,10 +660,22 @@ function Progress({
             reached its end in the instant this was pressed has moved, and is not an
             error to report as one.
           */}
-          {at.kind === 'running' ? (
+          {at.kind === 'running' && !stopped ? (
             <button type="button" onClick={() => void stop()} disabled={stopping}>
               {stopping ? 'Stopping…' : 'Stop this run'}
             </button>
+          ) : null}
+          {/*
+            Once the bench has the flag, the control is gone and this stands in its
+            place until the run settles. It is not a disabled button: a stop is a stop
+            and never a pause, so there is nothing here to press again and nothing to
+            un-press — and a greyed-out *Stop this run* reads as a press that did not
+            take, which is the thing this whole line exists to stop saying.
+          */}
+          {at.kind === 'running' && stopped ? (
+            <span className="taken">
+              Stopping after the message on the wire is answered
+            </span>
           ) : null}
         </p>
         {refusedStop ? (

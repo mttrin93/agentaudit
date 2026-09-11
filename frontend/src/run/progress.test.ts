@@ -672,6 +672,25 @@ describe('stopping a run that is going', () => {
     expect(standing(holdingItsInterrupt()).kind).toBe('holding')
   })
 
+  it('stays taken once it is taken, so the press is not asked for twice', () => {
+    // **The two-press bug.** `stopping` was the whole of this screen's memory of the
+    // press and it tracks the *request*, which comes back in milliseconds — while the
+    // run goes on running until the bench reaches its next `authorise_call`, which is
+    // a whole attempt away on a real target. So the button re-armed itself, said
+    // *Stop this run* at somebody who had just stopped it, and they pressed again.
+    //
+    // The second press did nothing the first had not: the flag only ever goes from
+    // false to true. What was wrong was the screen, which had no memory of the press
+    // outliving the request that carried it.
+    expect(screen).toContain('const [stopped, setStopped] = useState(false)')
+    expect(screen).toContain('setStopped(true)')
+    // Never unset, and the control is gone rather than disabled once it is: a stop is
+    // a stop and never a pause, so there is nothing here to press a second time and
+    // nothing to un-press (ADR-0114).
+    expect(screen).not.toContain('setStopped(false)')
+    expect(screen).toContain('Stopping after the message on the wire')
+  })
+
   it('sends the stop and reads the run back, and never writes a status itself', () => {
     // The bench settles its own run on its own thread (ADR-0114), so what this screen
     // does with the answer is read the run again — there is no `setProgress` here

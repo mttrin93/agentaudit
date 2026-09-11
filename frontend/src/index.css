@@ -3369,6 +3369,14 @@ code {
   font-size: 0.78rem;
 }
 
+/* What stands where the button was once the bench has taken the stop. Quiet, and not
+ * a control: there is nothing left to press. */
+.run-state .taken {
+  margin-left: 0.4rem;
+  font-size: 0.78rem;
+  color: var(--quiet);
+}
+
 .run-state .dot {
   width: 0.5rem;
   height: 0.5rem;

@@ -98,7 +98,7 @@ from backend.bench.library import (
 )
 from backend.bench.measurability import checkable
 from backend.bench.transforms import spelled
-from backend.graph.budget import BudgetExceeded
+from backend.graph.budget import BudgetExceeded, StopRequested
 from backend.graph.runstate import RunState
 from backend.observability import Field, Span, traced
 
@@ -389,9 +389,18 @@ class _Episode:
                 if steps < self.budget.steps_per_episode:
                     self._step(sending=False)
                 self._file_the_break()
-        except BudgetExceeded:
+        except (BudgetExceeded, StopRequested):
             # Recorded before the abort leaves this frame. The run is over, and an
-            # episode the ceiling cut short is censored — never a target that held.
+            # episode either of them cut short is censored — never a target that held.
+            #
+            # **Both, because they are siblings and not a base and a subclass.** A
+            # stop is the operator's decision and a ceiling is the budget working
+            # (ADR-0114); what they have in common is the only thing that matters
+            # here, which is that the attacker stopped. Catching the ceiling alone
+            # left an episode a stop cut short with no record at all, under a run
+            # whose own statement said it had been recorded as censored — the
+            # attacker's exhaustion unrecorded rather than misread, which is the same
+            # ADR-0011 failure one step further along.
             self._record(EpisodeOutcome.CENSORED)
             raise
         return self._record(

@@ -1368,6 +1368,65 @@ def test_a_stop_is_read_before_the_next_call(leakage_case: Case) -> None:
         state.authorise_call(Layer.SCORED, sends=1)
 
 
+def test_a_stop_inside_an_episode_records_that_episode_as_censored(
+    leakage_case: Case,
+) -> None:
+    """The claim the run's own statement makes, asserted where it is made true.
+
+    Every abort says *an episode the stop cut short is recorded as censored, never as
+    resisted*. That sentence is the whole of ADR-0011 on this path — a target never
+    given the chance to hold must not read as one that did — and a run that settled
+    with the sentence and no episode behind it would be making a claim about a
+    measurement it discarded.
+
+    Where it is recorded is `AdaptiveEpisode.run`, which files the episode on the way
+    out and re-raises. It caught `BudgetExceeded` only, and `StopRequested` is its
+    sibling rather than a subclass, so an episode a stop cut short was leaving no
+    record at all (ADR-0011, ADR-0114).
+
+    The adaptive layer is reached with one scored case and made long enough to press
+    inside: this waits for the layer to be the one spending, so the stop lands in an
+    open episode rather than between two of them.
+    """
+    with (
+        watched_reference(name="hardened") as watched,
+        api(
+            [leakage_case],
+            adaptive=AdaptiveBudget(turns_per_episode=30, episodes_per_family=4),
+        ) as (client, bench),
+    ):
+        nonce = registered(client, watched)
+        started = client.post("/runs", json=a_request(watched.target, nonce)).json()
+        record = _record(bench, started)
+        client.post(
+            f"/runs/{started['run_id']}/approval",
+            json={"confirmed": True, "identity": "operator"},
+        )
+
+        # Pressed once the second layer is the one spending, so there is an episode
+        # open to cut short. A stop that landed between two episodes would assert
+        # nothing about the one this test is about.
+        deadline = time.monotonic() + 30.0
+        while (
+            time.monotonic() < deadline
+            and record.run_state.spent[Layer.ADAPTIVE] < 3
+            and record.status is RunStatus.RUNNING
+        ):
+            time.sleep(0.02)
+        assert record.run_state.spent[Layer.ADAPTIVE] >= 3, "never reached the layer"
+        assert client.post(f"/runs/{started['run_id']}/stop").status_code == 200
+        settled(record)
+
+    assert record.status is RunStatus.ABORTED
+    assert "censored, never as resisted" in record.statement
+    # The episode the press cut short, on the record and named the one way this
+    # bench may name it. Not *broken*: nothing verified a break. Not absent: the
+    # statement above says an episode was recorded, and an empty list makes that
+    # sentence a claim about nothing.
+    assert record.run_state.episodes, "the stop discarded the episode it cut short"
+    assert record.run_state.episodes[-1].outcome is EpisodeOutcome.CENSORED
+
+
 def test_a_run_that_is_not_running_cannot_be_stopped(leakage_case: Case) -> None:
     """Two states this refuses, and the reason they are refused rather than ignored.
 

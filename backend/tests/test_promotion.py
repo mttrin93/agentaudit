@@ -310,6 +310,40 @@ def test_the_retirement_rate_is_grouped_by_discovered_by() -> None:
     assert "retirement rate, adaptive: 0.75" in provenance.stated()
 
 
+def test_the_adaptive_fraction_counts_both_adaptive_provenances() -> None:
+    # ADR-0012 §2 asks for the share of the live library *the attacker wrote*, and
+    # ADR-0107 splits which bar the attacker's routes face without splitting the
+    # attacker. A fraction that counted one member would put a target-discovered
+    # case in the denominator and never in the numerator, so the headline share
+    # would fall as the attacker wrote more of the library (#223).
+    provenance = LibraryProvenance(
+        live=dict.fromkeys(DiscoveredBy, 0)
+        | {
+            DiscoveredBy.AUTHORED: 2,
+            DiscoveredBy.ADAPTIVE: 1,
+            DiscoveredBy.ADAPTIVE_ON_TARGET: 1,
+        },
+        retired=dict.fromkeys(DiscoveredBy, 0),
+    )
+
+    assert provenance.live_total == 4
+    assert provenance.adaptive_fraction() == 0.5
+    assert "0.50 adaptive-discovered" in provenance.stated()
+
+
+def test_a_target_discovered_case_alone_moves_the_adaptive_fraction() -> None:
+    # The sharper half of the claim above, and the one that is wrong today: a
+    # library whose only attacker-written case is `adaptive_on_target` reads as a
+    # library the attacker wrote none of.
+    provenance = LibraryProvenance(
+        live=dict.fromkeys(DiscoveredBy, 0)
+        | {DiscoveredBy.AUTHORED: 3, DiscoveredBy.ADAPTIVE_ON_TARGET: 1},
+        retired=dict.fromkeys(DiscoveredBy, 0),
+    )
+
+    assert provenance.adaptive_fraction() == 0.25
+
+
 def test_a_provenance_with_no_case_written_has_no_retirement_rate() -> None:
     # `None` rather than zero. In the comparison this figure exists for, a zero
     # standing in for "none written yet" would read as a provenance that never

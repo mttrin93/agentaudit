@@ -42,17 +42,24 @@ from backend.bench.library import (
     Trigger,
     VerdictClass,
     bar_for,
+    found_by_the_attacker,
     spells_out,
 )
 
 FOUND_BY_THE_ATTACKER: frozenset[DiscoveredBy] = frozenset(
-    {DiscoveredBy.ADAPTIVE, DiscoveredBy.ADAPTIVE_ON_TARGET}
+    member for member in DiscoveredBy if found_by_the_attacker(member)
 )
 """The two provenances a proposal may carry, as a set rather than a pair of names.
 
-Held here so that a sixth `DiscoveredBy` member is a decision somebody makes about
-this set rather than a value that flows through by default. Which of the two a route
-gets is the caller's declaration and never this module's guess (ADR-0107 §3).
+Derived from `library.found_by_the_attacker` rather than written out, because the
+same question is asked of the same field in `admission.LibraryProvenance` and two
+lists of members drift apart silently. That predicate is a match with no fallback
+branch, so a sixth `DiscoveredBy` member is still a decision somebody makes about
+this set rather than a value that flows through by default — it just fails the type
+check in one place instead of passing quietly in two (#223).
+
+Which of the two a route gets is the caller's declaration and never this module's
+guess (ADR-0107 §3).
 """
 
 

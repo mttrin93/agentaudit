@@ -2925,3 +2925,25 @@ def bar_for(discovered_by: DiscoveredBy) -> AdmissionBar:
             # records what is given up: model-dependence is no longer caught at
             # admission for this population, only by the retirement signal.
             return AdmissionBar.SINGLE_MODEL
+
+
+def found_by_the_attacker(discovered_by: DiscoveredBy) -> bool:
+    """Whether the adaptive attacker wrote this case, under either provenance.
+
+    `bar_for` above reads this field for which bar a case must clear; this reads it
+    for who found the case, which ADR-0107 split into two members without splitting
+    the population. The two callers that need the population rather than the bar are
+    `admission.LibraryProvenance.adaptive_fraction`, which ADR-0012 §2 asks to print
+    the attacker's share of the live library, and `adaptive.proposal`, which derives
+    `FOUND_BY_THE_ATTACKER` from this.
+
+    A match with no fallback branch, on `bar_for`'s terms and for the sharper reason
+    here: a sixth provenance that silently answered `False` would land in the
+    fraction's denominator and never in its numerator, which is the defect (#223)
+    the fifth provenance introduced and this function exists to make unrepeatable.
+    """
+    match discovered_by:
+        case DiscoveredBy.ADAPTIVE | DiscoveredBy.ADAPTIVE_ON_TARGET:
+            return True
+        case DiscoveredBy.AUTHORED | DiscoveredBy.USER_GAP | DiscoveredBy.RETRIEVED:
+            return False

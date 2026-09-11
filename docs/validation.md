@@ -166,8 +166,12 @@ What follows from that, and what does not:
 
 **Every one of the twenty-one cases in `backend/cases/` — eighteen base cases and the
 three variants admitted since — is `discovered_by = authored`, and the adaptive fraction
-of the live library is 0.00.** `library_provenance` reads live `authored 21, adaptive 0,
-user_gap 0, retrieved 0` with none retired, and the nine elective records beside them are
+of the live library is 0.00.** That fraction is a **sum over both adaptive provenances**,
+`adaptive` and `adaptive_on_target` — ADR-0012 §2 asks for the share the attacker wrote
+and ADR-0107 splits the bar rather than the attacker, so a route found against a
+customer's target counts towards it exactly as one found against the reference agents
+does (#223). `library_provenance` reads live `authored 21, adaptive 0, user_gap 0,
+retrieved 0, adaptive_on_target 0` with none retired, and the nine elective records beside them are
 `authored` too. The count moved because a **variant is a case** (ADR-0051, ADR-0055) and
 three were written by hand; not one of the three came from an attacker. The writer exists, it is exercised end
 to end in the suite, and it has never fired outside one: the only reading of the
@@ -5608,7 +5612,12 @@ change shape. What changed the line is this change, and not a measurement.
 - **The provenance census reports five members where it reported four.** `library_provenance`
   counts what it always counted and was not edited; what grew is the set it counts over.
   A reader holding two gate runs across this change sees the split appear in the
-  adaptive-fraction line, and that appearance is this entry and not a finding.
+  adaptive-fraction line, and that appearance is this entry and not a finding. **The
+  fraction itself was left counting one of the two adaptive members and was repaired
+  separately** (#223): it now sums `adaptive` and `adaptive_on_target`, because §2 asks
+  for the share the attacker wrote and ADR-0107 splits which bar the attacker's routes
+  face, not whether the attacker wrote them. The reading is 0.00 either way today and
+  would have diverged the first time a target-discovered route was admitted.
 - **No case in the library changed.** All 21 live cases are `authored` under
   `single_model`, and no adaptive case of either provenance has ever been admitted, so
   there was no record to migrate and no admission to re-decide. The adaptive fraction of

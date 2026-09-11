@@ -1015,12 +1015,16 @@ def _queued(record: RunRecord) -> str:
     applied to the second store a run now grows.
 
     `recorded_at` is the day the run went on the record, so nothing between this
-    entry point and the row reads a clock (`queued.file_proposals`). Returns the
+    entry point and the row reads a clock (`queued.file_proposals`), and `run_id`
+    is this run's own — the record a reader of a route filed here, or of a route
+    later held off one, opens for the date, the target and the declaration. Returns the
     sentence rather than settling the record, because what the four callers share
     is the filing and not what else their statement has to say.
     """
     return file_proposals(
-        record.run_state.episodes, today=record.recorded_at.date()
+        record.run_state.episodes,
+        today=record.recorded_at.date(),
+        found_in=record.run_id,
     ).stated()
 
 

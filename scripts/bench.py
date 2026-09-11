@@ -596,7 +596,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             # The run ended, so its routes are filed: an episode the ceiling cut
             # short is a censored episode, and an episode that finished before it
             # bit may well have found something.
-            print_filed_routes(state.episodes)
+            print_filed_routes(state.episodes, trace.id)
             return EXIT_ABORTED
 
     if not result.approval.proceeded:
@@ -615,7 +615,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     # Beside `print_precedent`, because these are the two stores a customer run
     # writes to and a job log that reported one of them would be an account of half
     # the run.
-    print_filed_routes(result.run_state.episodes)
+    print_filed_routes(result.run_state.episodes, trace.id)
     # Per layer and never added, in the job log as on a terminal: a blended figure
     # would hide which half of a run is consuming the caller's budget (ADR-0007).
     for layer in Layer:
@@ -713,7 +713,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     return EXIT_NOT_REGISTERED if target_run.registration.refused else 0
 
 
-def print_filed_routes(episodes: Sequence[AdaptiveEpisode]) -> None:
+def print_filed_routes(episodes: Sequence[AdaptiveEpisode], found_in: str) -> None:
     """File what this run's attacker found, and print what was filed.
 
     Here rather than beside `print_precedent` in `scripts/console.py`, which the
@@ -729,8 +729,15 @@ def print_filed_routes(episodes: Sequence[AdaptiveEpisode]) -> None:
     `date.today()` here and nowhere deeper: an entry point is where a clock may be
     read, and it is the one place that knows which day the run means
     (`queued.file_proposals`).
+
+    `found_in` is this run's own id — the same one the plant namespace and the
+    throwaway workspace are derived from, and derived once for the reason
+    `planting.namespace_for` gives: two names for one run would send a reader of a
+    route filed here to a record nothing was written under.
     """
-    print(f"\n{file_proposals(episodes, today=date.today()).stated()}")
+    print(
+        f"\n{file_proposals(episodes, today=date.today(), found_in=found_in).stated()}"
+    )
 
 
 def declared_families(named: Sequence[str] | None) -> frozenset[Family]:

@@ -35,6 +35,14 @@ at the write, and the routes it would have written stay **pending** — nothing
 measured is lost, because the memory now holds the reading and a second measurement
 of them sends nothing (ADR-0032).
 
+**One approval, two independent answers, and the second one is a person's.** A
+route the bar refuses is held against the target it beat
+([ADR-0117](../../docs/adr/0117-a-refused-break-is-held-against-the-target-it-beat-and-is-scored-beside-the-six.md)),
+and a route it admits is not — a library case is already sent to every target
+including this one. The bar itself is untouched by that: no new threshold, no
+second arithmetic, and no `D` computed for a held route. `bench/holding.py` is the
+door and this module only tells it what the bar said.
+
 **The adaptive layer is switched off for an admission run on this surface.**
 `cross_model_bar` discards any proposal made while measuring a proposal — "a
 proposal made while measuring a proposal has had no admission run of its own, and
@@ -78,6 +86,7 @@ from backend.bench.contract import TargetConfig
 from backend.bench.decided import RouteKey, criterion_of
 from backend.bench.entry import AlreadyInTheLibrary, Entered, Entry, enter
 from backend.bench.evaluator import Verdict
+from backend.bench.holding import hold_refused
 from backend.bench.lease import LibraryBusy, held_by, holding_the_library
 from backend.bench.library import AdmissionReading, Case, DiscoveredBy, VerdictClass
 from backend.bench.pending import (
@@ -744,6 +753,35 @@ def _decide(
                 )
             continue
         state, reason, entered_as = answer
+        # The second door (`bench/holding.py`), taken before the queue is told
+        # anything so that the reason the row keeps says which of the two this
+        # route went through — which is what an operator reading the queue a month
+        # later has.
+        #
+        # **The cost of that order, stated rather than left to be found.** If the
+        # write below then refuses, the route stays pending with a held record
+        # already standing; a later measurement could admit that route, and the
+        # probe would be in the shared library and in this target's library at
+        # once, which is the one thing ADR-0117 §3 forbids. What bounds it is that
+        # the refusal below needs a queue that no longer holds the row as pending,
+        # and `_chosen` refuses a decided route at selection — so the reachable
+        # case is a store that dropped the record, which also takes the route out
+        # of every later selection. Closing it properly needs either a decision and
+        # a hold in one write, or a way to drop a held record when a later decision
+        # admits the route, and the target library deliberately has no delete
+        # (a closed route is kept, ADR-0117 §5). Both are their own ticket.
+        #
+        # A rediscovery holds nothing twice: one route is one held record per
+        # target, and `hold_refused` leaves the record it finds alone.
+        holding = hold_refused(one, decided_as=state, approved_by=record.confirmed_by)
+        # Said twice on purpose, into the two things that outlive this loop: the
+        # consultation report an operator checks the measurement against, and the
+        # queue row, which is all that is left of this route once the page is
+        # closed. An admitted route's row carries it too, because *this is in the
+        # shared library and therefore not in your target library* is the half of
+        # the answer a reader would otherwise have to infer from a silence.
+        record.say(holding.stated())
+        reason = f"{reason}. {holding.stated()}"
         try:
             bench.queue.decide(one.route, state=state, reason=reason)
         except (KeyError, ValueError) as refused:

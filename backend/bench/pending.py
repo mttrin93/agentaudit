@@ -167,6 +167,22 @@ class FiledRoute:
     that also held how to reach it would be a credential waiting for an export.
     """
 
+    found_in: str
+    """The `run_id` of the run whose attacker found this route. Not a day.
+
+    The day is `filed_on` below, and a day is not a record anybody can go and read.
+    A run record is: it carries its own date, its target and its declaration, and a
+    route this queue decides may outlive the queue — `held.HeldRoute.found_in` is
+    filled off this field and off nothing else, because the decision that holds a
+    route has only what the run that found it wrote down.
+
+    **Refused blank by `file` and not by this record**, which is the one asymmetry
+    in this module. A row written before this field existed still has to read back,
+    because a triage page that raised on one old record would show an operator none
+    of the new ones; `read_filed` reads a missing value as `""` and the writer is
+    where a new blank is refused.
+    """
+
     filed_on: date
     """The day the run that found the route filed it. Not a clock this module reads:
     the caller passes the date, as `entry` and `decided` do, so a route filed by a
@@ -180,6 +196,7 @@ class FiledRoute:
             "criterion": self.criterion,
             "description": self.description,
             "target": self.target,
+            "found_in": self.found_in,
             "filed_on": self.filed_on.isoformat(),
         }
 
@@ -272,6 +289,11 @@ def read_filed(value: dict[str, Any]) -> AwaitingDecision | Decided:
         "criterion": str(value["criterion"]),
         "description": str(value["description"]),
         "target": str(value["target"]),
+        # `get` and not `[]`, for the reason `FiledRoute.found_in` states: a record
+        # filed before the field existed reads back as naming no run, because the
+        # alternative is a page that shows none of the rows rather than one row with
+        # a gap in it.
+        "found_in": str(value.get("found_in", "")),
         "filed_on": date.fromisoformat(str(value["filed_on"])),
     }
     if state is RouteState.PENDING:
@@ -343,6 +365,7 @@ class PendingRoutes:
         proposal: ProposedRoute,
         *,
         target: str,
+        found_in: str,
         today: date,
     ) -> AwaitingDecision:
         """File one route the attacker found, so it survives the run that found it.
@@ -356,15 +379,28 @@ class PendingRoutes:
         only caller is a run that knows the day it ran. A route filed by a run
         replayed next month is not dated to the morning it was replayed.
 
+        **No default for `found_in` either**, and it is refused blank here rather
+        than on the record: the entry point is the one thing that knows which run it
+        is, and a decision taken on this row months later has nothing else to name
+        the run with (`FiledRoute.found_in`).
+
         Nothing here decides anything. A filed route "faces a stated bar, and is not
         admitted by having been filed" — the same sentence `propose_case` already
         answers to (ADR-0010, ADR-0012).
         """
+        if not found_in.strip():
+            raise ValueError(
+                f"{RouteKey.of(proposal.case).stated()} was filed naming no run at "
+                "all. What a route outliving this queue is found in is the run "
+                "record a reader opens for its date, its target and its "
+                "declaration, and nothing else on this row carries one"
+            )
         record = AwaitingDecision(
             route=RouteKey.of(proposal.case),
             criterion=criterion_of(proposal.case),
             description=proposal.description,
             target=target,
+            found_in=found_in,
             filed_on=today,
             draft=proposal.case,
         )
@@ -427,6 +463,7 @@ class PendingRoutes:
             criterion=found.criterion,
             description=found.description,
             target=found.target,
+            found_in=found.found_in,
             filed_on=found.filed_on,
             state=state,
             reason=reason,

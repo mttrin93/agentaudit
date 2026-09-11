@@ -73,6 +73,14 @@ from backend.tests.test_headless_run import arguments, attestation_file
 from scripts import bench
 from scripts.console import EXIT_ABORTED
 
+THE_RUN = "run-2026-08-30-0004"
+"""The run whose attacker found the routes below, as an entry point names it.
+
+Not derivable from an episode: `AdaptiveEpisode` records what the attacker did and
+not which run it did it in, so the run travels from the entry point beside the day
+(`queued.file_proposals`).
+"""
+
 RAN_ON = date(2026, 8, 30)
 """The day the run ended. Deliberately not today's date: a filing that read a clock
 instead of the date the run passed it would date a replayed run's route to the
@@ -129,11 +137,11 @@ class RefusesOneRoute(PendingRoutes):
     refused: RouteKey | None = None
 
     def file(
-        self, proposal: ProposedRoute, *, target: str, today: date
+        self, proposal: ProposedRoute, *, target: str, found_in: str, today: date
     ) -> AwaitingDecision:
         if RouteKey.of(proposal.case) == self.refused:
             raise OSError("the queue's database is not writable")
-        return super().file(proposal, target=target, today=today)
+        return super().file(proposal, target=target, found_in=found_in, today=today)
 
 
 @pytest.fixture
@@ -155,7 +163,10 @@ def test_a_runs_proposals_are_filed_with_the_target_the_episode_beat(
     proposal = a_route(leakage_case)
 
     filed = file_proposals(
-        [an_episode(leakage_case, proposal)], queue=queue, today=RAN_ON
+        [an_episode(leakage_case, proposal)],
+        queue=queue,
+        today=RAN_ON,
+        found_in=THE_RUN,
     )
 
     assert [record.route for record in filed.filed] == [RouteKey.of(proposal.case)]
@@ -178,9 +189,12 @@ def test_four_proposals_of_one_route_are_one_record_within_a_run_and_across_runs
     proposal = a_route(leakage_case)
     four = [an_episode(leakage_case, proposal) for _ in range(4)]
 
-    within = file_proposals(four, queue=queue, today=RAN_ON)
+    within = file_proposals(four, queue=queue, today=RAN_ON, found_in=THE_RUN)
     across = file_proposals(
-        [an_episode(leakage_case, proposal)], queue=queue, today=RAN_ON
+        [an_episode(leakage_case, proposal)],
+        queue=queue,
+        today=RAN_ON,
+        found_in=THE_RUN,
     )
 
     assert len(within.filed) == 1
@@ -195,7 +209,9 @@ def test_a_run_that_proposed_nothing_files_nothing_and_says_so(
     # never about the target (ADR-0011). An entry point that printed nothing here
     # would leave an operator unable to tell a queue that grew by nothing from a
     # filing that was never attempted.
-    nothing = file_proposals([an_episode(leakage_case)], queue=queue, today=RAN_ON)
+    nothing = file_proposals(
+        [an_episode(leakage_case)], queue=queue, today=RAN_ON, found_in=THE_RUN
+    )
 
     assert nothing.filed == ()
     assert nothing.refusals == ()
@@ -218,7 +234,10 @@ def test_a_store_that_refuses_is_reported_and_the_rest_of_the_routes_still_file(
     )
 
     both = file_proposals(
-        [an_episode(leakage_case, first, second)], queue=refusing, today=RAN_ON
+        [an_episode(leakage_case, first, second)],
+        queue=refusing,
+        today=RAN_ON,
+        found_in=THE_RUN,
     )
 
     assert [record.route for record in both.filed] == [RouteKey.of(second.case)]
@@ -277,6 +296,10 @@ def test_a_customer_run_files_its_proposals_and_says_so_on_its_own_record(
     # The date the run went on the record, not the day the row was written: nothing
     # between the entry point and the store reads a clock.
     assert {record_.filed_on for record_ in held} == {record.recorded_at.date()}
+    # And the run itself, which is the record a reader opens for the rest — its
+    # declaration, its target and its date. A route decided months from now is held
+    # under this id and under nothing this surface invents (`held.HeldRoute`).
+    assert {record_.found_in for record_ in held} == {record.run_id}
     # And the sentence a poller reads says the queue grew, beside what the run said
     # about precedent and about its review queue.
     assert "awaiting a decision" in record.statement
@@ -388,7 +411,9 @@ def test_a_gate_run_leaves_the_pending_queue_as_it_found_it(
     asserted alongside the proposals the gate run's own attacker made, so a run
     that proposed nothing cannot make this pass by accident.
     """
-    before = PENDING_ROUTES.file(a_route(leakage_case), target=A_CUSTOMER, today=RAN_ON)
+    before = PENDING_ROUTES.file(
+        a_route(leakage_case), target=A_CUSTOMER, found_in=THE_RUN, today=RAN_ON
+    )
 
     with a_bench(a_library(tmp_path), attempts_per_case=1) as gating:
         body = started(gating)

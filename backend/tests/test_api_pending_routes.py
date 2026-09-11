@@ -121,6 +121,7 @@ from backend.bench.decided import (
     RouteKey,
 )
 from backend.bench.entry import enter
+from backend.bench.held import HELD_ROUTES, HeldState
 from backend.bench.lease import LEASE_FILE, take_the_library
 from backend.bench.library import (
     AdmissionReading,
@@ -168,6 +169,14 @@ A_CUSTOMER = "acme-support-bot"
 """Whose agent the route was found against — the field ADR-0104 §2 grants."""
 
 FILED_ON = date(2026, 8, 30)
+
+THE_RUN_THAT_FOUND_IT = "run-2026-08-30-0004"
+"""The run the routes here were found in, as the run service names its own.
+
+What a route held against a target is found in (`held.HeldRoute.found_in`), so it
+travels from the run that filed the route to the decision that holds it and is
+never minted by this surface.
+"""
 
 A_PROBE = "the probe that actually beat somebody's agent"
 """The payload the pending store is the one place in this repository allowed to hold.
@@ -427,7 +436,9 @@ def a_route(
 
 def filed(proposal: ProposedRoute, target: str = A_CUSTOMER) -> AwaitingDecision:
     """That route, in the queue, as the run that found it left it."""
-    return PENDING_ROUTES.file(proposal, target=target, today=FILED_ON)
+    return PENDING_ROUTES.file(
+        proposal, target=target, found_in=THE_RUN_THAT_FOUND_IT, today=FILED_ON
+    )
 
 
 def decided_row(route: RouteKey) -> dict[str, Any]:
@@ -1048,6 +1059,76 @@ def test_a_route_the_agents_never_engaged_says_so_rather_than_blaming_the_case(
     # The reading itself is still there — the kind is a label on it, not a
     # replacement for the counts a reader checks the decision against.
     assert "trivial 0.00" in reason
+
+
+def test_an_approval_holds_the_route_the_bar_refused(
+    cases_dir: Path, leakage_case: Case
+) -> None:
+    """ADR-0117 §2 and §3, on the surface the whole feature hangs off.
+
+    The counts are the floor ones, which is the population this exit was built for:
+    the reference agents never engaged, so the bar refused the route and until this
+    ticket the refusal was the deletion of the finding (ADR-0118, #234). What the
+    route now has is a second door — the operator's approval — and everything the
+    second run needs goes through it: the probe, the criterion, the attacker's own
+    words, and the run a reader opens for the rest.
+    """
+    proposal = a_route(leakage_case, description="ran a tool after an explicit stop")
+    record = filed(proposal)
+    remembered(proposal, FLOOR)
+
+    with a_bench(cases_dir) as deciding:
+        reading = answered(deciding, [record.route.filed_under])
+
+    [held] = HELD_ROUTES.for_target(A_CUSTOMER)
+    assert held.route == record.route
+    assert held.payload == (A_PROBE,)
+    assert held.description == "ran a tool after an explicit stop"
+    assert held.found_in == THE_RUN_THAT_FOUND_IT
+    assert held.state is HeldState.OPEN
+    assert held.clean_runs == 0
+    # And the queue row says it was held, and on whose approval: a held route is
+    # the one scored thing here that faced no declared threshold, so the record of
+    # what stood in a threshold's place is part of the answer (ADR-0117 §2).
+    [row] = reading["routes"]
+    assert row["state"] == RouteState.REJECTED
+    assert "held against" in row["reason"]
+    assert BENCH_ATTESTATION.identity in row["reason"]
+    decided = PENDING_ROUTES.filed(record.route)
+    assert isinstance(decided, Decided)
+    assert decided.reason == row["reason"]
+    # The identity boundary is where it was: the target library is scoped to the
+    # agent, and the admission memory still knows nothing about whose agent it was
+    # (ADR-0011, ADR-0104 §2).
+    remembered_route = DECIDED_ROUTES.store.get(
+        DECIDED_ROUTES.namespace, record.route.filed_under
+    )
+    assert remembered_route is not None
+    assert A_CUSTOMER not in json.dumps(dict(remembered_route.value))
+
+
+def test_an_admitted_route_is_written_into_the_library_and_not_held(
+    cases_dir: Path, leakage_case: Case
+) -> None:
+    """The double door, and the one probe that must appear in one denominator.
+
+    ADR-0117 §3: a library case is already sent to every target including this one,
+    so holding it as well would send the same probe twice and count it on two
+    denominators — a family rate on one of them and a held-route block on the
+    other, both describing one attack.
+    """
+    proposal = a_route(leakage_case)
+    record = filed(proposal)
+    remembered(proposal, SEPARATING)
+
+    with a_bench(cases_dir) as deciding:
+        reading = answered(deciding, [record.route.filed_under])
+
+    [row] = reading["routes"]
+    assert row["state"] == RouteState.ADMITTED
+    assert (cases_dir / row["entered_as"]).exists()
+    assert HELD_ROUTES.for_target(A_CUSTOMER) == ()
+    assert "two denominators" in row["reason"]
 
 
 def test_nothing_a_decision_writes_carries_the_target(

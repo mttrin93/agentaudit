@@ -141,19 +141,24 @@ SECOND_REFERENCE_MODEL_ENV = "AGENTAUDIT_SECOND_REFERENCE_MODEL"
 A second variable rather than a list in the first, because the two are declared for
 different reasons and only one of them is what this bench's own gate citation was
 earned on: `REFERENCE_MODEL_ENV` is the model every run and every gate run measures
-against, and this one is reached by the two things that measure a *pair* — the model
-swap `scripts/swap.py` runs, and the cross-model admission bar
-([ADR-0012](../../docs/adr/0012-adaptive-discovered-cases-face-a-cross-model-admission-bar.md),
-[ADR-0105](../../docs/adr/0105-deciding-a-pending-route-is-its-own-surface-and-not-a-gate-runs-second-job.md)).
+against, and this one is reached by what measures a *pair* — the model swap
+`scripts/swap.py` runs, and the cross-model admission bar that swap's own proposals
+face
+([ADR-0012](../../docs/adr/0012-adaptive-discovered-cases-face-a-cross-model-admission-bar.md)).
 
-**Here rather than in `scripts/swap.py`, which declared it first.** That was correct
-while a swap was the only thing in the bench with a second reference model; the
-`/pending-routes` surface is the second, it has no terminal, and no module of
-`backend/api/` may read an environment of its own — so one name in one place is what
-keeps the two surfaces reading the same declaration. Each caller keeps its own
-default: the swap falls back to `swap.DEFAULT_SECOND_MODEL`, and a deployment that
-declares nothing here decides no pending route and says so on the screen that would
-offer the control, because a bar met on one model is not the bar.
+**One reader today, and it is `scripts/swap.py`.** The `/pending-routes` surface was
+the second and is no longer: every route it decides was found against a customer's
+target, faces the single-model bar, and a second pass is a call that decision cannot
+spend, so `deployed_pending_routes` reads `REFERENCE_MODEL_ENV` and nothing else
+([ADR-0107](../../docs/adr/0107-a-route-found-against-a-customers-target-faces-the-single-model-bar.md)
+§4). **A deployment that declares nothing here still decides pending routes.** What
+it cannot do is run a swap on a pair it never named, and the swap falls back to
+`swap.DEFAULT_SECOND_MODEL` rather than refusing.
+
+**Losing a reader did not move where it is declared.** It stays in this module,
+which is where every model name a deployment can set is declared and where
+`test_declared_models.py` reads the list of them off, and that is untouched by which
+surfaces read which name.
 """
 
 ADJUDICATOR_MODEL_ENV = "AGENTAUDIT_ADJUDICATOR_MODEL"

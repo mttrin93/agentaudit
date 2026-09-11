@@ -149,7 +149,7 @@ Everything else on those screens is still driven by hand, and the division has n
 ## Out of Scope
 
 - **The typed override taxonomy, the feedback loop and the review screen.** These wait on a real user disputing a real finding, per ADR-0006, and Track A has not run. `case_gap` into the admission gate is the remaining half of the "agent that learns" task and it waits with them.
-- **A writer for a proposal that clears the cross-model bar** (#42). The bar is enforced and nothing has ever cleared it; the missing piece is a coverage claim about a payload nobody authored, which is a decision before it is code.
+- **A writer for a proposal that clears the bar it faces** (#42) — the cross-model bar for a route found against the reference agents, ADR-0003's single-model bar for one found against a customer's target (ADR-0107). Both are enforced and nothing has ever cleared either; the missing piece is a coverage claim about a payload nobody authored, which is a decision before it is code.
 - **Model-scoping the retirement series** (#43). A stub reading currently sits in the series on the same footing as a certified one. It is named in the reflection notes of this spec and fixed in neither.
 - **ADR-0015's repair route for wrongful commitment.** Rewriting the criterion and labelling a fresh gold set is a new instrument honestly measured, and it is not this spec's work.
 - **Cross-tenant isolation.** Not applicable before user one, and a P1 blocker when it arrives. The store is namespaced single-tenant and says so.

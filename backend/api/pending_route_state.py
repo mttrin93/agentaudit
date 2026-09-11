@@ -185,9 +185,9 @@ class RouteProgress:
     """Where one route in a measurement has got to, and what it ended as.
 
     Per route rather than per measurement, because the action is minutes long and
-    the operator selected the routes one at a time: *measuring on the second model*
-    and *answered from the memory without being measured* are two different things
-    to be told about a route somebody is paying for (spec story 10).
+    the operator selected the routes one at a time: *being measured against the three
+    reference agents* and *answered from the memory without being measured* are two
+    different things to be told about a route somebody is paying for (spec story 10).
 
     The state is a `RouteState` and never a fourth word for one: what a decided
     route is, is what the store says it is, and a progress row that could say

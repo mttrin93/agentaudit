@@ -8,15 +8,22 @@ number stays reproducible because nothing crossed the boundary except a case tha
 beat a stated bar. **The arbiter is a declared number, not the model's own
 confidence**, which is what makes "an agent that learns" auditable here.
 
-**The cross-model bar is enforced here and cannot be argued around** (ADR-0012).
-A proposal carries `discovered_by = adaptive`, which selects the two-model bar by
-itself: `bar_for` reads it off the record, `MODELS_REQUIRED` says two, and
-`AdmissionOutcome.admitted` refuses a case read on one. The bar exists because the
-attacker discovers its route *by exploiting the same three agents admission then
-tests it against* — a route found against the trivial agent that the hardened agent
-happens to resist scores `D ≈ 1` for free, and trivial breaks on nearly everything,
-so that is close to free. Nothing in this module accepts a bar as an argument, and
-there is no branch here that could reach a weaker one.
+**The bar is enforced here and cannot be argued around** (ADR-0012, as
+[ADR-0107](../../../docs/adr/0107-a-route-found-against-a-customers-target-faces-the-single-model-bar.md)
+narrows it). A proposal carries its provenance, and that field selects the bar by
+itself: `bar_for` reads it off the record, `MODELS_REQUIRED` says how many distinct
+models clearing it takes, and `AdmissionOutcome.admitted` refuses a case read on
+fewer. Which bar that is depends on what the route was found against, and the
+attacker has two provenances. A route found against the three reference agents is
+`adaptive` and faces the cross-model bar, which exists because the attacker
+discovers such a route *by exploiting the same three agents admission then tests it
+against* — a route found against the trivial agent that the hardened agent happens
+to resist scores `D ≈ 1` for free, and trivial breaks on nearly everything, so that
+is close to free. A route found against a user's own target is `adaptive_on_target`
+and faces ADR-0003's single-model bar, because those three agents were never in its
+discovery loop and the pressure a second model answers is not acting on it.
+Nothing in this module accepts a bar as an argument, and there is no branch here
+that could reach a weaker one than the record's own provenance names.
 
 **A rejected proposal is discarded, not parked.** A refused promotion returns no
 case at all: there is no field on the result holding a case waiting for a second

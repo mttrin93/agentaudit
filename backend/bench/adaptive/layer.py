@@ -27,8 +27,9 @@ adaptive section rather than reported as a family nothing broke.
 requested and no others, and it learns which those are the way it learns the six's
 own switch: from the cases the run planned (`api/run_config.plan_for`). An episode in
 the tier is scored on nothing, exactly as one on the six is (ADR-0010), and it reaches
-the scored side by the one edge that already existed — `propose_case`, into ADR-0012's
-cross-model bar. What does **not** widen is the separation statistic:
+the scored side by the one edge that already existed — `propose_case`, into the
+admission bar the proposal's own provenance selects (ADR-0012, as ADR-0107 narrows
+it). What does **not** widen is the separation statistic:
 [ADR-0089](../../../docs/adr/0089-a-break-is-over-the-six-and-the-tier-is-read-beside-it.md)
 keeps `A_break`'s denominator over the six, so the readings in `docs/validation.md`
 stay comparable across a run that requested the tier and one that did not.

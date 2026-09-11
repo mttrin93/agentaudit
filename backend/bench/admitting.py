@@ -108,10 +108,24 @@ def cross_model_bar(
     **The memory is consulted before anything is sent** (ADR-0032). A route the gate
     already measured under this run's own conditions is reported from it, and the
     three reference agents are never called for it — which is the whole of what #39
-    saves, since a refused route the attacker rediscovers every run was costing an
-    admission run on two models for an answer already known. What is remembered is
-    the *measurement*: `promote` decides it again below, so the declared threshold
-    still decides every proposal in this run.
+    saves, since a refused route the attacker rediscovers every run was costing a
+    fresh admission run for an answer already known. What that run costs is one pass
+    over the three agents **per model this caller declared**: two under
+    `scripts/swap.py`, which measures a pair by definition, and one on
+    `/pending-routes`, which has declared a single reference model since
+    [ADR-0107](../../docs/adr/0107-a-route-found-against-a-customers-target-faces-the-single-model-bar.md).
+
+    The multiplier is deliberately not fixed to a figure here, and the reason is
+    local to this function rather than to any bar. The loop below measures every
+    undecided proposal on every model in `models`, whichever bar `promote` will
+    decide it under afterwards — so the saving is the length of that list, one set of
+    proposals may span both provenances, and a single number written into this
+    sentence would be wrong for the run that mixes them.
+    `test_multi_model.test_every_route_is_measured_on_every_model_whatever_bar_it_will_face`
+    is the other end of that claim.
+
+    What is remembered is the *measurement*: `promote` decides it again below, so the
+    declared threshold still decides every proposal in this run.
 
     A route is measured **once per run** even where several proposals took it.
     `docs/validation.md` records one run proposing four cases all describing the same

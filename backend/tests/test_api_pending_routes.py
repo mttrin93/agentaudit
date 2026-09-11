@@ -25,9 +25,9 @@ run holds the library, and a gate run is refused while a measurement holds it �
 ADR-0033's property observed from both ends rather than a new one added.
 
 **That a refusal costs nothing and loses nothing.** A declined measurement, one
-whose second model could not be served, and one whose agents on the second model
-never registered all leave every route pending — asserted on the store rather than
-on the response. The last of those is the path a `Measure` answers with a *code*,
+whose declared model could not be served, and one whose agents on that model never
+registered all leave every route pending — asserted on the store rather than on the
+response. The last of those is the path a `Measure` answers with a *code*,
 which is the same path a run aborted on its ceiling takes.
 
 **That the three families stay apart.** No route under `/pending-routes` takes a run

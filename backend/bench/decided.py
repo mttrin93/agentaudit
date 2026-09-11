@@ -2,10 +2,14 @@
 
 `promote` decides one proposed route against a declared threshold and writes
 nothing (`adaptive/promotion.py`). So a route the attacker rediscovers next run is
-re-proposed and **re-measured against three reference agents on two underlying
-models** — at the operator's cost, for the same answer — and the `RejectionKind`
+re-proposed and **re-measured against three reference agents on every model the run
+declared** — at the operator's cost, for the same answer — and the `RejectionKind`
 counts behind a refusal are computed and thrown away, when ADR-0012 calls exactly
 those counts a finding in its own right. This module is the memory that stops both.
+How many models that is belongs to the caller and not to the route: two under
+`scripts/swap.py`, one on `/pending-routes` since
+[ADR-0107](../../docs/adr/0107-a-route-found-against-a-customers-target-faces-the-single-model-bar.md),
+and `admitting.py` is where the arithmetic of what the memory saves is argued.
 
 The decision, its alternatives and the hazard it had to be built around are
 [ADR-0032](../../docs/adr/0032-the-admission-memory-holds-the-measurement.md). Two

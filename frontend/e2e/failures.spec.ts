@@ -105,10 +105,14 @@ test('a failure, its fix, and what informed it, are on the report screen', async
   const failures = page.locator('section').filter({
     has: page.getByRole('heading', { level: 2, name: 'Failures and fixes' }),
   })
-  // Which of the four readings this is, as the name the payload carries and not only
-  // as the sentence: a page that told the four apart by prose alone would stop telling
-  // them apart the day the prose was reworded (ADR-0070 §4).
-  await expect(failures.getByText('explained', { exact: true })).toBeVisible()
+  // The reading's own name is not drawn, and the standing sentences under a finding
+  // are not either: this screen carries the figures and the blocks, and the sentences
+  // travel in the artefact a recipient reads
+  // ([ADR-0115](../../docs/adr/0115-the-report-screen-carries-the-figures-and-the-artefact-carries-the-sentences.md)).
+  // What this spec asks of the page is therefore what the page draws; every sentence
+  // it stopped drawing is asserted over the reading in `report.test.ts`, against the
+  // same served fixture, and none of them left the payload.
+  await expect(failures.getByText('explained', { exact: true })).toHaveCount(0)
   // And the two standing claims about what is under it: a model wrote these sentences
   // and would not write them again, and no figure above came from any of them. One
   // line where `A_MODEL_WROTE_THESE_SENTENCES` and two paragraphs beside it stood —
@@ -132,7 +136,7 @@ test('a failure, its fix, and what informed it, are on the report screen', async
 
   // The two sentences, each under the question it answers, because two instruments
   // wrote them and neither answers the other's (ADR-0069).
-  const [alone, reused] = SERVED.findings.findings
+  const [alone] = SERVED.findings.findings
   const first = leakage.locator('.finding').first()
   // The case, as the finding's own heading: the fix's label sits in the same line
   // beside it, so the id is asked for as the heading it starts rather than as an
@@ -144,85 +148,31 @@ test('a failure, its fix, and what informed it, are on the report screen', async
   await expect(first.getByText(alone.reason)).toBeVisible()
   await expect(first.getByText('what to change')).toBeVisible()
   await expect(first.getByText(alone.fix)).toBeVisible()
-  // What this break is read against, in the record's own sentence.
-  await expect(
-    first.getByText('the operator declared output_filter'),
-  ).toBeVisible()
 
-  // **The assertion this spec exists for.** #113's own red: a failure with no
-  // informing precedent still says so on the screen. On run one the honest answer is
-  // that nothing informed the fix, and it renders as a stated absence rather than as
-  // blank space — which is the precedent store's claim about itself made checkable by
-  // a reader (ADR-0019).
-  await expect(first.getByText(alone.informed_by_stated)).toBeVisible()
-  expect(alone.informed_by).toEqual([])
+  // **Proven or proposed, and no third label**, which is the one word on this block a
+  // reader must not have blurred: *proven* means the bench patched a copy of the
+  // caller's own checkout, re-served the target and re-attempted the case, and
+  // *proposed* means it could not be tested — a plain hosted endpoint can only ever
+  // carry the second, because the bench cannot restart somebody else's server
+  // (ADR-0001, ADR-0073). It stays on the screen where the sentence under it does
+  // not, because the sentence over the section says a fix reads proven only where the
+  // bench re-attempted the case, and a word that points at has to be on the page.
+  await expect(first.locator('.fix-label')).toHaveText(alone.fix_standing.reading)
 
-  // And the other half of that claim: a fix written with earlier findings in front of
-  // it names them, so a reader can tell it from one derived from this transcript
-  // alone. The sentence is the record's own and this app writes no second wording of
-  // it, which was #112's own review finding.
-  const second = leakage.locator('.finding').nth(1)
-  await expect(second.getByText(reused.informed_by_stated)).toBeVisible()
-  expect(reused.informed_by).toEqual(['data-leakage-001', 'data-leakage-002'])
-
-  // A sentence the disclosure rule replaced is on the page as the statement that it
-  // was withheld, with its finding kept beside it: the case id, the family and the
-  // attributed cause are the three facts a reader can check against the record
-  // (ADR-0070 §2c). Nothing that was withheld is anywhere on this page.
+  // A family whose fix the disclosure rule replaced is still a family with a block:
+  // the case is on the screen and so is the sentence standing where the withheld one
+  // was, which is the payload's own and says what happened (ADR-0070 §2c). Nothing
+  // that was withheld is anywhere on this page.
   const denial = failures.locator('details.family').filter({
     has: page.getByRole('heading', { level: 3, name: 'disclosure denial' }),
   })
   await denial.getByRole('heading', { level: 3, name: 'disclosure denial' }).click()
   const [, , quoted] = SERVED.findings.findings
-  await expect(denial.getByText('withheld — fix')).toBeVisible()
   await expect(denial.getByText(quoted.fix)).toBeVisible()
-  await expect(denial.getByText(quoted.case_id, { exact: true })).toBeVisible()
-  expect(quoted.withheld).toEqual(['fix'])
-
-  // Where the failure is, when the bench ran where the code is — the line every
-  // reviewer UI this section borrows from leads with, and the one thing the bench
-  // could not know until the Action put it in the caller's own repository (ADR-0066,
-  // ADR-0071). The compact `path:line` and the sentence that says what it is: the
-  // definition site of the object that answered, and not a claim about which line is
-  // at fault. Both are the payload's own strings and this app words neither.
-  await expect(first.getByText('app/agent.py:61', { exact: true })).toBeVisible()
-  await expect(first.getByText(alone.source_anchor.stated)).toBeVisible()
-
-  // What the two labels mean, above the blocks and on the page under every reading —
-  // including the common one, where the bench attacked a URL and every fix is
-  // *proposed*. #116's third item: what *proven* asserts, spelled out where a reader
-  // is, and not in a legend a screenshot loses (ADR-0073 §4).
   await expect(
-    failures.getByText(/^Every fix below carries one of two labels/),
+    denial.getByRole('heading', { level: 4, name: new RegExp(`^${quoted.case_id}`) }),
   ).toBeVisible()
-
-  // **Proven or proposed, and no third label.** The word is the load-bearing part of
-  // this block: *proven* means the bench patched a copy of the caller's own checkout,
-  // re-served the target and re-attempted the case, and *proposed* means it could not
-  // be tested — a plain hosted endpoint can only ever carry the second, because the
-  // bench cannot restart somebody else's server. Blurring them would put an untested
-  // assertion in front of a procurement reader under the word *proven* (ADR-0001,
-  // ADR-0073).
-  await expect(first.locator('.change > .label')).toHaveText(
-    alone.fix_standing.reading,
-  )
-  await expect(first.getByText(alone.fix_standing.stated)).toBeVisible()
-  // What it asserts, beside it rather than in a legend: one case against one patched
-  // revision, and never that the family is closed (ADR-0003, ADR-0072 §5).
-  expect(alone.fix_standing.stated).toContain('deliberately not about its family')
-
-  // The change, collapsed and expandable, with the label on the header beside the
-  // file and the line — the one convention worth taking from the reviewer UIs this
-  // borrows from, and none of the others.
-  const change = first.locator('details.diff')
-  await expect(change.locator('pre')).toBeHidden()
-  await change.locator('summary').click()
-  await expect(change.locator('pre')).toHaveText(alone.fix_standing.diff)
-
-  // And a fix nobody could test carries no change to expand and says why in words —
-  // not a gap a reader would take for a clean result.
-  await expect(second.locator('.change > .label')).toHaveText('proposed')
-  await expect(second.locator('details.diff')).toHaveCount(0)
+  expect(quoted.withheld).toEqual(['fix'])
 
   // And no severity anywhere, in any of the words a reviewer UI would use for one.
   // #109 names this as out of scope precisely because every UI this borrows from has

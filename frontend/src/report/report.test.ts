@@ -767,6 +767,41 @@ describe('the failures the bench explained', () => {
     expect(reused.informedBy).toBe(second.informed_by_stated)
   })
 
+  it('carries the sentences the screen stopped drawing, verbatim', () => {
+    // ADR-0115 moved eight standing lines off the failures section and into the
+    // artefact alone. *Into the artefact* is the whole of the decision, so it is
+    // asserted here rather than assumed: every one of them is still on the reading,
+    // still the payload's own words, and none was reworded on the way through.
+    const explained = findingsReading(SERVED.findings)
+    if (explained.kind !== 'explained') {
+      throw new Error('the fixture explains its failures')
+    }
+    const [block] = explained.families[0].findings
+    const [payload] = SERVED.findings.findings
+
+    // The two with no other test on this side. `attributed_cause_stated` is what the
+    // failure was read against and `exposure` is what a reader of it is exposed to,
+    // off the judge's own closed set — neither is composed here, and a screen that no
+    // longer draws them is exactly why they need holding somewhere.
+    expect(block.attributedCause).toBe(payload.attributed_cause_stated)
+    expect(block.exposure).toBe(payload.exposure)
+    expect(block.attributedCause).not.toBe('')
+
+    // And the rest, in one place, so the list this ADR moved is a list something
+    // reads back: the identifier, what informed the fix, whether the instruments
+    // disagreed, what was withheld, the anchor's sentence, and what the label asserts.
+    expect(block.identifier).toBe(payload.external_id)
+    expect(block.informedBy).toBe(payload.informed_by_stated)
+    expect(block.disagreement).toBe(payload.disagreement)
+    expect(block.sourceAnchor).toBe(payload.source_anchor.stated)
+    expect(block.fixStanding).toBe(payload.fix_standing.stated)
+
+    // The reading's own name is the eighth, and it is on the reading rather than on a
+    // block: it names which of the four this section is, which is what ADR-0070 §4
+    // asked for and what the document still says.
+    expect(explained.reading).toBe(SERVED.findings.reading)
+  })
+
   it('says where a failure is, and says the bench could not look where it could not', () => {
     // The line every reviewer UI this section borrows from leads with, and the one
     // thing the bench structurally could not know: a target is a URL, and the only

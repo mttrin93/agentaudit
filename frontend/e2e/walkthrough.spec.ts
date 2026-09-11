@@ -344,16 +344,18 @@ test('an operator registers a target, is blocked, confirms, and reads the report
     has: page.getByRole('heading', { level: 2, name: 'Failures and fixes' }),
   })
   await expect(failures).toHaveCount(1)
-  await expect(failures.getByText('no_narrative_instrument_declared')).toBeVisible()
-  // The standing claim about whatever is under this section, in the screen's own one
-  // line. It replaced `A_MODEL_WROTE_THESE_SENTENCES` and two paragraphs beside it,
-  // which opened on *not reproducible*; all three are still built and still tested,
-  // and what is asserted here is the claim rather than the wording.
-  await expect(
-    failures.getByText('would not write the same ones again'),
-  ).toBeVisible()
+  // The reading's own name is not drawn (ADR-0115); what tells this run's section from
+  // one whose judge broke is the payload's own sentence, which is what the screen puts
+  // where the blocks would be. `report.test.ts` holds the name over the reading.
+  await expect(failures.getByText('no_narrative_instrument_declared')).toHaveCount(0)
   await expect(
     failures.getByText('no narrative instrument was declared for this run'),
+  ).toBeVisible()
+  // And the standing claim about whatever is under the section, in the screen's own
+  // one line: it replaced `A_MODEL_WROTE_THESE_SENTENCES` and the two paragraphs
+  // beside it, and all three are still built and still tested.
+  await expect(
+    failures.getByText('would not write the same ones again'),
   ).toBeVisible()
   await expect(failures.locator('details.family')).toHaveCount(0)
 

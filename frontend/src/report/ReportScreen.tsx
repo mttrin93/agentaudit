@@ -530,21 +530,19 @@ function TheFailures({ findings }: { findings: FindingsView }) {
     <section>
       <h2>Failures and fixes</h2>
       {/*
-        Which of the four readings this run holds, as the name the payload carries.
+        The reading's own name is not drawn.
 
-        `findings.reading` is a name off a closed set, and ADR-0070 §4 put it on the
-        screen so a reader tells the four apart by that name rather than by prose that
-        could be reworded — which is also how a reading this app has no shape for
-        reaches the page as itself.
+        `findings.reading` is the name off the closed set the payload carries — the
+        thing ADR-0070 §4 put there so a reader tells the four readings apart by a name
+        rather than by prose that could be reworded. It is still read, still typed and
+        still what this component branches on; what a reader sees instead is the blocks
+        themselves on the one reading that has them, and the payload's own sentence on
+        the three that do not.
 
-        It was taken off for a pass on this section's length, on the grounds that the
-        blocks say it on the one reading that has them and the payload's sentence says
-        it on the three that do not. Both are prose, and the line above still claims
-        the section says which reading holds under all four — so what the removal cost
-        was exactly the guarantee the ADR was making. Dropping it again is a decision
-        to record in an ADR rather than in this comment.
+        That the name, and the standing sentences under every finding, live in the
+        artefact and not on this screen is
+        [ADR-0115](../../../docs/adr/0115-the-report-screen-carries-the-figures-and-the-artefact-carries-the-sentences.md).
       */}
-      <p className="kind">{findings.reading}</p>
       {/* One line where three paragraphs stood: who wrote these sentences, that no
           figure above came from them, and what the label on a fix asserts. The three
           the screen no longer prints are `A_MODEL_WROTE_THESE_SENTENCES`,

@@ -4,8 +4,10 @@
  * A console opening on a registration form asks an engineer for an endpoint before
  * telling them what will be done to it. So the root screen says what the bench is
  * and what the console does — `WHAT_THIS_INSTRUMENT_IS` and
- * `WHAT_THIS_CONSOLE_DOES`, two paragraphs and three cards — and it says it in as
- * few words as the claim survives in.
+ * `WHAT_THIS_CONSOLE_DOES` — and it says it in as few words as the claim survives in.
+ * Neither is drawn any more: the bench screen is the switches an operator came to move,
+ * and both strings are still built and still tested on `Tuning.elective_statement`'s
+ * terms. `LandingScreen` says at each site what it stopped printing and why.
  *
  * **The citation is read here and drawn by the gate screen.** The outcome, the date
  * it was decided and the library version it was earned at, out of the same typed
@@ -65,6 +67,14 @@ import type {
 
 import { ARTEFACTS_PATH, REGISTER_PATH } from './rail'
 
+/**
+ * What the bench attacks, over what denominator, and what it reports.
+ *
+ * Printed by nothing since the bench screen dropped its own heading for it: the claim
+ * is the one a report makes and it is stated where the figures are. Kept for the reason
+ * `Tuning.elective_statement` is kept — a sentence in the bench's own vocabulary, and
+ * this screen was never the only thing that could print it.
+ */
 export const WHAT_THIS_INSTRUMENT_IS =
   'AgentAudit attacks an AI agent you own across six families of failure, ten ' +
   'attempts per case, and reports each family over its own denominator: a rate, an ' +
@@ -72,6 +82,10 @@ export const WHAT_THIS_INSTRUMENT_IS =
 
 /**
  * The three errands this console exists for, each with the control that starts it.
+ *
+ * **Drawn by nothing.** The bench screen's card set is gone — both screens are rows in
+ * the rail, and the runs and artefacts blocks point at them with the record's own rows
+ * in them — and this stays on `WHAT_THIS_INSTRUMENT_IS`'s terms, above.
  *
  * Copy rather than markup, on the same terms as every other string in this module:
  * the screen is markup driven by hand and the wording is here. `path` is taken off
@@ -244,8 +258,11 @@ export const THE_ELECTIVE_FAMILIES: readonly FamilySays[] = [
  * halt defeat and disclosure denial nothing on the LLM one — so an empty column here is
  * a refusal `labels.py` argues for and never a lookup that failed.
  *
- * **No figure on the row.** Not a rate, not a `D`, not a band: this screen says what
- * the nine *are*, and how a target answered one is the report's business (ADR-0018).
+ * **No measurement on the row.** Not a rate, not a `D`, not a band: this screen says
+ * what the nine *are*, and how a target answered one is the report's business
+ * (ADR-0018). `holds` is the one figure, and it is admissible because it is a count of
+ * what this bench holds rather than a reading against anybody's agent — the layers
+ * block's own column, asked of a family (ADR-0108).
  */
 export interface FamilyRow {
   /** The wire name, as every record spells it. Read as words on the way out. */
@@ -255,6 +272,14 @@ export interface FamilyRow {
   tier: 'six' | 'elective'
   owasp: readonly string[]
   articles: readonly string[]
+  /**
+   * How much of this family the library holds, worded by the bench.
+   *
+   * Empty where the settings read has not answered — the sentence and the switch are
+   * this console's own and draw without it, and a count is not: a row that filled this
+   * in from a default would be stating what the library holds without having asked.
+   */
+  holds: string
 }
 
 /**
@@ -282,13 +307,15 @@ export function familyRows(
     tier: 'six' | 'elective',
   ): readonly FamilyRow[] =>
     said.map((one) => {
-      const labels = rows?.find((held) => held.family === one.family)?.labels
+      const served = rows?.find((held) => held.family === one.family)
+      const labels = served?.labels
       return {
         family: one.family,
         says: one.says,
         tier,
         owasp: [...(labels?.agentic ?? []), ...(labels?.llm ?? [])],
         articles: labels?.articles ?? [],
+        holds: served?.holds ?? '',
       }
     })
   return [

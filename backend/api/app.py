@@ -3236,16 +3236,21 @@ def _labelled(label: FamilyLabel) -> FamilyLabelled:
 
 
 class FamilyCovered(BaseModel):
-    """One failure family, whether the next run covers it, and what it is read onto.
+    """One failure family, whether the next run covers it, what it is read onto, and
+    how much of it the mounted library holds.
 
     The label rides on the switch rather than arriving on a route of its own, because
     the screen prints the two in one row: a console that fetched the nine labels
-    separately could draw a tick beside a claim read at a different moment.
+    separately could draw a tick beside a claim read at a different moment. `holds` is
+    on the row for the same reason and on `LayerSelected.holds`'s terms — worded by the
+    bench, because a console composing *3 cases* from a number and a noun would be
+    printing a figure no route stated.
     """
 
     family: str
     covered: bool
     labels: FamilyLabelled
+    holds: str
 
 
 class Tuning(BaseModel):
@@ -3719,6 +3724,7 @@ def tuning(config: BenchConfig) -> Tuning:
                 family=str(family),
                 covered=family in config.families,
                 labels=_labelled(label_for(family)),
+                holds=_what_a_family_holds(family, config.cases, config.elective_cases),
             )
             for family in Family
         ],
@@ -3728,6 +3734,7 @@ def tuning(config: BenchConfig) -> Tuning:
                 family=str(family),
                 covered=family in config.elective.requested,
                 labels=_labelled(elective_label_for(family)),
+                holds=_what_a_family_holds(family, config.cases, config.elective_cases),
             )
             for family in ElectiveFamily
         ],
@@ -3852,6 +3859,45 @@ def _counted(count: int, noun: str) -> str:
     return f"{count} {noun}" if count == 1 else f"{count} {noun}s"
 
 
+def _what_a_family_holds(
+    family: AnyFamily, cases: Sequence[Case], elective: Sequence[Case]
+) -> str:
+    """How much of one family the mounted library holds, for the row that switches it.
+
+    The count of cases filed under the family, across every layer that sends them: what
+    an operator switching a family on is asking is how much there is to send about it,
+    and the layers block one heading up is where the split by layer is read.
+
+    **Both sequences, because the library is two directories.** The tier's cases are
+    loaded out of `cases/elective/` into `BenchConfig.elective_cases` and are
+    deliberately not folded into `cases`, so that a run asking for none of the tier does
+    not move its library digest — read that field for the argument. A row counting only
+    `cases` would therefore say *no cases in this library* under all three elective
+    families while nine records sat in the directory next door. The two are searched
+    together here and nothing is double counted: a family belongs to one tier by its
+    type, and a case of the six loaded out of the elective directory is a refusal
+    `load_elective` raises rather than a row this function has to reconcile.
+
+    A count and never a rate — nothing here is over a denominator and no two rows may be
+    added (ADR-0005, ADR-0010) — and the same figure for a family of either tier, which
+    is `AnyFamily` on the parameter rather than two functions: an elective family's case
+    is an ordinary case, and the tier decides what the gate is read over and not what
+    the library holds (ADR-0035, ADR-0091).
+
+    Counted off what is loaded and never off what is requested, which is the difference
+    between *how much of this is there* and *how much of it did somebody tick*: the row
+    is what an operator reads before ticking.
+
+    The empty library says so in words on the same terms `_what_a_layer_holds` does: a
+    family the next run would attack with nothing is a fact about this bench, and `0`
+    beside a ticked switch reads as a figure that failed to load.
+    """
+    held = [case for case in [*cases, *elective] if case.family == family]
+    if not held:
+        return "no cases in this library"
+    return _counted(len(held), "case")
+
+
 def _layer_cases(cases: Sequence[Case], layer: AttackLayer) -> list[Case]:
     """The mounted library's cases that the named layer is the one to send.
 
@@ -3873,18 +3919,17 @@ def _what_a_layer_holds(
     reader is being told is what a full family of this layer is attacked with, and a
     mean over families is a figure no family was ever attacked at (ADR-0005).
 
-    Episodes for the layer that holds no case at all, and *in each set* is load-bearing
-    on that row: `episodes_per_family` is the count inside one episode set, and each
-    schedule and each spelling the operator selects is a set of its own
-    (`budget.episode_count`, ADR-0096, ADR-0097). The multiplication belongs to the
-    estimate the operator confirms before a run starts and is deliberately not done
-    here — a figure on this screen that moved as switches moved would be an estimate
-    beside the switches, which is the thing ADR-0007 puts behind a confirmation.
+    Episodes for the layer that holds no case at all: `episodes_per_family` is the
+    count inside one episode set, and each schedule and each spelling the operator
+    selects is a set of its own (`budget.episode_count`, ADR-0096, ADR-0097). The
+    multiplication belongs to the estimate the operator confirms before a run starts
+    and is deliberately not done here — a figure on this screen that moved as switches
+    moved would be an estimate beside the switches, which is the thing ADR-0007 puts
+    behind a confirmation. The row says *a family* and leaves the per-set qualifier to
+    that estimate, where the set count is a figure rather than a word.
     """
     if layer is AttackLayer.ADAPTIVE:
-        return (
-            f"{_counted(adaptive.episodes_per_family, 'episode')} a family in each set"
-        )
+        return f"{_counted(adaptive.episodes_per_family, 'episode')} a family"
     held = _layer_cases(cases, layer)
     if not held:
         return "no cases in this library"
@@ -3910,7 +3955,7 @@ def _what_an_attempt_costs(
     the price of something that is not going to happen.
     """
     if layer is AttackLayer.ADAPTIVE:
-        return f"at most {_counted(adaptive.turns_per_episode, 'turn')} an episode"
+        return f"{_counted(adaptive.turns_per_episode, 'turn')} an episode"
     held = _layer_cases(cases, layer)
     if not held:
         return ""

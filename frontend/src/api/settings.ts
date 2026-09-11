@@ -285,6 +285,15 @@ export interface FamilyCovered {
   family: string
   covered: boolean
   labels: FamilyLabelled
+  /**
+   * How much of this family the mounted library holds, in the bench's own words.
+   *
+   * `LayerSelected.holds` one level up, and worded for the same reason: *3 cases*, or
+   * *no cases in this library* where it holds none. A count of this bench's own
+   * records and never a reading against a target, which is the line ADR-0108 draws
+   * through ADR-0091's *no figure in any column*.
+   */
+  holds: string
 }
 
 /**

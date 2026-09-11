@@ -202,8 +202,14 @@ const CONFIGURED: BenchSettings = {
         family: 'indirect_prompt_injection',
         covered: true,
         labels: { agentic: ['ASI01:2026'], llm: ['LLM01:2026'], articles: ['15'] },
+        holds: '3 cases',
       },
-      { family: 'scope_creep', covered: false, labels: SOME_LABEL },
+      {
+        family: 'scope_creep',
+        covered: false,
+        labels: SOME_LABEL,
+        holds: 'no cases in this library',
+      },
     ],
     families_off_statement:
       'a family switched off is not run: its cases are not attempted, no episode ' +
@@ -214,11 +220,17 @@ const CONFIGURED: BenchSettings = {
     // put all nine in one array would be modelling a response this bench does not
     // serve (ADR-0015, ADR-0035).
     elective_families: [
-      { family: 'memory_poisoning', covered: false, labels: SOME_LABEL },
+      {
+        family: 'memory_poisoning',
+        covered: false,
+        labels: SOME_LABEL,
+        holds: 'no cases in this library',
+      },
       {
         family: 'pii_leakage',
         covered: true,
         labels: { agentic: [], llm: ['LLM02:2026'], articles: ['10'] },
+        holds: '1 case',
       },
     ],
     elective_statement:
@@ -243,8 +255,8 @@ const CONFIGURED: BenchSettings = {
         layer: 'adaptive',
         selected: true,
         sends: 'the model-driven attacker',
-        holds: '2 episodes a family in each set',
-        costs: 'at most 8 turns an episode',
+        holds: '2 episodes a family',
+        costs: '8 turns an episode',
       },
     ],
     transforms: [

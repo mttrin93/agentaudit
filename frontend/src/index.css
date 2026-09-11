@@ -284,11 +284,13 @@ h1 {
 /* The margins are set rather than left to the browser, which gives a heading room in
  * proportion to its own size: on this page a heading belongs to what is under it, so it
  * sits closer to that than to the block above. */
+/* The space above is half of what separates two sections — `section`'s own padding is
+ * the other half, and the comment there is where the distance is argued. */
 h2 {
   font-size: 1.15rem;
   font-weight: 700;
   letter-spacing: -0.012em;
-  margin: 0.9rem 0 0.4rem;
+  margin: 0.55rem 0 0.4rem;
 }
 
 h3 {
@@ -328,14 +330,19 @@ h4 {
  * citation, a figure — and there an edge says *this is one object* rather than
  * *these two things are different*.
  *
- * 1.5rem, down from 2.6 in two steps. The gap was set when a section opened on a
+ * 1.1rem, down from 2.6 in three steps. The gap was set when a section opened on a
  * heading and a paragraph explaining it; a screen of rows and short lines needs less of
  * it before the space reads as a section that lost its content rather than one that
- * ended. Below this the heading of the next section starts to belong to the block above
- * it, which is where the floor is.
+ * ended. The last step came with the front door's two prose blocks: with no paragraph
+ * under any heading, the gap was the widest thing left on the screen, and the heading
+ * below it carries its own caption strip which reads as part of the block it labels.
+ *
+ * The floor is where the next heading starts to belong to the block above it, and the
+ * `h2` margin above is the other half of the distance — the two are set together or the
+ * total moves twice.
  */
 section {
-  padding-top: 1.5rem;
+  padding-top: 1.1rem;
 }
 
 label {
@@ -783,69 +790,13 @@ button:disabled {
 }
 
 /*
- * The three things this console does, side by side on the front door.
- *
- * Cards rather than prose, because each one is an errand with a control at the end
- * of it and a reader who came to start one should not have to read the other two to
- * find it. `auto-fit` and not three fixed columns: the reading column is 44rem, so
- * three cards are narrow by design and one column is what a phone gets.
- *
- * **Nothing in a card is a figure**, so there is no rule here for a rate, a band or
- * a tint — the front door says what the console does, and every figure in this
- * application belongs to the screen that measured it.
- */
-.does {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
-  gap: 1rem;
-  margin: 1.5rem 0 0;
-}
-
-.does .card {
-  display: flex;
-  flex-direction: column;
-  padding: 1.15rem 1.3rem;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-}
-
-.does .card h3 {
-  margin-top: 0;
-}
-
-/* The description takes the slack, so the controls sit on one line across the row
- * however unevenly the three sentences wrap. */
-.does .card p {
-  flex: 1;
-  margin: 0 0 1.1rem;
-  font-size: 0.9rem;
-  color: var(--quiet);
-}
-
-/*
- * A link that opens a screen, set as the control it is.
- *
- * `button`'s own rule is left alone: these are anchors, because they navigate, and
- * the styling is where the resemblance stops. `.lead` is the filled one — one per
- * card set, on the errand to do first.
- */
-/*
- * The three errands' controls, and all three are drawn the same.
- *
- * The filled mint was spent on the lead card alone — register first, because an
- * operator with nothing registered can usefully do one of the three — and the other two
- * were outlined in the hairline every block on the page is edged with, which made them
- * read as the disabled halves of a set. All three are doors, they are the only doors on
- * this screen, and the order of the cards is what says which to open first.
- */
-/*
  * The idiom the two switch blocks share: a tick, a name, and what it means.
  *
- * `.said` carries the tick and its hover, and the two blocks that use it both lay
- * themselves out as one box to a row under it — nine boxes of families, then three of
- * layers. What is shared is the control, which is the thing that must not drift:
- * the same square box in both, so a reader who has learned what one means on one block
- * has learned it on the other.
+ * `.said` carries the tick and its hover, and the two blocks that use it are drawn the
+ * same way under it: one frame, one row to a member, and the row in columns with the
+ * switch first — three layers, then nine families. What is shared is the control,
+ * which is the thing that must not drift: the same square box in both, so a reader who
+ * has learned what one means on one block has learned it on the other.
  */
 .said {
   display: grid;
@@ -855,38 +806,73 @@ button:disabled {
 }
 
 /*
- * The nine families, one to a box and one box to a row.
+ * The nine families, one to a row, and the row in three columns.
  *
- * The same paper-and-hairline box every other block on this page is made of, in a
- * single column rather than the two the auto-fit grid gave them. Two to a row read as
- * a grid of cards and buried the question the block exists to answer — which of these
- * will the next run cover — which is a question a reader answers by running an eye
- * down one column of switches.
+ * The shape the layers block above settled on, on the same argument: boxes came first
+ * — two to a row, which read as a grid of cards, then one to a row — and what a box
+ * costs is that the switch, the sentence and the claims each begin at a different
+ * depth down the page, so *which of these will the next run cover* is read one box at
+ * a time. In columns the switches line up down one edge and the sentences down the
+ * next, and the eye answers by running down a column.
  *
- * The label footer is inside the box, under the sentence, because what a family
- * claims is a fact about the family and not a fifth column: a box holds one subject.
+ * One frame with a hairline between rows and no box of its own for any row: nine
+ * framed boxes in a column read as nine cards, and what this is is one list. Which is
+ * also the other half of ADR-0091 — the tier is drawn undifferentiated, and nine rows
+ * inside one frame are harder to read as six and three than nine boxes were. What
+ * stays split is the pair of arrays the switches write to.
  *
- * One list and not two: the tier is drawn undifferentiated (ADR-0091), and what stays
- * split is the pair of arrays the switches write to.
+ * The switch column is the layers block's width to the character, so the two blocks'
+ * switches stand on the same edge down the whole screen. `minmax(0, …)` on the
+ * sentence, or a long word in it pushes the codes off the row.
+ *
+ * The codes get a **fixed** track wide enough for the longest pair of entries on one
+ * line, and the sentence takes every remaining pixel. Two things fall out of that, and
+ * both are the point: the codes end close to the counts beside them rather than across
+ * a lane of space, and they start on the same edge in all nine rows. `max-content`
+ * would size the track to the widest cell — but each row is its own grid, not a
+ * subgrid, so it sizes per row, and a family claiming one entry had its codes set 70px
+ * to the right of a family claiming two. A column that does not line up is not a
+ * column.
+ *
+ * The column gap is tighter than the row gap for the same reason the codes moved: four
+ * columns across 44rem, and the space between them was reading as the widest thing in
+ * the row.
  */
 .said.families {
   grid-template-columns: 1fr;
-  gap: 0.6rem;
+  gap: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--paper);
 }
 
-/* The published entries and the articles, at the foot of the box that names them. Each
- * is set as what it is — a string a recipient matches against a stored copy, not prose
- * — behind the word for the list it is on, because neither `ASI01:2026` nor `15` names
- * its own register. A family claiming nothing on a list draws nothing: an empty run of
- * codes, and never a dash, which would read as *not looked up*. */
+.said.families > div {
+  display: grid;
+  grid-template-columns: 10.5rem minmax(0, 1fr) 13.25rem 8rem;
+  align-items: start;
+  gap: 1.1rem 0.85rem;
+  background: none;
+  border: 0;
+  border-top: 1px solid var(--line);
+  border-radius: 0;
+}
+
+.said.families > div:first-child {
+  border-top: 0;
+}
+
+/* The published entries and the articles, in the third column of the row that names
+ * them — where the layers' members are, and the same relation to the sentence beside
+ * them. Each is set as what it is — a string a recipient matches against a stored
+ * copy, not prose — behind the word for the list it is on, because neither
+ * `ASI01:2026` nor `15` names its own register. A family claiming nothing on a list
+ * draws nothing: an empty run of codes, and never a dash, which would read as *not
+ * looked up*. */
 .said.families .claims {
   display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 0.35rem 1.1rem;
-  margin-top: 0.55rem;
-  padding-top: 0.55rem;
-  border-top: 1px solid var(--line);
+  flex-direction: column;
+  gap: 0.4rem;
+  margin: 0;
 }
 
 .said.families .claims > span {
@@ -896,6 +882,11 @@ button:disabled {
   gap: 0.35rem;
 }
 
+/* The list's word in front of its codes and not over them. Over them is how the
+ * layers' members are labelled, and it cost four lines in a column whose row is two:
+ * the switch and the sentence both ended halfway up an empty row. Inline, the two
+ * lists are two lines, the row is the height of its own sentence, and a list long
+ * enough to wrap wraps under its word rather than being given one. */
 .said.families .claims .of {
   font-size: 0.72rem;
   font-weight: 600;
@@ -909,15 +900,60 @@ button:disabled {
   color: var(--ink);
 }
 
+/* The family's sentence, in the column between the switch and the codes. */
+.said.families .means {
+  margin: 0;
+}
+
+/* The last column, on the layers block's own terms: ranged right and set in the
+ * monospace, so nine counts are read down one edge rather than as nine more sentences
+ * to start. `.holds .much` is styled once, for both blocks, below.
+ *
+ * A fixed width and not `max-content`, which is the layers block's rule and cannot be
+ * this one's: three of the nine hold nothing and say so in a sentence, and a column
+ * sized to its widest cell would set those three rows' codes on a different edge from
+ * the other six — which is the alignment the columns exist for. The empty answer wraps
+ * instead. */
+.said.families .holds {
+  margin: 0;
+  text-align: right;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
 /*
- * The strip over the switches: what the block switches, how much of it is on, and what
- * a chip is for.
+ * Narrow, the row is the box it used to be — the layers block's rule, at its width, so
+ * the two blocks stack at the same moment and the screen never holds one of each.
+ */
+@media (max-width: 60rem) {
+  .said.families > div {
+    grid-template-columns: 1fr;
+    gap: 0.55rem;
+  }
+
+  /* Stacked, the count is a line under the codes rather than a column beside them, so
+   * it is set where the eye already is — the layers block's own rule at this width. */
+  .said.families .holds {
+    text-align: left;
+  }
+
+  /* Stacked, the codes are a footer under the sentence again, and the hairline that
+   * separated them inside the box comes back with the shape. */
+  .said.families .claims {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.35rem 1.1rem;
+    padding-top: 0.55rem;
+    border-top: 1px solid var(--line);
+  }
+}
+
+/*
+ * The strip over the switches: what the block switches, and how much of it is on.
  *
  * Set in the small upper case the rest of the file labels lists in, and on the ground
- * rather than in a well of its own — it is a caption over the rows and not a row. The
- * third part is pushed to the far edge because it is the only one addressed to a
- * pointer: the two on the left describe what is on the screen, and it says what to do
- * with it.
+ * rather than in a well of its own — it is a caption over the rows and not a row. Both
+ * parts describe what is on the screen; nothing here instructs a pointer.
  */
 .switching {
   display: flex;
@@ -938,13 +974,6 @@ button:disabled {
   color: var(--ink);
 }
 
-.switching .how {
-  margin-left: auto;
-  font-weight: 400;
-  letter-spacing: 0.03em;
-  text-transform: none;
-}
-
 /*
  * The three layers, one to a row, and the row in three columns.
  *
@@ -956,9 +985,14 @@ button:disabled {
  * column.
  *
  * The switch column is fixed and the other two share what is left, weighted toward the
- * members: the sentences are two lines either way, and a layer offering seven chips is
- * what needs the width. `minmax(0, …)` on both, or a long word in a sentence pushes the
- * chips off the row.
+ * members: the sentences are two or three lines either way, and a layer offering seven
+ * chips is what needs the width. `minmax(0, …)` on both, or a long word in a sentence
+ * pushes the chips off the row.
+ *
+ * The weighting moved toward the chips, and the column gap is tighter than the row gap,
+ * to close the lane that stood between the last chip and the figures beside it: the
+ * chips wrap where their own widths fall, so the space at the end of that column is
+ * whatever the last row of chips left, and a wider track leaves less of it.
  */
 .said.layers {
   grid-template-columns: 1fr;
@@ -971,10 +1005,10 @@ button:disabled {
 .said.layers > div {
   display: grid;
   grid-template-columns:
-    10.5rem minmax(0, 1fr) minmax(0, 1.15fr)
+    10.5rem minmax(0, 0.95fr) minmax(0, 1.35fr)
     minmax(8rem, max-content);
   align-items: start;
-  gap: 1.1rem;
+  gap: 1.1rem 0.85rem;
   /* One frame around the block and a hairline between rows, rather than a box each:
    * three framed boxes in a column read as three cards, which is the shape this block
    * was moved out of. */
@@ -1031,7 +1065,8 @@ button:disabled {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
-.said.layers .holds .much {
+.said.layers .holds .much,
+.said.families .holds .much {
   display: block;
   font-size: 0.82rem;
   color: var(--ink);
@@ -1143,8 +1178,10 @@ button:disabled {
   font-style: italic;
 }
 
-/* One construction to a box, in the idiom every other block on the page is made of:
- * paper, a hairline, and the same radius. */
+/* The box a row is when a block does not frame the whole list, in the idiom every
+ * other block on the page is made of: paper, a hairline, and the same radius. Both
+ * blocks that use `.said` override it — they frame the list and rule between rows —
+ * and it is what a third one would get. */
 .said > div {
   padding: 0.9rem 1rem;
   background: var(--paper);
@@ -1299,21 +1336,6 @@ button:disabled {
   background: var(--paper);
 }
 
-.act {
-  align-self: start;
-  padding: 0.45rem 1rem;
-  font-size: 0.9rem;
-  text-decoration: none;
-  color: var(--accent);
-  background: var(--accent-paper);
-  border: 1px solid var(--accent);
-  border-radius: var(--radius);
-}
-
-.act:hover {
-  border-color: var(--ink);
-}
-
 a {
   color: inherit;
 }
@@ -1398,7 +1420,6 @@ a:hover {
 
 /* Every card-like block is made of paper and sits on the page. One rule, so a new
  * block cannot arrive as a tinted region with a line round it. */
-.does .card,
 .family,
 .signed,
 .artefact,

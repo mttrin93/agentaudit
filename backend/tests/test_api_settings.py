@@ -230,9 +230,11 @@ def test_the_route_states_the_configuration_a_run_will_actually_use() -> None:
     assert "a read" in str(body["statement"]).lower()
 
     # Not one field here is a measurement of anybody's target. A family is named in
-    # exactly one place — the switch that says whether the next run covers it — and
-    # that row carries no number, so there is nothing on this response that could be
-    # read as a rate or a band about an agent somebody registered (ADR-0018).
+    # exactly one place — the switch that says whether the next run covers it — and the
+    # one figure that row carries is a count of what this bench's own library holds,
+    # which does not move when a target is registered, so there is nothing on this
+    # response that could be read as a rate or a band about an agent somebody
+    # registered (ADR-0018, ADR-0108).
     body = a_client(configured(models=DECLARED)).get(BENCH_SETTINGS_ROUTE).json()
     switches = body["tuning"].pop("families")
     assert [row["family"] for row in switches] == [str(family) for family in Family]
@@ -241,8 +243,12 @@ def test_the_route_states_the_configuration_a_run_will_actually_use() -> None:
         # what the family is *read onto* — published entries and articles — and carries
         # no rate, no interval and no `D`. What it is checked against is
         # `test_every_family_switch_carries_the_labels_its_row_prints`.
-        assert set(row) == {"family", "covered", "labels"}
+        assert set(row) == {"family", "covered", "labels", "holds"}
         assert isinstance(row["covered"], bool)
+        # And `holds` is the bench's own wording of a count of its own records, never a
+        # reading against a target: the row states cases, and it states them in words
+        # so that no console has to compose the noun (ADR-0108).
+        assert "case" in row["holds"]
     for family in Family:
         assert family.value not in json.dumps(body)
 
@@ -1586,13 +1592,12 @@ def test_each_layer_says_how_much_it_holds_and_what_an_attempt_of_it_costs() -> 
     # The layer that holds no case counts the thing it does hold, off the declared
     # budget rather than off a literal here, and says which of the two the figure is.
     episodes = DECLARED_ADAPTIVE_BUDGET.episodes_per_family
-    assert (
-        rows[str(AttackLayer.ADAPTIVE)]["holds"]
-        == f"{episodes} episodes a family in each set"
-    )
+    assert rows[str(AttackLayer.ADAPTIVE)]["holds"] == f"{episodes} episodes a family"
+    # Its unit is an episode, so what an attempt of it costs is counted in the turns
+    # an episode spends and never in calls.
     assert (
         rows[str(AttackLayer.ADAPTIVE)]["costs"]
-        == f"at most {DECLARED_ADAPTIVE_BUDGET.turns_per_episode} turns an episode"
+        == f"{DECLARED_ADAPTIVE_BUDGET.turns_per_episode} turns an episode"
     )
 
     # Cases of one layer that do not all run to the same length are stated at their
@@ -1620,6 +1625,92 @@ def test_each_layer_says_how_much_it_holds_and_what_an_attempt_of_it_costs() -> 
     # sent, so there is no price to state.
     assert rows[str(AttackLayer.SINGLE_TURN)]["holds"] == "no cases in this library"
     assert rows[str(AttackLayer.SINGLE_TURN)]["costs"] == ""
+
+
+def test_each_family_says_how_much_of_it_the_library_holds() -> None:
+    """The one figure a family's row carries, and what it deliberately is not.
+
+    ADR-0091 §5 said *no figure in any column* and ADR-0108 narrowed it to what its own
+    argument was about: a reading against somebody's agent. This is a count of records
+    this bench holds, it does not move when a target is registered, and it is the same
+    question the layers block one heading up already answers — how much is there to
+    send — asked of a family instead of a layer.
+
+    Counted across the layers and not per layer: a case is filed under one family
+    whatever construction sends it, and the split by layer is the block above's.
+
+    And across both directories the library is. The tier's cases are loaded into
+    `BenchConfig.elective_cases` rather than into `cases`, so that a run asking for none
+    of the tier does not move its library digest; a row that read only `cases` would
+    print *no cases in this library* under all three elective families while the records
+    sat in `cases/elective/`. That is the failure this test's second half is here for.
+
+    Worded by the bench, on `LayerSelected.holds`'s terms, so a console prints the
+    sentence rather than composing *3* and the noun for it. And a family this library
+    holds nothing for says so in words rather than as a zero a reader could take for a
+    measurement that came back empty.
+    """
+    library = [
+        replace(
+            unlisted_case(payload="one message", case_id=f"leak-{index}"),
+            family=Family.DATA_LEAKAGE,
+        )
+        for index in range(3)
+    ] + [
+        replace(
+            unlisted_case(payload="one message", case_id="creep"),
+            family=Family.SCOPE_CREEP,
+        )
+    ]
+    app = create_app(BenchConfig(cases=library))
+    with TestClient(app) as client:
+        tuning = client.get(BENCH_SETTINGS_ROUTE).json()["tuning"]
+    rows = {
+        row["family"]: row for row in tuning["families"] + tuning["elective_families"]
+    }
+
+    assert rows[str(Family.DATA_LEAKAGE)]["holds"] == "3 cases"
+    # One is one case and never *1 cases*: the noun is the bench's, so the bench
+    # inflects it.
+    assert rows[str(Family.SCOPE_CREEP)]["holds"] == "1 case"
+    assert rows[str(Family.HALT_DEFEAT)]["holds"] == "no cases in this library"
+
+    # The tier is counted the same way and by the same function, because an elective
+    # family's case is an ordinary case: what the tier decides is the gate's
+    # denominator and not what the library holds (ADR-0035, ADR-0108).
+    assert (
+        rows[str(ElectiveFamily.MEMORY_POISONING)]["holds"]
+        == "no cases in this library"
+    )
+    elective = create_app(
+        BenchConfig(
+            cases=[],
+            # Where the tier's library actually arrives, which is the second directory
+            # and never `cases`: a bench that folded it into the first would move the
+            # library digest of every run that asked for none of it. A row counting
+            # only `cases` says *no cases in this library* under all three elective
+            # families while the records sit in `cases/elective/`.
+            elective_cases=[
+                replace(
+                    unlisted_case(payload="one message", case_id=f"poison-{index}"),
+                    family=ElectiveFamily.MEMORY_POISONING,
+                )
+                for index in range(2)
+            ],
+        )
+    )
+    with TestClient(elective) as client:
+        held = {
+            row["family"]: row
+            for row in client.get(BENCH_SETTINGS_ROUTE).json()["tuning"][
+                "elective_families"
+            ]
+        }
+    assert held[str(ElectiveFamily.MEMORY_POISONING)]["holds"] == "2 cases"
+    # Loaded and not requested: the row says how much there is to send about a family,
+    # which is what an operator reads *before* ticking it. This bench requested nothing
+    # — `NOTHING_REQUESTED` is the default — and the count is two all the same.
+    assert held[str(ElectiveFamily.PII_LEAKAGE)]["holds"] == "no cases in this library"
 
 
 def test_the_layers_and_constructions_the_next_run_sends_can_be_set() -> None:

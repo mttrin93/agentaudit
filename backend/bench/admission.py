@@ -48,6 +48,7 @@ from backend.bench.library import (
     CaseStatus,
     DiscoveredBy,
     ElectiveFamily,
+    NoAdmissionBar,
     bar_for,
     found_by_the_attacker,
     load_elective,
@@ -76,6 +77,7 @@ __all__ = [
     "AdmissionOutcome",
     "CrossModelRejections",
     "LibraryProvenance",
+    "NoAdmissionBar",
     "NotAdmitted",
     "ReadingOutcome",
     "RejectionKind",
@@ -104,6 +106,10 @@ find the name here, where the rule is applied.
 field and belongs beside the branch it is the other half of: both are statements
 about what a `DiscoveredBy` member *means*, and splitting them would leave a
 reader who found one with no way to know the other existed.
+
+`NoAdmissionBar` follows both because it is what one branch of `bar_for` does
+instead of returning: a caller that reaches this module for the two-bar rule needs
+the name of the answer *no bar applies* in the same place (ADR-0117 §2).
 """
 
 

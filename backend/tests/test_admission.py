@@ -26,6 +26,7 @@ from pathlib import Path
 import pytest
 
 from backend.bench.admission import (
+    NoAdmissionBar,
     NotAdmitted,
     UnevenReading,
     admitted_library,
@@ -141,7 +142,17 @@ def test_provenance_decides_the_bar_and_every_member_has_one() -> None:
     assert bar_for(DiscoveredBy.ADAPTIVE) is AdmissionBar.CROSS_MODEL
     assert bar_for(DiscoveredBy.AUTHORED) is AdmissionBar.SINGLE_MODEL
     assert bar_for(DiscoveredBy.USER_GAP) is AdmissionBar.SINGLE_MODEL
-    assert {bar_for(member) for member in DiscoveredBy} == set(AdmissionBar)
+
+    # Every member a `Case` may carry, which since ADR-0117 is five of the six:
+    # `TARGET_SPECIFIC` is a held route's provenance and faces no `D` at all, so it
+    # is refused here rather than given the weaker bar — and the refusal is what
+    # stops a case record from claiming it (`test_held_routes.py`).
+    barred = {
+        member for member in DiscoveredBy if member is not DiscoveredBy.TARGET_SPECIFIC
+    }
+    assert {bar_for(member) for member in barred} == set(AdmissionBar)
+    with pytest.raises(NoAdmissionBar):
+        bar_for(DiscoveredBy.TARGET_SPECIFIC)
 
 
 def test_a_retrieved_case_faces_the_single_model_bar_for_a_reason_of_its_own() -> None:

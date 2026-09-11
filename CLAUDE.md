@@ -19,6 +19,7 @@ Do not restate these here — read them.
 | The build spec — the elective family tier | [docs/specs/elective-family-tier.md](./docs/specs/elective-family-tier.md) |
 | The build spec — the MCP server | [docs/specs/mcp-server.md](./docs/specs/mcp-server.md) |
 | The build spec — a route found against a customer's agent | [docs/specs/pending-routes.md](./docs/specs/pending-routes.md) |
+| The build spec — the door, and the name in the report | [docs/specs/the-authenticated-operator.md](./docs/specs/the-authenticated-operator.md) |
 
 Terms in CONTEXT.md are load-bearing arithmetic, not synonyms. An **attempt** is
 the unit of the denominator; a turn is not an attempt.

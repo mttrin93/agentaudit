@@ -104,6 +104,9 @@ FLAT = {"attempts": 10, "hardened": 9, "weak": 9, "trivial": 10}
 """Counts that do not: the two ends are one attempt apart and the intervals
 overlap."""
 
+FLOOR = {"attempts": 10, "hardened": 0, "weak": 0, "trivial": 0}
+"""Counts where nothing engaged: the trivial agent was never broken (ADR-0118)."""
+
 PROBE = "the probe that actually ran"
 
 
@@ -239,7 +242,7 @@ def test_a_refused_route_is_remembered_with_its_rejection_kind_and_its_counts(
     memory: DecidedRoutes, leakage_case: Case
 ) -> None:
     # ADR-0012 calls a cross-model discard a finding in its own right, and
-    # `RejectionKind` says why the four ways of failing are counted apart: "a count
+    # `RejectionKind` says why the ways of failing are counted apart: "a count
     # means nothing unless the other ways of failing are counted apart from it". So
     # what is kept is the counts, and what comes back is the count *and* the answer
     # the current threshold reaches on it.
@@ -258,6 +261,28 @@ def test_a_refused_route_is_remembered_with_its_rejection_kind_and_its_counts(
     assert kind_of(answer.promotion.outcome) is RejectionKind.CROSS_MODEL
     assert answer.promotion.case is None
     assert "reported from memory" in answer.stated()
+
+
+def test_a_route_the_agents_never_engaged_is_still_remembered(
+    memory: DecidedRoutes, leakage_case: Case
+) -> None:
+    # ADR-0118 §5, and it is the close call of that ADR. `FLOOR_AT_ZERO` says nothing
+    # was learned about the *case*, which reads like `UNREAD` and `NOT_MEASURED` — but
+    # unlike those two the measurement happened: the three agents were run the full
+    # denominator against a fixed probe and a scripted router, so the answer is
+    # reproducible and paying for it twice buys nothing. Relabelling a refusal must
+    # not silently change what the bench pays for.
+    promotion = decided_by_the_bar(a_route(leakage_case), FLOOR, FLOOR)
+    assert kind_of(promotion.outcome) is RejectionKind.FLOOR_AT_ZERO
+
+    assert worth_remembering(promotion)
+    entry = memory.remember(promotion, models=MODELS, today=DECIDED_ON)
+
+    assert entry.decided_as is RejectionKind.FLOOR_AT_ZERO
+    answer = memory.recall(a_route(leakage_case), models=MODELS)
+    assert isinstance(answer, Remembered)
+    assert kind_of(answer.promotion.outcome) is RejectionKind.FLOOR_AT_ZERO
+    assert answer.promotion.case is None
 
 
 def test_a_remembered_decision_names_the_bar_its_own_route_faced(
@@ -768,7 +793,7 @@ def test_a_recorded_answer_the_arithmetic_no_longer_reaches_re_measures_the_rout
 def test_a_re_measured_route_is_counted_apart_from_one_never_proposed(
     memory: DecidedRoutes, leakage_case: Case
 ) -> None:
-    # `RejectionKind`'s reasoning about counting the four refusals apart, applied to
+    # `RejectionKind`'s reasoning about counting the refusals apart, applied to
     # the memory's own two misses. A route re-measured because a record stopped
     # applying is the event that says the invalidation rules are working, and one
     # number over both would report it as a route nobody had ever proposed.

@@ -172,6 +172,37 @@ class ReadingOutcome:
         )
 
     @property
+    def engaged(self) -> bool:
+        """Whether this reading reached the equipment at all: any success, any agent.
+
+        The trivial agent is the one built to fall over, so an attempt that broke
+        nothing on it is usually an attempt whose success condition never fired —
+        most often a probe composed in a customer target's vocabulary, put to
+        reference agents that route tools by scripted phrase. A reading that did not
+        engage is not a weak case: it is a case nothing was learned about, and
+        [ADR-0118](../../docs/adr/0118-a-rejection-at-the-floor-is-counted-apart-from-a-case-that-separated-nothing.md)
+        is where `kind_of` counts the two apart.
+
+        **All three agents and not the trivial one alone.** The claim the predicate
+        carries downstream is *this probe reached nothing here*, and one success
+        anywhere disproves it — including the improbable one where the hardened agent
+        broke and the trivial one did not. The three share a router, so that reading
+        is noise rather than a floor, and the conservative answer is the only one
+        available: it falls back to `SEPARATED_NOWHERE`, which at least says something
+        engaged.
+
+        **`> 0` and not a rate above some floor**, which is that ADR's §3: at the
+        declared ten attempts a rate "below a floor" is one success away from a case
+        the bar should simply refuse as weak, and this predicate has to mean *nothing
+        happened* for an operator to act on it by rewriting a probe. Zero is also
+        checkable from the counts the record already prints, where a second declared
+        threshold beside `discrimination_floor` would not be.
+        """
+        return any(
+            rate.successes > 0 for rate in (self.hardened, self.weak, self.trivial)
+        )
+
+    @property
     def clears(self) -> bool:
         """Whether this reading meets the bar: magnitude *and* separation.
 
@@ -276,8 +307,27 @@ class AdmissionOutcome:
         The bar is named on the first line, so an adaptive-discovered case is
         distinguishable from an authored one by reading the report rather than by
         knowing the rule (ADR-0012).
+
+        **A refusal names which refusal it was**, because two of them mean opposite
+        things and used to print the same words: a case the agents engaged and did
+        not separate is a finding about the case, and one that never engaged them at
+        all is a finding about nothing
+        ([ADR-0118](../../docs/adr/0118-a-rejection-at-the-floor-is-counted-apart-from-a-case-that-separated-nothing.md)).
+        It is said here rather than at each printer because every surface that shows
+        an operator a refusal shows it through this line — the gate's reading
+        (`CrossModelRejections.stated`), a promotion's lines, and the reason a
+        rejected row carries on `/pending-routes`.
+
+        `kind_of` is defined below this class and called from inside a method, which
+        Python resolves at call time. The classifier stays a function over the
+        outcome so that nothing can construct an outcome carrying a kind its own
+        readings do not support.
         """
-        decision = "admitted" if self.admitted else "REJECTED — discard the case"
+        decision = (
+            "admitted"
+            if self.admitted
+            else f"REJECTED — {kind_of(self)}, discard the case"
+        )
         lines = [
             f"{self.case_id}: {decision} — provenance {self.discovered_by}, "
             f"bar {self.bar} "
@@ -594,7 +644,7 @@ def library_provenance(cases: Iterable[Case]) -> LibraryProvenance:
 
 
 class RejectionKind(StrEnum):
-    """How one decided proposal came out, and the four ways it can fail to enter.
+    """How one decided proposal came out, and the five ways it can fail to enter.
 
     A closed enum rather than three booleans, because ADR-0012 asks for **the count
     of cross-model rejections** and a count means nothing unless the other ways of
@@ -606,6 +656,7 @@ class RejectionKind(StrEnum):
     ADMITTED = "admitted"
     CROSS_MODEL = "cross-model rejection"
     SEPARATED_NOWHERE = "separated on no model"
+    FLOOR_AT_ZERO = "trivial never left the floor"
     UNREAD = "not read on enough models"
     NOT_MEASURED = "not measured at all"
 
@@ -614,7 +665,7 @@ class RejectionKind(StrEnum):
 
         The member's own name is *not* repeated here: the caller prints it with the
         count, and this is the gloss beside it. The match has no fallback branch —
-        a sixth member must fail the type check rather than print as a name with
+        a seventh member must fail the type check rather than print as a name with
         nothing said about it.
         """
         match self:
@@ -635,6 +686,15 @@ class RejectionKind(StrEnum):
                     "a finding about the case rather than about any model. Discarded "
                     "on the same bar every authored case faces (ADR-0003)"
                 )
+            case RejectionKind.FLOOR_AT_ZERO:
+                return (
+                    "no attempt broke any of the three agents, on any model the bar "
+                    "read. The probe never reached the equipment — most often "
+                    "because it was composed in a customer target's vocabulary and "
+                    "the reference agents route by scripted phrase — so nothing was "
+                    "learned about this case and nothing may be concluded about its "
+                    "route from the refusal (ADR-0118)"
+                )
             case RejectionKind.UNREAD:
                 return (
                     "every reading it has cleared, and it has not been read on a "
@@ -650,17 +710,25 @@ class RejectionKind(StrEnum):
 
 
 def kind_of(outcome: AdmissionOutcome) -> RejectionKind:
-    """Which of the five answers one decided proposal landed on.
+    """Which of the six answers one decided proposal landed on.
 
     Ordered from the outside in, so that each member means what its name says: an
-    admitted case first, then the two refusals that are findings about a route or a
-    case, then the two that are facts about the run rather than about either.
+    admitted case first, then the refusals that are findings about a route or a
+    case, then the ones that are facts about the run rather than about either.
+
+    `FLOOR_AT_ZERO` is read inside the branch it narrows and nowhere else: it is the
+    subset of `SEPARATED_NOWHERE` where no reading engaged the equipment at all, so a
+    proposal that cleared somewhere cannot land on it however low its floor sat
+    (ADR-0118 §2). What *engaged* means is `ReadingOutcome.engaged`'s, beside the
+    counts it is read off.
     """
     if outcome.admitted:
         return RejectionKind.ADMITTED
     if not outcome.readings:
         return RejectionKind.NOT_MEASURED
     if not any(reading.clears for reading in outcome.readings):
+        if not any(reading.engaged for reading in outcome.readings):
+            return RejectionKind.FLOOR_AT_ZERO
         return RejectionKind.SEPARATED_NOWHERE
     if all(reading.clears for reading in outcome.readings):
         return RejectionKind.UNREAD

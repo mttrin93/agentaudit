@@ -92,24 +92,39 @@ configurable path is a path that can be configured into a tracked directory. A t
 asks git whether this path is ignored, and asks it of the sidecars too.
 """
 
-ABOUT_THE_ROUTE = frozenset(
+MEASURED_THE_ROUTE = frozenset(
     {
         RejectionKind.ADMITTED,
         RejectionKind.CROSS_MODEL,
         RejectionKind.SEPARATED_NOWHERE,
+        RejectionKind.FLOOR_AT_ZERO,
     }
 )
-"""The three answers that are findings about the route, and so the three worth keeping.
+"""The four answers a run reached by measuring, and so the four worth keeping.
 
-`RejectionKind`'s own docstrings draw this line and this constant reads it off them:
-the other two members are facts about a *run* rather than about a route. `UNREAD` is
-"a run that did not happen the way the bar needs it to, and it is not evidence about
-the route"; `NOT_MEASURED` is "no reading exists, so nothing about this proposal has
-been measured and nothing may be concluded from it". Remembering either would be
-remembering that a measurement did not happen, and then answering a later run with it.
+**The line is whether the measurement happened, not whether it was flattering.** The
+other two members are facts about a *run* rather than about a route, in
+`RejectionKind`'s own words: `UNREAD` is "a run that did not happen the way the bar
+needs it to, and it is not evidence about the route"; `NOT_MEASURED` is "no reading
+exists, so nothing about this proposal has been measured and nothing may be concluded
+from it". Remembering either would be remembering that a measurement did not happen,
+and then answering a later run with it.
+
+**The name says *measured* and not *about the route* because of `FLOOR_AT_ZERO`**,
+whose own gloss says nothing may be concluded about the route from the refusal — and
+which is kept here anyway, on
+[ADR-0118](../../docs/adr/0118-a-rejection-at-the-floor-is-counted-apart-from-a-case-that-separated-nothing.md)
+§5. The agents were run the full denominator against a fixed probe and a scripted
+router, so the reading is a measurement and a reproducible one; dropping it would make
+every re-proposal of the same dead route pay for the same reading again, which is the
+cost this module exists to stop. Two members of this set are refusals that conclude
+nothing about a route, so a name claiming otherwise would be the wrong invariant to
+classify a seventh member against. A record filed before that member existed comes
+back `Stale` on `recall`'s fourth rule and is measured once more, so nothing has to be
+migrated.
 
 Ordered from the outside in like `kind_of`, and a frozenset rather than a predicate
-so that a sixth `RejectionKind` has to be classified here rather than defaulting into
+so that a seventh `RejectionKind` has to be classified here rather than defaulting into
 the memory.
 """
 
@@ -491,7 +506,7 @@ class DecidedRoutes:
         reading set matching no run's declared configuration.
         """
         kind = kind_of(promotion.outcome)
-        if kind not in ABOUT_THE_ROUTE:
+        if kind not in MEASURED_THE_ROUTE:
             raise NotAboutTheRoute(promotion, kind)
         case = promotion.proposal.case
         entry = DecidedRoute(
@@ -560,7 +575,7 @@ def worth_remembering(promotion: Promotion) -> bool:
     `DecidedRoutes.remember` is a selection rather than a caught exception
     (ADR-0031 point 3). The store still refuses, so the selection cannot be skipped.
     """
-    return kind_of(promotion.outcome) in ABOUT_THE_ROUTE
+    return kind_of(promotion.outcome) in MEASURED_THE_ROUTE
 
 
 @dataclass(frozen=True)

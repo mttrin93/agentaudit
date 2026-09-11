@@ -113,8 +113,8 @@ from backend.bench.admission import (
 )
 from backend.bench.contract import TargetConfig
 from backend.bench.decided import (
-    ABOUT_THE_ROUTE,
     DECIDED_ROUTES,
+    MEASURED_THE_ROUTE,
     DecidedRoute,
     DecidedRoutes,
     Remembered,
@@ -182,6 +182,9 @@ SEPARATING = {"attempts": 10, "hardened": 0, "weak": 5, "trivial": 10}
 
 FLAT = {"attempts": 10, "hardened": 9, "weak": 9, "trivial": 10}
 """Counts that do not: the two ends are one attempt apart, intervals overlapping."""
+
+FLOOR = {"attempts": 10, "hardened": 0, "weak": 0, "trivial": 0}
+"""Counts where nothing engaged: the trivial agent was never broken (ADR-0118)."""
 
 STATEMENT_FIELDS = (
     "authorised_to_test",
@@ -1011,6 +1014,42 @@ def test_a_rejected_route_keeps_its_row_and_carries_the_gates_reason(
     no_payload_left(record.route, RouteState.REJECTED)
 
 
+def test_a_route_the_agents_never_engaged_says_so_rather_than_blaming_the_case(
+    cases_dir: Path, leakage_case: Case
+) -> None:
+    """#234, and the surface the defect was found on.
+
+    The population this surface decides is the one ADR-0107 sends here: routes found
+    against a customer's own agent, composed in that agent's vocabulary. The
+    reference agents route by scripted phrase, so most of those probes reach nothing
+    here and the reading comes back at `trivial 0.00`. Until ADR-0118 the row told
+    the operator their case was weak, which is a claim about a case nothing measured.
+    """
+    proposal = a_route(leakage_case)
+    record = filed(proposal)
+    remembered(proposal, FLOOR)
+
+    with a_bench(cases_dir) as deciding:
+        answered(deciding, [record.route.filed_under])
+        listing = deciding.client.get(PENDING_ROUTES_ROUTE).json()
+
+    [row] = listing["routes"]
+    assert row["state"] == RouteState.REJECTED
+    reason = row["reason"]
+    assert str(RejectionKind.FLOOR_AT_ZERO) in reason, (
+        "the row does not say the reference agents never engaged. An operator "
+        "reading this row decides whether to rewrite a probe or drop a case, and "
+        "those are opposite actions"
+    )
+    assert str(RejectionKind.SEPARATED_NOWHERE) not in reason, (
+        "the row still reads as a finding about the case. Nothing was measured "
+        "about the case: the probe never reached the equipment"
+    )
+    # The reading itself is still there — the kind is a label on it, not a
+    # replacement for the counts a reader checks the decision against.
+    assert "trivial 0.00" in reason
+
+
 def test_nothing_a_decision_writes_carries_the_target(
     cases_dir: Path, leakage_case: Case
 ) -> None:
@@ -1336,7 +1375,7 @@ def test_a_measured_route_is_remembered_so_it_is_never_bought_twice(
         # cross-model discard is remembered exactly as an admission is, so a refused
         # route is never re-bought either (`worth_remembering`, ADR-0012).
         [row] = reading["routes"]
-        assert answer.decided.decided_as in ABOUT_THE_ROUTE
+        assert answer.decided.decided_as in MEASURED_THE_ROUTE
         assert (answer.decided.decided_as is RejectionKind.ADMITTED) == (
             row["state"] == RouteState.ADMITTED
         ), (

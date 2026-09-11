@@ -82,6 +82,8 @@ A **pending route** is a proposal filed at the end of the run that found it, int
 
 **`pending/routes.sqlite`, through `DatabaseStore`.** The fourth store on that seam, a git-ignored directory rather than a file name, and one location with no environment override — [ADR-0104](../adr/0104-the-pending-store-holds-the-payload-and-the-target-and-it-is-the-one-exception.md) §5 for why each of the three, and it is the sidecar argument the other ignored directories were created under.
 
+**A rejection names which rejection it was.** Story 12's *gate's own reason* is `AdmissionOutcome.stated()`, and since [ADR-0118](../adr/0118-a-rejection-at-the-floor-is-counted-apart-from-a-case-that-separated-nothing.md) that line carries the `RejectionKind` the counts reached. This surface is where the distinction earns its keep: every route it decides was found against a customer's agent and is written in that agent's vocabulary, so the reference agents' scripted router often never fires and the reading comes back at the floor. The row then says *the agents never engaged* rather than *your case separated nothing*, and those are opposite actions for the operator reading it.
+
 **Keyed on `decided.RouteKey`.** The same family-plus-probe-digest the memory and the library de-duplicate on, so one route is one pending record, one remembered measurement and one library record, and the three agree by construction rather than by convention.
 
 **Filed by the customer-run entry points, not by `run_calibration`.** `run_calibration` is shared with gate runs, so filing there would put reference-agent routes into a queue whose whole purpose is routes no surface decides. The seam is the API's run service and `scripts/bench.py`.

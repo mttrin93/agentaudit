@@ -113,6 +113,9 @@ SEPARATES = (0, 15, 30)
 FLAT = (30, 30, 30)
 """Every agent broken equally: D = 0, intervals identical, nothing separated."""
 
+FLOOR = (0, 0, 0)
+"""Nothing broke anything: the trivial agent never engaged, so nothing was learned."""
+
 
 def a_run(
     *counts: tuple[int, int, int],
@@ -365,6 +368,58 @@ def test_a_route_that_separates_on_one_model_only_is_a_cross_model_rejection() -
     assert "4 proposal(s) decided, 4 of them facing the cross-model bar" in stated
     for kind in RejectionKind:
         assert f"{kind}: {counted.counts[kind]}" in stated
+
+
+def test_a_route_the_agents_never_engaged_is_not_a_finding_about_the_case() -> None:
+    """#234: a rejection may not say the trivial agent never engaged.
+
+    Two refusals that read the same today and mean opposite things. `no-model` broke
+    every agent equally — the case is genuinely weak, and the refusal is a finding
+    about it. `floor` broke nothing at all: the probe was composed in some other
+    agent's vocabulary, the scripted router never fired, and nothing was learned
+    about the case or about any model. Counted apart, on the same denominator as the
+    rest, because a count of the second is the signal that the equipment rather than
+    the attacker is the limit (ADR-0118).
+    """
+    counted = rejections(
+        (
+            _proposed("no-model", FLAT, FLAT),
+            _proposed("floor", FLOOR, FLOOR),
+            _proposed("floor-on-one", FLOOR, FLAT),
+            _proposed("stray", (1, 0, 0), (1, 0, 0)),
+        )
+    )
+
+    landed = {
+        kind: [outcome.case_id for outcome in counted.of(kind)]
+        for kind in RejectionKind
+    }
+    assert landed[RejectionKind.FLOOR_AT_ZERO] == ["floor"]
+    # A reading that engaged anywhere is not this kind: the claim is that the probe
+    # reached nothing, and one model where it did disproves it — as does one attempt
+    # that broke an agent the trivial one was not, however improbable that is against
+    # three agents that share a router.
+    assert landed[RejectionKind.SEPARATED_NOWHERE] == [
+        "no-model",
+        "floor-on-one",
+        "stray",
+    ]
+    assert sum(counted.counts.values()) == len(counted.outcomes)
+
+    stated = counted.stated()
+    assert f"{RejectionKind.FLOOR_AT_ZERO}: 1" in stated
+    # And the reading a reader checks the decision against says which refusal each
+    # proposal was, not only how many of each there were.
+    for case_id, kind in (
+        ("floor", RejectionKind.FLOOR_AT_ZERO),
+        ("no-model", RejectionKind.SEPARATED_NOWHERE),
+    ):
+        assert f"{case_id}: REJECTED — {kind}" in stated, (
+            f"the reading does not say {case_id} was {kind}. An operator reading a "
+            "refusal has to be able to tell 'your probe never reached the equipment' "
+            "from 'your case is weak', and the counts alone do not say which "
+            "proposal was which"
+        )
 
 
 SEPARATING_COUNTS = {"attempts": 10, "hardened": 0, "weak": 5, "trivial": 10}

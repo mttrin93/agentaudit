@@ -63,6 +63,7 @@ from backend.bench.gate import GateResult
 from backend.bench.lease import take_the_library
 from backend.bench.library import (
     EMPTY_LIBRARY,
+    AdmissionBar,
     AdmissionReading,
     Case,
     DiscoveredBy,
@@ -454,7 +455,14 @@ def test_a_remembered_decision_says_so_where_the_promotions_are_reported(
     reported = again[2].reported(again[1])
     assert "discarded" in reported
     assert "reported from memory" in reported
-    assert "nothing was measured against three agents on two models" in reported
+    # And it names the bar this route faced rather than a fixed pair of models. The
+    # proposals here are `DiscoveredBy.ADAPTIVE`, so the clause the line carries is
+    # the cross-model bar's own — asserted through `AdmissionBar.CROSS_MODEL.asks`
+    # and never as prose, because a verbatim sentence is what made this assertion
+    # block the fix in #228 and would block the next rewording the same way. Read off
+    # the enum it also stays a canary: a change that moved this population to the
+    # weaker bar fails here as loudly as the counts above do.
+    assert AdmissionBar.CROSS_MODEL.asks in reported
 
 
 def test_a_promotion_list_that_does_not_pair_with_the_consultation_is_refused(

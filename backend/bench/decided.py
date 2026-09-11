@@ -362,20 +362,27 @@ class Remembered:
     promotion: Promotion
 
     def stated(self) -> str:
-        """The promotion's own lines, and the sentence that says nothing was spent."""
+        """The promotion's own lines, and the sentence that says nothing was spent.
+
+        What the run did not spend is named by the bar the promotion printed
+        immediately above it was decided under — `decide` puts `bar_for`'s answer on
+        the outcome, so this line reads the mapping rather than restating it and
+        cannot drift from the decision it annotates. A fixed pair of models here
+        would be a second statement of a mapping that has had two answers since
+        [ADR-0107](../../docs/adr/0107-a-route-found-against-a-customers-target-faces-the-single-model-bar.md)
+        (#228).
+
+        The bar named is this run's, which is the one the sentence is about: the line
+        annotates a promotion re-decided here and not the stored measurement, and
+        `Conditions` deliberately holds no provenance.
+        """
         return "\n".join(
             (
                 self.promotion.stated(),
                 f"  reported from memory — {self.decided.route.stated()} was "
                 f"decided on {self.decided.decided_on.isoformat()} as "
-                f"{self.decided.case_id}, and nothing was measured against three "
-                # "on two models" is stale on the `/pending-routes` half of this
-                # sentence since ADR-0107 §4, where the pass is over one model. Left
-                # standing rather than fixed here: the wording is asserted verbatim
-                # in `test_multi_model.py`, which #220 must leave green *untouched*
-                # — the canary for a change leaking into the cross-model bar — so
-                # correcting it is a ticket of its own and not a line in that one.
-                "agents on two models for it here",
+                f"{self.decided.case_id}, and nothing was measured here to ask "
+                f"whether it {self.promotion.outcome.bar.asks}",
                 f"  {self.decided.conditions.stated()}",
             )
         )

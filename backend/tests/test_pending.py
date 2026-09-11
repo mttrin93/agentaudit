@@ -40,6 +40,7 @@ from backend.bench.pending import (
     RouteState,
 )
 from backend.tests.conftest import BENCH, REPOSITORY, a_target, reachable_from
+from scripts.restamp_filed_routes import restamp
 
 FILED_ON = date(2026, 8, 30)
 """The day the run that found the route ended, so nothing here reads a clock.
@@ -60,8 +61,15 @@ def a_route(
     objective: Case,
     payload: str = PROBE,
     description: str = "a route worth deciding",
+    discovered_by: DiscoveredBy = DiscoveredBy.ADAPTIVE,
 ) -> ProposedRoute:
-    """One proposal, drafted the way `propose_case` drafts it inside an episode."""
+    """One proposal, drafted the way `propose_case` drafts it inside an episode.
+
+    `discovered_by` defaults to `ADAPTIVE` because that is what every route filed
+    before ADR-0107 carries, and the re-stamp below is the thing that has to see
+    one: a parameter rather than a second helper, so the one place a proposal is
+    built in this file stays the one place.
+    """
     return proposed_from(
         objective=objective,
         target=a_target("trivial"),
@@ -70,7 +78,7 @@ def a_route(
         description=description,
         today=FILED_ON,
         broken=True,
-        discovered_by=DiscoveredBy.ADAPTIVE,
+        discovered_by=discovered_by,
     )
 
 
@@ -464,3 +472,69 @@ def _live_queue_paths() -> tuple[Path, ...]:
     is the real location, and is what the git question above relies on.
     """
     return (pending.DEFAULT_PENDING_PATH, PENDING_ROUTES.store.path)
+
+
+# --- Seam four: the one-shot the narrowing needs -----------------------------
+
+
+def test_a_route_filed_before_the_narrowing_is_restamped_not_reinterpreted(
+    queue: PendingRoutes, leakage_case: Case
+) -> None:
+    # Every row in this queue was filed by a customer run — that is the only writer
+    # (docs/specs/pending-routes.md §5) — so the new provenance is a constant and
+    # not a judgement. Asserted on the record rather than on a reading, because a
+    # reader that translated on the way out would leave the stored record saying
+    # one thing while the surface acted on another (ADR-0032 §4).
+    proposal = a_route(leakage_case, discovered_by=DiscoveredBy.ADAPTIVE)
+    queue.file(proposal, target=A_CUSTOMER, today=FILED_ON)
+
+    restamped = restamp(queue)
+
+    assert restamped == 1
+    filed = queue.filed(RouteKey.of(proposal.case))
+    assert isinstance(filed, AwaitingDecision)
+    assert filed.draft.discovered_by is DiscoveredBy.ADAPTIVE_ON_TARGET
+
+
+def test_restamping_is_idempotent_and_leaves_the_rest_of_the_draft_alone(
+    queue: PendingRoutes, leakage_case: Case
+) -> None:
+    # Run twice on purpose: a one-shot script that cannot be re-run safely is one
+    # nobody can confirm the result of. The `replace` assertion is the load-bearing
+    # one — a TOML round-trip that dropped a payload or a precondition passes the
+    # test above and fails this one.
+    proposal = a_route(leakage_case, discovered_by=DiscoveredBy.ADAPTIVE)
+    queue.file(proposal, target=A_CUSTOMER, today=FILED_ON)
+    before = queue.filed(RouteKey.of(proposal.case))
+    assert isinstance(before, AwaitingDecision)
+
+    assert restamp(queue) == 1
+    assert restamp(queue) == 0
+
+    after = queue.filed(RouteKey.of(proposal.case))
+    assert isinstance(after, AwaitingDecision)
+    assert after.draft == dataclasses.replace(
+        before.draft, discovered_by=DiscoveredBy.ADAPTIVE_ON_TARGET
+    )
+
+
+def test_a_decided_route_has_no_provenance_left_to_restamp(
+    queue: PendingRoutes, leakage_case: Case
+) -> None:
+    # The live queue's other rows, and the reason the walk skips them rather than
+    # failing on them: a decided record has no draft — the payload and the case it
+    # drafted went with the decision (ADR-0104 §4) — so there is no stored
+    # provenance on it, and the bar it faced was applied while it was pending.
+    proposal = a_route(leakage_case, discovered_by=DiscoveredBy.ADAPTIVE)
+    queue.file(proposal, target=A_CUSTOMER, today=FILED_ON)
+    queue.decide(
+        RouteKey.of(proposal.case),
+        state=RouteState.REJECTED,
+        reason="it was a property of one model",
+    )
+
+    assert restamp(queue) == 0
+
+    decided = queue.filed(RouteKey.of(proposal.case))
+    assert isinstance(decided, Decided)
+    assert decided.state is RouteState.REJECTED

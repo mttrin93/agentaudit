@@ -129,6 +129,15 @@ export interface LabelReading {
    */
   agentic: string[]
   llm: string[]
+  /**
+   * The EU AI Act articles this family's failure bears on, as the payload spells them.
+   *
+   * Verbatim and never derived, on `agentic`'s own terms: `14(4)(e)` is a key into a
+   * published instrument, and a screen that composed one from a family name would hold
+   * a second copy of a legal mapping. The sentence that reads them out is `bears`,
+   * which the table does not print — these are what a reader matches.
+   */
+  articles: string[]
 }
 
 /**
@@ -190,7 +199,25 @@ export interface CoverageLimit {
  */
 export interface Figures {
   counts: string
+  /**
+   * The two counts the rate came from, as a fraction, beside it in the table.
+   *
+   * The same numbers `counts` says in prose. A fraction is what a reader checks a rate
+   * against at a glance — *0.40* over *20/50* — and a sentence in a cell is a sentence
+   * six of them make a paragraph of. Both, because the prose is what a screenshot of
+   * one family carries and the fraction is what a column of six is read down.
+   */
+  fail: string
   rate: string
+  /**
+   * The rate as a length, for the mark beside the figure. Never read as a number.
+   *
+   * A width and not a second rendering of the rate: it draws the same quantity the
+   * figure states, so a reader comparing six families does it down one edge instead of
+   * decimal by decimal. It carries no band and no tint of one — the band is its own
+   * column, in the bench's own word (ADR-0005, ADR-0014).
+   */
+  rateWidth: string
   interval: string
   /** The confidence the interval was computed at, beside the interval. */
   intervalAt: string
@@ -325,11 +352,15 @@ function goldSetCounts(
  *
  * A rename and nothing else: the two sentences are whole sentences the payload
  * carries, and this app adds no word to either. Nothing is *derived* from `agentic`,
- * `llm` or `articles`: the first two travel through verbatim so a card can print the
- * identifiers a recipient matches against a published list, and `articles` stays off
- * this reading because the article's claim is already in `bears` — a screen that
- * rebuilt either sentence from the identifiers beside it would hold a second copy of
- * a legal mapping in TypeScript (ADR-0044).
+ * `llm` or `articles` — all three travel through verbatim, so a screen prints the
+ * identifiers a recipient matches against a published list and never a mapping this
+ * app rebuilt (ADR-0044).
+ *
+ * `articles` was left off this reading while `bears` was printed beside the chips: the
+ * article's claim was already in that sentence, and a screen carrying both would have
+ * had two renderings of one legal mapping. The per-family table prints neither
+ * sentence, so the identifiers are now the only place an article reaches a reader —
+ * carried, like the other two, exactly as the payload spells them.
  */
 function labelOf(label: FamilyLabel): LabelReading {
   return {
@@ -337,6 +368,7 @@ function labelOf(label: FamilyLabel): LabelReading {
     claims: label.claims_stated,
     agentic: label.agentic,
     llm: label.llm,
+    articles: label.articles,
   }
 }
 
@@ -388,7 +420,9 @@ export function electiveReading(
 function electiveFigures(entry: ElectiveEntry): Figures {
   return {
     counts: `${entry.successes} of ${entry.attempts} attempts succeeded`,
+    fail: `${entry.successes}/${entry.attempts}`,
     rate: entry.rate.toFixed(2),
+    rateWidth: `${Math.min(entry.rate, 1) * 100}%`,
     interval: `${entry.interval.lower.toFixed(3)} to ${entry.interval.upper.toFixed(3)}`,
     intervalAt: `${(entry.interval_confidence * 100).toFixed(0)}% Wilson`,
     band: entry.band,
@@ -438,7 +472,9 @@ export function familyAnswers(measured: MeasuredSection): FamilyAnswer[] {
     const interval = entry.interval
     return {
       counts: `${entry.successes} of ${entry.attempts} attempts succeeded`,
+      fail: `${entry.successes}/${entry.attempts}`,
       rate: entry.rate.toFixed(2),
+      rateWidth: `${Math.min(entry.rate, 1) * 100}%`,
       interval: `${interval.lower.toFixed(3)} to ${interval.upper.toFixed(3)}`,
       intervalAt: `${(entry.interval_confidence * 100).toFixed(0)}% Wilson`,
       band: entry.band,
@@ -931,6 +967,27 @@ export const A_MODEL_WROTE_THESE_SENTENCES =
  * branch that does not exist, and the fallback would stop covering a fifth reading
  * added upstream (`readOutcome`).
  */
+/**
+ * What this section is, in one line over it.
+ *
+ * The three paragraphs it replaces on the screen are still here and still tested:
+ * `A_MODEL_WROTE_THESE_SENTENCES` above, `WHAT_A_LABEL_ON_A_FIX_ASSERTS` below, and the
+ * payload's own `stated`, which travels in `report.json` and in the `report.md` a
+ * recipient reads. What they said between them was three things, and this keeps all
+ * three: a model wrote the sentences and would not write them again, no figure above
+ * was measured from any of them, and *proven* is a claim about one case against one
+ * patched revision rather than a family that is closed.
+ *
+ * **It is the screen's wording and never a fix's.** Every sentence *about a fix* stays
+ * the payload's own, character for character, which `report.test.ts` holds over every
+ * block — this is the standing explanation above them, on
+ * `A_MODEL_WROTE_THESE_SENTENCES`'s own terms (ADR-0069, ADR-0073 §4, ADR-0006).
+ */
+export const WHAT_THIS_SECTION_IS =
+  'A model wrote these sentences and would not write the same ones again, no figure ' +
+  'above was measured from any of them, and a fix reads proven only where this bench ' +
+  're-attempted that one case against a patched copy of the caller\u2019s checkout.'
+
 export const WHAT_A_LABEL_ON_A_FIX_ASSERTS =
   'Every fix below carries one of two labels and there is no third. Proven means ' +
   'this bench applied the change to a throwaway copy of the caller\u2019s own ' +

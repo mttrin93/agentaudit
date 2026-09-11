@@ -412,6 +412,11 @@ describe('the label beside a family name', () => {
       // against any payload.
       agentic: ['ASI01:2026'],
       llm: ['LLM01:2026'],
+      // And the articles beside them, on the same terms: `14(4)(e)` is a key into a
+      // published instrument and a screen that composed one from a family name would
+      // hold a second copy of a legal mapping. The sentence above reads them out; the
+      // per-family table prints these.
+      articles: ['15'],
     })
 
     // Both absences carry it too. A withheld rate says the evidence behind it

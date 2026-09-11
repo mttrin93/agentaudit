@@ -853,15 +853,18 @@ describe('nothing on this screen changes a setting', () => {
 
     // Carried, never paraphrased: five of the six settings bound a layer that is
     // scored on nothing, and this one moves the number the gate is decided at.
-    // The reasoning effort is carried as the closed list the route enforces, with the
-    // bench's own sentence beside it: two runs of one model at one temperature and
-    // different effort are two different instruments, and the screen may not say one
-    // thing about that while the signed document says another (#5).
+    // The reasoning effort is carried as the closed list the route enforces, and the
+    // bench's own sentences about it are `stated` and `absent` — the screen may not say
+    // one thing about those while the signed document says another (#5).
     expect(tuning.reasoning.levels).toBe(CONFIGURED.tuning.reasoning_efforts)
     expect(tuning.reasoning.chosen).toBe('medium')
     expect(tuning.reasoning.stated).toBe(CONFIGURED.tuning.reasoning_effort_stated)
     expect(tuning.reasoning.absent).toBe(CONFIGURED.tuning.reasoning_effort_absent)
-    expect(tuning.reasoning.decides).toContain('two different instruments')
+    // `decides` is the console's own line beside the control and it says the one thing
+    // the control cannot: that this is a declared input of its own. Why it is not the
+    // temperature — two runs at one temperature and different effort are two different
+    // instruments — is the argument for recording it, and the report records it.
+    expect(tuning.reasoning.decides).toContain('declared input')
 
     expect(tuning.warning).toBe(CONFIGURED.tuning.attempts_warning)
     expect(tuning.warning).toContain('not a gate result')

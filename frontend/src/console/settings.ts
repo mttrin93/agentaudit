@@ -397,31 +397,53 @@ function adaptiveCeiling(adaptive: AdaptiveCeiling): Ceiling {
  * is opened with, and the two ceilings are last because they are the only block whose
  * point is made by there being two of it.
  */
-const WHAT_A_REASONING_EFFORT_DECIDES =
-  'how much of a thinking budget the attacker spends before it answers. A declared ' +
-  'input like the temperature beside it, and not the same one: two runs of one model ' +
-  'at one temperature and different effort are two different instruments, and a ' +
-  'report that recorded only the first would call them identical'
+/*
+ * What each control decides, in the fewest words the fact survives in.
+ *
+ * They were paragraphs, and beside six controls on one form they were the form. What
+ * each keeps is the half that changes what an operator types; what came out of each is
+ * recorded here, because the argument is still the reason the short line says what it
+ * says.
+ *
+ * **The model:** that the layer it drives is scored on nothing (ADR-0010) — which is
+ * the one thing the identifier in the box cannot say. The block's own paragraph, about
+ * these being declared inputs printed in every run's provenance and refused mid-run, is
+ * `TuningBlock.statement`: served, tested, and printed by nothing.
+ *
+ * **The temperature:** that blank is the provider's default. What came out was the
+ * third case — a model that takes no temperature was never offered the choice — which
+ * the form states by drawing no slider at all and printing the response's own sentence
+ * where it stood.
+ *
+ * **The reasoning effort:** that it is a declared input of its own. What came out was
+ * why it is not the temperature: two runs of one model at one temperature and different
+ * effort are two different instruments. That is an argument for recording it, and the
+ * report records it.
+ *
+ * **T:** that an episode reaching the cap is censored. What came out was that a censored
+ * episode is a reading about the attacker and never about the target — which is
+ * `EpisodeOutcome`'s own rule and is stated wherever an episode is reported.
+ *
+ * **k:** that episodes are not samples of a rate. What came out was the consequence,
+ * that more of them buy coverage and no precision, which follows from it.
+ *
+ * **Attempts per case:** that it is the scored denominator and the only setting here
+ * that moves a rate. `TuningBlock.warning` — the bench's own sentence about what a run
+ * at another number may be called — is untouched and still drawn.
+ */
+const WHAT_A_REASONING_EFFORT_DECIDES = 'a declared input of its own, beside the model'
 
 const WHAT_A_TEMPERATURE_DECIDES =
-  'how varied the attacker\u2019s probes are. Left blank it is the provider\u2019s ' +
-  'own default, which is a fact about the provider and not a choice this bench ' +
-  'recorded \u2014 and a model that takes no temperature was never offered the choice, ' +
-  'which is a third thing again'
+  'how varied the probes are \u2014 blank is the provider\u2019s default'
 
 const WHAT_A_TUNED_SETTING_DECIDES: Record<TunedNumber['name'], string> = {
-  turns_per_episode:
-    'T \u2014 how many probes one episode may send before it is capped. An episode ' +
-    'that reaches the cap without breaking the target is censored, which is a ' +
-    'reading about the attacker and never about the target',
-  episodes_per_family:
-    'k \u2014 how many episodes run per family per target. Episodes are not samples ' +
-    'of a rate, so more of them buys coverage of the attacker\u2019s search and no ' +
-    'precision',
-  attempts_per_case:
-    'attempts per recorded case, which is the scored denominator. This is the one ' +
-    'setting here that moves a rate',
+  turns_per_episode: 'T \u2014 an episode that reaches the cap is censored',
+  episodes_per_family: 'k \u2014 episodes are not samples of a rate',
+  attempts_per_case: 'the scored denominator \u2014 the one setting here that moves a rate',
 }
+
+/** What the attacker's model drives, which its identifier cannot say. */
+export const WHAT_THE_ATTACKER_DRIVES = 'drives the adaptive layer, scored on nothing'
 
 function tunedNumbers(tuning: Tuning): TunedNumber[] {
   return [

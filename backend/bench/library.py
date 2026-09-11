@@ -309,6 +309,23 @@ class DiscoveredBy(StrEnum):
     to a user, and a **reference agent** is test equipment that never reaches one.
     """
 
+    TARGET_SPECIFIC = "target_specific"
+    """A confirmed break the admission bar refused, held against the target it beat.
+
+    Last in the set, on `RETRIEVED`'s and `ADAPTIVE_ON_TARGET`'s terms: the
+    provenance census prints in this order and a member inserted above one already
+    counted reorders a line readers of two gate runs compare
+    (`admission.LibraryProvenance.stated`).
+
+    **The one member no `Case` may carry.** A route held against a target is a
+    `held.HeldRoute` and not a case: it is scored on its own denominator, outside
+    the case library, outside `load_library` and outside the library digest
+    ([ADR-0117](../../docs/adr/0117-a-refused-break-is-held-against-the-target-it-beat-and-is-scored-beside-the-six.md)
+    §1). The refusal is not a convention — `bar_for` raises `NoAdmissionBar` for
+    this member and `Case.__post_init__` calls `bar_for` on every record, so a case
+    record claiming this provenance cannot be constructed at all.
+    """
+
 
 class AdmissionBar(StrEnum):
     """The bar a case actually entered the library under, recorded on the record.
@@ -2887,6 +2904,25 @@ def _retirement(
     return Retirement(retired_on=block["retired_on"], final=history[-1])
 
 
+class NoAdmissionBar(ValueError):
+    """A provenance that faces no admission bar was asked which bar it faces.
+
+    One member reaches this and it is `DiscoveredBy.TARGET_SPECIFIC`. A held route
+    faces no `D` at all — `D` is a measurement against the three reference agents,
+    and the defining property of that population is that those agents cannot read
+    its probe, so what it faces is an evaluator-confirmed break and a named
+    operator's approval instead
+    ([ADR-0117](../../docs/adr/0117-a-refused-break-is-held-against-the-target-it-beat-and-is-scored-beside-the-six.md)
+    §2).
+
+    Raised rather than answered with the weaker bar, because the caller this
+    protects is `Case.__post_init__`: a case record that claimed this provenance
+    and were handed `SINGLE_MODEL` would be a held route in the shared library,
+    counted on a family's denominator and versioned into the library digest. The
+    refusal is what makes "a held route is not a `Case`" a property of the type.
+    """
+
+
 def bar_for(discovered_by: DiscoveredBy) -> AdmissionBar:
     """Which bar this provenance has to clear.
 
@@ -2925,6 +2961,19 @@ def bar_for(discovered_by: DiscoveredBy) -> AdmissionBar:
             # records what is given up: model-dependence is no longer caught at
             # admission for this population, only by the retirement signal.
             return AdmissionBar.SINGLE_MODEL
+        case DiscoveredBy.TARGET_SPECIFIC:
+            # The one member with no answer, and a raise rather than a third bar:
+            # ADR-0117 §2 is that a person is the door and the gate is not, so
+            # there is no threshold here to name. The branch exists so that the
+            # match stays fallback-free and so that `Case.__post_init__`, which
+            # calls this on every record, refuses a case carrying it.
+            raise NoAdmissionBar(
+                f"{discovered_by} faces no admission bar, because a held route "
+                "faces no D — D is a measurement against the three reference "
+                "agents and this population is the routes those agents cannot "
+                "read. A record carrying this provenance is a `held.HeldRoute` "
+                "and not a `Case` (ADR-0117 §1, §2)"
+            )
 
 
 def found_by_the_attacker(discovered_by: DiscoveredBy) -> bool:
@@ -2941,9 +2990,22 @@ def found_by_the_attacker(discovered_by: DiscoveredBy) -> bool:
     here: a sixth provenance that silently answered `False` would land in the
     fraction's denominator and never in its numerator, which is the defect (#223)
     the fifth provenance introduced and this function exists to make unrepeatable.
+
+    **`TARGET_SPECIFIC` answers `False` and that is not the #223 defect returning.**
+    That hazard needs a member a `Case` can carry, and this one cannot: `bar_for`
+    raises for it and every case record is constructed through `bar_for`, so its
+    live count and its retired count are both zero by construction and it is in
+    neither half of the fraction. What it must not do is raise, because
+    `LibraryProvenance.adaptive_fraction` asks this of every member of the census
+    (ADR-0117 §1).
     """
     match discovered_by:
         case DiscoveredBy.ADAPTIVE | DiscoveredBy.ADAPTIVE_ON_TARGET:
             return True
-        case DiscoveredBy.AUTHORED | DiscoveredBy.USER_GAP | DiscoveredBy.RETRIEVED:
+        case (
+            DiscoveredBy.AUTHORED
+            | DiscoveredBy.USER_GAP
+            | DiscoveredBy.RETRIEVED
+            | DiscoveredBy.TARGET_SPECIFIC
+        ):
             return False

@@ -97,9 +97,10 @@ ABOUT_THE_ROUTE = frozenset(
         RejectionKind.ADMITTED,
         RejectionKind.CROSS_MODEL,
         RejectionKind.SEPARATED_NOWHERE,
+        RejectionKind.FLOOR_AT_ZERO,
     }
 )
-"""The three answers that are findings about the route, and so the three worth keeping.
+"""The four answers that are findings about the route, and so the four worth keeping.
 
 `RejectionKind`'s own docstrings draw this line and this constant reads it off them:
 the other two members are facts about a *run* rather than about a route. `UNREAD` is
@@ -108,8 +109,18 @@ the route"; `NOT_MEASURED` is "no reading exists, so nothing about this proposal
 been measured and nothing may be concluded from it". Remembering either would be
 remembering that a measurement did not happen, and then answering a later run with it.
 
+`FLOOR_AT_ZERO` is on this side of the line and the argument is
+[ADR-0118](../../docs/adr/0118-a-rejection-at-the-floor-is-counted-apart-from-a-case-that-separated-nothing.md)
+§5, because it is the one member whose gloss makes it look like the other two: it says
+nothing was learned about the case. What it does not say is that nothing was measured.
+The agents were run the full denominator against a fixed probe and a scripted router,
+so the answer is reproducible, and dropping it here would make every re-proposal of the
+same dead route pay for the same reading again — which is the cost this module exists
+to stop. A record filed before the member existed comes back `Stale` on `recall`'s
+fourth rule and is measured once more, so nothing has to be migrated.
+
 Ordered from the outside in like `kind_of`, and a frozenset rather than a predicate
-so that a sixth `RejectionKind` has to be classified here rather than defaulting into
+so that a seventh `RejectionKind` has to be classified here rather than defaulting into
 the memory.
 """
 

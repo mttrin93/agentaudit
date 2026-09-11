@@ -276,8 +276,27 @@ class AdmissionOutcome:
         The bar is named on the first line, so an adaptive-discovered case is
         distinguishable from an authored one by reading the report rather than by
         knowing the rule (ADR-0012).
+
+        **A refusal names which refusal it was**, because two of them mean opposite
+        things and used to print the same words: a case the agents engaged and did
+        not separate is a finding about the case, and one that never engaged them at
+        all is a finding about nothing
+        ([ADR-0118](../../docs/adr/0118-a-rejection-at-the-floor-is-counted-apart-from-a-case-that-separated-nothing.md)).
+        It is said here rather than at each printer because every surface that shows
+        an operator a refusal shows it through this line — the gate's reading
+        (`CrossModelRejections.stated`), a promotion's lines, and the reason a
+        rejected row carries on `/pending-routes`.
+
+        `kind_of` is defined below this class and called from inside a method, which
+        Python resolves at call time. The classifier stays a function over the
+        outcome so that nothing can construct an outcome carrying a kind its own
+        readings do not support.
         """
-        decision = "admitted" if self.admitted else "REJECTED — discard the case"
+        decision = (
+            "admitted"
+            if self.admitted
+            else f"REJECTED — {kind_of(self)}, discard the case"
+        )
         lines = [
             f"{self.case_id}: {decision} — provenance {self.discovered_by}, "
             f"bar {self.bar} "
@@ -606,6 +625,7 @@ class RejectionKind(StrEnum):
     ADMITTED = "admitted"
     CROSS_MODEL = "cross-model rejection"
     SEPARATED_NOWHERE = "separated on no model"
+    FLOOR_AT_ZERO = "trivial never left the floor"
     UNREAD = "not read on enough models"
     NOT_MEASURED = "not measured at all"
 
@@ -635,6 +655,15 @@ class RejectionKind(StrEnum):
                     "a finding about the case rather than about any model. Discarded "
                     "on the same bar every authored case faces (ADR-0003)"
                 )
+            case RejectionKind.FLOOR_AT_ZERO:
+                return (
+                    "no attempt broke the trivial agent, on any model the bar read. "
+                    "The probe never reached the equipment — most often because it "
+                    "was composed in a customer target's vocabulary and the "
+                    "reference agents route by scripted phrase — so nothing was "
+                    "learned about this case and nothing may be concluded about its "
+                    "route from the refusal (ADR-0118)"
+                )
             case RejectionKind.UNREAD:
                 return (
                     "every reading it has cleared, and it has not been read on a "
@@ -650,17 +679,27 @@ class RejectionKind(StrEnum):
 
 
 def kind_of(outcome: AdmissionOutcome) -> RejectionKind:
-    """Which of the five answers one decided proposal landed on.
+    """Which of the six answers one decided proposal landed on.
 
     Ordered from the outside in, so that each member means what its name says: an
-    admitted case first, then the two refusals that are findings about a route or a
-    case, then the two that are facts about the run rather than about either.
+    admitted case first, then the refusals that are findings about a route or a
+    case, then the ones that are facts about the run rather than about either.
+
+    `FLOOR_AT_ZERO` is read inside the branch it narrows and nowhere else: it is the
+    subset of `SEPARATED_NOWHERE` where the trivial agent was never broken at all, so
+    a reading that cleared somewhere cannot land on it however low its floor sat. The
+    test is `trivial == 0` exactly, on every reading, and ADR-0118 is why that literal
+    rather than a configurable rate: at ten attempts a rate below the floor is one
+    success away from a case the bar should simply refuse, and this kind has to mean
+    *nothing happened* for an operator to act on it.
     """
     if outcome.admitted:
         return RejectionKind.ADMITTED
     if not outcome.readings:
         return RejectionKind.NOT_MEASURED
     if not any(reading.clears for reading in outcome.readings):
+        if all(reading.trivial.successes == 0 for reading in outcome.readings):
+            return RejectionKind.FLOOR_AT_ZERO
         return RejectionKind.SEPARATED_NOWHERE
     if all(reading.clears for reading in outcome.readings):
         return RejectionKind.UNREAD

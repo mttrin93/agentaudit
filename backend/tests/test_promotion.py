@@ -19,6 +19,7 @@ from backend.bench.adaptive.promotion import promote
 from backend.bench.adaptive.proposal import ProposedRoute, proposed_from
 from backend.bench.admission import (
     LibraryProvenance,
+    RejectionKind,
     library_provenance,
     outcome_for,
 )
@@ -221,7 +222,13 @@ def test_a_rejected_proposal_is_discarded_rather_than_parked(
     assert promoted.case is None
     assert proposal.case.admission is None
     assert "discarded" in promoted.stated()
-    assert "REJECTED — discard the case" in promoted.stated()
+    # And the line says which refusal it was before it says to discard it: two
+    # refusals that read the same are two findings the operator cannot act on
+    # differently (ADR-0118).
+    assert (
+        f"REJECTED — {RejectionKind.SEPARATED_NOWHERE}, discard the case"
+        in promoted.stated()
+    )
 
     parked = [
         name

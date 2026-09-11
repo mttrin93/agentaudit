@@ -506,11 +506,20 @@ function sending(progress: RunProgress): string {
 }
 
 /**
- * One family's attempts as cells, from the counts the route serves and the position.
+ * One family's attempts as cells: the verdicts in the order they came back, the one
+ * on the wire, and the ones not sent yet.
  *
- * In one order every time — held, broken, in flight, not yet attempted — because that
- * order is the only one the served counts support. The strip is a count made legible
- * and it is deliberately not a timeline.
+ * **The order is the bench's and not this app's.** The strip used to be built from
+ * the counts — every held cell, then every broken one — because counts were all the
+ * route served. That put a run of green beside a run of red and read as two bars
+ * filling independently, which is a shape no run ever had. `FamilyRun.answers`
+ * carries the sequence now, so drawing it in order invents nothing; a strip laid out
+ * from counts was the thing inventing a shape.
+ *
+ * It is still not a timeline anybody may read a slope off. Attempts are independent
+ * by construction — a fresh session each, which is what makes their quotient a rate
+ * (CONTEXT.md, ADR-0005) — so what this shows is verdicts landing as they landed, and
+ * nothing on this bench is a figure over a window of them.
  *
  * **The in-flight cell comes off the position and never off the counts.** It used to
  * be `attempted - resisted - succeeded`, which is always zero: `attempted` counts the
@@ -526,19 +535,23 @@ function sending(progress: RunProgress): string {
  * and a second cell would be this screen inventing concurrency the bench has not got.
  */
 function cellsFor(
-  resisted: number,
-  succeeded: number,
-  attempted: number,
+  answers: readonly string[],
   of: number,
   inFlight: boolean,
 ): readonly Cell[] {
-  const waiting = Math.max(of - attempted, 0)
+  // Never past the plan. The sequence and the denominator come off one walk on the
+  // bench's side and cannot disagree, but the strip is `of` cells long by definition
+  // and a row longer than its own denominator is what a length here must not be.
+  const answered = answers.slice(0, of)
+  const waiting = Math.max(of - answered.length, 0)
   // Only out of what is left: a family whose plan is full has nothing on the wire,
   // and a strip that grew a cell to say otherwise would be longer than the plan.
   const onTheWire = inFlight && waiting > 0 ? 1 : 0
   return [
-    ...Array<Cell>(resisted).fill('held'),
-    ...Array<Cell>(succeeded).fill('broke'),
+    // A test for `resisted` rather than for `succeeded`: those are the only two
+    // verdicts this bench has, and a word that is neither draws the cell that is not
+    // the target holding — the direction ADR-0011 says to be wrong in.
+    ...answered.map<Cell>((answer) => (answer === 'resisted' ? 'held' : 'broke')),
     ...Array<Cell>(onTheWire).fill('in flight'),
     ...Array<Cell>(waiting - onTheWire).fill('not attempted'),
   ]
@@ -593,9 +606,7 @@ export function familyRows(progress: RunProgress): readonly FamilyRow[] {
     resisted: family.resisted,
     rate: rateOf(family.succeeded, family.attempted),
     cells: cellsFor(
-      family.resisted,
-      family.succeeded,
-      family.attempted,
+      family.answers,
       family.of,
       onTheWire !== '' && readFamily(family.family) === readFamily(onTheWire),
     ),
@@ -642,9 +653,7 @@ export function electiveRows(progress: RunProgress): readonly FamilyRow[] {
     resisted: family.resisted,
     rate: rateOf(family.succeeded, family.attempted),
     cells: cellsFor(
-      family.resisted,
-      family.succeeded,
-      family.attempted,
+      family.answers,
       family.of,
       onTheWire !== '' && readFamily(family.family) === readFamily(onTheWire),
     ),

@@ -87,6 +87,7 @@ function inTheScoredLayer(): RunProgress {
         of: 0,
         resisted: 0,
         succeeded: 0,
+        answers: [],
         not_run: 'not run: this family needs a third-party note planted',
       },
       {
@@ -95,6 +96,30 @@ function inTheScoredLayer(): RunProgress {
         of: 30,
         resisted: 12,
         succeeded: 8,
+        // The order they came back in, which is what the cells are drawn from. Twelve
+        // held and eight broken, interleaved the way a real run interleaves them.
+        answers: [
+          'resisted',
+          'succeeded',
+          'resisted',
+          'resisted',
+          'succeeded',
+          'resisted',
+          'succeeded',
+          'resisted',
+          'resisted',
+          'succeeded',
+          'resisted',
+          'succeeded',
+          'resisted',
+          'resisted',
+          'succeeded',
+          'resisted',
+          'succeeded',
+          'resisted',
+          'resisted',
+          'succeeded',
+        ],
         not_run: '',
       },
     ],
@@ -107,6 +132,18 @@ function inTheScoredLayer(): RunProgress {
         of: 30,
         resisted: 7,
         succeeded: 3,
+        answers: [
+          'resisted',
+          'succeeded',
+          'resisted',
+          'resisted',
+          'resisted',
+          'succeeded',
+          'resisted',
+          'resisted',
+          'succeeded',
+          'resisted',
+        ],
         no_case: '',
       },
       {
@@ -115,6 +152,7 @@ function inTheScoredLayer(): RunProgress {
         of: 0,
         resisted: 0,
         succeeded: 0,
+        answers: [],
         no_case:
           'requested, and this run has no case to attempt: the library it was ' +
           'planned against holds none for this elective family',
@@ -442,11 +480,30 @@ describe('the six families, while the run is going', () => {
       // `attempted` and never over `of`: a rate over the plan would count attempts
       // nobody has made yet as attempts the target held (ADR-0111).
       rate: '40%',
-      // One cell an attempt, over the family's own plan: twelve held, eight broken,
-      // one on the wire, and nine not yet sent — thirty cells, which is `of`.
+      // One cell an attempt, over the family's own plan, in the order the verdicts
+      // came back: twelve held and eight broken as they landed, one on the wire, and
+      // nine not yet sent — thirty cells, which is `of`.
       cells: [
-        ...Array<string>(12).fill('held'),
-        ...Array<string>(8).fill('broke'),
+        'held',
+        'broke',
+        'held',
+        'held',
+        'broke',
+        'held',
+        'broke',
+        'held',
+        'held',
+        'broke',
+        'held',
+        'broke',
+        'held',
+        'held',
+        'broke',
+        'held',
+        'broke',
+        'held',
+        'held',
+        'broke',
         'in flight',
         ...Array<string>(9).fill('not attempted'),
       ],
@@ -467,12 +524,21 @@ describe('the six families, while the run is going', () => {
     // The strip is the plan and not the attempts made, so it is `of` cells long
     // however few have come back.
     expect(leakage.cells).toHaveLength(leakage.of)
-    // And it is counts in one order, never the order they ran in: the route serves
-    // four counts per family and no per-attempt list, so an interleaved strip would
-    // be an order this app made up.
-    expect(leakage.cells.indexOf('broke')).toBeGreaterThan(
+    // And it is the run's own order, not the counts sorted into two blocks. The
+    // strip used to be every held cell then every broken one, which put a run of
+    // green beside a run of red and read as two bars filling independently — a shape
+    // the run never had. The order is served now, so drawing it invents nothing.
+    expect(leakage.cells.indexOf('broke')).toBeLessThan(
       leakage.cells.lastIndexOf('held'),
     )
+    expect(leakage.cells.slice(0, 6)).toEqual([
+      'held',
+      'broke',
+      'held',
+      'held',
+      'broke',
+      'held',
+    ])
     // The two verdict lengths add up to the attempted length rather than to the bar:
     // drawn against the attempts made so far, they would fill it from the first
     // verdict onwards — a rate with no denominator (ADR-0005).
@@ -596,9 +662,20 @@ describe('the elective families, while the run is going', () => {
       succeeded: 3,
       resisted: 7,
       rate: '30%',
+      // The tier's strip is read the same way the six's is: this family's verdicts in
+      // the order they came back, then what has not been sent. No cell in flight —
+      // the position names the other list's family, and one suite sends one attempt.
       cells: [
-        ...Array<string>(7).fill('held'),
-        ...Array<string>(3).fill('broke'),
+        'held',
+        'broke',
+        'held',
+        'held',
+        'held',
+        'broke',
+        'held',
+        'held',
+        'broke',
+        'held',
         ...Array<string>(20).fill('not attempted'),
       ],
       // Not the family the scored layer is in, and not finished: the tier's rows go

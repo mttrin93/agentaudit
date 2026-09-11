@@ -1721,6 +1721,61 @@ def test_a_run_reports_each_family_over_its_own_denominator_while_it_goes(
     assert (unwritten["of"], unwritten["not_run"]) == (0, "")
 
 
+def test_a_family_carries_its_verdicts_in_the_order_they_came_back(
+    leakage_case: Case,
+) -> None:
+    """The sequence, beside the counts it is not a second copy of.
+
+    A screen watching a run draws one cell an attempt, and the cells were laid out
+    from the counts — every resisted one, then every succeeded one — which put a run
+    of green beside a run of red and read as two bars filling independently. The order
+    is a fact this record already holds and the response was throwing away.
+
+    **A sequence and never a trajectory.** Attempts inside a case are independent by
+    construction — fresh session each, which is what makes the quotient of them a rate
+    — so an operator who reads a slope off this order is reading something that is not
+    there. What it is for is watching verdicts land as they land.
+
+    `resisted` and `succeeded` stay: they are the counts the columns print, this list
+    is what the cells are drawn from, and asserting the two agree is what keeps the
+    order from becoming a second, divergent count.
+    """
+    with watched_reference() as watched, api([leakage_case]) as (client, bench):
+        nonce = registered(client, watched)
+        started = client.post("/runs", json=a_request(watched.target, nonce)).json()
+        record = _record(bench, started)
+        _approve(client, started["run_id"])
+        settled(record)
+        body = _progress(client, started["run_id"])
+
+    row = next(
+        one for one in body["families"] if one["family"] == str(leakage_case.family)
+    )
+    answers = row["answers"]
+    # One entry an attempt that came back, and only the two words a verdict has.
+    assert len(answers) == row["attempted"]
+    assert set(answers) <= {"resisted", "succeeded"}
+    # The same partition the counts state, read a second way: a sequence that
+    # disagreed with the columns beside it would be a second scorer.
+    assert answers.count("resisted") == row["resisted"]
+    assert answers.count("succeeded") == row["succeeded"]
+
+    # And it is this run's own order, not a sorted copy of it: the record's attempts
+    # for this family, in the order they were appended.
+    assert answers == [
+        str(attempt.verdict)
+        for attempt in record.run_state.attempts
+        if str(attempt.family) == str(leakage_case.family)
+    ]
+
+    # A family with no plan carries no sequence at all — not a list of zeroes, which
+    # is the same absence its empty bar is.
+    unwritten = next(
+        one for one in body["families"] if one["family"] == str(Family.HALT_DEFEAT)
+    )
+    assert unwritten["answers"] == []
+
+
 @pytest.mark.parametrize("declared", [False, True])
 def test_a_case_asking_for_a_capability_this_target_did_not_declare_is_out_of_the_bar(
     declared: bool, halt_defeat_case: Case

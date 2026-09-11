@@ -264,6 +264,18 @@ export interface FamilyRun {
   of: number
   resisted: number
   succeeded: number
+  /**
+   * This family's verdicts, in the order the attempts came back.
+   *
+   * What one cell an attempt is drawn from. The counts beside it say how many; this
+   * says in what order they landed, and the two are one walk over the record on the
+   * bench's side, so a cell strip and the columns above it cannot disagree.
+   *
+   * **A sequence and never a trajectory.** Attempts are independent by construction —
+   * a fresh session each — so there is no slope here to read and nothing in this app
+   * takes a figure over a window of it.
+   */
+  answers: string[]
   not_run: string
 }
 
@@ -287,6 +299,18 @@ export interface ElectiveFamilyRun {
   of: number
   resisted: number
   succeeded: number
+  /**
+   * This family's verdicts, in the order the attempts came back.
+   *
+   * What one cell an attempt is drawn from. The counts beside it say how many; this
+   * says in what order they landed, and the two are one walk over the record on the
+   * bench's side, so a cell strip and the columns above it cannot disagree.
+   *
+   * **A sequence and never a trajectory.** Attempts are independent by construction —
+   * a fresh session each — so there is no slope here to read and nothing in this app
+   * takes a figure over a window of it.
+   */
+  answers: string[]
   no_case: string
 }
 

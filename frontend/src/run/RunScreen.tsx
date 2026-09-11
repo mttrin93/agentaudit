@@ -738,10 +738,16 @@ function Progress({
           their own columns and the attempts themselves are the last column, so what
           has been made and how it went are read across one row.
 
-          **The strip is counts and never a sequence.** `FamilyRow.cells` lays out the
-          four served counts in one order; the route serves no per-attempt list, so an
-          interleaved strip would be a pattern this app made up for somebody to read
-          something into.
+          **The strip is the run's own order.** `FamilyRow.cells` is built from
+          `FamilyRun.answers` — this family's verdicts as they came back — so a cell is
+          where its attempt was. It was laid out from the counts while counts were all
+          the route served, which put every held cell before every broken one and read
+          as two bars filling independently; that was the shape this app made up, and
+          the order is the one the bench had all along.
+
+          Not a slope. Attempts are independent by construction, which is what makes
+          their quotient a rate rather than a reading of how a target answers being
+          attacked repeatedly (CONTEXT.md, ADR-0005).
 
           **No rate in any row.** Two counts over one denominator — the attempts made,
           and how many of them the target let through — and the quotient of them is a
@@ -947,10 +953,10 @@ function FamilyLine({ row, widest }: { row: FamilyRow; widest: number }) {
       <td className="figure-cell broke">{row.rate}</td>
       <td className="attempts-cell">
         {/*
-          One cell an attempt, in the four states one attempt can be in. Counts laid
-          out in one order and never the order they ran in (`FamilyRow.cells`), and
-          each cell carries its state as a word for a reader who cannot tell the hues
-          apart — the legend under the table names all four.
+          One cell an attempt, in the four states one attempt can be in, in the order
+          the verdicts came back (`FamilyRow.cells`). Each cell carries its state as a
+          word for a reader who cannot tell the hues apart — the legend under the
+          table names all four.
         */}
         <span
           className="cells"

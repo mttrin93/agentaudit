@@ -1078,6 +1078,23 @@ class FamilyRun(BaseModel):
     of: int
     resisted: int
     succeeded: int
+    answers: list[str] = []
+    """This family's verdicts, in the order the attempts came back.
+
+    The counts above say *how many*; this says *in what order they landed*, which is
+    what a screen drawing one cell an attempt needs. Built from the same walk over
+    `RunState.attempts`, so it cannot disagree with `resisted` and `succeeded` — the
+    two counts partition this list rather than being computed beside it.
+
+    **A sequence and never a trajectory.** Attempts inside a case are independent by
+    construction — a fresh session each, which is what makes their quotient a rate and
+    not a reading of how a target responds to being attacked repeatedly (CONTEXT.md,
+    ADR-0005). Nothing here is a slope, and no figure on this bench is taken over a
+    window of it.
+
+    Empty for a family with no plan, which is the same absence its zero denominator
+    already states.
+    """
     not_run: str = ""
     """Why this family is not in the plan, in the bench's own words, or empty.
 
@@ -1124,6 +1141,23 @@ class ElectiveFamilyRun(BaseModel):
     of: int
     resisted: int
     succeeded: int
+    answers: list[str] = []
+    """This family's verdicts, in the order the attempts came back.
+
+    The counts above say *how many*; this says *in what order they landed*, which is
+    what a screen drawing one cell an attempt needs. Built from the same walk over
+    `RunState.attempts`, so it cannot disagree with `resisted` and `succeeded` — the
+    two counts partition this list rather than being computed beside it.
+
+    **A sequence and never a trajectory.** Attempts inside a case are independent by
+    construction — a fresh session each, which is what makes their quotient a rate and
+    not a reading of how a target responds to being attacked repeatedly (CONTEXT.md,
+    ADR-0005). Nothing here is a slope, and no figure on this bench is taken over a
+    window of it.
+
+    Empty for a requested family the library holds no case in, which is the same
+    absence `no_case` states in words.
+    """
     no_case: str = ""
     """Why this requested family has no denominator, or empty.
 
@@ -1199,7 +1233,7 @@ def _run_families(record: RunRecord, rule: GateRule) -> list[FamilyRun]:
     reply this function cannot see. A row over-counting there is a bar that stops
     short, which is the direction this used to fail in everywhere.
     """
-    made, held = _attempts_by_family(record)
+    made, held, answered = _attempts_by_family(record)
     answerable = _answerable_cases(record)
     rows: list[FamilyRun] = []
     for family in Family:
@@ -1217,13 +1251,16 @@ def _run_families(record: RunRecord, rule: GateRule) -> list[FamilyRun]:
                 # one verdict, so the two are one partition and cannot drift apart by
                 # a verdict this branch had not heard of.
                 succeeded=attempted - held.get(name, 0),
+                answers=answered.get(name, []),
                 not_run="" if gap is None else gap.stated(),
             )
         )
     return rows
 
 
-def _attempts_by_family(record: RunRecord) -> tuple[dict[str, int], dict[str, int]]:
+def _attempts_by_family(
+    record: RunRecord,
+) -> tuple[dict[str, int], dict[str, int], dict[str, list[str]]]:
     """This run's attempts grouped by family name, and how many of them held.
 
     One walk over `RunState.attempts`, keyed on the **name**, which is what lets the
@@ -1234,12 +1271,17 @@ def _attempts_by_family(record: RunRecord) -> tuple[dict[str, int], dict[str, in
     """
     made: dict[str, int] = {}
     held: dict[str, int] = {}
+    answered: dict[str, list[str]] = {}
     for attempt in record.run_state.attempts:
         name = str(attempt.family)
         made[name] = made.get(name, 0) + 1
         if attempt.verdict is Verdict.RESISTED:
             held[name] = held.get(name, 0) + 1
-    return made, held
+        # The same walk, in the order the attempts were appended, so the sequence a
+        # screen draws its cells from and the counts its columns print cannot come
+        # apart: they are one pass over one list.
+        answered.setdefault(name, []).append(str(attempt.verdict))
+    return made, held, answered
 
 
 def _answerable_cases(record: RunRecord) -> list[Case]:
@@ -1270,7 +1312,7 @@ def _run_elective_families(
     library the run was planned against holds nothing in that family, and without the
     sentence the row would read as a family that has not started yet (ADR-0094).
     """
-    made, held = _attempts_by_family(record)
+    made, held, answered = _attempts_by_family(record)
     answerable = _answerable_cases(record)
     rows: list[ElectiveFamilyRun] = []
     for family in record.plan.elective.requested:
@@ -1284,6 +1326,7 @@ def _run_elective_families(
                 of=cases * rule.attempts_per_case,
                 resisted=held.get(name, 0),
                 succeeded=attempted - held.get(name, 0),
+                answers=answered.get(name, []),
                 no_case=("" if cases else A_REQUESTED_ELECTIVE_FAMILY_WITH_NO_CASE),
             )
         )

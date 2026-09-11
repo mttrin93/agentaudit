@@ -59,7 +59,8 @@ routes are spent out of the headroom between the exact suite cost and the
 retry-allowance ceiling. ADR-0117 states the cost — *every run of a target gets longer
 by the number of routes held against it* — and does not price it.
 
-Both are recorded rather than absorbed, and both want their own ticket. Until then a
+Both are recorded rather than absorbed and both are #256, which is where the choice
+between pricing the library, a third `Layer` and a declared cap is argued. Until then a
 target holding more routes than that headroom covers has its held sends **refused** at
 the counter, one route at a time, each reading `UNMEASURED`: nothing is overspent, the
 scored suite is untouched, and the run still signs.

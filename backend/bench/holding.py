@@ -8,22 +8,19 @@ decision side of it, and it stands to `held.py` as `queued.py` stands to
 §2 and §3; the build spec is
 [docs/specs/the-target-library.md](../../docs/specs/the-target-library.md).
 
-**One route takes one door, and this function is the door.** The same approval on
-`/pending-routes` answers two questions that were always distinct — *is this
-everyone's?*, which the bar decides and `entry.enter` writes (ADR-0033), and *is
-this still yours?*, which the operator decides and this writes. A route the bar
-**admits** is not held: a library case is already sent to every target including
-this one, and holding it as well would send one probe twice and count it on two
-denominators (ADR-0117 §3). The state the queue is told is the state this is told,
-so the two writes cannot disagree about which door a route took.
+**One route takes one door, and ADR-0117 §3 is why.** The consequence here is that
+`hold_refused` is given the answer the queue is given rather than deriving its own:
+one `RouteState` decides both writes, so the case library's record and the target
+library's cannot disagree about which door a route took. A caller that computed the
+door twice would be the disagreement waiting to happen.
 
-**A person is the door, and the gate is not.** A held route faces no `D`, and what
-it faces instead is what it has already passed: an evaluator-confirmed break
-against the target (ADR-0106) and a *named* operator's approval (ADR-0117 §2). Both
-halves are refused here rather than assumed, because this is the one place in the
-bench where something scored enters without a declared threshold behind it — so a
-route no confirmed break stands behind, and an approval with nobody's name on it,
-are both declined whatever the surface selected.
+**A person is the door, and the gate is not** (ADR-0117 §2). The consequence here is
+that both halves of what stands in a threshold's place are *checked* rather than
+assumed: the evidence a held route rests on is an evaluator-confirmed break and a
+named operator, so a route no confirmed break stands behind and an approval with
+nobody's name on it are declined whatever the surface selected. This is the only
+place in the bench where something scored is written without a declared threshold
+behind it, which is what makes the checking worth the lines.
 
 **Nothing here is scored and nothing here widens.** The input is an
 `AwaitingDecision` and the output is a `HeldRoute` or nothing; there is no
@@ -64,7 +61,14 @@ class Holding:
     reason: str
 
     def stated(self) -> str:
-        """What this decision says about the target library, in one sentence."""
+        """What this decision says about the target library, in one sentence.
+
+        A method over a field a caller could read directly, for one reason and it
+        is not encapsulation: `Queued`, `Filing` and `Entry` are the records a run
+        or a decision says itself with, every one of them says it through
+        `stated()`, and a fourth that had to be printed differently would be the
+        thing a caller forgets. What it delegates to is the argument for keeping it.
+        """
         return self.reason
 
 
@@ -107,10 +111,10 @@ def hold_refused(
     except Exception as refused:  # noqa: BLE001 - never fails a decision
         return Holding(
             None,
-            (
-                f"{record.route.stated()} was not held against {record.target}: "
+            _not_held(
+                record,
                 f"{refused}. The route was measured and the decision stands — what "
-                "a storage fault costs here is a record and never an answer"
+                "a storage fault costs here is a record and never an answer",
             ),
         )
     return Holding(
@@ -148,48 +152,60 @@ def _route_from(record: AwaitingDecision) -> HeldRoute:
     )
 
 
+def _not_held(record: AwaitingDecision, because: str) -> str:
+    """One refusal, in the shape every refusal here takes: which route, whose
+    agent, and why. One function so five reasons cannot drift into five shapes."""
+    return f"{record.route.stated()} was not held against {record.target}: {because}"
+
+
 def _why_it_cannot_be_held(record: AwaitingDecision, approved_by: str) -> str | None:
     """Why this route may not be held, or `None` for one that may.
 
-    Three refusals and one function, because they are one question — *does the
+    Five refusals and one function, because they are one question — *does the
     evidence a held route rests on actually exist?* — and a caller that asked them
-    one at a time would be free to ask two of the three.
+    one at a time would be free to ask four of the five.
+
+    **`_route_from` reads this as having run.** Two of the five are what narrow the
+    draft it builds from: a record whose verdict class is not deterministic, and one
+    carrying no success condition, are refused here, which is what lets that
+    function assert a condition rather than invent one.
     """
     if not approved_by.strip():
-        return (
-            f"{record.route.stated()} was not held against {record.target}: the "
-            "approval that would license it carries nobody's name. A held route is "
-            "the one scored thing here that faced no declared threshold, and what "
-            "stands in a threshold's place is a person (ADR-0117 §2)"
+        return _not_held(
+            record,
+            "the approval that would license it carries nobody's name. A held route "
+            "is the one scored thing here that faced no declared threshold, and what "
+            "stands in a threshold's place is a person (ADR-0117 §2)",
         )
     if not _a_confirmed_break(record.draft):
-        return (
-            f"{record.route.stated()} was not held against {record.target}: nothing "
-            "recorded a confirmed break behind it. What a held route claims is that "
-            "this probe produced this verdict against this agent, and an approval "
-            "is proportionate to that claim only because the evaluator has already "
-            "confirmed it (ADR-0106, ADR-0117 §2)"
+        return _not_held(
+            record,
+            "nothing recorded a confirmed break behind it. What a held route claims "
+            "is that this probe produced this verdict against this agent, and an "
+            "approval is proportionate to that claim only because the evaluator has "
+            "already confirmed it (ADR-0106, ADR-0117 §2)",
         )
     if record.draft.verdict_class is not VerdictClass.DETERMINISTIC:
-        return (
-            f"{record.route.stated()} was not held against {record.target}: its "
-            "verdict would be a judgement rather than a reading. A held route is "
-            "judged by the same deterministic evaluator as any case, because *still "
-            "open* is a verdict and a judged one carries a reliability figure and a "
-            "wider stated limit (ADR-0004, ADR-0117 §4)"
+        return _not_held(
+            record,
+            "its verdict would be a judgement rather than a reading. A held route "
+            "is judged by the same deterministic evaluator as any case, because "
+            "*still open* is a verdict and a judged one carries a reliability figure "
+            "and a wider stated limit (ADR-0004, ADR-0117 §4)",
         )
     if record.draft.success_condition is None:
-        return (
-            f"{record.route.stated()} was not held against {record.target}: it "
-            "carries no success condition, so there is no deterministic check a "
-            "later run could read *still open* off (ADR-0117 §4)"
+        return _not_held(
+            record,
+            "it carries no success condition, so there is no deterministic check a "
+            "later run could read *still open* off (ADR-0117 §4)",
         )
     if not record.found_in.strip():
-        return (
-            f"{record.route.stated()} was not held against {record.target}: it was "
-            "filed before the run that found it was recorded, so the held record "
-            "would answer *found in what?* with nothing. The row is still readable "
-            "and still decidable; what it cannot be is held (`pending.FiledRoute`)"
+        return _not_held(
+            record,
+            "it was filed before the run that found it was recorded, so the held "
+            "record would answer *found in what?* with nothing. The row is still "
+            "readable and still decidable; what it cannot be is held "
+            "(`pending.FiledRoute`)",
         )
     return None
 
@@ -208,7 +224,14 @@ def _a_confirmed_break(draft: Case) -> bool:
 
 
 def _one_door(record: AwaitingDecision, decided_as: RouteState) -> str:
-    """Why a route that was not refused is not held. ADR-0117 §3."""
+    """Why a route that was not refused is not held, in the operator's own row.
+
+    ADR-0117 §3's argument spelled out rather than linked, and that is the one
+    place in this module where it is: this string is *printed*, on the queue row an
+    operator reads, and a row that answered *why is my finding not in my target
+    library?* with a document reference would be sending a reader somewhere the
+    surface could have just told them.
+    """
     if decided_as is RouteState.ADMITTED:
         return (
             f"{record.route.stated()} is not held against {record.target}: the bar "

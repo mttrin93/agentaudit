@@ -753,16 +753,33 @@ def _decide(
                 )
             continue
         state, reason, entered_as = answer
-        # The second door, taken before the queue is told anything, so the reason
-        # the row keeps says which of the two this route went through
-        # (ADR-0117 §3). The bar is unchanged and no `D` is computed here: what the
-        # held record rests on is the evaluator-confirmed break the route was filed
-        # on and the name on this approval, and `hold_refused` refuses both halves
-        # rather than assuming them. A queue that then refuses the decision leaves
-        # the held record standing and the route pending, which is the honest pair
-        # — the bar did refuse the route — and a re-decision holds nothing twice,
-        # because one route is one held record per target.
+        # The second door (`bench/holding.py`), taken before the queue is told
+        # anything so that the reason the row keeps says which of the two this
+        # route went through — which is what an operator reading the queue a month
+        # later has.
+        #
+        # **The cost of that order, stated rather than left to be found.** If the
+        # write below then refuses, the route stays pending with a held record
+        # already standing; a later measurement could admit that route, and the
+        # probe would be in the shared library and in this target's library at
+        # once, which is the one thing ADR-0117 §3 forbids. What bounds it is that
+        # the refusal below needs a queue that no longer holds the row as pending,
+        # and `_chosen` refuses a decided route at selection — so the reachable
+        # case is a store that dropped the record, which also takes the route out
+        # of every later selection. Closing it properly needs either a decision and
+        # a hold in one write, or a way to drop a held record when a later decision
+        # admits the route, and the target library deliberately has no delete
+        # (a closed route is kept, ADR-0117 §5). Both are their own ticket.
+        #
+        # A rediscovery holds nothing twice: one route is one held record per
+        # target, and `hold_refused` leaves the record it finds alone.
         holding = hold_refused(one, decided_as=state, approved_by=record.confirmed_by)
+        # Said twice on purpose, into the two things that outlive this loop: the
+        # consultation report an operator checks the measurement against, and the
+        # queue row, which is all that is left of this route once the page is
+        # closed. An admitted route's row carries it too, because *this is in the
+        # shared library and therefore not in your target library* is the half of
+        # the answer a reader would otherwise have to infer from a silence.
         record.say(holding.stated())
         reason = f"{reason}. {holding.stated()}"
         try:

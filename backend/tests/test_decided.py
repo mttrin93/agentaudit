@@ -878,6 +878,30 @@ def test_no_scored_instrument_can_reach_the_admission_memory() -> None:
         )
 
 
+def test_the_route_key_reaches_no_store_at_all() -> None:
+    """The other half of the wall above, since the key left this module.
+
+    `RouteKey` moved to `backend/bench/route_key.py` so that a run sending held
+    routes — `calibration.py` is in the list above — could key them without the
+    admission memory becoming reachable from a scored instrument (ADR-0117 §1). That
+    is only honest while the key stays a key: a `RouteKey` that could reach a store
+    would have taken the wall's ground with it on the way out.
+    """
+    reachable = [
+        name
+        for name in reachable_from(BENCH / "route_key.py")
+        if "store" in name.lower()
+        or "bench.decided" in name
+        or "bench.held" in name
+        or "bench.pending" in name
+    ]
+    assert not reachable, (
+        f"{reachable} is reachable from the route key. The key was moved out from "
+        "behind the wall above on the grounds that it opens nothing, and a key that "
+        "reaches a store is that wall widened rather than kept"
+    )
+
+
 def test_the_memory_is_its_own_database_and_not_a_table_in_the_precedent_store() -> (
     None
 ):

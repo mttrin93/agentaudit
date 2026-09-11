@@ -30,6 +30,7 @@ from backend.bench.library import (
     Family,
     Plant,
     Precondition,
+    SuccessCondition,
     SuccessConditionKind,
     one_of_the_six,
 )
@@ -162,9 +163,16 @@ class TraceNotVisible(RuntimeError):
     through the front door.
     """
 
-    def __init__(self, case_id: str, target_name: str) -> None:
+    def __init__(self, named: str, target_name: str) -> None:
+        """`named` is whatever the caller calls the thing it was reading.
+
+        Not `case_id`, and the sentence no longer says *case*, because a **held
+        route** is read by this same criterion and is not a `Case` and never
+        becomes one (ADR-0117 §4). An exception that asserted the kind would be
+        the one place the vocabulary of CONTEXT.md is spent on a guess.
+        """
         super().__init__(
-            f"case {case_id!r} reached a verdict against {target_name!r} with no "
+            f"{named!r} reached a verdict against {target_name!r} with no "
             "tool trace to read. A target without tool-call visibility yields "
             "not measurable, never a verdict"
         )
@@ -311,6 +319,29 @@ def checkable(
 ) -> bool:
     """Whether this one transcript carries what this case's condition has to read.
 
+    The `Case`-shaped way in, and the whole of the reading is one line down in
+    `condition_checkable`. The split is the fence of
+    [ADR-0117](../../docs/adr/0117-a-refused-break-is-held-against-the-target-it-beat-and-is-scored-beside-the-six.md)
+    §4 arriving at this function: a **held route** is not a `Case` and must not
+    become one, so the thing both callers share is narrowed to the criterion rather
+    than widened to accept either record. `target` stays on this signature, unused
+    by the reading below, because it is the question a caller asks here — *can this
+    case be read against this target* — and dropping it would move a call site's
+    vocabulary for a parameter's sake.
+    """
+    return condition_checkable(
+        case.success_condition, transcript, already_halted=already_halted
+    )
+
+
+def condition_checkable(
+    condition: SuccessCondition | None,
+    transcript: Transcript,
+    *,
+    already_halted: bool = False,
+) -> bool:
+    """Whether this one transcript carries what this criterion has to read.
+
     The per-turn counterpart of `measurable`, and the two ask different questions.
     `measurable` asks what the *target* declared, once, before anything was sent;
     this asks what *one reply* actually came back with. A target can satisfy the
@@ -334,12 +365,15 @@ def checkable(
     §4). Every caller reading one probe passes nothing.
 
     **Reporting and safety, never a verdict.** Nothing here returns or influences a
-    `Verdict`: `evaluate` remains the only route to one, and `TraceNotVisible` stays
-    exactly where it is. This is also what keeps automatic verification from
+    `Verdict`: `read_condition` remains the only route to one, and `TraceNotVisible`
+    stays exactly where it is. This is also what keeps automatic verification from
     crashing an episode — a trace-dependent condition applied to a reply with no
     trace raises, and the caller has to be able to ask before it applies one.
+
+    `None` is a criterion there is nothing deterministic to read, and it answers
+    `False` rather than raising, because this is the question asked *before* a
+    reading is attempted and a judged case has to be able to be asked it.
     """
-    condition = case.success_condition
     if condition is None:
         return False
     trace = transcript.tool_trace
@@ -385,9 +419,21 @@ def readable_trace(
     case: Case, transcript: Transcript, target: TargetConfig
 ) -> ToolTrace:
     """The trace a trace-dependent success condition reads, or a refusal to guess."""
+    return trace_or_refuse(case.id, transcript, target.name)
+
+
+def trace_or_refuse(named: str, transcript: Transcript, target_name: str) -> ToolTrace:
+    """The same refusal, for a reading that has no case record to name itself with.
+
+    `named` is whatever the caller calls the thing it is reading — a case id from
+    `readable_trace` above, a route key from the held-route sender — and it reaches
+    nothing but the exception's own sentence. A held route is not a `Case`
+    (ADR-0117 §4), so the alternative to this parameter was a `Case` built to carry
+    an identifier, which is the conflation the whole fence is about.
+    """
     trace = transcript.tool_trace
     if trace is None:
-        raise TraceNotVisible(case_id=case.id, target_name=target.name)
+        raise TraceNotVisible(named=named, target_name=target_name)
     return trace
 
 

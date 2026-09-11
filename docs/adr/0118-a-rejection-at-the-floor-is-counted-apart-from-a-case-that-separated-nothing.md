@@ -39,7 +39,7 @@ fine; the dialect is the variable.
    it, whatever its floor did on the other model. The claim the member makes is *the
    probe reached nothing here*, and one model where it reached something disproves it.
 
-3. **The threshold is `trivial == 0` exactly, on every reading.** Not a configurable
+3. **The threshold is no success at all — every agent at zero, on every reading.** Not a configurable
    rate below some floor. Two reasons. The kind has to mean *nothing happened* for an
    operator to act on it by rewriting a probe, and at the declared ten attempts a rate
    "below a floor" is one success away from a case the bar should simply refuse as
@@ -50,6 +50,13 @@ fine; the dialect is the variable.
    hold in their head to know which of the two refusals they are looking at. Zero is
    checkable from the counts the record already prints.
 
+   All three agents rather than the trivial one alone, because the claim the member
+   carries is *this probe reached nothing here* and one success anywhere disproves it.
+   A reading at `trivial 0/10, hardened 3/10` is noise against three agents that share
+   a router, and it falls back to `SEPARATED_NOWHERE` — which is not a good name for
+   it either, but at least says something engaged. The predicate is
+   `ReadingOutcome.engaged`, beside the counts it is read off.
+
 4. **A refusal names which refusal it was, on `AdmissionOutcome.stated()`.** One line
    rather than one per surface: the gate's reading, a promotion's lines and the reason
    a rejected row carries on `/pending-routes` all print an outcome through it, so an
@@ -57,7 +64,7 @@ fine; the dialect is the variable.
    from *your case is weak*. The counts alone say how many of each there were and not
    which proposal was which.
 
-5. **The admission memory still holds it** (`ABOUT_THE_ROUTE`,
+5. **The admission memory still holds it** (`decided.MEASURED_THE_ROUTE`,
    [ADR-0032](./0032-the-admission-memory-holds-the-measurement.md)). This was the
    close call. The member's gloss says nothing was learned about the *case*, which
    reads like the two members the memory refuses — `UNREAD` and `NOT_MEASURED`, both
@@ -67,6 +74,13 @@ fine; the dialect is the variable.
    Excluding it would make every re-proposal of the same dead route pay for the same
    thirty attempts again, which is the cost `decided.py` exists to stop. Relabelling a
    refusal must not silently change what the bench pays for.
+
+   The constant ADR-0032 names `ABOUT_THE_ROUTE` is renamed `MEASURED_THE_ROUTE` here,
+   because the line it draws is whether the measurement happened and two of its four
+   members are refusals that conclude nothing about a route. ADR-0032 is not edited:
+   its decision — that `UNREAD` and `NOT_MEASURED` are not remembered, and that the
+   set is a frozenset so a new member has to be classified rather than default into
+   the memory — is unchanged, and this is where the name moved.
 
    A record filed under the old label is not migrated. `recall` already answers
    `Stale` where "the same counts now decide X where the run that measured them

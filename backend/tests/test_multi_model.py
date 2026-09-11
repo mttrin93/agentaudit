@@ -386,6 +386,7 @@ def test_a_route_the_agents_never_engaged_is_not_a_finding_about_the_case() -> N
             _proposed("no-model", FLAT, FLAT),
             _proposed("floor", FLOOR, FLOOR),
             _proposed("floor-on-one", FLOOR, FLAT),
+            _proposed("stray", (1, 0, 0), (1, 0, 0)),
         )
     )
 
@@ -395,8 +396,14 @@ def test_a_route_the_agents_never_engaged_is_not_a_finding_about_the_case() -> N
     }
     assert landed[RejectionKind.FLOOR_AT_ZERO] == ["floor"]
     # A reading that engaged anywhere is not this kind: the claim is that the probe
-    # reached nothing, and one model where it did disproves it.
-    assert landed[RejectionKind.SEPARATED_NOWHERE] == ["no-model", "floor-on-one"]
+    # reached nothing, and one model where it did disproves it — as does one attempt
+    # that broke an agent the trivial one was not, however improbable that is against
+    # three agents that share a router.
+    assert landed[RejectionKind.SEPARATED_NOWHERE] == [
+        "no-model",
+        "floor-on-one",
+        "stray",
+    ]
     assert sum(counted.counts.values()) == len(counted.outcomes)
 
     stated = counted.stated()

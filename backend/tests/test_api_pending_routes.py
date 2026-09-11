@@ -113,8 +113,8 @@ from backend.bench.admission import (
 )
 from backend.bench.contract import TargetConfig
 from backend.bench.decided import (
-    ABOUT_THE_ROUTE,
     DECIDED_ROUTES,
+    MEASURED_THE_ROUTE,
     DecidedRoute,
     DecidedRoutes,
     Remembered,
@@ -1375,7 +1375,7 @@ def test_a_measured_route_is_remembered_so_it_is_never_bought_twice(
         # cross-model discard is remembered exactly as an admission is, so a refused
         # route is never re-bought either (`worth_remembering`, ADR-0012).
         [row] = reading["routes"]
-        assert answer.decided.decided_as in ABOUT_THE_ROUTE
+        assert answer.decided.decided_as in MEASURED_THE_ROUTE
         assert (answer.decided.decided_as is RejectionKind.ADMITTED) == (
             row["state"] == RouteState.ADMITTED
         ), (

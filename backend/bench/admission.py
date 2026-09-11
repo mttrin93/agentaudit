@@ -172,6 +172,37 @@ class ReadingOutcome:
         )
 
     @property
+    def engaged(self) -> bool:
+        """Whether this reading reached the equipment at all: any success, any agent.
+
+        The trivial agent is the one built to fall over, so an attempt that broke
+        nothing on it is usually an attempt whose success condition never fired —
+        most often a probe composed in a customer target's vocabulary, put to
+        reference agents that route tools by scripted phrase. A reading that did not
+        engage is not a weak case: it is a case nothing was learned about, and
+        [ADR-0118](../../docs/adr/0118-a-rejection-at-the-floor-is-counted-apart-from-a-case-that-separated-nothing.md)
+        is where `kind_of` counts the two apart.
+
+        **All three agents and not the trivial one alone.** The claim the predicate
+        carries downstream is *this probe reached nothing here*, and one success
+        anywhere disproves it — including the improbable one where the hardened agent
+        broke and the trivial one did not. The three share a router, so that reading
+        is noise rather than a floor, and the conservative answer is the only one
+        available: it falls back to `SEPARATED_NOWHERE`, which at least says something
+        engaged.
+
+        **`> 0` and not a rate above some floor**, which is that ADR's §3: at the
+        declared ten attempts a rate "below a floor" is one success away from a case
+        the bar should simply refuse as weak, and this predicate has to mean *nothing
+        happened* for an operator to act on it by rewriting a probe. Zero is also
+        checkable from the counts the record already prints, where a second declared
+        threshold beside `discrimination_floor` would not be.
+        """
+        return any(
+            rate.successes > 0 for rate in (self.hardened, self.weak, self.trivial)
+        )
+
+    @property
     def clears(self) -> bool:
         """Whether this reading meets the bar: magnitude *and* separation.
 
@@ -634,7 +665,7 @@ class RejectionKind(StrEnum):
 
         The member's own name is *not* repeated here: the caller prints it with the
         count, and this is the gloss beside it. The match has no fallback branch —
-        a sixth member must fail the type check rather than print as a name with
+        a seventh member must fail the type check rather than print as a name with
         nothing said about it.
         """
         match self:
@@ -657,10 +688,10 @@ class RejectionKind(StrEnum):
                 )
             case RejectionKind.FLOOR_AT_ZERO:
                 return (
-                    "no attempt broke the trivial agent, on any model the bar read. "
-                    "The probe never reached the equipment — most often because it "
-                    "was composed in a customer target's vocabulary and the "
-                    "reference agents route by scripted phrase — so nothing was "
+                    "no attempt broke any of the three agents, on any model the bar "
+                    "read. The probe never reached the equipment — most often "
+                    "because it was composed in a customer target's vocabulary and "
+                    "the reference agents route by scripted phrase — so nothing was "
                     "learned about this case and nothing may be concluded about its "
                     "route from the refusal (ADR-0118)"
                 )
@@ -686,19 +717,17 @@ def kind_of(outcome: AdmissionOutcome) -> RejectionKind:
     case, then the ones that are facts about the run rather than about either.
 
     `FLOOR_AT_ZERO` is read inside the branch it narrows and nowhere else: it is the
-    subset of `SEPARATED_NOWHERE` where the trivial agent was never broken at all, so
-    a reading that cleared somewhere cannot land on it however low its floor sat. The
-    test is `trivial == 0` exactly, on every reading, and ADR-0118 is why that literal
-    rather than a configurable rate: at ten attempts a rate below the floor is one
-    success away from a case the bar should simply refuse, and this kind has to mean
-    *nothing happened* for an operator to act on it.
+    subset of `SEPARATED_NOWHERE` where no reading engaged the equipment at all, so a
+    proposal that cleared somewhere cannot land on it however low its floor sat
+    (ADR-0118 §2). What *engaged* means is `ReadingOutcome.engaged`'s, beside the
+    counts it is read off.
     """
     if outcome.admitted:
         return RejectionKind.ADMITTED
     if not outcome.readings:
         return RejectionKind.NOT_MEASURED
     if not any(reading.clears for reading in outcome.readings):
-        if all(reading.trivial.successes == 0 for reading in outcome.readings):
+        if not any(reading.engaged for reading in outcome.readings):
             return RejectionKind.FLOOR_AT_ZERO
         return RejectionKind.SEPARATED_NOWHERE
     if all(reading.clears for reading in outcome.readings):

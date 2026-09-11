@@ -793,7 +793,7 @@ def test_a_recorded_answer_the_arithmetic_no_longer_reaches_re_measures_the_rout
 def test_a_re_measured_route_is_counted_apart_from_one_never_proposed(
     memory: DecidedRoutes, leakage_case: Case
 ) -> None:
-    # `RejectionKind`'s reasoning about counting the four refusals apart, applied to
+    # `RejectionKind`'s reasoning about counting the refusals apart, applied to
     # the memory's own two misses. A route re-measured because a record stopped
     # applying is the event that says the invalidation rules are working, and one
     # number over both would report it as a route nobody had ever proposed.

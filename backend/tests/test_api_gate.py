@@ -407,13 +407,21 @@ def test_only_the_two_settings_routes_write_under_the_bench_prefix() -> None:
         (BENCH_SELECTION_ROUTE, "PUT"),
     }
 
-    # And the not-`GET` routes on this bench are the eleven that are named — eight
-    # `POST`s and the three settings `PUT`s. Three of the eight start something that
+    # And the not-`GET` routes on this bench are the twelve that are named — nine
+    # `POST`s and the three settings `PUT`s. Three of the nine start something that
     # spends — a run, a gate run and a pending-route measurement — and each is behind
     # an attestation that cannot be constructed incomplete and a halt in front of the
     # figures (ADR-0007). The count is asserted by naming every pair rather than by
-    # its length, because a **twelfth** is either a spend nobody declared or a
+    # its length, because a **thirteenth** is either a spend nobody declared or a
     # setting no ADR admitted, and the failure has to name which route it is.
+    #
+    # **The ninth `POST` ends a spend rather than starting one** (ADR-0114).
+    # `POST /runs/{run_id}/stop` is the second decision an operator takes about a run:
+    # it sets a flag the worker reads where it authorises its next call, so it spends
+    # nothing, cancels nothing already sent, and writes no status. It is a write
+    # because it changes what the bench is doing, and its own route rather than a
+    # field on the approval because an approval is answered once and this is made
+    # minutes later.
     #
     # **The third spend arrived with ADR-0105** and is named here on the same terms
     # as the second: deciding a pending route measures it against three reference
@@ -441,6 +449,7 @@ def test_only_the_two_settings_routes_write_under_the_bench_prefix() -> None:
         (RULE_OF_TWO_ROUTE, "POST"),
         ("/runs", "POST"),
         ("/runs/{run_id}/approval", "POST"),
+        ("/runs/{run_id}/stop", "POST"),
         (GATE_RUNS_ROUTE, "POST"),
         (GATE_RUN_APPROVAL_ROUTE, "POST"),
         (PENDING_MEASUREMENTS_ROUTE, "POST"),

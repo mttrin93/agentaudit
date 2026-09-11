@@ -1440,6 +1440,14 @@ def _no_report_recorded_for(bench: BenchRuns, run_id: str) -> tuple[ReportRefusa
     )
 
 
+RUN_STOP_ROUTE = "/runs/{run_id}/stop"
+"""Where a running suite is asked to stop (ADR-0114).
+
+A `POST` because it changes what the bench is doing, and its own route rather than a
+field on the approval: an approval is answered once and this is a second decision,
+made minutes later by somebody watching the figures move.
+"""
+
 RUN_EPISODES_ROUTE = "/runs/{run_id}/episodes"
 """Where the probes one run's own episodes sent are read. Memory, and never bytes
 anybody signed.
@@ -6159,6 +6167,38 @@ def create_app(
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT, detail=str(elsewhere)
             ) from elsewhere
+        except NoLongerWaiting as closed:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT, detail=str(closed)
+            ) from closed
+        return response_for(record)
+
+    @app.post(RUN_STOP_ROUTE)
+    def stop_the_run(run_id: Annotated[str, PathParam()]) -> RunResponse:
+        """Ask a running suite to stop. It stops between one call and the next.
+
+        **A stop and never a pause.** The run ends as **aborted**, its attempts stay
+        on the record and its families are reported over what was attempted — which is
+        not a gate result and says so. There is no resuming it: the estimate an
+        operator confirmed was for a run, and a run continued an hour later under
+        whatever the settings say by then is a different run
+        ([ADR-0114](../../docs/adr/0114-an-operator-may-stop-a-running-suite.md)).
+
+        **It spends nothing and it cancels nothing already sent.** The flag is read
+        where the next call is authorised, so a message on the wire is answered and
+        recorded; what stops is the message after it.
+
+        `409` for a run that is not running — one still at its interrupt has sent
+        nothing and is declined rather than stopped, and one that has ended has
+        nothing to stop.
+        """
+        try:
+            record = bench.stop(run_id)
+        except KeyError as unknown:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"no run {run_id} is being held by this bench",
+            ) from unknown
         except NoLongerWaiting as closed:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT, detail=str(closed)

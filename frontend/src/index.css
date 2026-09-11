@@ -3359,6 +3359,16 @@ code {
   color: var(--quiet);
 }
 
+/* The one control on this screen, on the line that says what the run is doing: a stop
+ * belongs beside the state it ends, not in a footer under the table. Small and outlined
+ * — it is not the thing a reader came to press, and the primary fill on this bench is
+ * reserved for what will happen next. */
+.run-state button {
+  margin-left: 0.4rem;
+  padding: 0.15rem 0.6rem;
+  font-size: 0.78rem;
+}
+
 .run-state .dot {
   width: 0.5rem;
   height: 0.5rem;

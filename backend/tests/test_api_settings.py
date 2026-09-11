@@ -648,7 +648,8 @@ def test_three_routes_under_the_bench_prefix_write_and_all_are_declared_inputs()
 
     # And nothing anywhere on this bench takes a key: the three setting routes take
     # the declared inputs of a run and nothing else, and the rest take an attestation,
-    # an approval, a nonce request, or four declarations that are read and not stored.
+    # an approval, a nonce request, four declarations that are read and not stored, or
+    # — since ADR-0114 — no body at all.
     writes = {
         route.path
         for route in app.routes
@@ -667,6 +668,12 @@ def test_three_routes_under_the_bench_prefix_write_and_all_are_declared_inputs()
         RULE_OF_TWO_ROUTE,
         "/runs",
         "/runs/{run_id}/approval",
+        # The one write that ends a spend instead of starting one, since ADR-0114: a
+        # running suite can be stopped. It takes no body at all — not a key, not a
+        # setting, not a declaration — and sets a flag the worker reads where it
+        # authorises its next call, so what it changes is whether the next message is
+        # sent and nothing else.
+        "/runs/{run_id}/stop",
         # The first of the two settings a console may write, since ADR-0025: the
         # attacker's model, its temperature and its reasoning effort, T, k and
         # attempts per case. Every one of them is printed in the report of every run

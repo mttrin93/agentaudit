@@ -254,6 +254,30 @@ class BudgetPayload(TypedDict):
     presented: list[str]
 
 
+class StopRequested(RuntimeError):
+    """An operator stopped this run between one call and the next.
+
+    `BudgetExceeded`'s sibling, and deliberately its own exception rather than a flag
+    on it: a run that reached its ceiling and a run somebody stopped are two different
+    facts about why the spending ended, and the sentence a reader is owed differs. Both
+    settle the run as **aborted**, because what an abort names is a run that stopped
+    rather than finish — the budget working in one case and a person deciding in the
+    other (ADR-0007, ADR-0114).
+
+    Loud on purpose, on `BudgetExceeded`'s own terms: a stopped run measured fewer
+    attempts than the rate it would report is denominated on, so a partial run is void
+    rather than smaller.
+    """
+
+    def __init__(self, layer: Layer, spent: int) -> None:
+        self.layer = layer
+        self.spent = spent
+        super().__init__(
+            f"stopped by the operator with {spent} calls spent in the {layer} layer: "
+            "the next message was not sent"
+        )
+
+
 class BudgetExceeded(RuntimeError):
     """A run stopped rather than spend past what the operator confirmed.
 

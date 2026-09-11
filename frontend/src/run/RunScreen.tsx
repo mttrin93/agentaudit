@@ -41,6 +41,7 @@ import {
   REGISTRATION_REFUSED,
   answerTheInterrupt,
   runProgress,
+  stopTheRun,
   type ApprovalBody,
   type RunEstimate,
   type RunProgress,
@@ -97,6 +98,12 @@ export function RunScreen() {
   const [unavailable, setUnavailable] = useState('')
   const [refused, setRefused] = useState('')
   const [busy, setBusy] = useState(false)
+  /* The stop's own two pieces of state, beside the interrupt's and never folded into
+     them: `busy` is an answer to the halt going out, and this is a second decision made
+     minutes later. A screen that shared one flag would grey the halt's buttons while a
+     stop was in flight. */
+  const [stopping, setStopping] = useState(false)
+  const [refusedStop, setRefusedStop] = useState('')
   const [confirmed, setConfirmed] = useState(false)
   /**
    * When the bench last answered this screen, and what time it is now.
@@ -236,6 +243,28 @@ export function RunScreen() {
     void answer(request.body)
   }
 
+  /**
+   * The second decision this screen can take: stop the suite that is going.
+   *
+   * It reads the run straight back rather than waiting for the next poll, because the
+   * press has to be answered on the screen it was made on — the bench settles the run
+   * on its own thread, so what comes back here is the record as it stands and the
+   * status arrives with the read after it.
+   *
+   * A refusal is the bench's own sentence and is drawn rather than thrown: a run that
+   * reached its end in the instant this was pressed has moved, which is not an error.
+   */
+  const stopTheSuite = async () => {
+    setStopping(true)
+    setRefusedStop('')
+    const outcome = await stopTheRun(runId)
+    if (outcome.kind !== 'answered') {
+      setRefusedStop(outcome.statement)
+    }
+    await read()
+    setStopping(false)
+  }
+
   const at = progress === null ? null : standing(progress)
   const live = liveness({ answeredAt, now: clock, inFlight })
   /**
@@ -363,7 +392,14 @@ export function RunScreen() {
       ) : null}
 
       {at !== null && progress !== null && at.kind !== 'holding' ? (
-        <Progress at={at} progress={progress} episodes={episodes} />
+        <Progress
+          at={at}
+          progress={progress}
+          episodes={episodes}
+          stop={stopTheSuite}
+          stopping={stopping}
+          refusedStop={refusedStop}
+        />
       ) : null}
 
       {progress?.status === REGISTRATION_REFUSED ? (
@@ -525,10 +561,16 @@ function Progress({
   at,
   progress,
   episodes,
+  stop,
+  stopping,
+  refusedStop,
 }: {
   at: Standing
   progress: RunProgress
   episodes: RunEpisodes | null
+  stop: () => Promise<void>
+  stopping: boolean
+  refusedStop: string
 }) {
   /*
    * The standing's own status word and sentence are not drawn.
@@ -585,7 +627,34 @@ function Progress({
         <p className={`run-state ${at.kind}`}>
           <span className="dot" aria-hidden="true" />
           {at.name}
+          {/*
+            The one control on this screen, and only while the run is going.
+
+            **A stop and never a pause** (ADR-0114). It ends the run as an abort: the
+            attempts already made stay on the record, each family is reported over what
+            was attempted, and there is no resuming it — the estimate confirmed at the
+            halt was for a run. Nothing already sent is cancelled; what stops is the
+            message after the one on the wire.
+
+            No confirmation on the press. A halt in front of a spend is worth a dialog
+            and a halt in front of *not* spending is not — the cost of this one is the
+            attempts it does not make.
+
+            The refusal, if the bench refuses, is the bench's own sentence: a run that
+            reached its end in the instant this was pressed has moved, and is not an
+            error to report as one.
+          */}
+          {at.kind === 'running' ? (
+            <button type="button" onClick={() => void stop()} disabled={stopping}>
+              {stopping ? 'Stopping…' : 'Stop this run'}
+            </button>
+          ) : null}
         </p>
+        {refusedStop ? (
+          <p className="aside" role="status">
+            {refusedStop}
+          </p>
+        ) : null}
 
         {/*
           How much of the scored layer's plan has been done, as a bar and as its two

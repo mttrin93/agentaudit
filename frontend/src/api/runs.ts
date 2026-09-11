@@ -428,6 +428,41 @@ export async function answerTheInterrupt(
   return { kind: 'refused', statement }
 }
 
+/**
+ * Ask a running suite to stop. It stops between one call and the next.
+ *
+ * **A stop and never a pause** (ADR-0114). The run ends as *aborted*, the attempts
+ * already made stay on the record, and there is no resuming it — the estimate the
+ * operator confirmed was for a run. Nothing already sent is cancelled: the flag is
+ * read where the bench authorises its next call.
+ *
+ * `answerTheInterrupt`'s outcomes, and for its reasons: a bench that cannot be reached
+ * is not a run that refused, and a `409` — a run at its interrupt, or one that has
+ * already ended — is a run that has moved rather than a request that was wrong. The
+ * caller draws the bench's own sentence either way.
+ */
+export async function stopTheRun(runId: string): Promise<ApprovalOutcome> {
+  let response: Response
+  try {
+    response = await fetch(`/runs/${encodeURIComponent(runId)}/stop`, {
+      method: 'POST',
+    })
+  } catch (unreachable) {
+    return {
+      kind: 'unreachable',
+      statement: `the bench could not be reached to stop this run (${unreachable})`,
+    }
+  }
+  if (response.ok) {
+    return { kind: 'answered', run: (await response.json()) as RunStarted }
+  }
+  const statement = await refusalIn(response)
+  if (response.status === 409) {
+    return { kind: 'no_longer_waiting', statement }
+  }
+  return { kind: 'refused', statement }
+}
+
 /** Where the runs on the record are listed. The path a run is started at, read. */
 export const RUNS_PATH = '/runs'
 

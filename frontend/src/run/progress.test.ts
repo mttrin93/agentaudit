@@ -19,6 +19,7 @@
 import { describe, expect, it } from 'vitest'
 
 import type { RunProgress } from '../api/bench'
+import screen from './RunScreen.tsx?raw'
 import {
   ADAPTIVE_UNITS,
   SCORED_UNITS,
@@ -608,5 +609,34 @@ describe('the last exchange', () => {
     // Before the first attempt comes back there is no exchange, and that is a state
     // rather than an empty card.
     expect(payloads(holdingItsInterrupt())).toEqual([])
+  })
+})
+
+describe('stopping a run that is going', () => {
+  it('is offered while it is running, and never once it has stopped', () => {
+    // The one control on this screen, and it is drawn off the standing rather than off
+    // the status string: `running` is the only kind a stop has anything to stop, and a
+    // button on a settled run would offer to end something that has ended (ADR-0114).
+    expect(screen).toContain("at.kind === 'running'")
+    expect(screen).toContain('Stop this run')
+
+    // And the standing this branches on is the one the rest of the screen reads: a
+    // second derivation of *is this going* would be a button that disagreed with the
+    // dot beside it.
+    expect(standing(inTheScoredLayer()).kind).toBe('running')
+    expect(standing(holdingItsInterrupt()).kind).toBe('holding')
+  })
+
+  it('sends the stop and reads the run back, and never writes a status itself', () => {
+    // The bench settles its own run on its own thread (ADR-0114), so what this screen
+    // does with the answer is read the run again — there is no `setProgress` here
+    // putting a status on the screen that the worker has not written.
+    expect(screen).toContain('stopTheRun(runId)')
+    expect(screen).toContain('await read()')
+
+    // A refusal is drawn as the bench's own sentence: a run that ended in the instant
+    // the button was pressed has moved, which is not an error to report as one.
+    expect(screen).toContain('setRefusedStop(outcome.statement)')
+    expect(screen).not.toContain("setProgress({ ...progress, status: 'aborted'")
   })
 })

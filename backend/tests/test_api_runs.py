@@ -75,7 +75,7 @@ from backend.bench.signing import (
     generate,
 )
 from backend.graph.approval import Approval
-from backend.graph.budget import Layer, RunBudget
+from backend.graph.budget import Layer, RunBudget, StopRequested
 from backend.graph.runstate import RunState
 from backend.targets.reference.model import ModelConfig
 from backend.targets.reference.operator import nonce_planter
@@ -1291,6 +1291,115 @@ def test_an_abort_mid_episode_records_that_episode_as_censored(
         for episode in record.run_state.episodes
     )
     assert record.spent[Layer.ADAPTIVE] <= record.budget.adaptive_ceiling
+
+
+def test_an_operator_can_stop_a_running_suite(leakage_case: Case) -> None:
+    """The second decision an operator makes about a run, minutes after the first.
+
+    **What this asserts is the signal, not the settling.** The worker runs on a thread
+    and a suite this small can finish inside the request that stops it, so a test that
+    demanded `ABORTED` would pass or fail on how fast a reference agent answered. What
+    is deterministic is that the route takes the stop and the run carries it; that the
+    flag ends the run as an abort is `test_a_stop_is_read_before_the_next_call` below,
+    over the one place the flag is read.
+
+    The route answers `200` with the record as it stands — not the record as it will
+    be. Nothing here writes a status: the worker settles its own run, because a status
+    written by the thread serving this request would race the thread that knows what
+    the run actually did (ADR-0114).
+    """
+    with (
+        watched_reference(name="hardened") as watched,
+        api([leakage_case]) as (client, bench),
+    ):
+        nonce = registered(client, watched)
+        started = client.post("/runs", json=a_request(watched.target, nonce)).json()
+        record = _record(bench, started)
+        client.post(
+            f"/runs/{started['run_id']}/approval",
+            json={"confirmed": True, "identity": "operator"},
+        )
+        stopped = client.post(f"/runs/{started['run_id']}/stop")
+        assert stopped.status_code == 200
+        assert record.run_state.stop_requested is True
+        settled(record)
+
+    # Whatever it settled as, every call it made is one it was authorised to make: the
+    # stop is read before a message goes on the wire, so nothing is cancelled in
+    # flight and the counter cannot have run past the ceiling.
+    assert record.spent[Layer.SCORED] <= record.budget.scored_ceiling
+    # And where the stop did land first, the sentence says who ended the run and what
+    # that leaves: figures over what was attempted, which is not a gate result.
+    if "stopped by the operator" in record.statement:
+        assert record.status is RunStatus.ABORTED
+        assert "not a gate result" in record.statement
+        assert "censored, never as resisted" in record.statement
+
+
+def test_a_stop_is_read_before_the_next_call(leakage_case: Case) -> None:
+    """Where the flag is read, and what it does there.
+
+    One place — `authorise_call`, which every message goes through before it is sent —
+    so a stopped run stops *between* one call and the next and never inside one. A flag
+    read in the transport would abandon a call already on somebody's endpoint and leave
+    the record missing an attempt the target had answered (ADR-0114).
+
+    Read before the ceiling, because they are two facts and the operator's happened
+    first: a run stopped in the same instant it would have breached is a run somebody
+    stopped, and the sentence a reader gets says so.
+    """
+    state = RunState(
+        budget=RunBudget.declare(cases=[leakage_case], targets=[a_target()])
+    )
+
+    # Authorised while nothing has been asked of it.
+    state.authorise_call(Layer.SCORED, sends=1)
+
+    state.stop_requested = True
+    with pytest.raises(StopRequested) as stopped:
+        state.authorise_call(Layer.SCORED, sends=1)
+    assert "stopped by the operator" in str(stopped.value)
+    assert stopped.value.layer is Layer.SCORED
+
+    # And it is the stop that is raised even where the ceiling would have refused the
+    # same call: two facts, and this is the one that happened.
+    state.spent[Layer.SCORED] = 10_000
+    with pytest.raises(StopRequested):
+        state.authorise_call(Layer.SCORED, sends=1)
+
+
+def test_a_run_that_is_not_running_cannot_be_stopped(leakage_case: Case) -> None:
+    """Two states this refuses, and the reason they are refused rather than ignored.
+
+    A run still at its interrupt has sent nothing: it is **declined** by answering the
+    halt, and a stop that quietly did that would record a refusal of the estimate as an
+    abort of a run. A run that has ended has nothing to stop, and a `200` would tell a
+    caller their press did something.
+
+    An id this bench never held is a `404` on `_answer_a_recovered_halt`'s own terms: a
+    restart holds no run, and a run this process never started cannot be stopped by it.
+    """
+    with (
+        watched_reference(name="hardened") as watched,
+        api([leakage_case]) as (client, bench),
+    ):
+        nonce = registered(client, watched)
+        started = client.post("/runs", json=a_request(watched.target, nonce)).json()
+        record = _record(bench, started)
+
+        # At its interrupt, which is the state this refusal is most about.
+        assert record.status is RunStatus.AWAITING_APPROVAL
+        assert client.post(f"/runs/{started['run_id']}/stop").status_code == 409
+
+        assert client.post("/runs/not-a-run/stop").status_code == 404
+
+        client.post(
+            f"/runs/{started['run_id']}/approval",
+            json={"confirmed": True, "identity": "operator"},
+        )
+        settled(record)
+        # And ended: whatever it settled as, there is nothing left to stop.
+        assert client.post(f"/runs/{started['run_id']}/stop").status_code == 409
 
 
 def test_a_nonce_starts_one_run_and_no_more(leakage_case: Case) -> None:

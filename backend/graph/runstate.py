@@ -26,7 +26,7 @@ from backend.bench.library import (
     Transform,
     VerdictClass,
 )
-from backend.graph.budget import BudgetExceeded, Layer, RunBudget
+from backend.graph.budget import BudgetExceeded, Layer, RunBudget, StopRequested
 
 
 @dataclass(frozen=True)
@@ -280,6 +280,20 @@ class RunState:
     merge.
     """
 
+    stop_requested: bool = False
+    """Whether an operator has asked this run to stop.
+
+    Set from the thread that serves the API and read by the thread running the suite,
+    which is safe because it is one boolean that only ever goes from false to true: a
+    reader that misses it checks again at the next call, and there is no state a torn
+    read could produce. It is never unset — a stopped run is not resumed, because the
+    estimate an operator confirmed was for a run and not for a run continued later
+    under whatever the settings say by then (ADR-0007, ADR-0114).
+
+    `authorise_call` is the only reader, so the run stops between one message and the
+    next and never inside one.
+    """
+
     attempts: list[Attempt] = field(default_factory=list)
     episodes: list[AdaptiveEpisode] = field(default_factory=list)
     """What the adaptive layer did, in a field of its own.
@@ -350,7 +364,8 @@ class RunState:
         return self.spent[layer]
 
     def authorise_call(self, layer: Layer, sends: int) -> None:
-        """Refuse the next message when the layer's budget cannot cover its worst case.
+        """Refuse the next message when the layer's budget cannot cover its worst case,
+        or when an operator has stopped the run.
 
         Checked before the message goes on the wire rather than after, so a breach
         is a refusal instead of a discovery — a call already sent cannot be
@@ -358,7 +373,20 @@ class RunState:
         plus whatever the last message happened to cost. `sends` is the target's
         retry limit, and the ceiling is built from the same limit, so a run that
         stays inside its own arithmetic is never aborted early.
+
+        **The stop is read here and nowhere else**, which is the whole of why it is
+        safe: this is the one place a call is authorised, so a stopped run stops
+        between one message and the next and never in the middle of one. A flag read
+        inside the transport would abandon a call already on somebody's endpoint, and
+        the record would be missing an attempt the target had already answered
+        (ADR-0114).
+
+        The stop is read before the ceiling, because they are two different facts and
+        the operator's is the one that happened first: a run stopped in the same
+        instant it would have breached is a run somebody stopped.
         """
+        if self.stop_requested:
+            raise StopRequested(layer=layer, spent=self.spent[layer])
         ceiling = self.budget.ceiling(layer)
         if self.spent[layer] + sends > ceiling:
             raise BudgetExceeded(

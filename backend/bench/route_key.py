@@ -82,7 +82,7 @@ class RouteKey:
         joined script is the digest of the probe and keys already filed still resolve
         (ADR-0053).
         """
-        return cls(family=case.family, probe=_digest(case.script))
+        return cls(family=case.family, probe=digest_of(case.script))
 
     @property
     def filed_under(self) -> str:
@@ -94,6 +94,10 @@ class RouteKey:
         return f"{self.family}, probe sha256:{self.probe}"
 
 
-def _digest(text: str) -> str:
-    """A truncated `sha256`, on `Precedent.key`'s terms and at its length."""
+def digest_of(text: str) -> str:
+    """A truncated `sha256`, on `Precedent.key`'s terms and at its length.
+
+    Public, because `decided.criterion_of` mints keys with it from the module next
+    door and a private name imported across a boundary is a boundary in name only.
+    """
     return sha256(text.encode("utf-8")).hexdigest()[:16]

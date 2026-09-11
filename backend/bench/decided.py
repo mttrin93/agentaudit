@@ -57,7 +57,7 @@ from backend.bench.adaptive.proposal import ProposedRoute
 from backend.bench.admission import RejectionKind, kind_of
 from backend.bench.library import AdmissionReading, Case, Family
 from backend.bench.route_key import RouteKey as RouteKey
-from backend.bench.route_key import _digest
+from backend.bench.route_key import digest_of
 from backend.bench.rule import DECLARED_RULE, GateRule
 from backend.bench.store import DatabaseStore
 
@@ -706,7 +706,7 @@ def criterion_of(case: Case) -> str:
     """
     condition = case.success_condition
     judged = case.judged_condition
-    return _digest(
+    return digest_of(
         json.dumps(
             {
                 "success_condition": (

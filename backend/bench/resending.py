@@ -41,21 +41,28 @@ on the `measurability.condition_checkable` path the adaptive layer already uses.
 Neither is a clean run and neither is a fix — an absent endpoint that read as *closed*
 would be the bench reporting somebody's outage as their remediation. Counting the
 clean runs those two outcomes deny is the retirement ticket's; what this module owes
-it is a reading it can count from, which is `HeldReading.counts_a_clean_run`.
+#241 is a reading it can count from, which is `HeldReading.counts_a_clean_run`.
 
-**The budget, and what it does not yet cover.** Every send here is authorised against
-`Layer.SCORED` before it goes on the wire and counted against it after, on the same
-terms as any scored attempt (ADR-0007): a call on the operator's endpoint that no
-counter saw is the one thing that decision forbids outright. What is *not* yet true is
-that the estimate an operator confirms prices these sends — `RunBudget.declare` is
-arithmetic over the case library and the targets and knows nothing about a target
-library, so a run's held routes are spent out of the headroom between the exact suite
-cost and the retry-allowance ceiling. ADR-0117 states the cost (*every run of a target
-gets longer by the number of routes held against it*) and does not price it. This is
-written out rather than absorbed: it is a real gap, it wants its own ticket, and until
-then a target holding more routes than that headroom covers will see its run refused
-at the counter — which is a refusal and not an overspend, and is the direction
-ADR-0007 asks a breach to fail in.
+**The budget, and two things it does not yet do.** Every send here is authorised
+against `Layer.SCORED` before it goes on the wire and counted against it after, on the
+same terms as any scored attempt (ADR-0007): a call on the operator's endpoint that no
+counter saw is the one thing that decision forbids outright, and there is no third
+member of `Layer` to put these in — adding one is a decision no ADR has taken.
+
+Two consequences are real and neither is softened. The first is that
+`spent_in(Layer.SCORED)` now blends the suite's calls with a fenced population's, so
+the *figure* ADR-0007 keeps per layer is less sharp than it was, even though the
+*ceiling* it enforces is unchanged. The second is that the estimate an operator
+confirms does not price these sends at all: `RunBudget.declare` is arithmetic over the
+case library and the targets and knows nothing about a target library, so a run's held
+routes are spent out of the headroom between the exact suite cost and the
+retry-allowance ceiling. ADR-0117 states the cost — *every run of a target gets longer
+by the number of routes held against it* — and does not price it.
+
+Both are recorded rather than absorbed, and both want their own ticket. Until then a
+target holding more routes than that headroom covers has its held sends **refused** at
+the counter, one route at a time, each reading `UNMEASURED`: nothing is overspent, the
+scored suite is untouched, and the run still signs.
 """
 
 from __future__ import annotations
@@ -76,7 +83,7 @@ from backend.bench.held import HELD_ROUTES, HeldRoute, HeldRoutes, HeldState
 from backend.bench.library import SuccessConditionKind
 from backend.bench.measurability import condition_checkable
 from backend.bench.route_key import RouteKey
-from backend.graph.budget import Layer
+from backend.graph.budget import BudgetExceeded, Layer
 from backend.graph.runstate import RunState
 
 
@@ -102,7 +109,8 @@ class HeldOutcome(StrEnum):
     """
 
     UNMEASURED = "unmeasured"
-    """The target could not be reached, so nothing was asked of it.
+    """Nothing was asked of the target: it could not be reached, or a send was
+    refused at the ceiling before it went out.
 
     Not a clean run and not a fix. `measurability.NotMeasurable`'s distinction one
     population out: a rate of zero and an absent endpoint are the same number and
@@ -162,8 +170,8 @@ class HeldReading:
     On the reading rather than derived afterwards, because a **regression** is a
     difference between this state and this outcome — a closed route that broke again
     — and a reader who has only the outcome cannot tell one from a new finding.
-    Reading it is the retirement ticket's; carrying it is this one's, because this is
-    the only moment the two facts are in one place.
+    Reading it is #241's; carrying it is this one's, because this is the only moment
+    the two facts are in one place.
     """
 
     decided_on_turn: int | None = None
@@ -181,7 +189,7 @@ class HeldReading:
         One outcome of the four, and the property exists so that the answer is in one
         place: ADR-0117 §5 makes *unmeasured* and *unmeasurable* count nothing, and a
         second call site writing `is not STILL_OPEN` would close a defect on an
-        outage. The retirement ticket reads this; nothing else does yet.
+        outage. #241 reads this; nothing else does yet.
         """
         return self.outcome is HeldOutcome.CLEAN
 
@@ -207,10 +215,39 @@ class HeldRoutesSent:
     target_name: str
     readings: tuple[HeldReading, ...] = ()
 
+    held: int = 0
+    """How many routes this target's library holds in total, sent or not.
+
+    A count of its own and not `len(readings)`, because those two are the same
+    number only until something closes. A closed route is **kept** and is not sent
+    (ADR-0117 §5), so a target every one of whose routes has been fixed would have
+    no readings — and a block that read that as *nothing has been found yet* would
+    print an operator's fixes as an absence, which is the opposite of the sentence
+    they paid for.
+
+    Counting the closed ones is the retirement ticket's (#241) and printing them is
+    the report block's (#242). Carrying the total is this one's, because this is the
+    only object either of them will have.
+    """
+
+    def __post_init__(self) -> None:
+        if self.held < len(self.readings):
+            raise ValueError(
+                f"{self.target_name!r} sent {len(self.readings)} held route(s) out "
+                f"of a library of {self.held}. Every reading is a route that was "
+                "held, so a total below the count of them is a figure that "
+                "contradicts the readings printed beside it"
+            )
+
     @property
     def holds_nothing(self) -> bool:
-        """Whether this target's library is empty, said rather than inferred."""
-        return not self.readings
+        """Whether this target's library is empty, said rather than inferred.
+
+        Read off the total and never off the readings: an empty library and a
+        library whose every route is closed are two different facts, and the second
+        is a target whose operator fixed everything.
+        """
+        return self.held == 0
 
     @property
     def sent(self) -> int:
@@ -251,17 +288,18 @@ def send_held_routes(
 
     Closed routes are not sent, on ADR-0117 §5 — a route past the window that is
     still sent costs the operator a probe on every run for a defect the bench has
-    already answered. Nothing closes one yet: the retirement ticket is what moves a
-    record into that state, and until it lands this filter is the guard rather than
-    the behaviour.
+    already answered. Nothing closes one yet: #241 is what moves a record into that
+    state, and until it lands this filter is the guard rather than the behaviour.
     """
+    library = held.for_target(target.name)
     return HeldRoutesSent(
         target_name=target.name,
         readings=tuple(
             _read(route, target, run_state, canary, reachable=reachable)
-            for route in held.for_target(target.name)
+            for route in library
             if route.state is HeldState.OPEN
         ),
+        held=len(library),
     )
 
 
@@ -284,6 +322,19 @@ def _read(
         # take a signed report down with it. Nothing off the exception reaches the
         # record — its message names the endpoint url, which is the one identifier
         # a record never carries (ADR-0011).
+        return _reading(route, target, HeldOutcome.UNMEASURED)
+    except BudgetExceeded:
+        # The same reading, for the second way a route can go unasked, and caught
+        # for a sharper version of the same reason. `authorise_call` refuses
+        # **before** the message goes on the wire, so nothing was spent and no
+        # ceiling was exceeded — what happened is that a send was refused. Letting
+        # that propagate would abort the whole suite, which on the first of three
+        # targets means two targets whose scored attempts were never made: a held
+        # route would have cost the run the measurement it is fenced from. The
+        # refusal is still visible where ADR-0007 puts it, in the layer's counters.
+        #
+        # `StopRequested` is deliberately **not** caught. It is not a ceiling, it is
+        # the operator, and a run somebody stopped stops (ADR-0114).
         return _reading(route, target, HeldOutcome.UNMEASURED)
     return _verdict(route, target, transcripts, canary)
 

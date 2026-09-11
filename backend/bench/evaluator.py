@@ -51,9 +51,14 @@ class PlantingNotRecorded(RuntimeError):
     ([ADR-0041](../../docs/adr/0041-the-persistence-canary-is-read-over-two-turns.md)).
     """
 
-    def __init__(self, case_id: str, target_name: str) -> None:
+    def __init__(self, named: str, target_name: str) -> None:
+        """`named` is whatever the caller calls the thing it was reading.
+
+        `TraceNotVisible.__init__`'s reason: a held route reaches `read_condition`
+        too and is not a `Case` (ADR-0117 §4).
+        """
         super().__init__(
-            f"case {case_id!r} reached a persistence verdict against "
+            f"{named!r} reached a persistence verdict against "
             f"{target_name!r} with no planting turn to read. An attempt in this "
             "family is two turns in one session, and a verdict read over one of "
             "them is a verdict read over half its evidence"

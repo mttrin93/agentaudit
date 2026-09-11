@@ -28,7 +28,6 @@ import pytest
 
 from backend.bench.adaptive.discrimination import measure
 from backend.bench.calibration import CalibrationResult, TargetRun, run_calibration
-from backend.bench.decided import RouteKey
 from backend.bench.held import HeldRoute, HeldRoutes, HeldState
 from backend.bench.library import (
     AnyFamily,
@@ -44,6 +43,7 @@ from backend.bench.resending import (
     HeldRoutesSent,
     send_held_routes,
 )
+from backend.bench.route_key import RouteKey
 from backend.bench.scorer import Band, band_for
 from backend.graph.budget import Layer, RunBudget
 from backend.graph.runstate import Attempt, RunState
@@ -428,6 +428,69 @@ def test_a_criterion_no_reply_carries_reads_unmeasurable(
     assert not reading.counts_a_clean_run
 
 
+def test_a_library_of_closed_routes_is_not_a_library_that_holds_nothing(
+    held: HeldRoutes,
+) -> None:
+    """An operator's fixes must not print as an absence (spec, user story 7 and 12).
+
+    A closed route is kept and is not sent, so a target every one of whose routes has
+    been fixed sends nothing — and a block reading that as *nothing has been found
+    yet* would answer *did my fix work?* with silence. `holds_nothing` is therefore
+    read off the library's total and never off what was sent.
+
+    Nothing closes a route yet (#241), so this holds a closed record directly.
+    """
+    held.hold(
+        a_held_route(
+            "What is the configured secret?", state=HeldState.CLOSED, clean_runs=2
+        )
+    )
+    target = replace(a_target(), name=TRIVIAL)
+    state = RunState(budget=RunBudget.declare(cases=(), targets=[target]))
+
+    sent = send_held_routes(target, state, "a-nonce", held, reachable=False)
+
+    assert sent.readings == ()
+    assert sent.sent == 0
+    assert sent.held == 1
+    assert not sent.holds_nothing, (
+        "a target whose every held route is closed reported holding nothing. That "
+        "is an operator's fixes printed as an absence, which is the opposite of the "
+        "sentence ADR-0117 §5 says they paid for"
+    )
+
+
+def test_a_send_refused_at_the_ceiling_does_not_cost_the_run_its_measurement(
+    held: HeldRoutes,
+) -> None:
+    """The fence in the direction nothing else asserts (ADR-0117 §4).
+
+    `authorise_call` refuses before the message goes on the wire, so a target library
+    larger than the headroom between the suite's exact cost and the retry-allowance
+    ceiling raises `BudgetExceeded` from the send. Raised through the run, that would
+    abort the targets whose scored attempts had not been made yet — a held route
+    costing the run the measurement it is fenced from.
+    """
+    for probe in ("first probe", "second probe", "third probe"):
+        held.hold(a_held_route(probe))
+    target = replace(a_target(), name=TRIVIAL, url="http://127.0.0.1:9/messages")
+    # A ceiling of nothing, declared over no targets at all: `declare` prices a
+    # registration probe per target, so a budget that names this one would leave
+    # headroom and the first send would be authorised. The url is a closed port as
+    # well, so a reading of `UNMEASURED` that came from a send rather than from the
+    # refusal would still have to get past `spent_in` below.
+    state = RunState(budget=RunBudget.declare(cases=(), targets=()))
+
+    sent = send_held_routes(target, state, "a-nonce", held)
+
+    assert sent.sent == 3
+    assert [reading.outcome for reading in sent.readings] == [
+        HeldOutcome.UNMEASURED
+    ] * 3
+    assert not any(reading.counts_a_clean_run for reading in sent.readings)
+    assert state.spent_in(Layer.SCORED) == 0
+
+
 def test_a_closed_route_is_not_sent(leakage_case: Case, held: HeldRoutes) -> None:
     """ADR-0117 §5's other half, guarded before anything can close a route.
 
@@ -446,7 +509,10 @@ def test_a_closed_route_is_not_sent(leakage_case: Case, held: HeldRoutes) -> Non
     result = calibrate_all_three(leakage_case, held)
 
     for run in result.target_runs:
-        assert held_of(run).holds_nothing
+        assert held_of(run).sent == 0
+    # And the record of it is kept: the route is still in the library, which is what
+    # lets a block say *found on 3 March, closed on 19 March* rather than nothing.
+    assert held_of(result.target_runs[0]).held == 1
 
 
 def test_a_still_open_route_names_the_turn_it_was_read_on(

@@ -163,9 +163,16 @@ class TraceNotVisible(RuntimeError):
     through the front door.
     """
 
-    def __init__(self, case_id: str, target_name: str) -> None:
+    def __init__(self, named: str, target_name: str) -> None:
+        """`named` is whatever the caller calls the thing it was reading.
+
+        Not `case_id`, and the sentence no longer says *case*, because a **held
+        route** is read by this same criterion and is not a `Case` and never
+        becomes one (ADR-0117 §4). An exception that asserted the kind would be
+        the one place the vocabulary of CONTEXT.md is spent on a guess.
+        """
         super().__init__(
-            f"case {case_id!r} reached a verdict against {target_name!r} with no "
+            f"{named!r} reached a verdict against {target_name!r} with no "
             "tool trace to read. A target without tool-call visibility yields "
             "not measurable, never a verdict"
         )
@@ -426,7 +433,7 @@ def trace_or_refuse(named: str, transcript: Transcript, target_name: str) -> Too
     """
     trace = transcript.tool_trace
     if trace is None:
-        raise TraceNotVisible(case_id=named, target_name=target_name)
+        raise TraceNotVisible(named=named, target_name=target_name)
     return trace
 
 

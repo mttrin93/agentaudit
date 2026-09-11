@@ -72,6 +72,7 @@ from backend.bench.attacker import run_case
 from backend.bench.contract import TargetConfig, TargetUnreachable
 from backend.bench.evaluator import Verdict
 from backend.bench.filing import Filing, file_precedent
+from backend.bench.held import HELD_ROUTES, HeldRoutes
 from backend.bench.judge import Disagreement, Finding
 from backend.bench.library import (
     AnyFamily,
@@ -125,6 +126,7 @@ from backend.bench.registration import (
     endpoint_hash,
     register,
 )
+from backend.bench.resending import HeldRoutesSent, send_held_routes
 from backend.bench.rule import DECLARED_RULE, GateRule
 from backend.bench.scorer import (
     IN_TRANSFORM_ORDER,
@@ -229,6 +231,26 @@ class TargetRun:
     Per case rather than per family, because a family can have some cases that
     apply and some that do not, and the rate over the ones that ran is a real
     number that a family-level skip would have to overwrite.
+    """
+
+    held_routes: HeldRoutesSent | None = None
+    """This target's target library, as this run read it — or `None` for a record
+    that never reached it.
+
+    A fifth field beside the four above, and not a value inside any of them, for
+    exactly their reason and one more:
+    [ADR-0117](../../docs/adr/0117-a-refused-break-is-held-against-the-target-it-beat-and-is-scored-beside-the-six.md)
+    §4 puts held routes on a denominator of their own, and a reading of one that
+    could be reached from `attempts` or from `rates` would be that denominator
+    joined to the six by a field name. Nothing in `rates`, `variant_counts` or
+    `findings` reads this, and `gate.family_rates` cannot see it at all.
+
+    Three readings, the same three `narrations` keeps apart. `None` is a target run
+    that never asked — a hand-built record, or a caller from before there were target
+    libraries. `HeldRoutesSent` with no readings is a target that **holds nothing**,
+    which is *nothing has been found against this agent yet* and is a fact rather
+    than a block that failed to render. A populated one is every open route that was
+    sent, each with its own four-valued outcome.
     """
 
     narrations: Narrations = None
@@ -784,6 +806,7 @@ def run_calibration(
     narrator: Narrator | None = None,
     attacker: AttackerCompletion = SCRIPTED_ATTACKER,
     precedent: DurablePrecedents = DURABLE_PRECEDENT,
+    held: HeldRoutes = HELD_ROUTES,
     rule: GateRule = DECLARED_RULE,
     adaptive: AdaptiveBudget = DECLARED_ADAPTIVE_BUDGET,
     selection: AttackSelection = EVERY_CONSTRUCTION,
@@ -948,6 +971,7 @@ def run_calibration(
                     adjudicator=adjudicator,
                     narrator=narrator,
                     precedent=precedent,
+                    held=held,
                     rule=rule,
                     planted=(planted_nonces or {}).get(target.name),
                     planter=(planters or {}).get(target.name),
@@ -1083,6 +1107,7 @@ def _run_target(
     adjudicator: Completion | None,
     narrator: Narrator | None,
     precedent: PrecedentStore,
+    held: HeldRoutes,
     rule: GateRule,
     planted: str | None,
     namespace: str,
@@ -1200,10 +1225,31 @@ def _run_target(
             )
         )
 
+    # **And only then the target library**, after every scored attempt against this
+    # target has been made. Strictly after, and for ADR-0010's ordering reason
+    # applied to a third population: a held route is a confirmed break — a probe
+    # known to work on this agent — and one sent before the suite would put every
+    # scored attempt after it against a target this run had already broken. The
+    # denominator would still be correct and the number would be about something
+    # else, which is the failure `test_layer_ordering.py` exists to catch for the
+    # adaptive layer.
+    #
+    # The registration's own answer decides whether anything goes on the wire, and
+    # the nonce it proved control with is the canary, exactly as the scored loop
+    # above uses it: one planted value, two roles (ADR-0007) — three now.
+    held_routes = send_held_routes(
+        target,
+        run_state,
+        registration.nonce,
+        held,
+        reachable=registration.complete,
+    )
+
     return TargetRun(
         target=target,
         registration=registration,
         attempts=attempts,
+        held_routes=held_routes,
         rule=rule,
         plantings=plantings,
         # Read over the cases written for this target, never over the whole

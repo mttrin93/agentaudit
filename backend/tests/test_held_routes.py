@@ -155,9 +155,18 @@ def test_the_provenance_census_prints_six_members_in_declaration_order() -> None
         line for line in stated.splitlines() if line.startswith("provenance of")
     )
     printed = [member for member in DiscoveredBy if f"{member} 0" in live]
+    named = sorted(printed, key=lambda member: live.index(str(member)))
 
-    assert printed == list(DiscoveredBy)
-    assert live.index("target_specific") > live.index("adaptive_on_target")
+    # Against a literal rather than against `list(DiscoveredBy)`, which is the
+    # sequence the line is built from and so would agree with it however it moved.
+    assert [str(member) for member in named] == [
+        "authored",
+        "adaptive",
+        "user_gap",
+        "retrieved",
+        "adaptive_on_target",
+        "target_specific",
+    ]
     assert "retirement rate, target_specific: none written" in stated
 
 

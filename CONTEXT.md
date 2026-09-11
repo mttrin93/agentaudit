@@ -605,13 +605,21 @@ agents were never in its discovery loop, so the selection pressure the second ba
 counters is not acting on it. Declared by whoever built the target and never sniffed
 from it, because a bar derived from a URL or a fixture's name is a bar that moves when
 somebody renames a fixture (ADR-0107 §3).
+**The enum has a sixth member and it is not a case provenance.** `target_specific`
+belongs to a route the bar *refused*, held against the target it beat and scored on a
+denominator of its own
+([ADR-0117](./docs/adr/0117-a-refused-break-is-held-against-the-target-it-beat-and-is-scored-beside-the-six.md)).
+No case record may carry it: it selects no **admission** bar, because a held route
+faces no `D` at all, and `bar_for` refuses it rather than answering — so the five
+above are still every provenance a **case** has. It is declared last for ADR-0107 §1's
+reason, which is that the provenance census prints in declaration order.
 Not a **trigger**, which is *why* the case exists, and the two are deliberately
 independent in all but one direction. Not a **provenance block** either, which is the
 part of a **signed report** recording who ran it — that is about a run and this is about
 a case, and no type carries both.
 _Avoid_: origin, discovered_by (in prose), where the case came from, *the adaptive
 provenance* (there are two), using `adaptive` for a route found against a customer's
-agent
+agent, calling `target_specific` a case's provenance
 
 **Trigger**:
 The stated reason a case was added to the library. One of seven — PLAN §6's six, plus

@@ -77,7 +77,7 @@ select = ["E", "F", "I", "UP", "B"]
 # B008 is about defaults that are evaluated once and shared by accident; this one is
 # the framework's own idiom and the call is what the framework reads.
 [tool.ruff.lint.flake8-bugbear]
-extend-immutable-calls = ["fastapi.Depends", "fastapi.Query", "fastapi.Header"]
+extend-immutable-calls = ["fastapi.Depends"]
 
 # The reference agents' system prompt is content sent to a model, not code.
 # Rewrapping it to satisfy a line limit would change what the agents are sent.

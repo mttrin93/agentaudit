@@ -6194,16 +6194,12 @@ def deployed_verifier() -> Verifier:
 NOBODY_VERIFIED: Final = Operator(subject="an operator this bench did not verify")
 """Who a bench that declared `NO_DOOR` records a request against.
 
-Every record this API makes names an operator and `Attestation` refuses a blank one,
-so an app serving every route to anybody still has to put something in the field. It
-puts this: a sentence that names nobody and says that nobody was named, which is the
-one true statement available and which reads as what it is in a signed report (ADR-0116
-§1 — the field says what established it, and here nothing did).
-
-Not a name, not `anonymous`, and deliberately not the string a caller sent: a bench
-with no door is exactly the deployment where a body's `identity` would be unchecked,
-so honouring it there is the failure this ticket exists to prevent, with the door open
-as the excuse.
+[ADR-0122](../../docs/adr/0122-a-bench-with-no-door-records-that-it-verified-nobody.md)
+decides that it is a stated sentence and which one, and weighs the three alternatives;
+none of that is re-argued here. The local consequence, which is why the constant
+exists at all: `Attestation` refuses a blank identity, so an app that serves every
+route to anybody still has to put something in the field, and this is the only true
+thing it has to put there.
 """
 
 
@@ -6339,6 +6335,9 @@ def create_app(
     # already established. FastAPI caches a dependency per request by the callable
     # it is, so those routes read the verification the router made rather than a
     # second one (ADR-0116 §1 — the name is read where the door read it).
+    # `isinstance` and not the `is NO_DOOR` a line above, on the same value: the two
+    # spellings answer one question and only this one narrows the union for the type
+    # checker, which is what lets `admitting` be handed a `Verifier`.
     asking = (
         nobody_verified if isinstance(verifier, DeclaredDoor) else admitting(verifier)
     )

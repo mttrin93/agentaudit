@@ -219,14 +219,15 @@ export function confirmationRequest(declared: Confirming): ConfirmationRequest {
         'they are, and nothing has been sent to the target',
     )
   }
-  // No requirement here that somebody type a name, because no field asks for one.
-  // The run is still charged to whoever confirms it and the bench still writes
-  // `confirmed by <name>` into the run's own sentence, so the name is carried from
-  // the registration that made the run — the attestation is signed by a person and
-  // this is the same person, two screens later, in the same browser. When it is not
-  // held the body goes with an empty identity and the bench's sentence names nobody,
-  // which is a worse record and not a blocked one: what this function guards is the
-  // spend, and a missing name is not a reason to make declining the easier answer.
+  // No requirement here that somebody type a name, and now no name on the body
+  // either. The bench still writes `confirmed by <name>` into the run's own sentence
+  // and it reads that name from the token the request carried, not from anything this
+  // screen holds (ADR-0116 §1) — so the sentence this comment used to end with, that
+  // an unheld name went as an empty identity and left the bench naming nobody, is a
+  // state that no longer exists. What this function guards is the spend, and it is
+  // the one function on this surface that must never block for want of a name: an
+  // interrupt that is harder to confirm than to decline is a consent surface pushing
+  // an answer.
   if (missing.length) {
     return { kind: 'withheld', missing }
   }

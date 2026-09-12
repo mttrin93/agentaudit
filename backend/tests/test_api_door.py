@@ -53,6 +53,9 @@ name, which is the distinction `identity.Operator` exists to keep."""
 
 TOKEN = "a-token-this-stub-accepts"
 
+AUTHORIZED = {"Authorization": f"Bearer {TOKEN}"}
+"""The header an operator the stub below admits arrives with."""
+
 GATE_ROUTE = "/bench/gate"
 """The route the door tests address. Chosen because it reaches no bench state and
 spends nothing: what is under test is whether the request arrived, not what the
@@ -399,8 +402,10 @@ def a_run_that_names_nobody(nonce: str) -> dict[str, object]:
 
 def _started(client: TestClient, headers: dict[str, str]) -> str:
     """One run, halted at its interrupt, started by whoever those headers are."""
-    nonce = str(client.post("/nonces", headers=headers).json()["nonce"])
-    started = client.post("/runs", json=a_run_that_names_nobody(nonce), headers=headers)
+    nonce = str(client.post("/nonces", headers=AUTHORIZED).json()["nonce"])
+    started = client.post(
+        "/runs", json=a_run_that_names_nobody(nonce), headers=AUTHORIZED
+    )
     assert started.status_code == 202, started.json()
     return str(started.json()["run_id"])
 
@@ -433,14 +438,13 @@ def test_a_run_is_attested_by_the_subject_the_token_was_verified_as(
     come from is the header the door read.
     """
     app = a_bench_behind_a_door(leakage_case, Admits())
-    headers = {"Authorization": f"Bearer {TOKEN}"}
 
     with TestClient(app) as client:
-        run_id = _started(client, headers)
+        run_id = _started(client, AUTHORIZED)
         client.post(
             f"/runs/{run_id}/approval",
             json={"confirmed": False, "reason": "the test that started this is over"},
-            headers=headers,
+            headers=AUTHORIZED,
         )
 
     assert _record(app, run_id).attestation.identity == SUBJECT
@@ -456,14 +460,13 @@ def test_the_answer_to_an_interrupt_is_recorded_against_the_same_subject(
     token and never off the body.
     """
     app = a_bench_behind_a_door(leakage_case, Admits())
-    headers = {"Authorization": f"Bearer {TOKEN}"}
 
     with TestClient(app) as client:
-        run_id = _started(client, headers)
+        run_id = _started(client, AUTHORIZED)
         answered = client.post(
             f"/runs/{run_id}/approval",
             json={"confirmed": False, "reason": "too dear"},
-            headers=headers,
+            headers=AUTHORIZED,
         )
 
     assert answered.status_code == 200
@@ -480,18 +483,17 @@ def test_a_start_body_that_still_names_an_operator_is_refused(
     named it, and nothing anywhere would say the two disagreed.
     """
     app = a_bench_behind_a_door(leakage_case, Admits())
-    headers = {"Authorization": f"Bearer {TOKEN}"}
 
     with TestClient(app) as client:
-        nonce = str(client.post("/nonces", headers=headers).json()["nonce"])
+        nonce = str(client.post("/nonces", headers=AUTHORIZED).json()["nonce"])
         body = a_run_that_names_nobody(nonce)
         body["attestation"] = {"identity": "somebody else", **ATTESTED}
-        refused = client.post("/runs", json=body, headers=headers)
+        refused = client.post("/runs", json=body, headers=AUTHORIZED)
 
         assert refused.status_code == 422
         assert "identity" in str(refused.json()["detail"])
         # And no run was started by the request that was refused.
-        assert client.get("/runs", headers=headers).json()["runs"] == []
+        assert client.get("/runs", headers=AUTHORIZED).json()["runs"] == []
 
 
 def test_an_approval_body_that_still_names_an_operator_is_refused(
@@ -503,14 +505,13 @@ def test_an_approval_body_that_still_names_an_operator_is_refused(
     the run is neither confirmed nor declined by it.
     """
     app = a_bench_behind_a_door(leakage_case, Admits())
-    headers = {"Authorization": f"Bearer {TOKEN}"}
 
     with TestClient(app) as client:
-        run_id = _started(client, headers)
+        run_id = _started(client, AUTHORIZED)
         refused = client.post(
             f"/runs/{run_id}/approval",
             json={"confirmed": True, "identity": "somebody else", "reason": ""},
-            headers=headers,
+            headers=AUTHORIZED,
         )
 
         assert refused.status_code == 422
@@ -520,7 +521,7 @@ def test_an_approval_body_that_still_names_an_operator_is_refused(
         client.post(
             f"/runs/{run_id}/approval",
             json={"confirmed": False, "reason": "the test that started this is over"},
-            headers=headers,
+            headers=AUTHORIZED,
         )
 
 
@@ -530,8 +531,9 @@ def test_a_bench_with_no_door_records_that_it_verified_nobody(
     """The declared-open reading, which still has to put something in the field.
 
     `Attestation` refuses a blank identity, so a bench that verified nobody says so
-    in the words `NOBODY_VERIFIED` carries rather than borrowing a name from the
-    body it no longer reads.
+    in the words `NOBODY_VERIFIED` carries rather than borrowing a name from the body
+    it no longer reads
+    ([ADR-0122](../../docs/adr/0122-a-bench-with-no-door-records-that-it-verified-nobody.md)).
     """
     app = a_bench_behind_a_door(leakage_case, NO_DOOR)
 

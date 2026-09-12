@@ -235,11 +235,6 @@ used on anyone's agent. A case that drops below `0.25` on two gate runs is
 retired — marked, never deleted, because a case that stopped working is evidence
 that models moved.
 
-One honest wrinkle: for disclosure denial, even an undefended agent refuses to
-deny being an AI, because the model providers trained that in. So the trivial
-agent is explicitly told to present itself as a person. Without that, the family
-would separate nothing and we would be measuring a provider's default.
-
 **The judge is measured too.** Two families are decided by a model reading a
 reply, so that model is checked like any other instrument. We hand-labelled 15
 replies per judged family — 30 in all — before the bench had a user. DeepEval

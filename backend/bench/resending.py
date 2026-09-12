@@ -40,8 +40,8 @@ reports `UNMEASURED` and a criterion the evaluator cannot read reports `UNMEASUR
 on the `measurability.condition_checkable` path the adaptive layer already uses.
 Neither is a clean run and neither is a fix — an absent endpoint that read as *closed*
 would be the bench reporting somebody's outage as their remediation. Counting the
-clean runs those two outcomes deny is the retirement ticket's; what this module owes
-#241 is a reading it can count from, which is `HeldReading.counts_a_clean_run`.
+clean runs those two outcomes deny is `closing.py`'s; what this module owes it is a
+reading it can count from, which is `HeldReading.counts_a_clean_run`.
 
 **The budget, and two things it does not yet do.** Every send here is authorised
 against `Layer.SCORED` before it goes on the wire and counted against it after, on the
@@ -171,8 +171,7 @@ class HeldReading:
     On the reading rather than derived afterwards, because a **regression** is a
     difference between this state and this outcome — a closed route that broke again
     — and a reader who has only the outcome cannot tell one from a new finding.
-    Reading it is #241's; carrying it is this one's, because this is the only moment
-    the two facts are in one place.
+    Carried here because this is the only moment the two facts are in one place.
     """
 
     decided_on_turn: int | None = None
@@ -190,7 +189,7 @@ class HeldReading:
         One outcome of the four, and the property exists so that the answer is in one
         place: ADR-0117 §5 makes *unmeasured* and *unmeasurable* count nothing, and a
         second call site writing `is not STILL_OPEN` would close a defect on an
-        outage. #241 reads this; nothing else does yet.
+        outage. `closing._counted` is what reads it.
         """
         return self.outcome is HeldOutcome.CLEAN
 
@@ -226,9 +225,9 @@ class HeldRoutesSent:
     print an operator's fixes as an absence, which is the opposite of the sentence
     they paid for.
 
-    Counting the closed ones is the retirement ticket's (#241) and printing them is
-    the report block's (#242). Carrying the total is this one's, because this is the
-    only object either of them will have.
+    Counting the closed ones is `closing.py`'s and printing them is the report
+    block's (#242). Carrying the total is this one's, because this is the only object
+    either of them will have.
     """
 
     def __post_init__(self) -> None:
@@ -289,8 +288,9 @@ def send_held_routes(
 
     Closed routes are not sent, on ADR-0117 §5 — a route past the window that is
     still sent costs the operator a probe on every run for a defect the bench has
-    already answered. Nothing closes one yet: #241 is what moves a record into that
-    state, and until it lands this filter is the guard rather than the behaviour.
+    already answered. `closing.count_clean_runs` is what moves a record into that
+    state, off the readings this returns, so the filter and the write are the two
+    halves of one window.
     """
     library = held.for_target(target.name)
     return HeldRoutesSent(

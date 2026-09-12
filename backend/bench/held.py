@@ -399,6 +399,13 @@ class HeldRoute:
         Closing is a state and never a deletion. Everything the record carried is
         carried on: the run that found it, the attacker's description, and the
         payload the route would be re-sent with if it ever reopened.
+
+        A route closing for the second time takes the second run's id and the first
+        is not kept. One field, because what a reader of a report is asking is *did
+        my fix work* and the answer is about the closing that stands; that this
+        record has been round the loop before is `reopened_in`, which is kept. A
+        full history of closings and returns is a series and not a field, and no
+        ADR has decided the bench should hold one.
         """
         counted = self.clean_runs + 1
         if counted < CLEAN_RUNS_TO_CLOSE:
@@ -427,6 +434,13 @@ class HeldRoute:
         pair of a closing and a return. `found_in` is untouched for the same reason:
         this is the same finding coming back, which is what distinguishes it from a
         new one.
+
+        The rediscovery's own description and payload are **not** taken. The route
+        is keyed on a digest of the probe, so a record this reopens is a record of
+        the same probe, and the attacker's account of what it did is an account of
+        the same break — a later run's rephrasing of it would overwrite the words
+        the operator was first shown for no gain. The run that brought it back is
+        `reopened_in`, which is where a reader goes for the rest.
         """
         return replace(self, state=HeldState.OPEN, clean_runs=0, reopened_in=run_id)
 
@@ -564,9 +578,9 @@ class HeldRoutes:
         """Write this record over the one held under the same key.
 
         The write `hold` deliberately is not, and the two are separated for that
-        reason: `hold` answers *has this route been found before?* and must not
-        touch what it finds, while this is a record that has already been read,
-        counted and moved by one of `HeldRoute`'s own transitions. Anything
+        reason: `hold` answers *has this route been found before?* and leaves an
+        open record exactly as it found it, while this is a record that has already
+        been read, counted and moved by one of `HeldRoute`'s own transitions. Anything
         contradictory the caller composed was refused by the record before it got
         here, so what this may write is bounded by the type and not by this method.
         """

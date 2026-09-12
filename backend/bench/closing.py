@@ -65,6 +65,8 @@ class Closing:
     """
 
     target_name: str
+    """The agent whose library this run counted into, which is the scope of it all."""
+
     closed: tuple[RouteKey, ...] = ()
     """Every route this run's second consecutive clean reading closed."""
 

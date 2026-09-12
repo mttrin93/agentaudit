@@ -40,7 +40,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from backend.bench.held import HELD_ROUTES, HeldRoute, HeldRoutes, HeldState
+from backend.bench.held import HELD_ROUTES, HeldRoute, HeldRoutes
 from backend.bench.library import Case, VerdictClass, found_by_the_attacker
 from backend.bench.pending import AwaitingDecision, RouteState
 
@@ -109,8 +109,6 @@ def hold_refused(
     if refusal is not None:
         return Holding(None, refusal)
     already = routes.held(record.target, record.route)
-    if already is not None and already.state is not HeldState.CLOSED:
-        return Holding(already, _already(already))
     try:
         held = routes.hold(_route_from(record))
     except Exception as refused:  # noqa: BLE001 - never fails a decision
@@ -123,6 +121,14 @@ def hold_refused(
             ),
         )
     if already is not None:
+        # Which of the two sentences is decided by what the store did rather than by
+        # a second reading of the state: `hold` leaves an open record exactly as it
+        # found it and reopens a closed one, so the record coming back unchanged is
+        # the rediscovery and a changed one is the regression. Asking the state here
+        # as well would be one fact in two modules, and the day they disagreed the
+        # operator's row would describe a write that did not happen.
+        if held == already:
+            return Holding(already, _already(already))
         return Holding(held, _reopened(held, already, approved_by))
     return Holding(
         held,
@@ -139,11 +145,11 @@ def hold_refused(
 def _reopened(held: HeldRoute, was: HeldRoute, approved_by: str) -> str:
     """What a rediscovery of a **closed** route says, and it says regression.
 
-    The one case where a rediscovery writes: a closed route is not sent, so no run
-    can read one breaking again, and the only way the bench learns that a fixed
-    defect came back is that the attacker walks the path again and a person decides
-    it again. Reopened rather than filed afresh, because a new record would lose
-    both dates and report a regression as a new finding (ADR-0117 §5).
+    ADR-0117 §5 decides that a closed route which breaks again reads as a regression
+    and `HeldRoutes.hold` performs it; what is local here is the sentence, and it
+    carries both dates because this is the row an operator reads and a row that sent
+    them to a document for *when did this close?* would be a row that could have just
+    told them (`_one_door`).
     """
     return (
         f"{held.route.stated()} is held against {held.target} again on the approval "

@@ -5,6 +5,7 @@ description = "An adversarial test bench for AI agents, with a signed evidence r
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "clerk-backend-api>=7.0.0",
     "cryptography>=50.0.0",
     "deepeval>=4.1.8",
     "fastapi>=0.141.1",
@@ -47,6 +48,12 @@ dev = [
     # every version through 4.6.0 passes, 4.6.1 and 4.6.2 fail before reaching
     # a hook. Raise the cap once the floor for git here is 2.31.
     "pre-commit>=4.4.0,<4.6.1",
+    # `backend/tests/test_identity.py` mints its own RS256 tokens, which is what
+    # lets the verifier seam be tested with no account at any issuer and no
+    # network. It arrives anyway as a dependency of `clerk-backend-api`; declared
+    # here because a test that imports a library its project never named breaks
+    # on somebody else's release notes.
+    "pyjwt>=2.10",
     "pytest>=9.1.1",
     "ruff>=0.14",
 ]

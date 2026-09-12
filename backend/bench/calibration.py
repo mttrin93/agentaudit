@@ -127,6 +127,7 @@ from backend.bench.registration import (
     endpoint_hash,
     register,
 )
+from backend.bench.reporting import HeldBlock, held_block
 from backend.bench.resending import HeldRoutesSent, send_held_routes
 from backend.bench.rule import DECLARED_RULE, GateRule
 from backend.bench.scorer import (
@@ -269,6 +270,22 @@ class TargetRun:
     Counts and keys and no rate, for `held_routes`'s reason and with the same force.
     Nothing reads it yet — the report block is #242 — and it is carried here because
     this is the only moment the run and the write are in one place.
+    """
+
+    held_block: HeldBlock | None = None
+    """That library and that write, as the block a reader is shown — or `None`.
+
+    The third of the three held-route fields, and the only one anything outside this
+    module reads: `held_routes` is what this run *read*, `closing` is what the library
+    *became*, and this is what a report *says* about the two. It exists as a third
+    field rather than as a property because building it takes the store — a closed
+    route is not sent, so the run's readings alone can never produce *found on 3
+    March, closed on 19 March* — and this record holds no store.
+
+    Carries no payload, no criterion and no attacker prose: it is `reporting.HeldBlock`
+    precisely so that the thing travelling towards `payload.document` is a record with
+    nowhere for any of those to sit
+    ([ADR-0008](../../docs/adr/0008-repo-disclosure-posture.md), ADR-0117 §4).
     """
 
     narrations: Narrations = None
@@ -1285,12 +1302,21 @@ def _run_target(
     # yet — the block that prints it is #242.
     closing = count_clean_runs(held_routes, run_id=run_id, routes=held)
 
+    # And the two of them as a report states them, which is the only one of the three
+    # anything downstream reads (#242). After the count and never before it: the state
+    # a line prints is the state the record is in once this run's readings have been
+    # written, so a route this run closed reads as closed here rather than one run
+    # later. The library is re-read here because a closed route is not sent — the
+    # sentence the operator paid for cannot be assembled out of the readings alone.
+    block = held_block(held_routes, closing, routes=held)
+
     return TargetRun(
         target=target,
         registration=registration,
         attempts=attempts,
         held_routes=held_routes,
         closing=closing,
+        held_block=block,
         rule=rule,
         plantings=plantings,
         # Read over the cases written for this target, never over the whole

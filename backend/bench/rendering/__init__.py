@@ -98,6 +98,10 @@ from backend.bench.rendering._declared import (
     _how_the_run_was_made,
 )
 from backend.bench.rendering._explained import _explained
+from backend.bench.rendering._held import (
+    WHAT_A_READER_CANNOT_RECOMPUTE as WHAT_A_READER_CANNOT_RECOMPUTE,
+)
+from backend.bench.rendering._held import _held_routes
 
 # Re-exported, not merely imported: these five names were defined in this module
 # before it became a package, and `signing.py`, `verification.py`, `app.py` and the
@@ -274,6 +278,11 @@ def _sections_of(body: Mapping[str, Any]) -> tuple[Section, ...]:
             body["claimed_in_part"],
         ),
         _adaptive(body["adaptive"]),
+        # Point 5's third section, and a third evidentiary class rather than a third
+        # helping of either of the two above it: 5a and 5b are the boundary of the
+        # recorded cases, and this is what earlier runs confirmed against **this**
+        # agent and what this run made of it (ADR-0117 §4).
+        _held_routes(body["held_routes"]),
         _lifecycle(),
         _standards(),
         _conformity(),
@@ -302,8 +311,8 @@ def _masthead(body: Mapping[str, Any], ordered: Sequence[Section]) -> tuple[str,
         f"`{body['artefact']}`, artefact version {body['artefact_version']}. "
         "One run against one target.",
         "",
-        "**Contents** — the nine points of Annex IV in the Act's order, points 3 "
-        "and 5 each answered in two sections:",
+        "**Contents** — the nine points of Annex IV in the Act's order, point 3 "
+        "answered in two sections and point 5 in three:",
         "",
         *(f"- {section.number} — {section.title}" for section in ordered),
         "",

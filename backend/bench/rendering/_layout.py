@@ -83,14 +83,18 @@ class Section:
     """Which Annex IV point this section answers."""
 
     part: str = ""
-    """`a` or `b` where one Annex IV point holds two sections, and empty otherwise.
+    """`a`, `b` or `c` where one Annex IV point holds several sections, else empty.
 
-    Point 5 holds two, because what the bench does not test — at all, or beyond where
-    a claim of its own stops — and what one attacker found outside the recorded cases
-    are both statements about the boundary of the claim, and they are not the same
-    evidentiary class. Two labelled sections under one point is Annex IV's own
-    shape — its points carry lettered sub-points — and it is the honest alternative to
-    one section with two labels or one label covering both.
+    Point 5 holds three. What the bench does not test — at all, or beyond where a
+    claim of its own stops — and what one attacker found outside the recorded cases
+    are both statements about the boundary of the claim; the third is what earlier
+    runs confirmed against this target and the admission bar refused, re-sent on this
+    run (ADR-0117 §4). No two of the three are the same evidentiary class, and the
+    third is the one whose figures rest on an operator's approval rather than on a
+    declared threshold — which is why it is a section of its own and says so in its
+    own body. Lettered sections under one point is Annex IV's own shape — its points
+    carry lettered sub-points — and it is the honest alternative to one section with
+    three labels or one label covering all of them.
     """
 
     title: str = ""

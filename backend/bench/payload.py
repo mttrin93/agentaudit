@@ -121,6 +121,13 @@ from backend.bench.planting import (
 )
 from backend.bench.published import ClaimedInPart, UntestedCategory
 from backend.bench.registration import AttestationRecord
+from backend.bench.reporting import (
+    NO_RATE_OVER_THESE,
+    WHAT_LICENSES_THIS_BLOCK,
+    HeldBlock,
+    HeldBlockReading,
+    HeldRouteLine,
+)
 from backend.bench.rule import DECLARED_RULE, GateRule
 from backend.bench.scanner import RuleOfTwo
 from backend.bench.scorer import GateOutcome, Interval, Reliability, VariantCounts
@@ -821,6 +828,7 @@ def document(payload: TargetPayload) -> dict[str, Any]:
         "findings": _findings(payload.result.findings),
         "coverage_gaps": [_gap(gap) for gap in payload.result.coverage_gaps],
         "elective": _elective(payload.result),
+        "held_routes": _held(payload.result.held_routes),
         "untested_categories": [
             _untested(category) for category in payload.result.untested_categories
         ],
@@ -922,6 +930,93 @@ class RequestedAndUnanswered:
             "block, and the same request against a library that holds the tier's "
             "cases would have been attempted (ADR-0035, ADR-0094)"
         )
+
+
+def _held(block: HeldBlock | None) -> dict[str, Any]:
+    """The target library as this document reports it: counts, dates, and two claims.
+
+    **Its own key at the top level, and no key of it anywhere else.** ADR-0117 §4 puts
+    held routes on a denominator of their own; a figure of theirs inside `measured`
+    would be that denominator joined to the six by a field name, and a verifier
+    re-deriving the measured section would walk it. Nothing in `measured`, `adaptive`,
+    `findings` or `declared` reads this and nothing here is derived from any of them.
+
+    **Counts and never a quotient.** Every figure below is an integer off a property
+    that counts records, and there is none this serialiser computes: *3 of 5* travels
+    as two integers, because the quotient is a rate over a sample chosen on its own
+    outcome and would fall with every new finding
+    ([ADR-0014](../../docs/adr/0014-band-cut-points-are-the-reference-agents-constructed-rates.md),
+    ADR-0117 §4).
+
+    **Both standing sentences travel on every artefact**, including the one for a run
+    that never reached a target library. `licensed_by` is what ADR-0117's cost
+    paragraph requires in as many words — a reader of one figure here is trusting an
+    operator's approval where elsewhere they trust a declared threshold — and
+    `no_rate_over_these` is what may not be done with the figures. A document that
+    printed them only when there were routes would let a reader meet the block's shape
+    once without either.
+
+    `None` is a run that never asked, which is neither of the other two readings, and
+    it arrives as a stated `reading` rather than as a dropped key: a missing key would
+    read as an older shape of artefact.
+    """
+    stated = block.stated() if block is not None else NO_TARGET_LIBRARY
+    return {
+        "reading": (
+            HeldBlockReading.NOT_ASKED.value if block is None else block.reading.value
+        ),
+        "stated": stated,
+        "licensed_by": WHAT_LICENSES_THIS_BLOCK,
+        "no_rate_over_these": NO_RATE_OVER_THESE,
+        "held": 0 if block is None else block.held,
+        "open": 0 if block is None else block.open_routes,
+        "closed": 0 if block is None else block.closed,
+        "still_breaking": 0 if block is None else block.still_breaking,
+        "not_read": 0 if block is None else block.not_read,
+        "regressed": 0 if block is None else block.regressed,
+        "routes": [] if block is None else [_held_route(one) for one in block.lines],
+        "not_counted": [] if block is None else list(block.not_counted),
+    }
+
+
+NO_TARGET_LIBRARY = (
+    "This run read no target library against this agent. That is not an empty "
+    "library and it is not a library whose every route is closed: it is a run that "
+    "never asked, which a count of zero would have reported as good news."
+)
+"""The `None` reading's own sentence, beside the serialiser that prints it.
+
+Here rather than on `reporting.HeldBlock`, because it is a statement about a record
+that does not exist and there is no instance to put it on — the same place
+`UNCITED_GATE` sits for the same reason.
+"""
+
+
+def _held_route(line: HeldRouteLine) -> dict[str, Any]:
+    """One held route's row: names, run ids, and nothing that could be sent again.
+
+    No payload, no success condition and no attacker prose. The first two are the
+    disclosure answer — a route that beat this target is a working unpublished exploit
+    ([ADR-0008](../../docs/adr/0008-repo-disclosure-posture.md)) — and the third is
+    the half `docs/specs/the-target-library.md` lists out of scope: whether a signed
+    document carries a held route's **sentences** is undecided, so this row carries
+    its figures and its dates and a new ADR is what would add the prose.
+
+    `family` is a name beside a route and not a key anything aggregates on, exactly as
+    the adaptive section's `families_broken` is: there is no mapping here for a
+    per-family counter to walk.
+    """
+    return {
+        "family": str(line.family),
+        "route": line.route.filed_under,
+        "state": line.state.value,
+        "outcome": None if line.outcome is None else line.outcome.value,
+        "found_in": line.found_in,
+        "closed_in": line.closed_in,
+        "reopened_in": line.reopened_in,
+        "regressed": line.regressed,
+        "stated": line.stated(),
+    }
 
 
 def canonical_json(payload: TargetPayload) -> str:

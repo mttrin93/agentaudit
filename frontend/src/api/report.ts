@@ -448,6 +448,13 @@ export interface FindingsSection {
 export interface ReportProvenance {
   target: string
   attestation: {
+    /**
+     * Who attested **and what established that name** — the party, what verified it,
+     * and the three things verification does not establish, in one value (ADR-0123).
+     * Still a string and still the same key: the sentence travels inside the field
+     * rather than in a key beside it, so a screen that prints this prints the claim
+     * whole and must not split it on the em dash to shorten it.
+     */
     identity: string
     endpoint_sha256: string
     recorded_at: string

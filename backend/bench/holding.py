@@ -40,7 +40,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from backend.bench.held import HELD_ROUTES, HeldRoute, HeldRoutes
+from backend.bench.held import HELD_ROUTES, HeldRoute, HeldRoutes, HeldState
 from backend.bench.library import Case, VerdictClass, found_by_the_attacker
 from backend.bench.pending import AwaitingDecision, RouteState
 
@@ -93,6 +93,11 @@ def hold_refused(
     queue row carries rather than on the held record, because the record is
     `HeldRoute` and widening it is a decision of its own.
 
+    A route already held is left exactly as it stands — unless it is **closed**,
+    which is the one case where a rediscovery writes: the route the operator fixed
+    has broken their agent again, and the record reopens as a regression rather than
+    being filed afresh under a run that would lose both dates (ADR-0117 §5).
+
     `routes` has a default for `queued.file_proposals`'s reason and with its
     consequence: the default is the module-level object bound at import, so every
     caller writes to the one git-ignored location and a test that wants its own
@@ -104,7 +109,7 @@ def hold_refused(
     if refusal is not None:
         return Holding(None, refusal)
     already = routes.held(record.target, record.route)
-    if already is not None:
+    if already is not None and already.state is not HeldState.CLOSED:
         return Holding(already, _already(already))
     try:
         held = routes.hold(_route_from(record))
@@ -117,6 +122,8 @@ def hold_refused(
                 "a storage fault costs here is a record and never an answer",
             ),
         )
+    if already is not None:
+        return Holding(held, _reopened(held, already, approved_by))
     return Holding(
         held,
         (
@@ -126,6 +133,25 @@ def hold_refused(
             "licenses this record is an evaluator-confirmed break and an approval, "
             "not a declared threshold (ADR-0117 §2)"
         ),
+    )
+
+
+def _reopened(held: HeldRoute, was: HeldRoute, approved_by: str) -> str:
+    """What a rediscovery of a **closed** route says, and it says regression.
+
+    The one case where a rediscovery writes: a closed route is not sent, so no run
+    can read one breaking again, and the only way the bench learns that a fixed
+    defect came back is that the attacker walks the path again and a person decides
+    it again. Reopened rather than filed afresh, because a new record would lose
+    both dates and report a regression as a new finding (ADR-0117 §5).
+    """
+    return (
+        f"{held.route.stated()} is held against {held.target} again on the approval "
+        f"of {approved_by}, and this is a **regression**: it was found in "
+        f"{held.found_in}, closed in {was.closed_in} after "
+        f"{was.clean_runs} clean run(s), and has broken the agent again. The record "
+        "is the same record and the window starts over — a defect that came back is "
+        "not a new finding (ADR-0117 §5)"
     )
 
 

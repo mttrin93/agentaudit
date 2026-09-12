@@ -93,6 +93,10 @@ assumed: two targets may fail one route and neither sees the other's record."""
 
 THE_RUN_THAT_FOUND_IT = "run-2026-09-03-0007"
 
+THE_RUN_THAT_CLOSED_IT = "run-2026-09-19-0002"
+"""A second run, because a closed route names the run that closed it and it is
+never the run that found it (ADR-0117 §5, #241)."""
+
 
 def digest_of(probe: str) -> str:
     """The probe's half of a `RouteKey`, as `decided.RouteKey.of` mints it.
@@ -110,8 +114,13 @@ def a_held_route(
     state: HeldState = HeldState.OPEN,
     clean_runs: int = 0,
     found_in: str = THE_RUN_THAT_FOUND_IT,
+    closed_in: str | None = None,
 ) -> HeldRoute:
-    """One confirmed break the bar refused, as the store holds it."""
+    """One confirmed break the bar refused, as the store holds it.
+
+    `closed_in` defaults to nothing, so a caller that asks for a closed route and
+    names no run gets the refusal the record owes it (#241, ADR-0117 §5).
+    """
     return HeldRoute(
         route=RouteKey(family=Family.DATA_LEAKAGE, probe=digest_of(probe)),
         target=target,
@@ -121,6 +130,7 @@ def a_held_route(
         found_in=found_in,
         state=state,
         clean_runs=clean_runs,
+        closed_in=closed_in,
     )
 
 
@@ -245,7 +255,11 @@ def test_a_record_may_not_disagree_with_its_own_clean_run_count() -> None:
     with pytest.raises(ValueError, match="costs the operator"):
         a_held_route(state=HeldState.OPEN, clean_runs=CLEAN_RUNS_TO_CLOSE)
 
-    closed = a_held_route(state=HeldState.CLOSED, clean_runs=CLEAN_RUNS_TO_CLOSE)
+    closed = a_held_route(
+        state=HeldState.CLOSED,
+        clean_runs=CLEAN_RUNS_TO_CLOSE,
+        closed_in=THE_RUN_THAT_CLOSED_IT,
+    )
     assert closed.state is HeldState.CLOSED
 
 
@@ -393,6 +407,7 @@ def test_a_targets_library_holds_its_closed_routes_too(store_file: Path) -> None
             probe="a second probe",
             state=HeldState.CLOSED,
             clean_runs=CLEAN_RUNS_TO_CLOSE,
+            closed_in=THE_RUN_THAT_CLOSED_IT,
         )
     )
 

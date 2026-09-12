@@ -52,6 +52,10 @@ PROBE = "the probe that actually beat somebody's agent"
 
 THE_RUN_THAT_FOUND_IT = "run-2026-08-30-0004"
 
+CLOSED_IN = "run-2026-09-12-0003"
+"""A later run, because a closed route names the run that closed it and it is never
+the run that found it (ADR-0117 §5)."""
+
 
 @pytest.fixture
 def routes(tmp_path: Path) -> HeldRoutes:
@@ -301,6 +305,52 @@ def test_a_rediscovered_route_keeps_the_record_and_its_clean_run_count(
     assert again.held.clean_runs == 1
     assert len(routes.for_target(A_CUSTOMER)) == 1
     assert "already held" in again.stated()
+
+
+def test_a_closed_route_rediscovered_reopens_as_a_regression(
+    routes: HeldRoutes, leakage_case: Case
+) -> None:
+    """ADR-0117 §5's other half, through the only door a closed route can come back
+    by (spec, user story 13).
+
+    A closed route is not sent, so no run can read one breaking again: the bench
+    learns a fixed defect came back when the attacker walks the path again, the
+    evaluator confirms the break again and a person decides it again. What must not
+    happen is that it lands as a **new finding** — both dates and the history would
+    be gone, and the operator would be told they have a new problem rather than that
+    their fix did not hold.
+    """
+    record = awaiting(a_route(leakage_case).case)
+    first = hold_refused(
+        record, decided_as=RouteState.REJECTED, approved_by=AN_OPERATOR, routes=routes
+    ).held
+    assert first is not None
+    closed = routes.record(
+        first.after_a_clean_run("run-2026-09-05-0001").after_a_clean_run(CLOSED_IN)
+    )
+    assert closed.state is HeldState.CLOSED
+
+    again = hold_refused(
+        record, decided_as=RouteState.REJECTED, approved_by=AN_OPERATOR, routes=routes
+    )
+
+    assert again.held is not None
+    assert again.held.state is HeldState.OPEN
+    assert again.held.clean_runs == 0
+    assert again.held.regressed
+    assert again.held.found_in == THE_RUN_THAT_FOUND_IT, (
+        "a reopened route was filed under the run that rediscovered it. *Found on 3 "
+        "March* is the first half of the sentence, and a regression is the same "
+        "finding coming back (ADR-0117 §5)"
+    )
+    assert again.held.closed_in == CLOSED_IN
+    assert again.held.reopened_in == THE_RUN_THAT_FOUND_IT
+    assert len(routes.for_target(A_CUSTOMER)) == 1, (
+        "the reopened route was filed as a second record. One route is one held "
+        "record per target, and a regression is that record reopening (ADR-0117 §1)"
+    )
+    assert "regression" in again.stated()
+    assert CLOSED_IN in again.stated()
 
 
 class RefusesTheWrite(HeldRoutes):

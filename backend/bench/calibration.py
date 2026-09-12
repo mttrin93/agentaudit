@@ -69,6 +69,7 @@ from backend.bench.adaptive.scripted import SCRIPTED_ATTACKER
 from backend.bench.adjudication import Completion, NoAdjudicator
 from backend.bench.applicability import SkippedCase, applicable, skipped_cases
 from backend.bench.attacker import run_case
+from backend.bench.closing import Closing, count_clean_runs
 from backend.bench.contract import TargetConfig, TargetUnreachable
 from backend.bench.evaluator import Verdict
 from backend.bench.filing import Filing, file_precedent
@@ -251,6 +252,23 @@ class TargetRun:
     which is *nothing has been found against this agent yet* and is a fact rather
     than a block that failed to render. A populated one is every open route that was
     sent, each with its own four-valued outcome.
+    """
+
+    closing: Closing | None = None
+    """What this run's readings did to that library: what closed, and what did not
+    count — or `None` for a record that never counted anything.
+
+    Beside `held_routes` rather than inside it, because the two are a reading and a
+    write and the distinction is load-bearing: `held_routes` is what this run *read*
+    off the library and this is what the library *became*. A block that printed
+    *closed* off the readings alone would be printing it off the state the routes
+    were in when they were sent, which is the state before the run
+    ([ADR-0117](../../docs/adr/0117-a-refused-break-is-held-against-the-target-it-beat-and-is-scored-beside-the-six.md)
+    §5).
+
+    Counts and keys and no rate, for `held_routes`'s reason and with the same force.
+    Nothing reads it yet — the report block is #242 — and it is carried here because
+    this is the only moment the run and the write are in one place.
     """
 
     narrations: Narrations = None
@@ -955,7 +973,12 @@ def run_calibration(
     # One namespace per run, derived from the run's own id and computed once here, so
     # that the value every plant is given and the value every teardown is given are
     # the same value and neither is stored on a shim in between (ADR-0063 §1).
-    namespace = namespace_for(trace.id if trace is not None else anonymous_run_id())
+    # This run's own id, computed once and used twice: the namespace below derives
+    # from it, and a route this run closes is kept with it (ADR-0117 §5). Two
+    # derivations of one id would be two ids the day an entry point stopped passing
+    # a trace.
+    run_id = trace.id if trace is not None else anonymous_run_id()
+    namespace = namespace_for(run_id)
     teardowns: tuple[Teardown, ...] = ()
 
     def run_suite() -> None:
@@ -976,6 +999,7 @@ def run_calibration(
                     planted=(planted_nonces or {}).get(target.name),
                     planter=(planters or {}).get(target.name),
                     namespace=namespace,
+                    run_id=run_id,
                     proof_waived=proof_waived,
                 )
             )
@@ -1111,6 +1135,7 @@ def _run_target(
     rule: GateRule,
     planted: str | None,
     namespace: str,
+    run_id: str,
     planter: Planter | None = None,
     proof_waived: bool = False,
 ) -> TargetRun:
@@ -1130,6 +1155,10 @@ def _run_target(
     ([ADR-0063](../../docs/adr/0063-one-run-scoped-namespace-dropped-wholesale.md)).
     It is passed down rather than derived here so that a second target cannot plant
     into a namespace the first target's teardown will not reach.
+
+    `run_id` is the run's own, passed down for the same reason and used for one
+    thing: a held route this run closes is kept with the run that closed it, which
+    is half of *found on 3 March, closed on 19 March* (ADR-0117 §5).
     """
     # `issue_nonce` is the only source of this value on a surface where the bench
     # plants it, and neither of the two ways a caller can supply one reaches such a
@@ -1245,11 +1274,23 @@ def _run_target(
         reachable=registration.complete,
     )
 
+    # And the window the readings advance, counted into the records they were read
+    # off. After the send and never before it, because what it counts is what this
+    # run read; and separated from the send for ADR-0029 decision 6's reason, which
+    # here buys the property that a reading is taken once and counted once.
+    #
+    # What it returns is carried on the target run beside the readings rather than
+    # dropped: a run that closed a route is the operator's fix confirmed, and this is
+    # the only moment the reading and the write are in one place. Nothing reads it
+    # yet — the block that prints it is #242.
+    closing = count_clean_runs(held_routes, run_id=run_id, routes=held)
+
     return TargetRun(
         target=target,
         registration=registration,
         attempts=attempts,
         held_routes=held_routes,
+        closing=closing,
         rule=rule,
         plantings=plantings,
         # Read over the cases written for this target, never over the whole

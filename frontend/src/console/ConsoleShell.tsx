@@ -142,7 +142,6 @@ export function ConsoleShell() {
 
         {door === null ? null : (
           <div className="rail-operator">
-            <h2 className="rail-heading">Signed in</h2>
             <p className="operator-name">{door.operator.named}</p>
             <button type="button" onClick={door.signInAgain}>
               Sign out

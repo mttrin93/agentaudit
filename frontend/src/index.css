@@ -600,6 +600,31 @@ label.declaration input {
 }
 
 /*
+ * Who the attestation will be recorded against, ruled off from the prose above it.
+ *
+ * The rule is above and not below: what follows it is the three statements and the
+ * button that commits them, so the line marks where describing the endpoint stops
+ * and consenting on the record starts. A hairline in `--line` and not a heading,
+ * because it separates two readings of one page rather than opening a section — the
+ * same hairline the attestations themselves are ruled apart with.
+ *
+ * **The rule is on a wrapper and not on the paragraph**, so that it runs to the same
+ * width as the one over each attestation below it: `p` is capped at `--reading` and
+ * `ol.attestations > li` is not, so a border on the paragraph itself stops short of
+ * the three rules it is supposed to line up with. The paragraph keeps the reading
+ * measure — the doorless sentence is three lines of prose and wants it.
+ */
+.attesting-as {
+  margin-top: 1.6rem;
+  padding-top: 1.2rem;
+  border-top: 1px solid var(--line);
+}
+
+.attesting-as > p {
+  margin: 0;
+}
+
+/*
  * The three attestations, one under the next, ruled apart and counted.
  *
  * They were three screens, and what three screens gave was that each statement was
@@ -4444,7 +4469,11 @@ textarea,
   min-height: 100vh;
 }
 
+/* A column, so the session block can be pushed to the foot of it: `.rail-operator`
+   takes `margin-top: auto` and the destinations keep their own height. */
 .rail {
+  display: flex;
+  flex-direction: column;
   padding: 1.6rem 1rem 3rem;
   background: var(--rail);
   border-right: 1px solid var(--line);
@@ -4579,13 +4608,20 @@ textarea,
  * there with. It is absent entirely on a console with no issuer (`TheDoor.tsx`), so
  * nothing here reserves space for a name that is not coming.
  *
+ * `margin-top: auto` against the flex column above, rather than a fixed gap under
+ * the last destination: the foot of the rail is where it belongs whether the rail
+ * holds four names or eleven, and a run in view adds a heading and three. Where the
+ * names do fill the column the auto margin resolves to nothing and the rule above
+ * the name is the whole of the separation, which is the cramped case rather than
+ * the ordinary one.
+ *
  * The name wraps rather than truncating. What the issuer holds may be an email
  * address, and an address cut off at the rail's width is one a person cannot check
  * against the account they think they are signed into.
  */
 .rail-operator {
-  margin-top: 2rem;
-  padding-top: 0.4rem;
+  margin-top: auto;
+  padding-top: 0.9rem;
   border-top: 1px solid var(--line);
 }
 
@@ -4686,6 +4722,12 @@ textarea,
 
   .rail-heading {
     margin-top: 1rem;
+  }
+
+  /* No free space to absorb in a strip whose height is its content, so the gap is
+     stated again rather than left to the auto margin the side rail uses. */
+  .rail-operator {
+    margin-top: 1.4rem;
   }
 }
 

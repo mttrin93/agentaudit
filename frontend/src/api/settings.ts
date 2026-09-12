@@ -18,6 +18,7 @@ import type {
   GateDecided,
 } from './contracts'
 import {
+  authed,
   fetched,
   refusalIn,
 } from './http'
@@ -527,7 +528,7 @@ export const BENCH_TUNING_PATH = '/bench/settings/tuning'
  * the screen shows the sentence.
  */
 export async function tuneBench(asked: Tune): Promise<BenchSettings> {
-  const response = await fetch(BENCH_TUNING_PATH, {
+  const response = await authed(BENCH_TUNING_PATH, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(asked),
@@ -567,7 +568,7 @@ export async function coverFamilies(
   families: string[],
   elective: string[],
 ): Promise<BenchSettings> {
-  const response = await fetch(BENCH_FAMILIES_PATH, {
+  const response = await authed(BENCH_FAMILIES_PATH, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ families, elective }),
@@ -606,7 +607,7 @@ export async function selectConstructions(
   schedules: string[],
   adaptiveConstructions: string[],
 ): Promise<BenchSettings> {
-  const response = await fetch(BENCH_SELECTION_PATH, {
+  const response = await authed(BENCH_SELECTION_PATH, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({

@@ -5,8 +5,29 @@
  * Both of these were private to `bench.ts` before #14 split it by API area. They are
  * exported now because six modules need them, and they are in a module of their own
  * rather than in `contracts.ts` because a contract is a shape and these are conduct.
- * Nothing outside `src/api/` imports this file — `bench.ts` deliberately does not
- * re-export it, so a screen cannot fetch a path the barrel does not list.
+ * `authed` is the only function under `src/api/` that calls `fetch`, and
+ * `http.test.ts` sweeps the directory to keep that true — a nineteenth call site
+ * would be a request that went out with no bearer on it, found in production by a
+ * `401` rather than here. The screens are held to the same line from the other
+ * side by `console/gate.test.ts` and `console/settings.test.ts`, which read their
+ * own modules for a `fetch(` and find none.
+ *
+ * **One place a token is attached, and the same place a door's refusal leaves.**
+ * The seam is the one
+ * [the spec declares](../../../docs/specs/the-authenticated-operator.md), under
+ * [ADR-0116](../../../docs/adr/0116-the-identity-in-a-report-is-a-verified-claim-and-not-a-typed-string.md);
+ * what is local to this file is that the refusal goes back out the way the token
+ * came in. A door is attended once — by a component inside the issuer's provider,
+ * since a token comes from a hook and these modules are plain functions that run
+ * under `environment: 'node'` with no jsdom — and it hears about its own refusals
+ * through the callback it registered, rather than each area module's outcome type
+ * gaining a case for *not signed in*. Being signed out is a fact about the session
+ * and not about the request that met it.
+ *
+ * `bench.ts` re-exports `attendTheDoor` and the two types it takes, and nothing
+ * else from this file. `authed`, `fetched` and the refusal readers stay out of the
+ * barrel for the reason they always did: a screen that fetched a path of its own
+ * would be a route the barrel does not list.
  *
  * **`refusalRead` never throws and never invents.** It reads the sentence the bench
  * wrote and, where there is none, says so in as many words: a refusal presented as
@@ -14,6 +35,144 @@
  */
 
 import type { Refusal } from './contracts'
+
+/**
+ * Why the door turned a request away, in the two readings a console acts on.
+ *
+ * The API answers a `401` for the four causes that are about the credential
+ * presented and a `503` for the one that is not, and it carries the verifier's own
+ * sentence in both (`backend/api/app.py:_the_refusal`). The two are held apart here
+ * because the remedies are different: a session to sign in for again, against an
+ * issuer that could not be reached, where signing in again is not the thing to do
+ * and would fail in the same way.
+ *
+ * `cause` is the wire's own lowercase spelling of `backend.identity.Unverifiable`,
+ * carried so a screen can tell *nobody has signed in yet* from *this session ran
+ * out* without parsing the sentence. The sentence is still the part an operator
+ * reads.
+ */
+export type DoorRefusal =
+  | { kind: 'sign_in_again'; cause: string; statement: string }
+  | { kind: 'issuer_unreachable'; statement: string }
+
+/**
+ * The door this console goes through: a token for the next request, and somewhere
+ * to say that the bench would not take it.
+ *
+ * `token` answers `null` for a console nobody has signed into, and the request goes
+ * anyway: signed out is the bench's refusal to state, not this module's to guess.
+ * `refused` is optional because a caller that wants only the header should not have
+ * to supply a sink for refusals it will not read.
+ */
+export interface Door {
+  token: () => Promise<string | null>
+  refused?: (refusal: DoorRefusal) => void
+}
+
+let attending: Door | null = null
+
+/**
+ * Attend the door, or stop attending it. Called once at mount, and with `null` to
+ * put the module back the way a fresh import finds it.
+ *
+ * No door attended is the declared-open reading (ADR-0121) seen from this side:
+ * every request goes with no `Authorization` on it, which is what every test in
+ * this suite and every clone with no issuer runs as. A header invented for that
+ * state would be a token this app does not have.
+ */
+export function attendTheDoor(door: Door | null): void {
+  attending = door
+}
+
+/**
+ * Every request this app makes to the bench, with the operator's token on it.
+ *
+ * The caller's `init` is passed through untouched apart from one header, so the
+ * eighteen call sites read exactly as they did: a method, a body, a
+ * `Content-Type`. Where the door holds no token the header is simply absent.
+ *
+ * **The response comes back unread.** The door's refusal is taken off a `clone()`,
+ * because a `Response` body is read once and the caller's own `refusalRead` is the
+ * thing that must have it — this seam reports a refusal and never consumes one.
+ *
+ * **A door that cannot produce a token is not an unreachable bench.** The issuer's
+ * client mints these over the network and can fail; letting that throw out of here
+ * would surface at the call sites as `unreachable`, whose sentence says the bench
+ * did not answer and that it is not known what it recorded. Neither half is true.
+ * So the request goes without a header and the bench's own door refuses it, which
+ * puts the operator in front of a sentence about signing in.
+ */
+export async function authed(path: string, init?: RequestInit): Promise<Response> {
+  const token = await tokenFromTheDoor()
+  const response = await fetch(
+    path,
+    token
+      ? {
+          ...init,
+          headers: {
+            ...Object.fromEntries(new Headers(init?.headers).entries()),
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      : init,
+  )
+  const refused = attending?.refused
+  if (refused && (response.status === 401 || response.status === 503)) {
+    const refusal = await doorRefusalIn(response.clone())
+    if (refusal) {
+      refused(refusal)
+    }
+  }
+  return response
+}
+
+/** The attended door's token, and `null` for every way there is not one. */
+async function tokenFromTheDoor(): Promise<string | null> {
+  try {
+    return (await attending?.token()) ?? null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * The door's refusal in a response, or `null` where the refusal is somebody else's.
+ *
+ * The status alone is not the discriminator. A `503` from a proxy or a cold start
+ * is not the issuer being unreachable, and a console that showed a sign-in screen
+ * over one would be reporting an outage as a rejected credential. So the body's own
+ * shape decides: `detail` an object carrying a `refusal` and a `statement` is this
+ * surface's door and nothing else on it answers that way.
+ */
+async function doorRefusalIn(response: Response): Promise<DoorRefusal | null> {
+  let detail: unknown
+  try {
+    detail = ((await response.json()) as { detail?: unknown }).detail
+  } catch {
+    return null
+  }
+  const door = theDoorsDetail(detail)
+  if (!door) {
+    return null
+  }
+  return response.status === 503
+    ? { kind: 'issuer_unreachable', statement: door.statement }
+    : { kind: 'sign_in_again', cause: door.refusal, statement: door.statement }
+}
+
+/** `detail` read as the door's two strings, or nothing at all. */
+function theDoorsDetail(
+  detail: unknown,
+): { refusal: string; statement: string } | null {
+  if (typeof detail !== 'object' || detail === null || Array.isArray(detail)) {
+    return null
+  }
+  const { refusal, statement } = detail as { refusal?: unknown; statement?: unknown }
+  if (typeof refusal !== 'string' || typeof statement !== 'string' || !statement.trim()) {
+    return null
+  }
+  return { refusal, statement }
+}
 
 export const REFUSED_WITHOUT_A_REASON =
   'the bench refused this registration and returned no reason with it. Nothing ' +
@@ -28,6 +187,13 @@ export const REFUSED_WITHOUT_A_REASON =
  * here rather than only the first, because the second is what arrives when this app
  * posts a field the API's models reject — and a screen that showed "refused, no
  * reason given" for it would be hiding the one message that says which field.
+ *
+ * **The third shape is the door's**: an object carrying the cause a client branches
+ * on and the verifier's own sentence. Only the sentence is taken here — the cause
+ * reaches the console through `attendTheDoor`, because what to do about an expired
+ * session is a fact about the session and not about the request that met it. Read
+ * in this function all the same, so that a screen holding a refused response shows
+ * the door's words instead of "refused, no reason given".
  *
  * **The two readings come out of one call**, because a `Response` body is read
  * once: a second function that fetched the fields separately would have nothing
@@ -45,6 +211,12 @@ export async function refusalRead(response: Response): Promise<Refusal> {
   }
   if (typeof detail === 'string' && detail.trim()) {
     return { statement: detail, fields: [] }
+  }
+  const door = theDoorsDetail(detail)
+  if (door) {
+    // No field is named. A refusal at the door is about the request and not about
+    // an input, so it goes over the form the way a raised `HTTPException` does.
+    return { statement: door.statement, fields: [] }
   }
   if (Array.isArray(detail) && detail.length) {
     const problems = detail.map((problem) => {
@@ -85,7 +257,7 @@ export const ANSWER_UNREACHABLE =
  * partial report to fall back to and none is invented here.
  */
 export async function fetched(path: string, what: string): Promise<unknown> {
-  const response = await fetch(path)
+  const response = await authed(path)
   if (!response.ok) {
     throw new Error(
       `the bench did not serve the ${what} at ${path}: ${await refusalIn(response)}`,

@@ -37,6 +37,7 @@ import type {
 } from './contracts'
 import {
   ANSWER_UNREACHABLE,
+  authed,
   fetched,
   refusalIn,
   refusalRead,
@@ -333,7 +334,7 @@ const UNREACHABLE =
 export async function startRun(body: StartRunBody): Promise<StartOutcome> {
   let response: Response
   try {
-    response = await fetch('/runs', {
+    response = await authed('/runs', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
@@ -347,12 +348,19 @@ export async function startRun(body: StartRunBody): Promise<StartOutcome> {
   return { kind: 'refused', ...(await refusalRead(response)) }
 }
 
-/** Where one run has got to, or the reason this app could not find out. */
+/**
+ * Where one run has got to, or the reason this app could not find out.
+ *
+ * Raises with the bench's own sentence and not with a status code. A poll is where
+ * a session runs out — a run is read every two seconds while it goes — and *the
+ * bench has no run r1* over an expired token would send an operator looking for a
+ * record that is there (#248).
+ */
 export async function runStanding(runId: string): Promise<RunStanding> {
-  const response = await fetch(`/runs/${encodeURIComponent(runId)}`)
+  const response = await authed(`/runs/${encodeURIComponent(runId)}`)
   if (!response.ok) {
     throw new Error(
-      `the bench has no run ${runId} to report on (HTTP ${response.status})`,
+      `the bench did not report on run ${runId}: ${await refusalIn(response)}`,
     )
   }
   return (await response.json()) as RunStanding
@@ -366,10 +374,10 @@ export async function runStanding(runId: string): Promise<RunStanding> {
  * touches the target — polling a run's standing is a question put to the bench.
  */
 export async function runProgress(runId: string): Promise<RunProgress> {
-  const response = await fetch(`/runs/${encodeURIComponent(runId)}`)
+  const response = await authed(`/runs/${encodeURIComponent(runId)}`)
   if (!response.ok) {
     throw new Error(
-      `the bench has no run ${runId} to report on (HTTP ${response.status})`,
+      `the bench did not report on run ${runId}: ${await refusalIn(response)}`,
     )
   }
   return (await response.json()) as RunProgress
@@ -407,7 +415,7 @@ export async function answerTheInterrupt(
 ): Promise<ApprovalOutcome> {
   let response: Response
   try {
-    response = await fetch(`/runs/${encodeURIComponent(runId)}/approval`, {
+    response = await authed(`/runs/${encodeURIComponent(runId)}/approval`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
@@ -444,7 +452,7 @@ export async function answerTheInterrupt(
 export async function stopTheRun(runId: string): Promise<ApprovalOutcome> {
   let response: Response
   try {
-    response = await fetch(`/runs/${encodeURIComponent(runId)}/stop`, {
+    response = await authed(`/runs/${encodeURIComponent(runId)}/stop`, {
       method: 'POST',
     })
   } catch (unreachable) {

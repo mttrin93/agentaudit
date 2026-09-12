@@ -42,6 +42,23 @@ import {
   type Remedy,
 } from './door'
 
+/**
+ * How the issuer's components are dressed: this console's colours, and one heading
+ * of theirs taken off the page.
+ *
+ * The heading is removed rather than restyled because of what it says. It is the
+ * application's name as the issuer's dashboard holds it, over a screen that already
+ * carries an `<h1>` naming the instrument — two top-level headings on one screen,
+ * the second of them a name configured somewhere this repository cannot see. The
+ * line under it still says what the card is for, in a verb.
+ */
+function dressed(): { variables: Record<string, string>; elements: object } {
+  return {
+    variables: painted(),
+    elements: { headerTitle: { display: 'none' } },
+  }
+}
+
 /** The console's colours, read off the root element the stylesheet paints. */
 function painted(): Record<string, string> {
   const computed = getComputedStyle(document.documentElement)
@@ -54,7 +71,7 @@ export function TheDoor({ children }: { children: ReactNode }) {
     return children
   }
   return (
-    <ClerkProvider publishableKey={issuer} appearance={{ variables: painted() }}>
+    <ClerkProvider publishableKey={issuer} appearance={dressed()}>
       <SignedOut>
         <TheSignIn />
       </SignedOut>

@@ -132,7 +132,7 @@ export function ConsoleShell() {
           <div className="rail-operator">
             <h2 className="rail-heading">Signed in</h2>
             <p className="operator-name">{door.operator.named}</p>
-            <button type="button" className="quiet" onClick={door.signInAgain}>
+            <button type="button" onClick={door.signInAgain}>
               Sign out
             </button>
           </div>
@@ -172,11 +172,11 @@ function TheDoorsRefusal({ remedy, door }: { remedy: Remedy; door: AtTheDoor }) 
       <p>{remedy.statement}</p>
       <p className="aside">
         {remedy.signInAgain ? (
-          <button type="button" onClick={door.signInAgain}>
+          <button type="button" className="primary" onClick={door.signInAgain}>
             Sign in again
           </button>
         ) : null}
-        <button type="button" className="quiet" onClick={door.letItGo}>
+        <button type="button" onClick={door.letItGo}>
           Put this away
         </button>
       </p>

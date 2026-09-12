@@ -4571,6 +4571,82 @@ textarea,
   outline: none;
 }
 
+/*
+ * Who is signed in, at the foot of the rail, and the way out beside the name.
+ *
+ * Below the destinations and ruled off from them, because it is not one: the rail
+ * above it is places this console goes and this is a fact about the session it goes
+ * there with. It is absent entirely on a console with no issuer (`TheDoor.tsx`), so
+ * nothing here reserves space for a name that is not coming.
+ *
+ * The name wraps rather than truncating. What the issuer holds may be an email
+ * address, and an address cut off at the rail's width is one a person cannot check
+ * against the account they think they are signed into.
+ */
+.rail-operator {
+  margin-top: 2rem;
+  padding-top: 0.4rem;
+  border-top: 1px solid var(--line);
+}
+
+.rail-operator .operator-name {
+  margin: 0 0 0.7rem;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+/* Smaller than a screen's controls, for the reason the rail's type is: it is chrome
+   standing beside the screen rather than a control on it. */
+.rail-operator button {
+  padding: 0.3rem 0.7rem;
+  font-size: 0.85rem;
+}
+
+/*
+ * What the bench's door said, above the screen that met it.
+ *
+ * The gutters are `.screen`'s, because it sits in the same column as one and a
+ * refusal flush against the rail would be the only block on the page that is.
+ */
+.console-body > .refusal {
+  box-sizing: border-box;
+  max-width: 130rem;
+  margin: 2.2rem auto -1rem;
+}
+
+.console-body > .refusal .aside {
+  display: flex;
+  gap: 0.8rem;
+  margin-bottom: 0.6rem;
+}
+
+/*
+ * The console, signed out: one column, and the issuer's card in it.
+ *
+ * Narrower than a screen because there is nothing on it to read across a page — a
+ * sentence about what this instrument does and one control. Centred in the window
+ * rather than at the top of it: there is no rail beside it, so a block pinned to the
+ * top left of an empty near-black page would read as a page that failed to load.
+ */
+.sign-in {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  min-height: 100vh;
+  max-width: 44rem;
+}
+
+.sign-in h1 {
+  margin-bottom: 0.4rem;
+}
+
+.sign-in p {
+  max-width: 34rem;
+  margin-bottom: 1.4rem;
+}
+
 @media (max-width: 52rem) {
   .console {
     grid-template-columns: minmax(0, 1fr);

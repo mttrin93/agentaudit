@@ -81,8 +81,14 @@ is a property of the deployment rather than of the source.
 
 ISSUER_SECRET_KEY_VARIABLE = "AGENTAUDIT_ISSUER_SECRET_KEY"
 """The credential the fallback path presents to fetch a key this process has not
-seen. Absent is the ordinary reading: with `ISSUER_JWT_KEY_VARIABLE` set, nothing
-on the happy path needs it."""
+seen, and the one a machine credential is checked under.
+
+Absent is the ordinary reading for a deployment whose only caller is the console:
+with `ISSUER_JWT_KEY_VARIABLE` set, nothing on a session token's happy path needs
+it. It stops being optional the moment a deployment means to admit `backend/mcp/`,
+because a machine credential is not a signed document and there is no local check
+of one (ADR-0124) — `MACHINE_NEEDS_SECRET_KEY` below is what such a caller is told
+where only the PEM was declared."""
 
 MACHINE_NEEDS_SECRET_KEY = (
     "a machine credential is checked at the issuer's own verification endpoint, "

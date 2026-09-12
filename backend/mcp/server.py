@@ -105,9 +105,12 @@ def _sentence(failure: Exception) -> str:
 
     A `ToolError` carries a string and nothing else, so a caller of this surface can
     only branch on words: the names this package keeps beside its sentences have to
-    be *in* the sentence or they do not reach a model at all. Three of the six put
-    theirs there already — `BenchRefused` its status, `ReportNotSigned` its outcome,
-    `NoCredential` the variable to set — and this adds the one that does not.
+    be *in* the sentence or they do not reach a model at all. Four of the six put
+    theirs there already — `BenchRefused` its status, `BenchUnreachable` the address
+    it tried, `ReportNotSigned` its outcome, `NoCredential` the variable to set — and
+    this adds `DeclarationRefused`, which keeps its name in a field beside the
+    sentence rather than in it. `NoEstimate` is the sixth and carries no name because
+    it is one condition and not a family of them.
     """
     if isinstance(failure, DeclarationRefused):
         return f"{failure.refusal}: {failure}"

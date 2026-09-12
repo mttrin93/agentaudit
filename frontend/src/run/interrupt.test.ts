@@ -27,8 +27,6 @@ import {
   costFigures,
   declineRequest,
   interruptView,
-  rememberWhoAttested,
-  whoAttested,
   rememberTheFigures,
   theFiguresPresented,
   type Confirming,
@@ -84,7 +82,6 @@ function confirming(): Confirming {
     status: AWAITING_APPROVAL,
     figures: estimated(),
     confirmed: true,
-    identity: 'operator',
     reason: '',
   }
 }
@@ -212,27 +209,15 @@ describe('the confirmation', () => {
     }
   })
 
-  it('is not withheld for want of a name, because no field asks for one', () => {
-    // The identity requirement came off with the field. What this function guards is
-    // the spend — the tick, the figures and the status — and a run held up over a
-    // name nobody was asked for would make declining the easier of the two answers.
-    const request = confirmationRequest({ ...confirming(), identity: '   ' })
+  it('holds no name to send and is not withheld for want of one', () => {
+    // Both halves are the same absence. There is no name on the declaration — the
+    // screen before this one asks nobody to type one and this one carries nothing
+    // across — and the body is the two keys the API takes: a body still carrying
+    // `identity` is refused (ADR-0116 §1). `toEqual` is the assertion on both, so an
+    // extra key on either fails it.
+    expect('identity' in confirming()).toBe(false)
 
-    expect(request.kind).toBe('ready')
-  })
-
-  it('sends no name, whatever the screen is holding', () => {
-    // The name a registration was attested by is still held in this browser, and it
-    // no longer goes on the wire: the operator on the record is the one the API
-    // verified the request as, and a body still carrying `identity` is refused
-    // (ADR-0116 §1). `toEqual` is the assertion — an extra key fails it.
-    const store = aStore()
-    rememberWhoAttested(store, 'run-1', '  Matteo Rinaldi  ')
-
-    const request = confirmationRequest({
-      ...confirming(),
-      identity: whoAttested(store, 'run-1'),
-    })
+    const request = confirmationRequest(confirming())
 
     expect(request.kind === 'ready' && request.body).toEqual({
       confirmed: true,
@@ -270,15 +255,22 @@ describe('the figures handed over by the registration that made the run', () => 
     expect(theFiguresPresented(store, 'run-1')).toEqual(estimate)
   })
 
-  it('carry the name that attested them, and never another run’s', () => {
-    const store = aStore()
+  it('are the only thing this browser carries between the two screens', () => {
+    // A name was carried beside them, keyed the same way, for the interrupt to
+    // confirm under. It is gone with the field that collected it: the token bridges
+    // the two screens now, so what `sessionStorage` holds is the one thing
+    // `GET /runs/{id}` does not answer with.
+    const written = new Map<string, string>()
+    const store: FigureStore = {
+      getItem: (key) => written.get(key) ?? null,
+      setItem: (key, value) => {
+        written.set(key, value)
+      },
+    }
 
-    rememberWhoAttested(store, 'run-1', 'Matteo Rinaldi')
+    rememberTheFigures(store, 'run-1', estimated())
 
-    expect(whoAttested(store, 'run-1')).toBe('Matteo Rinaldi')
-    // The interrupt asks for no name, so an empty one is the answer for a run this
-    // browser did not register — not the name of the last run it did.
-    expect(whoAttested(store, 'run-2')).toBe('')
+    expect([...written.keys()]).toEqual(['agentaudit.estimate.run-1'])
   })
 
   it('are never another run’s figures', () => {

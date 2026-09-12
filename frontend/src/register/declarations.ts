@@ -73,7 +73,7 @@ export interface Attested {
 }
 
 /**
- * What an operator has declared so far, and who is declaring it.
+ * What an operator has declared so far.
  *
  * Here rather than beside one of the walks that collects it, because there are
  * three of them now — a run's registration, a gate run, and a measurement over the
@@ -84,9 +84,13 @@ export interface Attested {
  *
  * The empty `price_per_call` means *not priced*, which is a declaration and not a
  * zero — the distinction `CallPrice` and `budget.NOT_PRICED` keep one level down.
+ *
+ * **Who is declaring it is not here, and is not collected anywhere.** It is the
+ * subject of the session the API verified the request as (ADR-0116 §1), which no
+ * screen can type and none of the three bodies may carry. What the walks draw in its
+ * place is `console/door.whoIsAttesting`.
  */
 export interface Attesting {
-  identity: string
   attested: Attested
   price_per_call: string
   currency: string
@@ -95,7 +99,6 @@ export interface Attesting {
 /** Nothing declared yet. No statement is made and no price is assumed. */
 export function nothingAttested(): Attesting {
   return {
-    identity: '',
     attested: {
       authorised_to_test: false,
       not_production: false,
@@ -352,7 +355,6 @@ export interface Declarations {
   auth_token: string
   agent_type: string
   sends: number
-  identity: string
   attested: Attested
   /** `null` until the operator declares one way or the other. Never defaulted. */
   exposes_tool_calls: boolean | null
@@ -439,7 +441,6 @@ export function nothingDeclared(): Declarations {
     auth_token: '',
     agent_type: '',
     sends: 3,
-    identity: '',
     attested: {
       authorised_to_test: false,
       not_production: false,
@@ -489,14 +490,13 @@ export const WALK_STEPS = ['target', 'plant', 'tools'] as const
 export type Step = (typeof WALK_STEPS)[number]
 
 /*
- * The five sentences a step and the registration guard both refuse with.
+ * The four sentences a step and the registration guard both refuse with.
  *
  * Constants rather than two literals, because the screen now prints them under the
  * button they disable: a condition reworded on the button would say one thing where
  * the operator is stopped and another where the post is refused, and the second is
  * the one they would eventually meet. One string, both readers.
  */
-const IDENTITY_UNRECORDED = 'an attestation has to record who made it'
 
 const NONCE_UNISSUED = 'no nonce has been issued, so there is nothing planted to prove'
 
@@ -540,15 +540,13 @@ const TOOLS_UNDECLARED =
 export function unmetConditions(step: Step, declarations: Declarations): string[] {
   if (step === 'target') {
     // The three statements are on this step, and they hold it exactly as they held
-    // their own page: all three, and the name they are recorded against. A screen
-    // that let the walk past them would be a console asserting them itself.
-    const unmet = withheldStatements(declarations).map(
+    // their own page: all three of them. A screen that let the walk past them would
+    // be a console asserting them itself. The name they are recorded against holds
+    // nothing, because it is not declared here — the step prints who the bench will
+    // record and there is no field to leave empty (ADR-0116 §1).
+    return withheldStatements(declarations).map(
       (wording) => `not attested: ${wording}`,
     )
-    if (!declarations.identity.trim()) {
-      unmet.push(IDENTITY_UNRECORDED)
-    }
-    return unmet
   }
   if (step === 'plant') {
     // Either the value is issued and declared planted, or the proof is waived and
@@ -646,9 +644,6 @@ export function registrationRequest(
     // rather than waived by default.
     missing.push(NONCE_UNPLANTED)
   }
-  if (!declarations.identity.trim()) {
-    missing.push(IDENTITY_UNRECORDED)
-  }
   missing.push(
     ...withheldStatements(declarations).map(
       (wording) => `not attested: ${wording}`,
@@ -742,8 +737,8 @@ function startRunBody(declarations: Declarations): StartRunBody {
     },
     // The three statements and no name: the operator on the record is the one the
     // API verified this request as, and a body still carrying `identity` is refused
-    // (ADR-0116 §1). The screen still asks who is attesting, and #250 is where that
-    // ask becomes a line naming the signed-in operator.
+    // (ADR-0116 §1). Nothing asks for one either — the attestation step names the
+    // operator the bench will record instead of offering a field to mistype.
     attestation: {
       ...declarations.attested,
     },

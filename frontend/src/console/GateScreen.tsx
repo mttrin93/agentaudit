@@ -150,7 +150,7 @@ export function GateScreen() {
           confirmed={confirmed}
           setConfirmed={setConfirmed}
           confirm={confirm}
-          decline={() => void answer(gateDecline(attesting.identity))}
+          decline={() => void answer(gateDecline())}
           busy={busy}
         />
       ) : null}

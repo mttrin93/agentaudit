@@ -258,13 +258,6 @@ export type GateRunRequest =
 export function gateRunRequest(attesting: Attesting): GateRunRequest {
   const missing: string[] = []
 
-  if (!attesting.identity.trim()) {
-    missing.push(
-      'an attestation has to record who made it: the gate run is charged to ' +
-        'whoever attests it, and the case records it writes carry the run that ' +
-        'wrote them',
-    )
-  }
   if (attesting.price_per_call.trim() && !attesting.currency.trim()) {
     // `CallPrice`'s own guard, held here so the operator meets it as an unfinished
     // step rather than as a 422: an amount with a currency the bench chose is a

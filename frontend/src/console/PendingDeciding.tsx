@@ -13,6 +13,7 @@
  * declaration or from anything but an explicit yes on a halted measurement.
  */
 
+import { AttestingAs } from '../attesting'
 import { Blocked, STILL_UNDECLARED } from '../blocked'
 import type {
   Attesting,
@@ -88,14 +89,7 @@ export function TheAttestation({
 
         {step === 0 ? (
           <>
-            <label>
-              Who is attesting
-              <input
-                value={attesting.identity}
-                onChange={(event) => declare({ identity: event.target.value })}
-                placeholder="recorded against every one of the three statements"
-              />
-            </label>
+            <AttestingAs />
             <label>
               What one call costs you, on your own provider
               <input

@@ -261,7 +261,9 @@ describe('nothing starts a measurement on a guess', () => {
       expect(statement.consequence).toBeTruthy()
       expect(statement.of).toBe(3)
     }
-    expect(nothingAttested().identity).toBe('')
+    // And nothing beside them. The name this measurement is recorded under is the
+    // subject of the verified session and is not collected here (ADR-0116 §1).
+    expect('identity' in nothingAttested()).toBe(false)
   })
 })
 
@@ -406,7 +408,6 @@ describe('no figure on this page is a rate, an interval, a band or a D', () => {
 function attested() {
   return {
     ...nothingAttested(),
-    identity: 'an operator',
     price_per_call: '0.002',
     attested: {
       authorised_to_test: true,

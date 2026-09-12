@@ -174,7 +174,6 @@ export interface Confirming {
   figures: RunEstimate | null
   /** Ticked by hand. Nothing computes it and nothing defaults it to `true`. */
   confirmed: boolean
-  identity: string
   reason: string
 }
 
@@ -219,15 +218,17 @@ export function confirmationRequest(declared: Confirming): ConfirmationRequest {
         'they are, and nothing has been sent to the target',
     )
   }
-  // No requirement here that somebody type a name, and now no name on the body
-  // either. The bench still writes `confirmed by <name>` into the run's own sentence
-  // and it reads that name from the token the request carried, not from anything this
-  // screen holds (ADR-0116 §1) — so the sentence this comment used to end with, that
-  // an unheld name went as an empty identity and left the bench naming nobody, is a
-  // state that no longer exists. What this function guards is the spend, and it is
-  // the one function on this surface that must never block for want of a name: an
-  // interrupt that is harder to confirm than to decline is a consent surface pushing
-  // an answer.
+  // No name is required here, none is sent, and there is no longer one to hold.
+  // The bench still writes `confirmed by <name>` into the run's own sentence and it
+  // reads that name from the token the request carried, not from anything this screen
+  // or the one before it holds (ADR-0116 §1) — so the sentence this comment used to
+  // end with, that an unheld name went as an empty identity and left the bench naming
+  // nobody, describes a state that no longer exists. It was the right trade while a
+  // name was a string somebody typed: what this function guards is the spend, and it
+  // is the one function on this surface that must never block for want of a name,
+  // because an interrupt harder to confirm than to decline is a consent surface
+  // pushing an answer. That reasoning is why the branch is gone rather than why it
+  // stayed.
   if (missing.length) {
     return { kind: 'withheld', missing }
   }
@@ -263,6 +264,12 @@ export function declineRequest(reason: string): ApprovalBody {
 /**
  * The little of `Storage` this app uses, so that the handoff can be tested.
  *
+ * **One handoff, and it used to be two.** The name that attested a registration was
+ * held here beside the figures, keyed by the same run id, because `sessionStorage`
+ * was the only thing bridging the register screen and the interrupt in one browser.
+ * The session's token bridges them now and the bench reads the name off the request,
+ * so what is left here is the one fact `GET /runs/{id}` does not answer with.
+ *
  * A three-method interface rather than the DOM's `Storage`, because these tests
  * run in node and there is no `sessionStorage` there. The screen passes the real
  * one; a test passes a map.
@@ -274,16 +281,9 @@ export interface FigureStore {
 
 const HELD_UNDER = 'agentaudit.estimate.'
 
-const ATTESTED_BY = 'agentaudit.attested.'
-
 /** Keyed by run id, so that no run can ever be shown another run's figures. */
 function keyFor(runId: string): string {
   return `${HELD_UNDER}${runId}`
-}
-
-/** The same keying for the name, so no run can be confirmed under another's. */
-function whoKeyFor(runId: string): string {
-  return `${ATTESTED_BY}${runId}`
 }
 
 /** Hold on to the figures `POST /runs` returned, for the screen that shows them. */
@@ -293,29 +293,6 @@ export function rememberTheFigures(
   estimate: RunEstimate,
 ): void {
   store.setItem(keyFor(runId), JSON.stringify(estimate))
-}
-
-/**
- * Hold on to the name that attested this registration, for the interrupt to confirm
- * under.
- *
- * The interrupt asks for no name — there is no field on that screen — and the bench
- * writes `confirmed by <name>` into the run's own sentence either way, so the name
- * comes from the registration that made the run. Kept beside the figures, keyed by
- * the same run id and for the same reason: a confirmation recorded against somebody
- * who did not give it is worse than one recorded against nobody.
- */
-export function rememberWhoAttested(
-  store: FigureStore,
-  runId: string,
-  identity: string,
-): void {
-  store.setItem(whoKeyFor(runId), identity.trim())
-}
-
-/** The name this run was attested by, or the empty string when none is held. */
-export function whoAttested(store: FigureStore, runId: string): string {
-  return store.getItem(whoKeyFor(runId)) ?? ''
 }
 
 /**

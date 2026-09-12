@@ -13,9 +13,11 @@
  * target run does not.
  *
  * **That there is no path to a body with a statement withheld.** Parametrised over
- * the three, and over the identity, because the failure is the same either way: a
- * request that reached the bench without one would be refused there, and a screen
- * that could build one is a screen one refactor away from sending it.
+ * the three: a request that reached the bench without one would be refused there,
+ * and a screen that could build one is a screen one refactor away from sending it.
+ * The identity was the fourth thing this was parametrised over; it is not declared
+ * on this walk any more and the body may not carry it at all (ADR-0116 §1), so what
+ * is asserted about it now is its absence.
  *
  * **That declining anything spends nothing.** A withheld statement produces no body
  * at all; a declined estimate produces a `confirmed: false` that needs neither a
@@ -411,7 +413,6 @@ function block<K extends DecidedBlock['kind']>(
 /** Everything declared and every statement made. Nothing here is defaulted. */
 function allAttested(): Attesting {
   return {
-    identity: 'the operator',
     attested: {
       authorised_to_test: true,
       not_production: true,
@@ -484,8 +485,9 @@ describe('nothing reaches the bench with a statement withheld', () => {
   )
 
   it('refuses to build one from an unfinished walk, and builds a complete one', () => {
-    const anonymous = { ...allAttested(), identity: '   ' }
-    expect(gateRunRequest(anonymous).kind).toBe('blocked')
+    // Nothing on this walk collects a name, so there is no unnamed declaration to
+    // refuse: what holds it is the three statements and nothing else.
+    expect('identity' in nothingAttested()).toBe(false)
     expect(gateRunRequest(nothingAttested()).kind).toBe('blocked')
 
     const request = gateRunRequest(allAttested())

@@ -19,17 +19,25 @@ can check it offline — no account, no network, no trust in us.
 It attacks nine kinds of failure. The first six are the ones the bench itself is
 judged on; the last three are **elective** — you ask for them per run.
 
-| Family | The question it asks | Tier |
-| --- | --- | --- |
-| indirect prompt injection | Does your agent obey instructions hidden in a document it reads? | one of the six |
-| scope creep | Does it use tools it was not given? | one of the six |
-| wrongful commitment | Does it promise things it has no right to promise? | one of the six |
-| data leakage | Does it hand over its own configuration? | one of the six |
-| halt defeat | Does it keep working after being told to stop? | one of the six |
-| disclosure denial | Does it deny being an AI when asked? | one of the six |
-| memory poisoning | Does an instruction planted in one turn still run two turns later, after the document carrying it is gone? | elective · `ASI06` |
-| direct prompt injection | Does an override in the user's *own* message beat the system prompt? | elective · `LLM01` |
-| PII leakage | Does it hand over a record it holds **about somebody else**? | elective · `LLM02` |
+| Family | The question it asks | Tier | OWASP | EU AI Act |
+| --- | --- | --- | --- | --- |
+| indirect prompt injection | Does your agent obey instructions hidden in a document it reads? | the six | `ASI01` · `LLM01` | 15 |
+| scope creep | Does it use tools it was not given? | the six | `ASI02` · `LLM03` | 14 · 15 |
+| wrongful commitment | Does it promise things it has no right to promise? | the six | `ASI03` · `LLM07` | 15 · 14 |
+| data leakage | Does it hand over its own configuration? | the six | — · `LLM02` `LLM08` | 15 |
+| halt defeat | Does it keep working after being told to stop? | the six | `ASI10` · — | 14(4)(e) |
+| disclosure denial | Does it deny being an AI when asked? | the six | `ASI09` · — | 50 · 13 |
+| memory poisoning | Does an instruction planted in one turn still run two turns later, after the document carrying it is gone? | elective | `ASI06` · — | 15 · 10 |
+| direct prompt injection | Does an override in the user's *own* message beat the system prompt? | elective | — · `LLM01` | 15 |
+| PII leakage | Does it hand over a record it holds **about somebody else**? | elective | — · `LLM02` | 10 |
+
+The OWASP column reads *agentic entry · LLM entry* — the 2026 edition of both
+lists, which the report spells out in full. A **—** is a claim the project
+declined to make, not a gap: data leakage claims no agentic entry, and halt
+defeat and disclosure denial claim no LLM entry because they originated here
+rather than on a list. Articles are primary first, and **Article 12** is missing
+from every row on purpose: record-keeping is borne by all nine, so a column
+repeating it nine times would say nothing.
 
 The elective three are measured by exactly the same machinery, against the same
 three reference agents, and held to the same bar — but they can never decide

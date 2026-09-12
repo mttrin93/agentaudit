@@ -132,7 +132,12 @@ def count_clean_runs(
         except Exception as fault:  # noqa: BLE001 - never fails a measured run
             refused.append(_not_written(reading, fault))
             continue
-        if counted.state is HeldState.CLOSED and held.state is not HeldState.CLOSED:
+        if counted.state is HeldState.CLOSED:
+            # This run closed it, and not some earlier one: the record read above
+            # was open — the guard further up returned every closed one — so the
+            # only transition that reaches this line is this run's second clean
+            # reading. mypy says the same thing, which is why there is no second
+            # half to this condition.
             closed.append(counted.route)
     return Closing(
         target_name=sent.target_name,

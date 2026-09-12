@@ -286,11 +286,7 @@ export function usePendingRoutes() {
    * re-asks its own guard: this is the line that spends.
    */
   const confirm = () => {
-    const confirmation = measurementConfirmation(
-      started?.status ?? '',
-      confirmed,
-      attesting.identity,
-    )
+    const confirmation = measurementConfirmation(started?.status ?? '', confirmed)
     if (confirmation.kind !== 'ready') {
       return
     }
@@ -299,7 +295,7 @@ export function usePendingRoutes() {
 
   /** The answer that spends nothing, sent rather than withheld. */
   const decline = () => {
-    void answer(measurementDecline(attesting.identity))
+    void answer(measurementDecline())
   }
 
   /**

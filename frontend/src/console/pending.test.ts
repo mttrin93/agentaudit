@@ -241,7 +241,13 @@ describe('nothing starts a measurement on a guess', () => {
     expect(request.kind).toBe('ready')
     if (request.kind === 'ready') {
       expect(request.body.routes).toEqual(['r-1', 'r-2'])
-      expect(request.body.attestation.identity).toBe('an operator')
+      // The three statements and nothing else: a body that still named its operator
+      // is refused by the API rather than served with the field ignored (ADR-0116 §1).
+      expect(Object.keys(request.body.attestation).sort()).toEqual([
+        'accepts_provider_policy_and_cost',
+        'authorised_to_test',
+        'not_production',
+      ])
       expect(request.body.cost.price_per_call).toBe('0.002')
     }
   })
@@ -263,32 +269,23 @@ describe('the halt, answered on the page', () => {
   it('builds no confirmation from anything but an explicit yes on a held halt', () => {
     // The three ways a confirmation is not one, each stated. Nothing here is a
     // flag, a setting or a default: an interrupt is answered by a person (ADR-0007).
-    expect(
-      measurementConfirmation('measuring', true, 'an operator').kind,
-    ).toBe('withheld')
-    expect(
-      measurementConfirmation(AWAITING_APPROVAL, false, 'an operator').kind,
-    ).toBe('withheld')
-    expect(measurementConfirmation(AWAITING_APPROVAL, true, '  ').kind).toBe(
-      'withheld',
-    )
+    expect(measurementConfirmation('measuring', true).kind).toBe('withheld')
+    expect(measurementConfirmation(AWAITING_APPROVAL, false).kind).toBe('withheld')
 
-    const ready = measurementConfirmation(AWAITING_APPROVAL, true, ' an operator ')
+    const ready = measurementConfirmation(AWAITING_APPROVAL, true)
     expect(ready.kind).toBe('ready')
     if (ready.kind === 'ready') {
-      expect(ready.body).toEqual({
-        confirmed: true,
-        identity: 'an operator',
-        reason: '',
-      })
+      // Two fields, and `toEqual` is the assertion that there is no third: who
+      // confirmed is the operator the API verified, not a name on the wire.
+      expect(ready.body).toEqual({ confirmed: true, reason: '' })
     }
   })
 
   it('sends the no rather than withholding it, and asks for nothing first', () => {
-    const declined = measurementDecline('an operator')
+    const declined = measurementDecline()
 
     expect(declined.confirmed).toBe(false)
-    expect(declined.identity).toBe('an operator')
+    expect(Object.keys(declined).sort()).toEqual(['confirmed', 'reason'])
     expect(declined.reason).toBeTruthy()
   })
 })

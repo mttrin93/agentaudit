@@ -402,7 +402,7 @@ export function RunScreen() {
           setConfirmed={setConfirmed}
           busy={busy}
           confirm={confirm}
-          decline={() => void answer(declineRequest(identity, ''))}
+          decline={() => void answer(declineRequest(''))}
         />
       ) : null}
 

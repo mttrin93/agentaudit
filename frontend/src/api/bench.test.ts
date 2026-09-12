@@ -104,8 +104,10 @@ describe('the registration this screen posts', () => {
         changes_state_or_communicates: null,
         under_human_supervision: null,
       },
+      // The three statements and no name. Who attested is the operator the API
+      // verified this request as, and a body still carrying `identity` is refused
+      // rather than served with the field ignored (ADR-0116 §1).
       attestation: {
-        identity: 'operator',
         authorised_to_test: true,
         not_production: true,
         accepts_provider_policy_and_cost: true,

@@ -289,6 +289,11 @@ def test_a_machine_credential_reaches_the_issuer_where_a_session_token_does_not(
 
     assert isinstance(refused, Unverified)
     assert refused.cause is Unverifiable.UNAVAILABLE
+    # And it got as far as the issuer to earn that: the refusal above is the one a
+    # deployment that declared nothing to check with earns, and this deployment
+    # declared one. A short circuit that stopped every machine credential here would
+    # pass the cause assertion while never reaching a network at all.
+    assert refused.reason != MACHINE_NEEDS_SECRET_KEY
 
 
 def _answering(payload: dict[str, Any]) -> Any:

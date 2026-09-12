@@ -99,11 +99,16 @@ FACTORY_VARIABLES = (
     "AGENTAUDIT_TURNS_PER_EPISODE",
     "OPENROUTER_API_KEY",
     "OPENROUTER_BASE_URL",
+    "AGENTAUDIT_ISSUER_JWT_KEY",
+    "AGENTAUDIT_ISSUER_SECRET_KEY",
 )
 """Every variable this walkthrough refuses to inherit, deleted before the factory runs.
 
 The four trace variables are the sink; the four model variables are what would be
-called; the two OpenRouter ones are the credential a call would be billed against.
+called; the two OpenRouter ones are the credential a call would be billed against;
+the two issuer ones are the door, which this walkthrough declares off below — deleted
+as well as declared off so that an engineer with a real issuer exported does not have
+a browser run that could reach it.
 Deleted rather than overridden with something harmless, because a harmless value is
 still a value the factory reads and reports, and the run is supposed to describe a
 bench that declared none of them.
@@ -152,7 +157,7 @@ def main() -> int:
     # second would put every one of them back.
     import uvicorn
 
-    from backend.api.app import create_app
+    from backend.api.app import NO_DOOR, create_app
     from backend.bench.signing import (
         SIGNING_KEY_VARIABLE,
         encoded_private,
@@ -208,7 +213,16 @@ def main() -> int:
         print(f"reference agents at {base_url}; the bench on port {port}", flush=True)
         try:
             uvicorn.run(
-                create_app(), host="127.0.0.1", port=int(port), log_level="warning"
+                # The door, declared off. A deployed factory refuses to boot without
+                # an issuer (`app.NO_ISSUER_NO_BOOT`), and this walkthrough has none:
+                # it runs in CI on a fork, against agents it started itself, with a
+                # browser that has no account to sign in to. Declared rather than
+                # defaulted, which is the whole of the distinction — nothing here
+                # falls into an open bench, this file asks for one.
+                create_app(verifier=NO_DOOR),
+                host="127.0.0.1",
+                port=int(port),
+                log_level="warning",
             )
         finally:
             SERVED.unlink(missing_ok=True)

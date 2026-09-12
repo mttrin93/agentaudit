@@ -83,6 +83,10 @@ from backend.graph import approval
 from backend.graph.approval import Approval, Approve
 from backend.graph.budget import BudgetPayload, RunBudget
 from backend.graph.runstate import Attempt
+from backend.identity import (
+    ISSUER_JWT_KEY_VARIABLE,
+    ISSUER_SECRET_KEY_VARIABLE,
+)
 from backend.targets.reference.agent import ReferenceAgent
 from backend.targets.reference.model import ModelConfig
 from backend.targets.reference.operator import namespace_dropper, nonce_planter
@@ -582,6 +586,38 @@ def precedent_elsewhere(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
     above cannot give and does not try to.
     """
     _precedent_at(monkeypatch, tmp_path / "precedent" / "findings.sqlite")
+
+
+SUITE_ISSUER_KEY = "-----BEGIN PUBLIC KEY-----\nnot a key\n-----END PUBLIC KEY-----"
+"""The issuer this suite declares and never reaches.
+
+Not a key, and nothing here checks that it is one: `ClerkVerifier` holds what it is
+handed and the provider's library is called per request, which no test with this
+value in the environment ever does. What it is for is the boot — `create_app()` with
+nothing declared refuses to start without an issuer (`app.NO_ISSUER_NO_BOOT`), and
+some two dozen tests boot exactly that factory to read what a *deployed* bench
+configured itself with.
+
+Autouse and in `conftest` rather than a line in each of those tests, because the
+alternative is the same declaration repeated two dozen times in five files to keep
+assertions about the signing key, the models and the citation passing — and because
+a test written next year that boots the deployed factory should not fail on a
+variable it has no opinion about. A test that *is* about the absence deletes both
+variables itself, which `test_the_deployed_factory_refuses_to_boot_with_no_issuer`
+does.
+"""
+
+
+@pytest.fixture(autouse=True)
+def an_issuer_the_suite_never_reaches(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Every test runs with an issuer declared and none of them presents a token.
+
+    See `SUITE_ISSUER_KEY`. The secret key is deleted rather than left alone: it is
+    the networked fallback, and an engineer with a real one exported would otherwise
+    have a suite that could open a socket to their provider.
+    """
+    monkeypatch.setenv(ISSUER_JWT_KEY_VARIABLE, SUITE_ISSUER_KEY)
+    monkeypatch.delenv(ISSUER_SECRET_KEY_VARIABLE, raising=False)
 
 
 def _decisions_at(patch: pytest.MonkeyPatch, elsewhere: Path) -> None:

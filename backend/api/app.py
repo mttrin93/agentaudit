@@ -173,9 +173,9 @@ from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from enum import StrEnum
 from pathlib import Path
-from typing import Annotated, Literal
+from typing import Annotated, Final, Literal
 
-from fastapi import Body, FastAPI, HTTPException, Response, status
+from fastapi import Body, Depends, FastAPI, Header, HTTPException, Response, status
 from fastapi import Path as PathParam
 from pydantic import BaseModel, Field
 
@@ -305,6 +305,15 @@ from backend.graph.budget import (
     Layer,
 )
 from backend.graph.runstate import Attempt, RunState
+from backend.identity import (
+    ISSUER_JWT_KEY_VARIABLE,
+    ISSUER_SECRET_KEY_VARIABLE,
+    Operator,
+    Unverifiable,
+    Unverified,
+    Verifier,
+    declared_verifier,
+)
 from backend.observability import (
     disable_inherited_tracing,
     install,
@@ -6037,10 +6046,128 @@ def deployed_pending_routes(
     )
 
 
+NO_DOOR: Final = "no door"
+"""Declared authentication, declared off: an app that serves every route to anybody.
+
+The one way a deployment gets an open bench, and it has to say so. `create_app()`
+declaring nothing gets `NO_ISSUER_NO_BOOT` instead, because *unconfigured* meaning
+*open* is the silent failure ADR-0116 §2 exists to prevent — so the open reading is
+a value a caller passes and never a state a redeploy can fall into.
+
+What it is for: the browser walkthrough, which starts a deployed bench in a process
+of its own and drives it with no issuer and no account (`frontend/e2e/harness.py`),
+and the tests that read what a *deployed* factory answers on a route. Not for the
+deployment: the console signs in, and the door there is the point.
+"""
+
+
+NO_ISSUER_NO_BOOT = (
+    "This factory does not start without an issuer it can verify an operator "
+    f"against. Declare {ISSUER_JWT_KEY_VARIABLE} — the identity provider's public "
+    "key, in PEM, as its dashboard prints it — or "
+    f"{ISSUER_SECRET_KEY_VARIABLE} for the fallback path, or hand in a verifier. "
+    "A factory that booted anyway would come back serving every route on this "
+    "surface to anyone holding the URL: registering a target, confirming an "
+    "estimate, and through /gate-runs the 830-call operation that spends this "
+    "deployment's own provider budget — with nothing on any screen saying the gate "
+    "was gone (ADR-0116 §2, which is ADR-0020's reasoning applied to a second "
+    "credential). Pass `verifier=NO_DOOR` instead to say deliberately that this "
+    "bench has no door."
+)
+"""Why an undeclared issuer is fatal at startup, in `NO_KEY_NO_BOOT`'s shape.
+
+The same sentence at the same distance: what the *caller* was about to do, which is
+the half that makes the absence fatal rather than a degraded mode. It names both
+variables because `declared_issuer` accepts either, and it names the way out because
+a contributor who wants an open bench on a laptop should not have to read this
+module to find it.
+"""
+
+
+class NoIssuer(RuntimeError):
+    """Nothing was declared to verify an operator against, so this factory does not
+    start.
+
+    A refusal and never a fallback, which is the whole of ADR-0116 §2. The decision
+    lives here rather than in `identity.declared_issuer` because that function says
+    what a deployment declared and this factory is what has to do something about
+    it — and because a repository where the environment reader also decided the
+    consequence would have one place to change to make *unconfigured* mean *open*
+    again.
+    """
+
+
+UNAUTHENTICATED = {
+    Unverifiable.ABSENT,
+    Unverifiable.MALFORMED,
+    Unverifiable.EXPIRED,
+    Unverifiable.UNTRUSTED,
+}
+"""The four refusals that are a statement about the credential presented.
+
+`UNAVAILABLE` is the fifth and is deliberately not here: it says the check could not
+be completed, which is this deployment's problem and not the caller's. It is served
+as a `503` so that an operator whose issuer is down is not told their credentials
+were rejected, and so that a console can tell *sign in again* from *try again later*
+(`identity.Unverifiable`).
+"""
+
+
+def deployed_verifier() -> Verifier:
+    """What a deployment that declared nothing verifies with, or a refusal to boot.
+
+    The issuer is read through `identity.declared_verifier`, which stays the only
+    function in this repository that names a concrete verifier; what is decided here
+    is what its `None` means, and it means this factory does not start.
+    """
+    verifier = declared_verifier()
+    if verifier is None:
+        raise NoIssuer(NO_ISSUER_NO_BOOT)
+    return verifier
+
+
+def admitting(verifier: Verifier) -> Callable[[str | None], Operator]:
+    """The dependency every route on this surface carries: the operator asking, or
+    the refusal that request earned, before any route body runs.
+
+    **Carried by the router and never a decorator per route.** A route added next
+    year is authenticated because it is on this app, not because somebody remembered
+    — which is the failure mode a per-route decorator has and this does not.
+
+    **The refusal takes the shape every other refusal on this surface takes**: an
+    `HTTPException` whose detail is the sentence the verifier wrote. That prose
+    travels through unaltered (`identity._refusal`), because the status is what a
+    console branches on and the sentence is what an operator reads.
+    """
+
+    def the_operator_asking(
+        authorization: Annotated[str | None, Header()] = None,
+    ) -> Operator:
+        verified = verifier.verify(authorization)
+        if isinstance(verified, Unverified):
+            presented = verified.cause in UNAUTHENTICATED
+            raise HTTPException(
+                status_code=(
+                    status.HTTP_401_UNAUTHORIZED
+                    if presented
+                    else status.HTTP_503_SERVICE_UNAVAILABLE
+                ),
+                detail=verified.reason,
+                # Only on the four. A `503` carrying a challenge would be telling a
+                # client to present something else when nothing it could have
+                # presented was checked.
+                headers={"WWW-Authenticate": "Bearer"} if presented else None,
+            )
+        return verified
+
+    return the_operator_asking
+
+
 def create_app(
     config: BenchConfig | None = None,
     gate_runs: GateRunBench | None = None,
     pending_routes: PendingRouteBench | None = None,
+    verifier: Verifier | Literal["no door"] | None = None,
 ) -> FastAPI:
     """The API over one bench, over one library.
 
@@ -6057,6 +6184,20 @@ def create_app(
     own configuration runs no gate — the operation that spends 830 calls and rewrites
     the library is not something a deployment acquires by omission — and a bench that
     declared nothing at all gets the deployed reading of both.
+
+    `verifier` is the **fourth**, on those terms and with one asymmetry the paragraph
+    above earns the right to state briefly: a bench that has said what it signs with,
+    what it may write a gate run into and what equipment it decides a route against
+    has still not said who is allowed to ask it for any of that. So a caller that
+    declared a configuration and no verifier gets an app with no authentication —
+    which is what this suite gets, and why it needs no issuer.
+
+    The asymmetry is in the deployed reading. An undeclared gate run is a bench that
+    runs no gate; an undeclared door is *not* a bench with no door but `NoIssuer`,
+    raised here, because a redeploy that dropped the variable would otherwise come
+    back serving every route to the internet with nothing saying the gate was gone
+    (ADR-0116 §2, and `NO_ISSUER_NO_BOOT` says it at the length it deserves). A
+    deployment that wants an open bench passes `NO_DOOR` and has then said so.
     """
     # Two lines of tracing, and both of them before a bench exists. The first turns
     # off every tracer this process inherited: one environment variable activates a
@@ -6091,7 +6232,19 @@ def create_app(
             else deployed_pending_routes(bench.config, gate_runs)
         )
     pending = BenchPendingRoutes(bench.config, pending_routes)
-    app = FastAPI(title="AgentAudit", version="0.1.0")
+    if verifier is None:
+        # The fourth declaration's own `if`, in the three above's shape. A bench that
+        # declared its own configuration and no verifier is unauthenticated; a bench
+        # that declared nothing at all is the deployment, and the deployment has a
+        # door or does not start.
+        verifier = NO_DOOR if declared else deployed_verifier()
+    app = FastAPI(
+        title="AgentAudit",
+        version="0.1.0",
+        # One dependency, carried by the router and so by every route on it —
+        # including the ones added after this line was written.
+        dependencies=[] if verifier == NO_DOOR else [Depends(admitting(verifier))],
+    )
     app.state.bench = bench
     app.state.gate_runs = gates
     app.state.pending_routes = pending

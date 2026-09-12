@@ -9,11 +9,12 @@
  * issuer. So the doored suite needs an account, and an account is a thing a clone,
  * a fork and CI do not have.
  *
- * **Absent is a skip that says so, and never a pass.** A suite that quietly reported
- * green with nothing exported would be the worst of the three outcomes: it would read
- * as evidence the door works to anybody scanning a run. So `declared: false` carries
- * the names it wanted, `door.spec.ts` skips on it with that sentence, and a run that
- * skipped is visible as a skip in the reporter.
+ * **Absent is a skip that says so, and never a pass.** Decided in
+ * [ADR-0125](../../docs/adr/0125-the-doored-walkthrough-is-opt-in-and-an-absent-test-user-is-a-printed-skip.md),
+ * which weighs it against the three alternatives and is not re-argued here. The local
+ * consequence is this function's shape: `declared: false` carries the names it wanted,
+ * `door.spec.ts` skips on it, and `playwright.door.config.ts` prints the sentence —
+ * because a reporter prints `2 skipped` and not the annotation behind it.
  *
  * **Nothing here is committed and nothing here is printed.** The values are read from
  * the environment at the moment they are used; `statement` names the *variables* and

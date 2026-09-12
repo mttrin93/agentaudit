@@ -7,8 +7,9 @@
  * bench and asserts the honest doorless reading of every screen — the sentence naming
  * nobody, on the register screen and in the signed artefact. What it cannot reach is a
  * verified subject, because a verified subject needs a real session from a real issuer
- * and CI has no account. So this file exists, it is opt-in, and `door-user.ts` says
- * what it reads and why an absent test user is a skip rather than a pass.
+ * and CI has no account. So this file exists and it is opt-in
+ * ([ADR-0125](../../docs/adr/0125-the-doored-walkthrough-is-opt-in-and-an-absent-test-user-is-a-printed-skip.md));
+ * `door-user.ts` says what it reads.
  *
  * **Started by `playwright.door.config.ts`.** `npm run e2e` does not run it: that
  * config ignores this file, this one runs nothing else, and the difference between

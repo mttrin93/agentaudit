@@ -148,7 +148,8 @@ no other purpose, and the deleted name is set from it below — so the factory r
 it always reads and the opt-in is visible in one grep.
 
 Absent is the path every clone and every CI run takes: `NO_DOOR`, and a console with no
-publishable key. `docs/deployment.md` lists the four variables the doored path needs.
+publishable key — ADR-0125, which decides that the doored suite is opt-in and that an
+absent test user is a printed skip. `docs/deployment.md` lists the four variables.
 """
 
 DOOR_SECRET_KEY_VARIABLE = "AGENTAUDIT_E2E_ISSUER_SECRET_KEY"

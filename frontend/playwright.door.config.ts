@@ -10,9 +10,10 @@
  * `playwright.config.ts` ignores `door.spec.ts` for the same reason this one runs
  * nothing else.
  *
- * **It is opt-in, and everything else about it follows from that.** The door needs an
- * account at an issuer and a test user in it; a clone, a fork and CI have none, which
- * `e2e/door-user.ts` says at more length. So the four variables are read here before
+ * **It is opt-in, and everything else about it follows from that**
+ * ([ADR-0125](../docs/adr/0125-the-doored-walkthrough-is-opt-in-and-an-absent-test-user-is-a-printed-skip.md)).
+ * The door needs an account at an issuer and a test user in it; a clone, a fork and CI
+ * have none. So the four variables are read here before
  * anything starts: with them, two servers and a suite; without them, no servers at
  * all and a suite that skips with the sentence naming what to export. A config that
  * started the servers anyway would fail in the harness — a deployed factory with no
@@ -47,7 +48,8 @@ const API = `http://127.0.0.1:${API_PORT}`
  */
 const user = doorUser(process.env)
 
-// Printed once, because a skip is only documented if somebody reads the document.
+// Printed once (ADR-0125 decision 3), because a skip is only documented if somebody
+// reads the document.
 // Playwright's reporters print `2 skipped` and not the annotation behind it, and a
 // line saying two tests were skipped is exactly as informative as a line saying two
 // passed — which is the reading `door-user.ts` exists to prevent.

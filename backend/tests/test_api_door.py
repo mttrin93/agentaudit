@@ -17,14 +17,25 @@ a suite nobody could run on a fork.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import cast
 
 import pytest
 from fastapi import FastAPI
 from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
 
-from backend.api.app import NO_DOOR, UNAUTHENTICATED, NoIssuer, create_app
+from backend.api.app import (
+    NO_DOOR,
+    NOBODY_VERIFIED,
+    UNAUTHENTICATED,
+    DeclaredDoor,
+    NoIssuer,
+    create_app,
+)
 from backend.api.run_config import BenchConfig
+from backend.api.run_state import RunRecord
+from backend.api.runs import BenchRuns
+from backend.bench.library import Case
 from backend.bench.signing import SIGNING_KEY_VARIABLE, encoded_private, generate
 from backend.identity import (
     ISSUER_JWT_KEY_VARIABLE,
@@ -335,3 +346,201 @@ def test_a_bench_with_no_door_keeps_its_schema() -> None:
     client = TestClient(create_app(BenchConfig(cases=[])))
 
     assert client.get("/openapi.json").status_code == 200
+
+
+# --- the name ---------------------------------------------------------------------
+
+
+ATTESTED = {
+    "authorised_to_test": True,
+    "not_production": True,
+    "accepts_provider_policy_and_cost": True,
+}
+"""The three statements, and no fourth field naming who made them.
+
+This dictionary is the shape of the deployed surface after
+[ADR-0116](../../docs/adr/0116-the-identity-in-a-report-is-a-verified-claim-and-not-a-typed-string.md)
+§1: a caller states what they attest to and cannot state who they are.
+"""
+
+
+def a_bench_behind_a_door(case: Case, verifier: Verifier | DeclaredDoor) -> FastAPI:
+    """An app over one case, with whatever door the test named.
+
+    One case because a run has to be startable: the halt is what these tests read,
+    and a bench with nothing to attempt has nothing to halt over.
+    """
+    return create_app(
+        BenchConfig(cases=[case], approval_wait_seconds=5.0), verifier=verifier
+    )
+
+
+def a_run_that_names_nobody(nonce: str) -> dict[str, object]:
+    """A start body in the shape a caller may now send: the statements, no name.
+
+    The target is an address nothing is listening on, and nothing reaches it: the
+    run halts at the approval interrupt before the probe, and every test below
+    declines.
+    """
+    return {
+        "target": {
+            "name": "a target this run never reaches",
+            "url": "http://127.0.0.1:1/never",
+            "auth_token": "",
+            "agent_type": "assistant",
+            "exposes_tool_calls": True,
+            "declared_tools": ["search"],
+        },
+        "attestation": dict(ATTESTED),
+        "nonce": nonce,
+        "cost": {"price_per_call": "0.002", "currency": "USD"},
+    }
+
+
+def _started(client: TestClient, headers: dict[str, str]) -> str:
+    """One run, halted at its interrupt, started by whoever those headers are."""
+    nonce = str(client.post("/nonces", headers=headers).json()["nonce"])
+    started = client.post("/runs", json=a_run_that_names_nobody(nonce), headers=headers)
+    assert started.status_code == 202, started.json()
+    return str(started.json()["run_id"])
+
+
+def _record(app: FastAPI, run_id: str) -> RunRecord:
+    """The record that run became, read where a signed report reads it from."""
+    record = cast(BenchRuns, app.state.bench).record(run_id)
+    assert record is not None, f"this bench did not start {run_id}"
+    return record
+
+
+def _declining(app: FastAPI, run_id: str) -> str:
+    """Who the record says answered that run's interrupt.
+
+    Read off the result the graph unwound with rather than off `confirmed_by`, which
+    a declined run does not carry: a no is answered by somebody too, and this is
+    where the bench keeps their name.
+    """
+    result = _record(app, run_id).result
+    assert result is not None, f"run {run_id} settled with no result on it"
+    return result.approval.identity
+
+
+def test_a_run_is_attested_by_the_subject_the_token_was_verified_as(
+    leakage_case: Case,
+) -> None:
+    """The assertion ADR-0116 §1 comes to: the record names the verified operator.
+
+    The body carried no name — it cannot — so the only place this string could have
+    come from is the header the door read.
+    """
+    app = a_bench_behind_a_door(leakage_case, Admits())
+    headers = {"Authorization": f"Bearer {TOKEN}"}
+
+    with TestClient(app) as client:
+        run_id = _started(client, headers)
+        client.post(
+            f"/runs/{run_id}/approval",
+            json={"confirmed": False, "reason": "the test that started this is over"},
+            headers=headers,
+        )
+
+    assert _record(app, run_id).attestation.identity == SUBJECT
+
+
+def test_the_answer_to_an_interrupt_is_recorded_against_the_same_subject(
+    leakage_case: Case,
+) -> None:
+    """The second record a request becomes, and the same source for its name.
+
+    An approval is the consent seam itself (ADR-0007), so who answered is the half
+    of it that has to be founded on something: `confirmed_by` is read off the
+    token and never off the body.
+    """
+    app = a_bench_behind_a_door(leakage_case, Admits())
+    headers = {"Authorization": f"Bearer {TOKEN}"}
+
+    with TestClient(app) as client:
+        run_id = _started(client, headers)
+        answered = client.post(
+            f"/runs/{run_id}/approval",
+            json={"confirmed": False, "reason": "too dear"},
+            headers=headers,
+        )
+
+    assert answered.status_code == 200
+    assert _declining(app, run_id) == SUBJECT
+
+
+def test_a_start_body_that_still_names_an_operator_is_refused(
+    leakage_case: Case,
+) -> None:
+    """Refused and never ignored, which is the half of §1 that can go wrong quietly.
+
+    A client that still sends the field would otherwise be served: the attestation
+    would be recorded against the token's subject, the caller would believe they had
+    named it, and nothing anywhere would say the two disagreed.
+    """
+    app = a_bench_behind_a_door(leakage_case, Admits())
+    headers = {"Authorization": f"Bearer {TOKEN}"}
+
+    with TestClient(app) as client:
+        nonce = str(client.post("/nonces", headers=headers).json()["nonce"])
+        body = a_run_that_names_nobody(nonce)
+        body["attestation"] = {"identity": "somebody else", **ATTESTED}
+        refused = client.post("/runs", json=body, headers=headers)
+
+        assert refused.status_code == 422
+        assert "identity" in str(refused.json()["detail"])
+        # And no run was started by the request that was refused.
+        assert client.get("/runs", headers=headers).json()["runs"] == []
+
+
+def test_an_approval_body_that_still_names_an_operator_is_refused(
+    leakage_case: Case,
+) -> None:
+    """The same refusal on the body that answers the halt, and the halt stays held.
+
+    The interrupt is still waiting afterwards: a refused answer is not an answer, so
+    the run is neither confirmed nor declined by it.
+    """
+    app = a_bench_behind_a_door(leakage_case, Admits())
+    headers = {"Authorization": f"Bearer {TOKEN}"}
+
+    with TestClient(app) as client:
+        run_id = _started(client, headers)
+        refused = client.post(
+            f"/runs/{run_id}/approval",
+            json={"confirmed": True, "identity": "somebody else", "reason": ""},
+            headers=headers,
+        )
+
+        assert refused.status_code == 422
+        assert "identity" in str(refused.json()["detail"])
+        assert _record(app, run_id).confirmed_by == ""
+
+        client.post(
+            f"/runs/{run_id}/approval",
+            json={"confirmed": False, "reason": "the test that started this is over"},
+            headers=headers,
+        )
+
+
+def test_a_bench_with_no_door_records_that_it_verified_nobody(
+    leakage_case: Case,
+) -> None:
+    """The declared-open reading, which still has to put something in the field.
+
+    `Attestation` refuses a blank identity, so a bench that verified nobody says so
+    in the words `NOBODY_VERIFIED` carries rather than borrowing a name from the
+    body it no longer reads.
+    """
+    app = a_bench_behind_a_door(leakage_case, NO_DOOR)
+
+    with TestClient(app) as client:
+        run_id = _started(client, {})
+        client.post(
+            f"/runs/{run_id}/approval",
+            json={"confirmed": False, "reason": "the test that started this is over"},
+        )
+
+    assert _record(app, run_id).attestation.identity == NOBODY_VERIFIED.subject
+    assert _declining(app, run_id) == NOBODY_VERIFIED.subject

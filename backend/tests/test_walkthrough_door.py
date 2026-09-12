@@ -25,6 +25,8 @@ from types import ModuleType
 
 import pytest
 
+from backend.identity import ISSUER_JWT_KEY_VARIABLE
+
 HARNESS = Path(__file__).resolve().parents[2] / "frontend" / "e2e" / "harness.py"
 
 
@@ -55,32 +57,16 @@ def test_an_exported_issuer_key_puts_the_door_up(harness: ModuleType) -> None:
     """The doored path: the operator exported the issuer's public key, so the harness
     serves the deployed reading of the factory and the bench checks every request."""
     door = harness.declared_door({harness.DOOR_JWT_KEY_VARIABLE: "-----BEGIN PEM-----"})
-    assert door == {"AGENTAUDIT_ISSUER_JWT_KEY": "-----BEGIN PEM-----"}
+    assert door is not None
+    assert list(door.values()) == ["-----BEGIN PEM-----"]
 
 
-def test_the_secret_key_rides_along_when_it_is_exported(harness: ModuleType) -> None:
-    """A machine credential is checked at the issuer and needs the secret key beside
-    the PEM (ADR-0124), so a walkthrough that means to exercise one may export both."""
-    door = harness.declared_door(
-        {
-            harness.DOOR_JWT_KEY_VARIABLE: "-----BEGIN PEM-----",
-            harness.DOOR_SECRET_KEY_VARIABLE: "sk_test_nothing",
-        }
-    )
-    assert door == {
-        "AGENTAUDIT_ISSUER_JWT_KEY": "-----BEGIN PEM-----",
-        "AGENTAUDIT_ISSUER_SECRET_KEY": "sk_test_nothing",
-    }
-
-
-def test_a_secret_key_alone_is_not_a_door_this_harness_will_serve(
+def test_the_name_the_door_is_declared_under_is_the_factorys_own(
     harness: ModuleType,
 ) -> None:
-    """Offline verification is the point of the PEM (ADR-0116 §4). A walkthrough given
-    only the secret key would run against a bench that called the issuer on every poll,
-    which is a different bench from the deployed one — so it is refused rather than
-    served as though it were the doored path."""
-    assert (
-        harness.declared_door({harness.DOOR_SECRET_KEY_VARIABLE: "sk_test_nothing"})
-        is None
-    )
+    """The value goes under the name `backend/identity.py` reads, asked of that module
+    rather than copied: a name copied here and renamed there would leave the harness
+    setting something nothing reads, and a bench serving every route to anybody while
+    this file said it had a door."""
+    door = harness.declared_door({harness.DOOR_JWT_KEY_VARIABLE: "-----BEGIN PEM-----"})
+    assert door == {ISSUER_JWT_KEY_VARIABLE: "-----BEGIN PEM-----"}

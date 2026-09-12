@@ -22,6 +22,15 @@
  * with one, named on the screen that collects the attestation, and same-origin on the
  * wire.
  *
+ * **So one acceptance clause of #252 is not closed here and is not claimed to be.**
+ * *A run registered there records the signed-in subject* is asserted at both ends by
+ * other things — `test_api_door.py` holds that an authenticated request records the
+ * token's subject, and `walkthrough.spec.ts` holds that the sentence on the register
+ * screen is the sentence in the signed artefact — but no browser here drives a run to
+ * a document. Closing it in a browser means walking the whole operator path a second
+ * time with a token on it, and the person who should see that walk is the operator
+ * running it against the live deployment.
+ *
  * **No credential reaches this file.** The password is read from the environment and
  * typed into the issuer's own field; nothing is logged, nothing is asserted against
  * it, and the one sentence this suite prints names variables rather than values.
@@ -55,9 +64,18 @@ test.skip(!user.declared, user.declared ? '' : user.statement)
  * the selectors are the issuer's and not this app's. They are the two inputs a
  * password-first flow has, reached by `name` because that is the attribute the
  * provider's markup commits to across its themes.
+ *
+ * **It assumes the instance signs in with a password**, which is a fact about the
+ * issuer's configuration and not about this bench: an instance set to email codes or
+ * one serving a bot check has no `input[name="password"]` to fill, and this fails on
+ * that locator with its name in the message. `docs/deployment.md` says so beside the
+ * four variables, because it is the operator's dashboard that decides it.
  */
 async function signIn(page: import('@playwright/test').Page): Promise<void> {
-  if (!user.declared) return
+  // A throw and never a `return`, though either narrows the union. A bare return
+  // would make a *vacuous pass* the failure mode if `test.skip` above ever stopped
+  // firing — which is the one reading ADR-0125 decision 3 exists to prevent.
+  if (!user.declared) throw new Error(user.statement)
   await page.goto('/')
   await page.locator('input[name="identifier"]').fill(user.emailAddress)
   await page.getByRole('button', { name: /continue/i }).click()
@@ -88,7 +106,8 @@ test('a request with no session is refused, in the shape every refusal here take
 test('a signed-in operator is named at the console and recorded by the bench', async ({
   page,
 }) => {
-  if (!user.declared) return
+  // Narrowed by throwing, for the reason `signIn` throws.
+  if (!user.declared) throw new Error(user.statement)
 
   // Every request the app makes after the door is attended, with the two facts this
   // ticket is about: it carries the session, and it is same-origin with the console.

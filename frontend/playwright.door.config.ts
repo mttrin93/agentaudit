@@ -20,10 +20,11 @@
  * issuer refuses to boot (ADR-0116 §2) — and a webServer that never answered reads as
  * a timeout rather than as a missing variable.
  *
- * Everything `playwright.config.ts` decides about *how* a browser suite runs here —
- * no retries, one worker, `vite dev` rather than `vite preview`, and why each — is
- * decided there and not re-argued: this file differs in what it declares to the two
- * processes and in nothing else.
+ * Everything about *how* a browser suite runs here — no retries, one worker, the two
+ * servers and how long each is given — is `e2e/suite.ts`, which both configs read.
+ * This file differs in what it declares to the console and in the spec it runs, and
+ * in nothing else, and now that is a fact about the code rather than a claim in a
+ * docstring.
  *
  * The ports are that file's, so the two suites cannot run at the same time. They are
  * two readings of one bench and there is no reason to; `--strictPort` makes the
@@ -34,13 +35,10 @@
 import { defineConfig } from '@playwright/test'
 
 import { doorUser } from './e2e/door-user.ts'
-import { API_PORT, API_PORT_VARIABLE, APP_PORT } from './e2e/served.ts'
-
-const APP = `http://127.0.0.1:${APP_PORT}`
-const API = `http://127.0.0.1:${API_PORT}`
+import { HOW_IT_RUNS, theBench, theConsole } from './e2e/suite.ts'
 
 /**
- * Read at config time, because the servers are declared from it.
+ * Read at config time, because the console's server is declared from it.
  *
  * `door.spec.ts` reads the environment again rather than importing this constant: a
  * spec that imported a config's value would be a spec that could not be run under any
@@ -49,71 +47,20 @@ const API = `http://127.0.0.1:${API_PORT}`
 const user = doorUser(process.env)
 
 // Printed once (ADR-0125 decision 3), because a skip is only documented if somebody
-// reads the document.
-// Playwright's reporters print `2 skipped` and not the annotation behind it, and a
-// line saying two tests were skipped is exactly as informative as a line saying two
-// passed — which is the reading `door-user.ts` exists to prevent.
+// reads the document. Playwright's reporters print `2 skipped` and not the annotation
+// behind it, and a line saying two tests were skipped is exactly as informative as a
+// line saying two passed.
 if (!user.declared) {
   console.log(user.statement)
 }
 
 export default defineConfig({
-  testDir: './e2e',
+  ...HOW_IT_RUNS,
+  // This file and nothing else, which is the other half of `playwright.config.ts`'s
+  // `testIgnore`.
   testMatch: '**/door.spec.ts',
-  fullyParallel: false,
-  workers: 1,
-  retries: 0,
-  forbidOnly: !!process.env.CI,
-  timeout: 90_000,
-  expect: { timeout: 20_000 },
-  reporter: process.env.CI ? 'list' : 'line',
-  use: { baseURL: APP },
   // No servers when there is no test user: the suite skips, and skipping is not
-  // something to spend two server startups and a refusal-to-boot on.
-  webServer: !user.declared
-    ? []
-    : [
-        {
-          // The harness reads `AGENTAUDIT_E2E_ISSUER_JWT_KEY` out of the environment
-          // Playwright passes it — this process's, plus whatever `env` adds — and
-          // serves the deployed reading of the factory rather than `NO_DOOR`
-          // (`harness.py`, `declared_door`). Nothing about the key is written here:
-          // a config that named its value would be a config that could commit one.
-          command: 'uv run python frontend/e2e/harness.py',
-          cwd: '..',
-          // The same probe the issuerless config uses, and on a doored bench it
-          // answers `401`. That is *up*, and Playwright reads it as up: its
-          // readiness check accepts 2xx, 3xx and the 400-403 band, which exists for
-          // exactly this — a server that is answering and refusing is not a server
-          // that has not bound yet.
-          url: `${API}/bench/settings`,
-          env: { [API_PORT_VARIABLE]: String(API_PORT) },
-          reuseExistingServer: false,
-          stdout: 'pipe',
-          stderr: 'pipe',
-          timeout: 120_000,
-        },
-        {
-          command: `npm run dev -- --host 127.0.0.1 --port ${APP_PORT} --strictPort`,
-          // The one line that differs from the issuerless config's console, and it
-          // is the whole difference: a publishable key, so `<ClerkProvider>` mounts,
-          // the console attends a door and `api/http.ts` attaches a token to every
-          // request. It is inlined into the bundle at build time here exactly as it
-          // is in a deployment, which is the trap `docs/deployment.md` records for
-          // Vercel — and the reason it is declared to the server that builds the
-          // bundle rather than set anywhere later.
-          env: {
-            AGENTAUDIT_API: API,
-            VITE_CLERK_PUBLISHABLE_KEY: user.publishableKey,
-          },
-          // Not `${API}` and not a Cloud Run URL: the app fetches same-origin paths
-          // and Vite proxies them, which is what the deployment's rewrites do
-          // (`vercel.json`) and why no CORS middleware exists to need testing.
-          url: APP,
-          reuseExistingServer: false,
-          stdout: 'pipe',
-          stderr: 'pipe',
-          timeout: 120_000,
-        },
-      ],
+  // something to spend two server startups and a refusal-to-boot on. The bench reads
+  // the issuer's PEM out of this process's environment itself (`e2e/suite.ts`).
+  webServer: user.declared ? [theBench(), theConsole(user.publishableKey)] : [],
 })

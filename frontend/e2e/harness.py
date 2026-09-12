@@ -140,25 +140,21 @@ that form that carries somebody's secret."""
 DOOR_JWT_KEY_VARIABLE = "AGENTAUDIT_E2E_ISSUER_JWT_KEY"
 """The issuer's public key, in PEM, that turns this walkthrough's door on.
 
-**Its own variable and never `AGENTAUDIT_ISSUER_JWT_KEY`.** That one is deleted above
-with the rest of the factory's environment, and deliberately: an engineer with a real
-issuer exported must not get a browser run that reaches it by accident. The doored
-walkthrough is therefore something an operator asks for, in a variable that exists for
-no other purpose, and the deleted name is set from it below — so the factory reads what
-it always reads and the opt-in is visible in one grep.
+**Its own variable and never `AGENTAUDIT_ISSUER_JWT_KEY`.** That one is deleted with
+the rest of the factory's environment, and deliberately: an engineer with a real issuer
+exported must not get a browser run that reaches it. The doored walkthrough is
+therefore something an operator asks for, in a variable that exists for no other
+purpose, and the factory's own name is set from it below — so the factory reads what it
+always reads and the opt-in is visible in one grep.
 
 Absent is the path every clone and every CI run takes: `NO_DOOR`, and a console with no
 publishable key — ADR-0125, which decides that the doored suite is opt-in and that an
-absent test user is a printed skip. `docs/deployment.md` lists the four variables.
-"""
+absent test user is a printed skip. `docs/deployment.md` lists the variables.
 
-DOOR_SECRET_KEY_VARIABLE = "AGENTAUDIT_E2E_ISSUER_SECRET_KEY"
-"""The issuer's secret key, optional beside the PEM.
-
-A session token is checked offline against the PEM and needs nothing here (ADR-0116
-§4). It is the machine credential that is checked at the issuer (ADR-0124), so a
-walkthrough that means to exercise one exports this as well; a walkthrough that only
-signs a person in does not.
+**The issuer's secret key has no variable here.** Verification against this PEM is
+offline and a session token needs nothing else (ADR-0116 §4); the credential that is
+checked *at* the issuer is the machine one, and no browser suite presents one
+(ADR-0124). A second variable would be a branch this repository has no caller for.
 """
 
 
@@ -166,26 +162,21 @@ def declared_door(environment: Mapping[str, str]) -> dict[str, str] | None:
     """What this walkthrough serves: the deployed factory's own reading, or nothing.
 
     Answers the environment the harness was started with, and answers it as the
-    variables `backend/identity.py` reads rather than as a flag — so the doored run is
+    variable `backend/identity.py` reads rather than as a flag — so the doored run is
     the deployed reading of the factory and not a third configuration of it.
+
+    **The name is asked of the module that owns it**, for the reason `trace_config` is
+    asked below rather than inferred: a variable renamed in `identity.py` and copied
+    here would leave this harness setting a name nothing reads, and a bench serving
+    every route to anybody while this file said it had a door.
 
     **Blank is unset**, as it is in `identity.declared_issuer` and for its reason: a
     variable cleared by whatever set it has declared nothing.
-
-    **The PEM alone is a door and the secret key alone is not.** Verification here is
-    offline or it is not this bench: a run given only the secret key would call the
-    issuer on every request the console's two-second poll makes, which is a bench the
-    deployment is not. So that reading is `None` — no door, and the walkthrough says
-    which one it served.
     """
+    from backend.identity import ISSUER_JWT_KEY_VARIABLE
+
     jwt_key = environment.get(DOOR_JWT_KEY_VARIABLE, "").strip()
-    if not jwt_key:
-        return None
-    declared = {"AGENTAUDIT_ISSUER_JWT_KEY": jwt_key}
-    secret_key = environment.get(DOOR_SECRET_KEY_VARIABLE, "").strip()
-    if secret_key:
-        declared["AGENTAUDIT_ISSUER_SECRET_KEY"] = secret_key
-    return declared
+    return {ISSUER_JWT_KEY_VARIABLE: jwt_key} if jwt_key else None
 
 
 AGENT = "trivial"
@@ -224,9 +215,10 @@ def main() -> int:
     from backend.targets.reference.server import ReferenceConfig, create_reference_app
     from backend.targets.reference.serving import serve
 
-    # Read before the deletion below empties it, and applied after — so the two
-    # issuer variables the factory reads are the ones this file put there and never
-    # ones a shell happened to hold (`DOOR_JWT_KEY_VARIABLE`).
+    # Read from `AGENTAUDIT_E2E_ISSUER_JWT_KEY`, which is not in `FACTORY_VARIABLES`
+    # and so survives the deletion below; what the deletion guarantees is the other
+    # half — that the name the factory reads holds this value or nothing, and never
+    # an issuer a shell happened to export.
     door = declared_door(os.environ)
 
     for variable in FACTORY_VARIABLES:

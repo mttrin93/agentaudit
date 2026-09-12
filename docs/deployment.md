@@ -141,6 +141,13 @@ sentence naming them and skips (ADR-0125).
 | `AGENTAUDIT_E2E_CLERK_USER` | the test user's identifier at the issuer |
 | `AGENTAUDIT_E2E_CLERK_PASSWORD` | that user's password |
 
+The sign-in this suite drives is password-first — it fills the issuer's `identifier`
+field, continues, and fills `password`. That is a fact about the instance and not about
+the bench: an instance configured for email codes, or one serving a bot check, has no
+password field to fill and the suite fails on that locator with its name in the
+message. Use a development instance with password sign-in enabled, and a user created
+for this and nothing else.
+
 They carry their own names rather than the deployment's, and that is deliberate:
 `frontend/e2e/harness.py` deletes `AGENTAUDIT_ISSUER_*` along with every other
 variable the factory reads, so an engineer with a real issuer exported cannot get a

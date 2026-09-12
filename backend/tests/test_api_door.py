@@ -23,7 +23,7 @@ from fastapi import FastAPI
 from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
 
-from backend.api.app import NO_DOOR, NoIssuer, create_app
+from backend.api.app import NO_DOOR, UNAUTHENTICATED, NoIssuer, create_app
 from backend.api.run_config import BenchConfig
 from backend.identity import (
     ISSUER_JWT_KEY_VARIABLE,
@@ -127,9 +127,10 @@ def test_an_unauthenticated_request_is_refused_in_this_surfaces_shape() -> None:
     refused = TestClient(a_door(Admits())).get(GATE_ROUTE)
 
     assert refused.status_code == 401
-    assert refused.json()["detail"] == (
-        "no token was presented, and this stub admits exactly one"
-    )
+    assert refused.json()["detail"] == {
+        "refusal": "absent",
+        "statement": "no token was presented, and this stub admits exactly one",
+    }
     assert refused.headers["WWW-Authenticate"] == "Bearer"
 
 
@@ -206,7 +207,10 @@ def test_an_issuer_that_could_not_be_reached_is_not_the_callers_fault() -> None:
 
     assert refused.status_code == 503
     assert "WWW-Authenticate" not in refused.headers
-    assert refused.json()["detail"] == "the stub refused this one"
+    assert refused.json()["detail"] == {
+        "refusal": "unavailable",
+        "statement": "the stub refused this one",
+    }
 
 
 @pytest.mark.parametrize(
@@ -228,6 +232,7 @@ def test_the_four_refusals_about_a_credential_are_all_401(
     refused = TestClient(a_door(Refuses(cause))).get(GATE_ROUTE)
 
     assert refused.status_code == 401
+    assert refused.json()["detail"]["refusal"] == str(cause)
 
 
 def test_a_deployment_that_declares_no_door_boots_with_no_issuer(
@@ -286,3 +291,41 @@ def test_a_deployment_that_declares_nothing_at_all_refuses_to_boot(
         create_app()
 
     assert ISSUER_JWT_KEY_VARIABLE in str(refused.value)
+
+
+def test_every_refusal_this_bench_distinguishes_has_a_status() -> None:
+    """The table is total, and a sixth cause is a failure here rather than a `503`.
+
+    `UNAUTHENTICATED` names four of the five, and `identity._REFUSALS` is written out
+    member by member for the same reason: a mapping that defaulted would answer a
+    cause added next year with a sentence saying this deployment's issuer is down,
+    which is a statement about the bench rather than about what was presented.
+    """
+    assert UNAUTHENTICATED | {Unverifiable.UNAVAILABLE} == set(Unverifiable)
+
+
+def test_a_bench_with_a_door_does_not_publish_its_own_schema() -> None:
+    """`/openapi.json`, `/docs` and `/redoc` are not `APIRoute`s, so the dependency
+    the router carries never reaches them.
+
+    Served, they would be three routes on this surface answering without an operator
+    — the shape of every route, its body and its refusals, to anyone holding the
+    host. They are turned off with the door rather than gated, because turning them
+    off is the one thing that cannot come apart from the dependency above.
+    """
+    client = TestClient(a_door(Admits()))
+
+    assert client.get("/openapi.json").status_code == 404
+    assert client.get("/docs").status_code == 404
+    assert client.get("/redoc").status_code == 404
+
+
+def test_a_bench_with_no_door_keeps_its_schema() -> None:
+    """The other half: a laptop and the browser walkthrough keep `/docs`.
+
+    There is nothing to disclose about a bench anybody may already call, and a
+    contributor reading the surface is the reason the schema is served at all.
+    """
+    client = TestClient(create_app(BenchConfig(cases=[])))
+
+    assert client.get("/openapi.json").status_code == 200

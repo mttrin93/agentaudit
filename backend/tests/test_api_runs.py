@@ -663,12 +663,11 @@ def test_the_deployed_factory_refuses_to_boot_with_no_issuer(
 ) -> None:
     """The second credential, on the first one's terms and for a worse failure.
 
-    A bench with no signing key measures a target for many minutes and then has no
-    document to hand over. A bench with no issuer serves every route on this surface
-    to anyone holding the URL and *says nothing*: the run finishes, the report signs,
-    and the only evidence that the gate was gone is the bill. So the refusal is here
-    too, before an app exists, and it names both variables and the way out
-    (ADR-0116 §2, which is ADR-0020's reasoning applied a second time).
+    ADR-0116 §2 is ADR-0020's reasoning applied to a second credential, and the
+    refusal it asks for is asserted beside the first one because that is the pair a
+    reader of this factory needs to see together. What is asserted is the refusal
+    and what it says: both variables and the way out, which are what the person
+    reading the traceback needs.
 
     The suite declares an issuer it never reaches (`conftest.SUITE_ISSUER_KEY`), so
     this test deletes it. The signing key is left in place deliberately: what is

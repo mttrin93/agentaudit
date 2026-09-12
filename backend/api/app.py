@@ -171,7 +171,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import replace
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
-from enum import StrEnum
+from enum import Enum, StrEnum
 from pathlib import Path
 from typing import Annotated, Final, Literal
 
@@ -6046,7 +6046,20 @@ def deployed_pending_routes(
     )
 
 
-NO_DOOR: Final = "no door"
+class DeclaredDoor(Enum):
+    """Authentication declared, and declared off. One member, and `NO_DOOR` is it.
+
+    An enum member and not the string it prints, because the alternative is
+    `verifier == "no door"` at the one comparison that decides whether this app has
+    a door at all — and a verifier a caller wrote whose `__eq__` answered `True` to
+    that string would open every route on this surface. `is` against a member
+    nobody else can construct cannot be answered by an argument.
+    """
+
+    NONE = "no door"
+
+
+NO_DOOR: Final = DeclaredDoor.NONE
 """Declared authentication, declared off: an app that serves every route to anybody.
 
 The one way a deployment gets an open bench, and it has to say so. `create_app()`
@@ -6134,10 +6147,13 @@ def admitting(verifier: Verifier) -> Callable[[str | None], Operator]:
     year is authenticated because it is on this app, not because somebody remembered
     — which is the failure mode a per-route decorator has and this does not.
 
-    **The refusal takes the shape every other refusal on this surface takes**: an
-    `HTTPException` whose detail is the sentence the verifier wrote. That prose
-    travels through unaltered (`identity._refusal`), because the status is what a
-    console branches on and the sentence is what an operator reads.
+    **The refusal takes the shape this surface's other categorised refusal takes** —
+    `_cannot_measure`'s: the name a caller branches on, and the words. Five causes
+    exist because consumers branch on them (ADR-0120 §3), so the cause travels as a
+    field rather than only as a status: `401` against `503` says whose problem it is
+    and could not say which of four the credential was. The verifier's own prose
+    travels unaltered beside it (`identity._refusal`), because that is the sentence
+    an operator reads.
     """
 
     def the_operator_asking(
@@ -6152,7 +6168,7 @@ def admitting(verifier: Verifier) -> Callable[[str | None], Operator]:
                     if presented
                     else status.HTTP_503_SERVICE_UNAVAILABLE
                 ),
-                detail=verified.reason,
+                detail=_the_refusal(verified),
                 # Only on the four. A `503` carrying a challenge would be telling a
                 # client to present something else when nothing it could have
                 # presented was checked.
@@ -6163,11 +6179,16 @@ def admitting(verifier: Verifier) -> Callable[[str | None], Operator]:
     return the_operator_asking
 
 
+def _the_refusal(verified: Unverified) -> dict[str, str]:
+    """The refusal as the caller reads it, on `_cannot_measure`'s shape."""
+    return {"refusal": str(verified.cause), "statement": verified.reason}
+
+
 def create_app(
     config: BenchConfig | None = None,
     gate_runs: GateRunBench | None = None,
     pending_routes: PendingRouteBench | None = None,
-    verifier: Verifier | Literal["no door"] | None = None,
+    verifier: Verifier | DeclaredDoor | None = None,
 ) -> FastAPI:
     """The API over one bench, over one library.
 
@@ -6194,10 +6215,9 @@ def create_app(
 
     The asymmetry is in the deployed reading. An undeclared gate run is a bench that
     runs no gate; an undeclared door is *not* a bench with no door but `NoIssuer`,
-    raised here, because a redeploy that dropped the variable would otherwise come
-    back serving every route to the internet with nothing saying the gate was gone
-    (ADR-0116 §2, and `NO_ISSUER_NO_BOOT` says it at the length it deserves). A
-    deployment that wants an open bench passes `NO_DOOR` and has then said so.
+    raised here — ADR-0116 §2, whose reasoning `NO_ISSUER_NO_BOOT` carries and this
+    docstring does not repeat. A deployment that wants an open bench passes `NO_DOOR`
+    and has then said so.
     """
     # Two lines of tracing, and both of them before a bench exists. The first turns
     # off every tracer this process inherited: one environment variable activates a
@@ -6238,12 +6258,24 @@ def create_app(
         # that declared nothing at all is the deployment, and the deployment has a
         # door or does not start.
         verifier = NO_DOOR if declared else deployed_verifier()
+    shut = verifier is not NO_DOOR
     app = FastAPI(
         title="AgentAudit",
         version="0.1.0",
         # One dependency, carried by the router and so by every route on it —
         # including the ones added after this line was written.
-        dependencies=[] if verifier == NO_DOOR else [Depends(admitting(verifier))],
+        dependencies=(
+            [Depends(admitting(verifier))]
+            if not isinstance(verifier, DeclaredDoor)
+            else []
+        ),
+        # And the schema goes with them. `/openapi.json`, `/docs` and `/redoc` are
+        # Starlette routes rather than `APIRoute`s, so the dependency above does not
+        # reach them and *every route is authenticated* would be false by three —
+        # served, they would publish this surface's shape to anyone holding the host.
+        # An app with no door keeps them, because that is the laptop and the browser
+        # walkthrough and there is nothing there to disclose.
+        openapi_url=None if shut else "/openapi.json",
     )
     app.state.bench = bench
     app.state.gate_runs = gates

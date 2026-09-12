@@ -1699,9 +1699,15 @@ describe('the confirmed breaks held against this target', () => {
     expect(held.licensedBy).toBe(SERVED.held_routes.licensed_by)
     expect(held.licensedBy).toContain('operator')
     expect(held.licensedBy).toContain('no declared threshold')
-    expect(held.noRateOverThese).toBe(SERVED.held_routes.no_rate_over_these)
+    expect(held.licensedBy).toBe(SERVED.held_routes.licensed_by)
     expect(screen).toContain('{held.licensedBy}')
-    expect(screen).toContain('{held.noRateOverThese}')
+
+    // And the artefact's other standing sentence is carried and not drawn: ADR-0115's
+    // split is that the screen carries the figures and the document carries the
+    // sentences, and one standing paragraph here is the one ADR-0117's cost paragraph
+    // requires in as many words.
+    expect(held.noRateOverThese).toBe(SERVED.held_routes.no_rate_over_these)
+    expect(screen).not.toContain('{held.noRateOverThese}')
   })
 
   it('shows a closed route with the run that closed it, and a reopened one as a regression', () => {
@@ -1731,7 +1737,9 @@ describe('the confirmed breaks held against this target', () => {
       expect(printed).not.toContain(key)
     }
     // The digest is what identifies a route, and it is not the probe.
-    expect(heldBlock(SERVED).routes[0].route).toMatch(/^[a-z_]+-[0-9a-f]{16}$/)
+    expect(heldReading(SERVED.held_routes).routes[0].route).toMatch(
+      /^[a-z_]+-[0-9a-f]{16}$/,
+    )
   })
 
   it('is drawn in its own section and never as a row of the per-family table', () => {
@@ -1755,7 +1763,7 @@ describe('the confirmed breaks held against this target', () => {
   })
 
   it('tells a library that holds nothing from a run that never read one', () => {
-    // Three readings and none of them is a count of zero: a screen that inferred them
+    // Four readings and none of them is a count of zero: a screen that inferred them
     // from `held === 0` would print a store that would not open as an agent nothing
     // has been found against.
     const empty = {
@@ -1769,6 +1777,11 @@ describe('the confirmed breaks held against this target', () => {
       routes: [],
       not_counted: [],
     }
+    const unreadable = heldReading({
+      ...empty,
+      reading: 'unreadable',
+      stated: 'The target library of staging support agent could not be listed.',
+    })
     const nothing = heldReading({
       ...empty,
       reading: 'holds_nothing',
@@ -1780,18 +1793,19 @@ describe('the confirmed breaks held against this target', () => {
       stated: 'This run read no target library against this agent.',
     })
 
-    expect(nothing.reading).not.toBe(neverAsked.reading)
+    expect(
+      new Set([nothing.reading, neverAsked.reading, unreadable.reading]).size,
+    ).toBe(3)
     expect(nothing.stated).not.toBe(neverAsked.stated)
+    // And a store that would not open is neither of the other two: *we never looked*
+    // and *we could not look* differ in whether anything is wrong, and a surface
+    // deciding whether to tell somebody has to tell them apart without matching prose.
+    expect(unreadable.reading).not.toBe(neverAsked.reading)
     // And both still carry the sentence saying what the block would be worth, so a
     // reader cannot meet the block once without it.
     expect(neverAsked.licensedBy).toBe(SERVED.held_routes.licensed_by)
   })
 })
-
-/** The held block of one served payload, read. */
-function heldBlock(report: TargetReport) {
-  return heldReading(report.held_routes)
-}
 
 /** Every dotted key path in the view, however deeply nested. */
 function keysIn(node: unknown, path = ''): string[] {

@@ -1522,15 +1522,19 @@ export interface HeldRouteReading {
  * a claim the signed document already makes (ADR-0117's cost paragraph).
  *
  * **Counts, and this module divides none of them.** There is no `reduce` here, no
- * quotient, and no field one could be assigned to: *3 of 5* is two integers on this
- * screen for the reason it is two integers in the document — a rate over routes
- * selected on their own outcome falls with every new finding and is comparable
- * between nothing (ADR-0014, ADR-0117 §4).
+ * quotient, and no field one could be assigned to. Why the quotient may not exist is
+ * ADR-0117's own longest section; what it buys here is that *3 of 5* reaches the
+ * markup as two strings, so there is nothing for a later cell to divide.
  *
  * **Its own reading and never a row in `rows`.** The six are what the gate's
  * denominator is fixed at (ADR-0015); a held route is on a denominator of its own,
  * and one drawn into the per-family table would be that denominator joined to the six
  * by a screen rather than by arithmetic.
+ *
+ * `noRateOverThese` is carried and **not drawn**. It is the artefact's sentence about
+ * what may not be done with these figures and it belongs in the document a recipient
+ * is handed, which is ADR-0115's own split; the screen draws one standing paragraph
+ * here, the one ADR-0117's cost paragraph requires.
  */
 export interface HeldReading {
   /** Which of the three answers this is, off the closed set the payload carries. */
@@ -1628,11 +1632,16 @@ function heldRoute(route: HeldRouteRow): HeldRouteReading {
 /**
  * The four readings a held route can take on one run, in the reader's words.
  *
- * Worded here rather than taken off the wire's own name, on `BAND_IN_A_TARGET_REPORT`'s
- * terms: what a screen draws is a phrase a person reads, and `unmeasurable` is a name
- * for a distinction rather than a sentence about a target. A reading this map has no
- * entry for is drawn as the name itself rather than dropped — an unknown outcome is a
- * newer bench, and a blank cell would read as a route nobody looked at.
+ * Worded here rather than taken off the row's `stated`, on `BAND_IN_A_TARGET_REPORT`'s
+ * own terms and for its own reason: the payload's sentence is a whole line about a
+ * route and this is one cell of a table, so the screen states the name off the closed
+ * set the way it states a band. It is not a second copy of a claim — the claim is the
+ * name, which is on the wire; these are four renderings of four names, and the sentence
+ * the document prints is `stated`, carried and not drawn.
+ *
+ * A reading this map has no entry for is drawn as the name itself rather than dropped —
+ * an unknown outcome is a newer bench, and a blank cell would read as a route nobody
+ * looked at.
  */
 const HELD_OUTCOME: Record<string, string> = {
   still_open: 'still breaking this target',

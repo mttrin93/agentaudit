@@ -529,11 +529,15 @@ function TheHeldRoutes({ held }: { held: HeldReading }) {
     <section>
       <h2>Held against this target</h2>
       {/* The same treatment `.asserts` gives the two other standing claims on this
-          page: a fact about what the figures below are, read once, above them. Two
-          paragraphs and not one, because they answer two questions — what the evidence
-          is, and what may be done with it. */}
+          page: a fact about what the figures below are, read once, above them.
+
+          **One paragraph and not two.** `noRateOverThese` is the artefact's other
+          standing sentence and it is not drawn here — ADR-0115's split is that the
+          screen carries the figures and the document carries the sentences, and the
+          one this block cannot do without is the one ADR-0117's cost paragraph
+          requires in as many words. The other is in the `report.md` a recipient is
+          handed, and nothing on this page divides two of these counts. */}
       <p className="asserts">{held.licensedBy}</p>
-      <p className="asserts">{held.noRateOverThese}</p>
       <p>{held.stated}</p>
       {held.reading === 'held' ? (
         <>

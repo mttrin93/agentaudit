@@ -542,7 +542,16 @@ export interface HeldRouteRow {
   closed_in: string | null
   reopened_in: string | null
   regressed: boolean
-  /** The whole row as one sentence, the document's own wording and not this app's. */
+  /**
+   * The whole row as one sentence, as the signed Markdown prints it.
+   *
+   * Typed because it is on the wire and **never rendered here**, on `band_stated`'s
+   * own terms: a renamed key upstream has to fail `tsc` against the served fixture
+   * rather than arrive as `undefined` in a browser. The screen draws the same facts
+   * as columns — a family, a state, a history of run ids, what this run read — which
+   * is the split ADR-0115 §1 makes: the screen carries the figures and the artefact
+   * carries the sentence.
+   */
   stated: string
 }
 
@@ -618,6 +627,11 @@ export interface TargetReport {
   coverage_gaps: CoverageGap[]
   /**
    * The confirmed breaks held against this target, and what this run made of them.
+   *
+   * That the signed document carries any of this is
+   * [ADR-0119](../../../docs/adr/0119-a-held-routes-figures-travel-in-the-signed-artefact-and-its-prose-does-not.md),
+   * which admits the figures and the dates and keeps the attacker's own account of
+   * each break out — so there is no `description` on a row and nowhere for one.
    *
    * Its own key beside `measured` and inside none of it, which is the shape of
    * ADR-0117 §4: held routes are on a denominator of their own, and a figure of theirs

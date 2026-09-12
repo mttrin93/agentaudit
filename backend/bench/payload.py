@@ -935,18 +935,20 @@ class RequestedAndUnanswered:
 def _held(block: HeldBlock | None) -> dict[str, Any]:
     """The target library as this document reports it: counts, dates, and two claims.
 
-    **Its own key at the top level, and no key of it anywhere else.** ADR-0117 §4 puts
-    held routes on a denominator of their own; a figure of theirs inside `measured`
-    would be that denominator joined to the six by a field name, and a verifier
-    re-deriving the measured section would walk it. Nothing in `measured`, `adaptive`,
-    `findings` or `declared` reads this and nothing here is derived from any of them.
+    **Its own key at the top level, and no key of it anywhere else**
+    ([ADR-0117](../../docs/adr/0117-a-refused-break-is-held-against-the-target-it-beat-and-is-scored-beside-the-six.md)
+    §4, and
+    [ADR-0119](../../docs/adr/0119-a-held-routes-figures-travel-in-the-signed-artefact-and-its-prose-does-not.md)
+    for why any of it is in these bytes). A figure of theirs inside `measured` would be
+    that denominator joined to the six by a field name, and a verifier re-deriving the
+    measured section would walk it. Nothing in `measured`, `adaptive`, `findings` or
+    `declared` reads this and nothing here is derived from any of them.
 
     **Counts and never a quotient.** Every figure below is an integer off a property
     that counts records, and there is none this serialiser computes: *3 of 5* travels
-    as two integers, because the quotient is a rate over a sample chosen on its own
-    outcome and would fall with every new finding
-    ([ADR-0014](../../docs/adr/0014-band-cut-points-are-the-reference-agents-constructed-rates.md),
-    ADR-0117 §4).
+    as two integers. Why the quotient may not exist is `reporting.py`'s module
+    docstring and ADR-0117 §4; what it means *here* is that a key holding a float
+    would be a rate arriving in the signed bytes.
 
     **Both standing sentences travel on every artefact**, including the one for a run
     that never reached a target library. `licensed_by` is what ADR-0117's cost
@@ -960,22 +962,34 @@ def _held(block: HeldBlock | None) -> dict[str, Any]:
     it arrives as a stated `reading` rather than as a dropped key: a missing key would
     read as an older shape of artefact.
     """
-    stated = block.stated() if block is not None else NO_TARGET_LIBRARY
+    if block is None:
+        return {
+            "reading": HeldBlockReading.NOT_ASKED.value,
+            "stated": NO_TARGET_LIBRARY,
+            "licensed_by": WHAT_LICENSES_THIS_BLOCK,
+            "no_rate_over_these": NO_RATE_OVER_THESE,
+            "held": 0,
+            "open": 0,
+            "closed": 0,
+            "still_breaking": 0,
+            "not_read": 0,
+            "regressed": 0,
+            "routes": [],
+            "not_counted": [],
+        }
     return {
-        "reading": (
-            HeldBlockReading.NOT_ASKED.value if block is None else block.reading.value
-        ),
-        "stated": stated,
+        "reading": block.reading.value,
+        "stated": block.stated(),
         "licensed_by": WHAT_LICENSES_THIS_BLOCK,
         "no_rate_over_these": NO_RATE_OVER_THESE,
-        "held": 0 if block is None else block.held,
-        "open": 0 if block is None else block.open_routes,
-        "closed": 0 if block is None else block.closed,
-        "still_breaking": 0 if block is None else block.still_breaking,
-        "not_read": 0 if block is None else block.not_read,
-        "regressed": 0 if block is None else block.regressed,
-        "routes": [] if block is None else [_held_route(one) for one in block.lines],
-        "not_counted": [] if block is None else list(block.not_counted),
+        "held": block.held,
+        "open": block.open_routes,
+        "closed": block.closed,
+        "still_breaking": block.still_breaking,
+        "not_read": block.not_read,
+        "regressed": block.regressed,
+        "routes": [_held_route(one) for one in block.lines],
+        "not_counted": list(block.not_counted),
     }
 
 
@@ -998,9 +1012,14 @@ def _held_route(line: HeldRouteLine) -> dict[str, Any]:
     No payload, no success condition and no attacker prose. The first two are the
     disclosure answer — a route that beat this target is a working unpublished exploit
     ([ADR-0008](../../docs/adr/0008-repo-disclosure-posture.md)) — and the third is
-    the half `docs/specs/the-target-library.md` lists out of scope: whether a signed
-    document carries a held route's **sentences** is undecided, so this row carries
-    its figures and its dates and a new ADR is what would add the prose.
+    [ADR-0119](../../docs/adr/0119-a-held-routes-figures-travel-in-the-signed-artefact-and-its-prose-does-not.md),
+    which admits a held route's figures and dates into these bytes and keeps the
+    attacker's account of the break out of them.
+
+    `stated` is composed here out of the fields beside it and holds no sentence any
+    instrument wrote: a family name, a probe digest, run ids, and which of four
+    readings this run took. That is what makes it a figure line rather than the prose
+    ADR-0119 withholds.
 
     `family` is a name beside a route and not a key anything aggregates on, exactly as
     the adaptive section's `families_broken` is: there is no mapping here for a

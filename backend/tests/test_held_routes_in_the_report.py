@@ -293,7 +293,11 @@ def test_a_library_that_will_not_open_is_not_a_library_that_holds_nothing(
         routes=WillNotOpen(store=held.store),
     )
 
-    assert block.reading is HeldBlockReading.NOT_ASKED
+    assert block.reading is HeldBlockReading.UNREADABLE, (
+        "a store that would not open and a run that never read one differ in whether "
+        "anything is wrong, and a surface deciding whether to tell somebody has to be "
+        "able to tell them apart without matching prose"
+    )
     assert block.holds_nothing is False
     assert "could not be listed" in block.stated()
     assert "database is locked" in block.stated()
@@ -473,6 +477,11 @@ def test_the_section_is_rendered_for_a_run_that_never_asked() -> None:
     body = "\n".join(_held_section(a_payload(None)).body)
 
     assert "no target library" in body.lower()
+    assert "**Held against this target**" not in body, (
+        "six zeroes under the sentence that says nobody looked is the document "
+        "reporting *nobody looked* as *nothing was found* — the one reading a count "
+        "of zero must never be allowed to stand for (ADR-0117 §4)"
+    )
 
 
 # --- The fence --------------------------------------------------------------

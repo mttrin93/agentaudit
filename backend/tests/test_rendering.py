@@ -162,7 +162,7 @@ def test_every_section_states_its_own_reproducibility_and_four_read_the_payload(
 
 # --- The golden digest: one document, pinned to the byte ---------------------
 
-GOLDEN_ONE_FAMILY = "72236abccc639109927d3a6b96e2dbecdc7ad772b1e5bea35afd9171fa7b3c32"
+GOLDEN_ONE_FAMILY = "1bd3c9b42fafea5cc45a590880c19ef72b7f3ca80e08fea5b34fbc481d2d1b5d"
 """The sha256 of `_one_family()`'s rendering, written down.
 
 **A tripwire, and it is deliberately a strict one.** Every other assertion in this
@@ -435,7 +435,14 @@ each
 and the sentence naming which points hold several sections now says point 3 in two and
 point 5 in three. **This fixture never reached a target library**, so the section reads
 *this run read no target library against this agent* — which is neither an empty
-library nor one whose every route is closed, and is the line this digest pins.
+library nor one whose every route is closed, and is the line this digest pins. Under
+that reading the six counts are **absent** rather than printed as zeroes: a block of
+zeroes under a sentence saying nobody looked is the document reporting *nobody looked*
+as *nothing was found*, which is the one reading ADR-0117 §4 says a count of zero must
+never stand for. That any of this is in the signed bytes at all is
+[ADR-0119](../../docs/adr/0119-a-held-routes-figures-travel-in-the-signed-artefact-and-its-prose-does-not.md),
+which admits the figures and the dates and keeps the attacker's account of the break
+out of them.
 
 **No figure moved and no figure arrived in any other section.** Every count in the new
 section is over that target's held routes and is a summand of nothing above it: there

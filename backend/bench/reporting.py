@@ -5,8 +5,10 @@ meets. `held.py` is the store, `holding.py` is the door a person opens, `resendi
 is the send, `closing.py` is the window it advances — and this is the block. The
 decision is
 [ADR-0117](../../docs/adr/0117-a-refused-break-is-held-against-the-target-it-beat-and-is-scored-beside-the-six.md)
-§4 and its cost paragraph; the build spec is
-[docs/specs/the-target-library.md](../../docs/specs/the-target-library.md).
+§4 and its cost paragraph;
+[ADR-0119](../../docs/adr/0119-a-held-routes-figures-travel-in-the-signed-artefact-and-its-prose-does-not.md)
+is what this record may carry into a signed document and what it may not; the build
+spec is [docs/specs/the-target-library.md](../../docs/specs/the-target-library.md).
 
 **Not `rendering/`.** That package turns a serialised payload into Markdown and reads
 nothing else. This one turns a run's readings and the library they were read off into
@@ -21,12 +23,11 @@ can undo all of it by looking like a seventh row. So three properties are carrie
 the types here and asserted by the suite rather than left to a call site:
 
 1. **No quotient exists.** Every figure on `HeldBlock` is a count, there is no method
-   that divides one by another, and there is no field a rate could arrive in. ADR-0117
-   spends its longest section on why *3 of 5* may be printed as two integers and never
-   as 0.6: the sample is chosen on its own outcome, so the quotient falls with every
-   new finding, two targets stop being comparable, and the band's cut-points were
-   never constructed against such a population
-   ([ADR-0014](../../docs/adr/0014-band-cut-points-are-the-reference-agents-constructed-rates.md)).
+   that divides one by another, and there is no field a rate could arrive in. Why the
+   quotient may not exist is ADR-0117's longest section — *Why the fence is the whole
+   decision* — and it is not restated here; what it buys locally is that *3 of 5* is
+   two integers on every surface that prints this record, because there is no third
+   value for one of them to be.
 2. **Nothing here is keyed on `Family`.** A line carries `route`, and the family is
    reached through it, exactly as `resending.HeldReading` makes a caller do. The
    family is printed as a **name** beside a route, on the terms the adaptive section
@@ -98,17 +99,30 @@ with it.
 
 
 class HeldBlockReading(StrEnum):
-    """Which of the three answers this block is. Three, and no two are one.
+    """Which of the four answers this block is. Four, and no two are one.
 
-    The same three `TargetRun.held_routes` keeps apart one field out, carried through
-    to the surface so that a consumer tells them apart by a name off a closed set
-    rather than by a count — a screen that read *held: 0* as *nothing found yet*
-    would print a library that could not be opened as good news.
+    Three of them are the three `TargetRun.held_routes` keeps apart one field out,
+    carried through to the surface so that a consumer tells them apart by a name off a
+    closed set rather than by a count — a screen that read *held: 0* as *nothing found
+    yet* would print a library that could not be opened as good news.
+
+    The fourth is that library. *We never looked* and *we could not look* are two
+    facts, and an enum that had both under one name would be this module drawing a
+    distinction in `unlisted` and then dropping it on the way to the screen.
     """
 
     NOT_ASKED = "not_asked"
     """No target library was read on this run: an older record, or a caller that
-    never reached the send. Not an empty library, and not a fixed one."""
+    never reached the send. Nobody looked, and nothing failed."""
+
+    UNREADABLE = "unreadable"
+    """A library this run went to read and could not open. `unlisted` says why.
+
+    Its own member and not `NOT_ASKED`, because the two differ in whether anything is
+    wrong: one is a run made without a target library and the other is a store that
+    would not answer, and a surface deciding whether to tell somebody has to be able
+    to tell them apart without matching prose.
+    """
 
     HOLDS_NOTHING = "holds_nothing"
     """The library was read and holds no route. *Nothing has been found against this
@@ -132,10 +146,13 @@ class HeldRouteLine:
     bookkeeping and not about the operator's agent.
 
     No `description` either, and that is a **deliberate absence and not an oversight**:
-    the spec lists *a held route in the signed artefact's sentences* out of scope and
-    ADR-0117 does not decide it, so this block carries the figures and the dates it
-    licenses and no prose a model wrote. Adding the attacker's own account of the
-    break here is a new ADR, because it changes what a signed document claims.
+    [ADR-0119](../../docs/adr/0119-a-held-routes-figures-travel-in-the-signed-artefact-and-its-prose-does-not.md)
+    admits this record's figures and dates into the signed artefact and keeps the
+    attacker's account of the break out of it. The consequence here is the one the ADR
+    records as a cost: the build spec's user story 4 — *the report says what the route
+    did and not only that a route exists* — is not met on any surface, and the ticket
+    that meets it is the one that decides what a signed document does with an
+    instrument's prose about a held route.
     """
 
     route: RouteKey
@@ -283,9 +300,14 @@ class HeldBlock:
 
     @property
     def reading(self) -> HeldBlockReading:
-        """Which of the three answers this block is, as a name off a closed set."""
+        """Which of the four answers this block is, as a name off a closed set.
+
+        `NOT_ASKED` is not produced here: a `HeldBlock` exists because something went
+        and read a library, so the reading for *nobody looked* belongs to the absence
+        of one of these records and is `payload._held`'s to print.
+        """
         if self.unlisted is not None:
-            return HeldBlockReading.NOT_ASKED
+            return HeldBlockReading.UNREADABLE
         return (
             HeldBlockReading.HOLDS_NOTHING if not self.lines else HeldBlockReading.HELD
         )

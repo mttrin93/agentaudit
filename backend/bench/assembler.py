@@ -1532,10 +1532,9 @@ class TargetResult:
     """This target's target library as this run's report states it, or `None`.
 
     A block beside the four sections and inside none of them, which is ADR-0117 §4's
-    own shape: held routes are on a denominator of their own, and a figure of theirs
-    reachable from `measured` would be that denominator joined to the six by a field
-    name. `MeasuredSection` is keyed on `Family` and there is no key in it for one of
-    these to arrive in; nothing below reads this and it reads nothing.
+    own shape. What it buys here: `MeasuredSection` is keyed on `Family` and there is
+    no key in it for one of these to arrive in, nothing below reads this and it reads
+    nothing — so this function, which combines no two sections, has nothing to combine.
 
     **Three readings**, the same three `TargetRun.held_routes` keeps apart two records
     back. `None` is a result that never reached a target library — a hand-built record,

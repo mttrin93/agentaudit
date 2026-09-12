@@ -8,14 +8,18 @@ read by the same deterministic evaluator. The decision is
 [ADR-0117](../../../docs/adr/0117-a-refused-break-is-held-against-the-target-it-beat-and-is-scored-beside-the-six.md)
 §4; the record it prints is `reporting.HeldBlock`.
 
+**That any of it is in these bytes is
+[ADR-0119](../../../docs/adr/0119-a-held-routes-figures-travel-in-the-signed-artefact-and-its-prose-does-not.md)**,
+which admits the figures and the dates and keeps the attacker's account of the break
+out — so there is no field on this section's rows for a sentence an instrument wrote.
+
 **Its own section is the whole of the fence at this last step.** Every module before
 this one carries ADR-0117 §4 by type — a `HeldRoute` is not a `Case`, a `HeldReading`
 is not an `Attempt`, a `HeldRouteLine` carries no payload — and a reader sees one page,
-so the place the separation is actually lost is here. So: this section is numbered
-apart from the figures, it states in its own body what licenses it and what may not be
-done with it, and every number in it is printed as a count beside the counts it came
-from. *3 of 5 still open* is two integers on this page, and there is nowhere in the
-document the quotient of them appears.
+so the place the separation is actually lost is here. What that buys locally: the
+section is numbered apart from the figures, every number in it is printed as a count
+beside the counts it came from, and *3 of 5 still open* is two integers on this page
+with nowhere in the document the quotient of them appears.
 
 **The reproducibility label is the nearer of the two and it is not a comfortable fit,
 which is said on the page rather than solved by inventing a third.** ADR-0017 declares
@@ -80,8 +84,11 @@ def _held_routes(block: Mapping[str, Any]) -> Section:
             "",
             f"**{block['stated']}**",
             "",
+            # The counts, and only where there is a library they are counts of. A
+            # block of six zeroes under *this run read no target library* would be
+            # the reading a count of zero must never stand for, printed by the
+            # document that says so two paragraphs up (ADR-0117 §4).
             *_counts(block),
-            "",
             *_listed(
                 (f"- {route['stated']}" for route in block["routes"]),
                 "- No route is listed. Which of the three readings that is, is the "
@@ -102,7 +109,14 @@ def _counts(block: Mapping[str, Any]) -> tuple[str, ...]:
     and *broke the target again* is this run's reading, and a run that could not reach
     the agent is exactly where they differ — so the count that explains the gap is
     printed between them rather than left for a reader to notice is missing.
+
+    Nothing at all under the other three readings. A library holding no route, a
+    library that would not open and a run that never read one have no routes for these
+    six figures to be counts of, and six zeroes printed under the sentence that says so
+    is the document reporting *nobody looked* as *nothing was found*.
     """
+    if block["reading"] != "held":
+        return ()
     return (
         f"- **Held against this target**: {block['held']}. Every confirmed break the "
         "admission bar refused and an operator approved, open and closed together — "

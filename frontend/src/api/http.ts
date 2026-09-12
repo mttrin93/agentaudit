@@ -88,9 +88,16 @@ export function attendTheDoor(door: Door | null): void {
  * **The response comes back unread.** The door's refusal is taken off a `clone()`,
  * because a `Response` body is read once and the caller's own `refusalRead` is the
  * thing that must have it — this seam reports a refusal and never consumes one.
+ *
+ * **A door that cannot produce a token is not an unreachable bench.** The issuer's
+ * client mints these over the network and can fail; letting that throw out of here
+ * would surface at the call sites as `unreachable`, whose sentence says the bench
+ * did not answer and that it is not known what it recorded. Neither half is true.
+ * So the request goes without a header and the bench's own door refuses it, which
+ * puts the operator in front of a sentence about signing in.
  */
 export async function authed(path: string, init?: RequestInit): Promise<Response> {
-  const token = (await attending?.token()) ?? null
+  const token = await tokenFromTheDoor()
   const response = await fetch(
     path,
     token
@@ -111,6 +118,15 @@ export async function authed(path: string, init?: RequestInit): Promise<Response
     }
   }
   return response
+}
+
+/** The attended door's token, and `null` for every way there is not one. */
+async function tokenFromTheDoor(): Promise<string | null> {
+  try {
+    return (await attending?.token()) ?? null
+  } catch {
+    return null
+  }
 }
 
 /**

@@ -86,6 +86,22 @@ describe('the token, attached in one place', () => {
     expect(bearerOf(fetching)).toBeNull()
   })
 
+  it('is absent where the door could not mint one, and the request still goes', async () => {
+    // The issuer's client mints these over the network. A throw out of the seam
+    // would reach the call sites as `unreachable` — *the bench did not answer, so
+    // it is not known whether it recorded this* — which would be two false
+    // statements about a bench that was never asked.
+    const fetching = answering(401, {
+      detail: { refusal: 'absent', statement: 'no token was presented' },
+    })
+    attendTheDoor({
+      token: () => Promise.reject(new Error('the issuer could not be reached')),
+    })
+
+    expect((await authed('/runs/r1')).status).toBe(401)
+    expect(bearerOf(fetching)).toBeNull()
+  })
+
   it('does not displace the method, the body or the caller’s own headers', async () => {
     const fetching = answering(202, { run_id: 'r1' })
     aDoorHolding('a-session-token')

@@ -482,3 +482,36 @@ def test_a_reopened_route_is_sent_again_and_keeps_both_of_its_dates(
         "closed once. A defect that came back reads as a new finding (ADR-0117 §5)"
     )
     assert after.closed_in == A_LATER_RUN_STILL
+
+
+def test_a_reading_of_a_closed_route_is_reported_and_counted_into_nothing(
+    held: HeldRoutes,
+) -> None:
+    """The count's own guard against the send's filter, which it may not rely on.
+
+    `send_held_routes` sends open routes only, so a reading of a closed one means a
+    record closed between the send and the count or that the filter stopped holding.
+    Counted into the record it would **raise** — a break resets the count, and a
+    closed route on a reset count is a state the record refuses — and a fenced
+    population may not take down a run whose family rates are already measured
+    (ADR-0117 §4).
+    """
+    route = held.hold(a_held_route())
+    closed = held.record(
+        route.after_a_clean_run(A_LATER_RUN).after_a_clean_run(A_LATER_RUN_STILL)
+    )
+
+    closing = count_clean_runs(
+        HeldRoutesSent(
+            target_name=A_CUSTOMER,
+            readings=(a_reading(HeldOutcome.STILL_OPEN, closed),),
+            held=1,
+        ),
+        run_id="run-2026-10-01-0001",
+        routes=held,
+    )
+
+    [after] = held.for_target(A_CUSTOMER)
+    assert after == closed
+    assert closing.closed == ()
+    assert "is closed, so nothing was counted into it" in closing.stated()

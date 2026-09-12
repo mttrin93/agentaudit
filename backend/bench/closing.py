@@ -121,6 +121,9 @@ def count_clean_runs(
         if held is None:
             refused.append(_no_record(reading))
             continue
+        if held.state is HeldState.CLOSED:
+            refused.append(_already_closed(reading))
+            continue
         counted = _counted(held, reading, run_id)
         if counted == held:
             continue
@@ -155,6 +158,25 @@ def _counted(held: HeldRoute, reading: HeldReading, run_id: str) -> HeldRoute:
     if reading.outcome is HeldOutcome.STILL_OPEN:
         return held.after_a_break()
     return held
+
+
+def _already_closed(reading: HeldReading) -> str:
+    """A reading of a route the library has closed, which is a fault and reads as one.
+
+    `send_held_routes` sends open routes only, so this is reachable only if a record
+    closed between the send and the count, or if that filter ever stops holding.
+    Counted into the record it would raise rather than return — a break resets the
+    count, and a closed route on a reset count is a state `HeldRoute` refuses — and
+    a fenced population may not take down a run whose six family rates are already
+    measured (ADR-0117 §4). So the reading is reported and the record left exactly
+    as it stands.
+    """
+    return (
+        f"{reading.route.stated()} was read against {reading.target_name} and the "
+        "record held under it is closed, so nothing was counted into it. A closed "
+        "route is not sent (ADR-0117 §5), and a reading of one is a fault in the "
+        "send rather than evidence about the target"
+    )
 
 
 def _no_record(reading: HeldReading) -> str:

@@ -6049,11 +6049,9 @@ def deployed_pending_routes(
 class DeclaredDoor(Enum):
     """Authentication declared, and declared off. One member, and `NO_DOOR` is it.
 
-    An enum member and not the string it prints, because the alternative is
-    `verifier == "no door"` at the one comparison that decides whether this app has
-    a door at all — and a verifier a caller wrote whose `__eq__` answered `True` to
-    that string would open every route on this surface. `is` against a member
-    nobody else can construct cannot be answered by an argument.
+    An enum member and not the string it prints (ADR-0121 decision 2): the comparison
+    that decides whether this app has a door is `is`, against a member no caller can
+    construct.
     """
 
     NONE = "no door"
@@ -6062,15 +6060,18 @@ class DeclaredDoor(Enum):
 NO_DOOR: Final = DeclaredDoor.NONE
 """Declared authentication, declared off: an app that serves every route to anybody.
 
-The one way a deployment gets an open bench, and it has to say so. `create_app()`
-declaring nothing gets `NO_ISSUER_NO_BOOT` instead, because *unconfigured* meaning
-*open* is the silent failure ADR-0116 §2 exists to prevent — so the open reading is
-a value a caller passes and never a state a redeploy can fall into.
+The one way to get an unauthenticated bench out of this factory, and it has to be
+passed —
+[ADR-0121](../../docs/adr/0121-an-open-bench-is-a-declaration-and-never-a-deployments-default.md)
+decision 1, which is why nothing here re-argues it. The local consequence:
+`create_app()` declaring nothing gets `NO_ISSUER_NO_BOOT` and not this, so the open
+reading is a value in a diff somebody reviewed and never a state a redeploy fell
+into.
 
-What it is for: the browser walkthrough, which starts a deployed bench in a process
-of its own and drives it with no issuer and no account (`frontend/e2e/harness.py`),
-and the tests that read what a *deployed* factory answers on a route. Not for the
-deployment: the console signs in, and the door there is the point.
+Who passes it: the browser walkthrough, which starts a deployed bench in a process of
+its own and drives it with no issuer and no account (`frontend/e2e/harness.py`), and
+the tests that read what a *deployed* factory answers on a route. Not the deployment:
+the console signs in, and the door there is the point.
 """
 
 
@@ -6147,13 +6148,9 @@ def admitting(verifier: Verifier) -> Callable[[str | None], Operator]:
     year is authenticated because it is on this app, not because somebody remembered
     — which is the failure mode a per-route decorator has and this does not.
 
-    **The refusal takes the shape this surface's other categorised refusal takes** —
-    `_cannot_measure`'s: the name a caller branches on, and the words. Five causes
-    exist because consumers branch on them (ADR-0120 §3), so the cause travels as a
-    field rather than only as a status: `401` against `503` says whose problem it is
-    and could not say which of four the credential was. The verifier's own prose
-    travels unaltered beside it (`identity._refusal`), because that is the sentence
-    an operator reads.
+    **The refusal takes `_cannot_measure`'s shape** — the name a caller branches on,
+    and the words (ADR-0121 decision 4). The verifier's own prose travels unaltered
+    (`identity._refusal`), because that is the sentence an operator reads.
     """
 
     def the_operator_asking(
@@ -6269,12 +6266,11 @@ def create_app(
             if not isinstance(verifier, DeclaredDoor)
             else []
         ),
-        # And the schema goes with them. `/openapi.json`, `/docs` and `/redoc` are
+        # And the schema goes with them: `/openapi.json`, `/docs` and `/redoc` are
         # Starlette routes rather than `APIRoute`s, so the dependency above does not
-        # reach them and *every route is authenticated* would be false by three —
-        # served, they would publish this surface's shape to anyone holding the host.
-        # An app with no door keeps them, because that is the laptop and the browser
-        # walkthrough and there is nothing there to disclose.
+        # reach them and *every route is authenticated* would be false by three.
+        # Off with the door rather than gated beside it, and ADR-0121 decision 3 is
+        # where that is argued.
         openapi_url=None if shut else "/openapi.json",
     )
     app.state.bench = bench

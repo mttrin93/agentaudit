@@ -308,10 +308,9 @@ def test_a_bench_with_a_door_does_not_publish_its_own_schema() -> None:
     """`/openapi.json`, `/docs` and `/redoc` are not `APIRoute`s, so the dependency
     the router carries never reaches them.
 
-    Served, they would be three routes on this surface answering without an operator
-    — the shape of every route, its body and its refusals, to anyone holding the
-    host. They are turned off with the door rather than gated, because turning them
-    off is the one thing that cannot come apart from the dependency above.
+    Served, they would be three routes on this surface answering without an operator.
+    Turned off with the door rather than gated beside it, and ADR-0121 decision 3
+    says why.
     """
     client = TestClient(a_door(Admits()))
 

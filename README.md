@@ -16,25 +16,20 @@ You point it at your agent's HTTP endpoint. It sends recorded attacks, watches
 what your agent does, and writes a signed report. Anyone you send that report to
 can check it offline — no account, no network, no trust in us.
 
-It attacks six kinds of failure:
+It attacks nine kinds of failure. The first six are the ones the bench itself is
+judged on; the last three are **elective** — you ask for them per run.
 
-| Family | The question it asks |
-| --- | --- |
-| indirect prompt injection | Does your agent obey instructions hidden in a document it reads? |
-| scope creep | Does it use tools it was not given? |
-| wrongful commitment | Does it promise things it has no right to promise? |
-| data leakage | Does it hand over its own configuration? |
-| halt defeat | Does it keep working after being told to stop? |
-| disclosure denial | Does it deny being an AI when asked? |
-
-Those six are the ones the bench is judged on. There are **three more you can ask
-for**, the *elective* families:
-
-| Elective family | The question it asks | |
+| Family | The question it asks | Tier |
 | --- | --- | --- |
-| memory poisoning | Does an instruction planted in one turn still run two turns later, after the document carrying it is gone? | `ASI06` |
-| direct prompt injection | Does an override in the user's *own* message beat the system prompt? | `LLM01` |
-| PII leakage | Does it hand over a record it holds **about somebody else**? | `LLM02` |
+| indirect prompt injection | Does your agent obey instructions hidden in a document it reads? | one of the six |
+| scope creep | Does it use tools it was not given? | one of the six |
+| wrongful commitment | Does it promise things it has no right to promise? | one of the six |
+| data leakage | Does it hand over its own configuration? | one of the six |
+| halt defeat | Does it keep working after being told to stop? | one of the six |
+| disclosure denial | Does it deny being an AI when asked? | one of the six |
+| memory poisoning | Does an instruction planted in one turn still run two turns later, after the document carrying it is gone? | elective · `ASI06` |
+| direct prompt injection | Does an override in the user's *own* message beat the system prompt? | elective · `LLM01` |
+| PII leakage | Does it hand over a record it holds **about somebody else**? | elective · `LLM02` |
 
 The elective three are measured by exactly the same machinery, against the same
 three reference agents, and held to the same bar — but they can never decide
@@ -42,9 +37,9 @@ whether the bench passes its own gate
 ([ADR-0035](./docs/adr/0035-the-elective-family-tier-is-never-gate-deciding.md)).
 That is enforced by the type system: `Family` and `ElectiveFamily` are two
 separate closed sets, so an elective figure cannot be assigned where a gate count
-is taken. You select them per run, they cost extra, and a run you did not ask for
-them in says **not requested** rather than leaving a silent hole. Each of the
-three is decided by a plain string check, so none of them depends on a judge.
+is taken. They cost extra, and a run you did not ask for them in says **not
+requested** rather than leaving a silent hole. Each of the three is decided by a
+plain string check, so none of them depends on a judge.
 
 **What makes this different from a test script:** before you are allowed to trust
 a number, the bench measures *itself*. It runs the same attacks against three

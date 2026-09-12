@@ -19,19 +19,11 @@ stop. So the environment is read here, once, by a named function, and the API is
 handed what it needs. ADR-0020 narrowed that rule for the signing key and did not
 lift it; this is the second reader admitted on the same terms.
 
-**A verification is a value, never an exception.** `verify` returns an `Operator`
-or an `Unverified` and raises nothing at all — not for a forged token, not for a
-malformed one, and not for an issuer that cannot be reached. The console polls a
-run every two seconds while the bench is attacking somebody else's endpoint; a
-verifier that raised would put a stack trace on that path and an issuer's outage
-would read as the bench failing. The refusal leaves as prose on `reason`, which is
-the shape every other refusal on this surface takes.
-
-**An unverified identity has no name on it.** `Unverified` carries no `subject`
-and there is no attribute on it a caller could read one off, so a call site that
-forgot to narrow the union does not typecheck. The invariant is the type's. This
-is the whole point of returning two types rather than one type with an `ok` flag,
-because the flag would have to be remembered and a union has to be narrowed.
+**A verification is a value and an unverified identity has no name on it**, both
+decided in ADR-0120 and neither re-argued here. What they come to in this file:
+`verify` returns `Operator | Unverified` and every `return` in it is one of the
+two, so a `raise` added later is a visible departure; and `Unverified` has no
+`subject` field, so narrowing the union is the only way to read a name.
 
 **Verification is offline on the happy path.** `authenticate_request` with
 `jwt_key` set checks the signature against the public key this process holds and
@@ -114,16 +106,6 @@ class Issuer:
                 "None rather than this"
             )
 
-    @property
-    def offline(self) -> bool:
-        """Whether a signature can be checked without asking the issuer.
-
-        Stated rather than inferred at the call site, because it is the property
-        ADR-0116 §4 is about and the thing a deployment should be able to read
-        off its own configuration.
-        """
-        return bool(self.jwt_key)
-
 
 def declared_issuer(environment: Mapping[str, str] | None = None) -> Issuer | None:
     """The issuer the environment declares, or `None` for no authentication.
@@ -176,14 +158,11 @@ class Operator:
 
 
 class Unverifiable(StrEnum):
-    """Why a token did not yield an operator. Five, and each is acted on
-    differently by somebody downstream.
+    """Why a token did not yield an operator. Five, because five consumers branch
+    (ADR-0120 §3, which is also why a sixth is a change to argue rather than add).
 
-    The enum exists beside the prose because two consumers need to *branch* and
-    not merely print: a console has to tell an expired session, which it renews
-    by signing in again, from a signature that did not verify, which is somebody
-    at the door; and a machine client has to tell a refusal of its credential
-    from a verifier that could not reach the issuer to check one.
+    Each member's own docstring says what it means, since what a member means is
+    a property of the member and not of the decision to have members.
     """
 
     ABSENT = "absent"
@@ -215,10 +194,9 @@ class Unverifiable(StrEnum):
 class Unverified:
     """A refusal, carrying which one it was and a sentence saying so.
 
-    **There is no subject on this type and there must not be one.** The whole
-    construction is that `verify` returns `Operator | Unverified`, so reading a
-    name requires narrowing the union, and a call site that forgot does not
-    typecheck rather than recording a name nothing checked.
+    **There is no subject on this type and there must not be one** — the whole of
+    ADR-0120 §1 at the one line that could undo it. Adding a field here is how
+    this seam stops working, and nothing else is.
     """
 
     cause: Unverifiable
@@ -233,14 +211,10 @@ Verification = Operator | Unverified
 class Verifier(Protocol):
     """What the API declares, and the whole of what it knows about an issuer.
 
-    A protocol rather than an import of the concrete class, which is what keeps
-    ADR-0116 §3's reversibility real — a second provider, or a self-hosted one, is
-    a different object passed to the same argument — and what lets every test in
-    this repository declare a stub with no account and no network.
-
-    It takes the `Authorization` header's value and not a request. The narrower
-    argument is deliberate: a protocol taking a framework's request object would
-    make the seam a FastAPI seam, and a stub would have to build one.
+    A protocol and not an import of the concrete class (ADR-0116 §3, ADR-0120 §4),
+    which is what a test relies on when it declares a stub with no account and no
+    network — `runtime_checkable` so that such a stub can be asserted to satisfy
+    this and not merely annotated as satisfying it.
     """
 
     def verify(self, authorization: str | None) -> Verification:
@@ -255,6 +229,7 @@ _REFUSALS: Mapping[object, Unverifiable] = {
     AuthErrorReason.SESSION_TOKEN_MISSING: Unverifiable.ABSENT,
     AuthErrorReason.TOKEN_TYPE_NOT_SUPPORTED: Unverifiable.MALFORMED,
     AuthErrorReason.SECRET_KEY_MISSING: Unverifiable.UNAVAILABLE,
+    TokenVerificationErrorReason.SECRET_KEY_MISSING: Unverifiable.UNAVAILABLE,
     TokenVerificationErrorReason.TOKEN_EXPIRED: Unverifiable.EXPIRED,
     TokenVerificationErrorReason.TOKEN_INVALID: Unverifiable.MALFORMED,
     TokenVerificationErrorReason.INVALID_TOKEN_TYPE: Unverifiable.MALFORMED,
@@ -271,14 +246,16 @@ _REFUSALS: Mapping[object, Unverifiable] = {
     TokenVerificationErrorReason.JWK_REMOTE_INVALID: Unverifiable.UNAVAILABLE,
     TokenVerificationErrorReason.SERVER_ERROR: Unverifiable.UNAVAILABLE,
 }
-"""Every reason the library can answer with, mapped onto the five this bench
-distinguishes.
+"""Every reason the library defines today, mapped onto the five this bench
+distinguishes (ADR-0120 §3).
 
-Exhaustive on purpose and not a `match` with a default: the library's set is a
-thing that changes under us, and a new member falling through to `UNAVAILABLE`
-would tell an operator the issuer was down when their token was refused. A reason
-this table does not hold is `UNAVAILABLE` *and* says it was not recognised, which
-is the honest reading of a verifier that no longer understands its library.
+Written out member by member rather than defaulted, because the two enums hold
+two same-named `SECRET_KEY_MISSING` members that are different objects — a table
+built by name would silently drop one of them, and that one is a configuration
+fault. A reason the table does not hold is still `UNAVAILABLE`, and `_refusal`
+says it was not recognised: the library's set changes under us, and a verifier
+that no longer understands its library should say so rather than report every
+new reason as an outage.
 """
 
 
@@ -302,12 +279,9 @@ class ClerkVerifier:
     it `DefaultVerifier` would hide the single binding ADR-0116 admits to. The API
     declares `Verifier` and never this.
 
-    **Nothing here raises.** The library's own failures come back as a
-    `RequestState` with a reason, and anything it did not anticipate — an httpx
-    error on the fallback path, a key that will not parse — is caught and
-    returned as `UNAVAILABLE`. A broad `except` is the right shape exactly once,
-    and this is that place: the alternative is an identity provider's bad day
-    arriving at an operator as a 500 on a run they are watching.
+    The broad `except` below is ADR-0120 §2 and its cost paragraph, and it is here
+    rather than anywhere else because this is the only line in the module that
+    calls into the provider's library.
     """
 
     issuer: Issuer

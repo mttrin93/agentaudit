@@ -39,6 +39,7 @@ corpus = [
 dev = [
     { name = "mypy" },
     { name = "pre-commit" },
+    { name = "pyjwt" },
     { name = "pytest" },
     { name = "ruff" },
 ]
@@ -68,6 +69,7 @@ provides-extras = ["corpus"]
 dev = [
     { name = "mypy", specifier = ">=1.14" },
     { name = "pre-commit", specifier = ">=4.4.0,<4.6.1" },
+    { name = "pyjwt", specifier = ">=2.10" },
     { name = "pytest", specifier = ">=9.1.1" },
     { name = "ruff", specifier = ">=0.14" },
 ]

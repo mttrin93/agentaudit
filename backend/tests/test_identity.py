@@ -94,7 +94,6 @@ def test_the_declared_issuer_is_the_material_the_environment_holds() -> None:
     assert declared == Issuer(jwt_key=PUBLIC.strip(), secret_key="sk_test_nothing")
     assert declared is not None
     assert declared.jwt_key is not None and "\n" in declared.jwt_key
-    assert declared.offline
 
 
 def test_an_environment_that_declares_no_issuer_declares_nothing() -> None:
@@ -120,7 +119,6 @@ def test_a_secret_key_alone_is_still_a_declared_issuer() -> None:
 
     assert declared == Issuer(secret_key="sk_test_nothing")
     assert declared is not None and declared.jwt_key is None
-    assert not declared.offline
 
 
 def test_an_issuer_holding_neither_value_cannot_be_constructed() -> None:

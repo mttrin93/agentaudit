@@ -163,13 +163,6 @@ bottom of every fraction in the report. It is printed beside every figure rather
 than assumed, because a family can grow a case: a route the bench's own attacker
 found, once it has cleared the bar against the three reference agents.
 
-Ten is a setting, not a constant. `attempts_per_case` is on the Settings screen,
-on `scripts/bench.py` and on the Action; lower it and the run is cheaper and the
-intervals get wider. What it may not do is quietly become a different
-measurement: the declared value is 10, a run below it is not a gate result, and
-the signed report says so beside every figure rather than leaving the figure to
-be compared with one taken at ten.
-
 **How a try is judged.** Seven of the nine are decided by a plain check, with no
 opinion in it:
 
@@ -384,6 +377,11 @@ episodes per family, and attempts per case.
 Not every model accepts every parameter, and the bench knows which before it
 calls one — setting a temperature on a model that takes none is refused when you
 set it, not at the first call of a run.
+
+One warning worth repeating: `attempts_per_case` is the denominator of every
+rate. The declared value is 10. A run at a lower number is honest, but it is not
+a gate result and nothing may compare it to one — and the report says so beside
+every figure.
 
 ### Tracing a run
 

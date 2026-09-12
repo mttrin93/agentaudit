@@ -22,6 +22,7 @@
  */
 
 import type { RuleOfTwoDeclared } from './contracts'
+import { authed } from './http'
 
 /** Where a candidate declaration is read. Exported so a test can name it. */
 export const RULE_OF_TWO_PATH = '/rule-of-two'
@@ -54,7 +55,7 @@ export interface RuleOfTwoRead {
 export async function readRuleOfTwo(
   declared: RuleOfTwoDeclared,
 ): Promise<RuleOfTwoRead> {
-  const response = await fetch(RULE_OF_TWO_PATH, {
+  const response = await authed(RULE_OF_TWO_PATH, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(declared),

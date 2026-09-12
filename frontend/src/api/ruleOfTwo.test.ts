@@ -55,14 +55,17 @@ function appSources(from = 'src'): string[] {
 }
 
 describe('the reading of a candidate declaration', () => {
-  it('posts the four answers as they were given, `null` included', () => {
+  it('posts the four answers as they were given, `null` included', async () => {
     // Three answers per question, so the body carries `null` rather than dropping
     // it: a field left out would be read as unstated by the API anyway, and the
     // point of asserting it is that this app is not quietly turning silence into a
     // denial on the way (ADR-0038, decision 1).
     const fetching = answering({ standing: 'at_most_two', stated: 'a sentence' })
 
-    void readRuleOfTwo({
+    // Awaited rather than dispatched and read: since #248 a request is made through
+    // `authed`, which asks the attended door for a token before it fetches, so the
+    // call reaches the wire a microtask later than it used to.
+    await readRuleOfTwo({
       processes_untrusted_input: true,
       reaches_private_data: false,
       changes_state_or_communicates: null,

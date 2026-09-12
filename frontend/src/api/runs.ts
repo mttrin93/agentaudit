@@ -37,6 +37,7 @@ import type {
 } from './contracts'
 import {
   ANSWER_UNREACHABLE,
+  authed,
   fetched,
   refusalIn,
   refusalRead,
@@ -333,7 +334,7 @@ const UNREACHABLE =
 export async function startRun(body: StartRunBody): Promise<StartOutcome> {
   let response: Response
   try {
-    response = await fetch('/runs', {
+    response = await authed('/runs', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
@@ -349,7 +350,7 @@ export async function startRun(body: StartRunBody): Promise<StartOutcome> {
 
 /** Where one run has got to, or the reason this app could not find out. */
 export async function runStanding(runId: string): Promise<RunStanding> {
-  const response = await fetch(`/runs/${encodeURIComponent(runId)}`)
+  const response = await authed(`/runs/${encodeURIComponent(runId)}`)
   if (!response.ok) {
     throw new Error(
       `the bench has no run ${runId} to report on (HTTP ${response.status})`,
@@ -366,7 +367,7 @@ export async function runStanding(runId: string): Promise<RunStanding> {
  * touches the target — polling a run's standing is a question put to the bench.
  */
 export async function runProgress(runId: string): Promise<RunProgress> {
-  const response = await fetch(`/runs/${encodeURIComponent(runId)}`)
+  const response = await authed(`/runs/${encodeURIComponent(runId)}`)
   if (!response.ok) {
     throw new Error(
       `the bench has no run ${runId} to report on (HTTP ${response.status})`,
@@ -407,7 +408,7 @@ export async function answerTheInterrupt(
 ): Promise<ApprovalOutcome> {
   let response: Response
   try {
-    response = await fetch(`/runs/${encodeURIComponent(runId)}/approval`, {
+    response = await authed(`/runs/${encodeURIComponent(runId)}/approval`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
@@ -444,7 +445,7 @@ export async function answerTheInterrupt(
 export async function stopTheRun(runId: string): Promise<ApprovalOutcome> {
   let response: Response
   try {
-    response = await fetch(`/runs/${encodeURIComponent(runId)}/stop`, {
+    response = await authed(`/runs/${encodeURIComponent(runId)}/stop`, {
       method: 'POST',
     })
   } catch (unreachable) {

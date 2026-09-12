@@ -25,6 +25,7 @@ import type {
 } from './contracts'
 import {
   ANSWER_UNREACHABLE,
+  authed,
   fetched,
   refusalIn,
 } from './http'
@@ -279,7 +280,7 @@ export async function startGateRun(
 ): Promise<GateRunOutcome> {
   let response: Response
   try {
-    response = await fetch(GATE_RUNS_PATH, {
+    response = await authed(GATE_RUNS_PATH, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
@@ -329,7 +330,7 @@ export async function answerTheGateRunsInterrupt(
 ): Promise<GateApprovalOutcome> {
   let response: Response
   try {
-    response = await fetch(
+    response = await authed(
       `${GATE_RUNS_PATH}/${encodeURIComponent(gateRunId)}/approval`,
       {
         method: 'POST',
@@ -367,7 +368,7 @@ export type GateApprovalOutcome =
  * asking a gate run how it is going is a question put to the bench.
  */
 export async function gateRunReading(gateRunId: string): Promise<GateRunReading> {
-  const response = await fetch(
+  const response = await authed(
     `${GATE_RUNS_PATH}/${encodeURIComponent(gateRunId)}`,
   )
   if (!response.ok) {

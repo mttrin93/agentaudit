@@ -28,7 +28,7 @@
  */
 
 import type { ApprovalBody, AttestationBody, CostBody } from './contracts'
-import { ANSWER_UNREACHABLE, fetched, refusalIn } from './http'
+import { ANSWER_UNREACHABLE, authed, fetched, refusalIn } from './http'
 
 /** Where the queue is read, and where a measurement over it is started. */
 export const PENDING_ROUTES_PATH = '/pending-routes'
@@ -241,7 +241,7 @@ export async function startMeasurement(
 ): Promise<MeasurementOutcome> {
   let response: Response
   try {
-    response = await fetch(MEASUREMENTS_PATH, {
+    response = await authed(MEASUREMENTS_PATH, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
@@ -299,7 +299,7 @@ export async function answerTheMeasurementsInterrupt(
 ): Promise<MeasurementApprovalOutcome> {
   let response: Response
   try {
-    response = await fetch(
+    response = await authed(
       `${MEASUREMENTS_PATH}/${encodeURIComponent(measurementId)}/approval`,
       {
         method: 'POST',
@@ -342,7 +342,7 @@ export type MeasurementApprovalOutcome =
 export async function measurementReading(
   measurementId: string,
 ): Promise<MeasurementReading> {
-  const response = await fetch(
+  const response = await authed(
     `${MEASUREMENTS_PATH}/${encodeURIComponent(measurementId)}`,
   )
   if (!response.ok) {

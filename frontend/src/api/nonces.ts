@@ -8,6 +8,8 @@
  * was issued for is refused or not.
  */
 
+import { authed } from './http'
+
 /** The value the operator plants, the probe that will ask for it, and why. */
 export interface NonceIssued {
   nonce: string
@@ -17,7 +19,7 @@ export interface NonceIssued {
 
 /** Issue a nonce. One value, one run: the next run needs one planted again. */
 export async function issueNonce(): Promise<NonceIssued> {
-  const response = await fetch('/nonces', { method: 'POST' })
+  const response = await authed('/nonces', { method: 'POST' })
   if (!response.ok) {
     throw new Error(
       `the bench refused to issue a nonce (HTTP ${response.status}), so there is ` +

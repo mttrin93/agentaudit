@@ -23,9 +23,11 @@
  * What *is* thrown is a fetch that never reached the bench at all — see
  * `unreachable` in `runs.ts`.
  *
- * `http.ts` is not re-exported here. Its two functions are how the area modules talk
- * to the bench, not something a screen may reach for: a screen that fetched a path
- * of its own would be a route this file does not list.
+ * `http.ts` is re-exported here in one line and no more. `attendTheDoor` is a thing
+ * a screen does — a component inside the issuer's provider registers the token
+ * source once at mount — so the barrel has to name it. `authed`, `fetched` and the
+ * two refusal readers stay out, for the reason they always did: a screen that
+ * fetched a path of its own would be a route this file does not list.
  */
 
 export * from './contracts'
@@ -38,3 +40,4 @@ export * from './gateruns'
 export * from './pendingroutes'
 export * from './settings'
 export * from './artefacts'
+export { attendTheDoor, type Door, type DoorRefusal } from './http'

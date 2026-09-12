@@ -1,20 +1,38 @@
-# AgentAudit
+<div align="center">
 
-*An adversarial test bench for AI agents. It attacks a target across six failure
-families, proves its own discriminating power before its results are trusted, and
-reports the outcome as a signed artefact anyone can verify offline.*
+<h1>AgentAudit</h1>
+
+<hr>
+
+### An adversarial test bench for AI agents
+
+It attacks your agent on purpose, so you find out how it fails before a customer
+does. Point it at an HTTP endpoint and it sends recorded attacks, watches what
+your agent does, and writes a signed report.<br/>
+Anyone you send that report to can check it offline — no account, no network,
+no trust in us.<br/>
+Available as a browser console, a GitHub Action, and four MCP tools.
+
+![tests](https://img.shields.io/badge/tests-2517_passing-2ea44f)
+![typed](https://img.shields.io/badge/mypy-strict-1f6feb)
+![python](https://img.shields.io/badge/python-3.12-3776ab)
+![react](https://img.shields.io/badge/react-19-61dafb)
+![vite](https://img.shields.io/badge/vite-8-646cff)
+![reports](https://img.shields.io/badge/reports-Ed25519_signed-8957e5)
+![families](https://img.shields.io/badge/families-6%2B3_elective-d29922)
 
 **[Open the live console](https://frontend-psi-three-16.vercel.app)** ·
-[how it works](#how-it-works) · [what it has measured about itself](./docs/validation.md)
+[How it works](#how-it-works) ·
+[The numbers](#the-scored-layer-where-the-numbers-come-from) ·
+[The gate](#how-the-bench-proves-the-attacks-work) ·
+[Run it yourself](#run-it-yourself) ·
+[In your CI](#in-your-own-pipeline) ·
+[From your editor](#from-your-coding-agent) ·
+[What it has measured](./docs/validation.md)
+
+</div>
 
 ---
-
-AgentAudit attacks your AI agent on purpose, so you find out how it fails before
-a customer does.
-
-You point it at your agent's HTTP endpoint. It sends recorded attacks, watches
-what your agent does, and writes a signed report. Anyone you send that report to
-can check it offline — no account, no network, no trust in us.
 
 It attacks nine kinds of failure. The first six are the ones the bench itself is
 judged on; the last three are **elective** — you ask for them per run.

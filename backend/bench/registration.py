@@ -36,6 +36,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
+from backend.bench.attested_name import AttestedName
 from backend.bench.contract import TargetConfig, Transcript, send_message
 from backend.graph.budget import Layer
 from backend.graph.runstate import RunState
@@ -62,9 +63,17 @@ class Attestation:
     cannot be reached without one.
     """
 
-    identity: str
-    """Who attested. Recorded, because an attestation nobody signed is not a
-    liability record."""
+    attested_by: AttestedName
+    """Who attested, and what established that name.
+
+    Recorded, because an attestation nobody signed is not a liability record — and
+    an `AttestedName` rather than a `str` since
+    [ADR-0123](../../docs/adr/0123-the-identity-in-the-payload-states-what-established-it.md),
+    because three surfaces write this field and one of them has a verified token
+    behind it. The local consequence: the name and the sentence saying what checked
+    it are one object, so a record cannot carry the first without the second, and
+    `identity` below stays the plain string every log line and lease holder reads.
+    """
 
     authorised_to_test: bool
     not_production: bool
@@ -82,9 +91,19 @@ class Attestation:
     """The wording an operator is asked to confirm, held beside the fields so the
     prompt and the record cannot drift apart."""
 
+    @property
+    def identity(self) -> str:
+        """The name, for everything that needs a name and not a claim about one.
+
+        A property and not a field: a caller constructs the attested name, and the
+        string falls out of it. That is what makes *this name was verified* something
+        a verifier produced rather than a keyword argument a caller typed beside it.
+        """
+        return self.attested_by.name
+
     def __post_init__(self) -> None:
-        if not self.identity.strip():
-            raise ValueError("an attestation has to record who made it")
+        # A blank name is refused by the attested name that was made rather than here
+        # — `attested_name.NO_NAME`, one wording at the place a name arrives.
         withheld = [
             wording
             for field_name, wording in self.STATEMENTS

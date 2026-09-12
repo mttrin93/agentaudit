@@ -48,6 +48,13 @@ from backend.bench.assembler import (
     WithheldProse,
     reported_findings,
 )
+from backend.bench.attested_name import (
+    NOT_ESTABLISHED,
+    AttestedName,
+    NameGiven,
+    VerifiedSubject,
+    WorkflowActor,
+)
 from backend.bench.capability import ReasoningEffort
 from backend.bench.contract import AgentCapability, DeclaredControl, Transcript
 from backend.bench.declared_gap import DeclaredGap
@@ -236,9 +243,18 @@ def test_the_provenance_block_says_how_this_was_made_and_what_it_cost_per_layer(
     # so a report cannot credit somebody who never attested — and the endpoint
     # travels as a hash, because a live URL that answers jailbreak payloads is not a
     # thing to write into a document that leaves the building (ADR-0008).
-    assert block["attestation"]["identity"] == "Matteo Rinaldi"
+    assert block["attestation"]["identity"].startswith("Matteo Rinaldi — ")
     assert block["attestation"]["endpoint_sha256"] == "a" * 64
     assert "https://" not in json.dumps(block)
+
+    # And the field says what established the name, in the field's own value: the
+    # one thing in this document naming a person carries what checked it and what
+    # that does not amount to (ADR-0123, ADR-0116's cost paragraph).
+    assert (
+        "verified session at the issuer this deployment declares"
+        in (block["attestation"]["identity"])
+    )
+    assert NOT_ESTABLISHED in block["attestation"]["identity"]
 
     # What the attestation is worth, beside the statements themselves. A run may now
     # start on the declaration alone (ADR-0007, as amended), so *authorised to test
@@ -1622,12 +1638,71 @@ def test_the_findings_the_document_carries_are_the_ones_the_record_passed() -> N
     )
 
 
+def test_the_attestation_block_gained_a_sentence_and_not_a_key() -> None:
+    """Five keys, the same five, and the new claim inside one of them.
+
+    The half of ADR-0123 that a wording assertion cannot make: a key beside
+    `identity` would change the shape of every artefact already signed, and a
+    version-2 verifier reading this document would meet a field it has no rule for.
+    The sentence therefore travels in the value, and this is what says it still does.
+    """
+    block = document(a_payload())["provenance"]["attestation"]
+
+    assert set(block) == {
+        "identity",
+        "endpoint_sha256",
+        "recorded_at",
+        "statements",
+        "control_proved",
+    }
+    # And the three statements are still the operator's own three. The bench's
+    # sentence about what verified the name is not one of them: an operator attests
+    # to what they are doing, and what checked who they are is the bench's claim.
+    assert len(block["statements"]) == 3
+    assert not any(NOT_ESTABLISHED in wording for wording in block["statements"])
+
+
+@pytest.mark.parametrize(
+    ("attested", "expected"),
+    [
+        (
+            VerifiedSubject(subject="user_2abc"),
+            "verified session at the issuer this deployment declares",
+        ),
+        (WorkflowActor(actor="ada"), "authenticated by the runner that ran it"),
+        (
+            NameGiven(given="an operator this bench did not verify"),
+            "a name nothing verified",
+        ),
+    ],
+)
+def test_the_document_says_which_surface_named_the_operator(
+    attested: AttestedName, expected: str
+) -> None:
+    """Three surfaces write this field, and a recipient can tell which one did.
+
+    The defect ADR-0116 opens with — "two surfaces write the same field of the same
+    payload; one of them means it, and a reader holding a report cannot tell which"
+    — read at the document. The serialiser prints what the record's attested name
+    states and cannot promote one reading to another, because it has no branch: the
+    type that was constructed is the sentence that travels.
+    """
+    record = replace(
+        ATTESTED, attestation=replace(ATTESTED.attestation, attested_by=attested)
+    )
+    block = document(a_payload(provenance=replace(a_provenance(), attestation=record)))
+
+    identity = block["provenance"]["attestation"]["identity"]
+    assert expected in identity
+    assert NOT_ESTABLISHED in identity
+
+
 # --- Helpers -----------------------------------------------------------------
 
 
 ATTESTED = AttestationRecord(
     attestation=Attestation(
-        identity="Matteo Rinaldi",
+        attested_by=VerifiedSubject(subject="Matteo Rinaldi"),
         authorised_to_test=True,
         not_production=True,
         accepts_provider_policy_and_cost=True,

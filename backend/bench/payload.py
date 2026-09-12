@@ -652,6 +652,10 @@ class Provenance:
     name somebody who never attested — and the record carries the endpoint as a
     hash, because a live URL that answers jailbreak payloads is not a thing to write
     into a document that travels (ADR-0008).
+
+    The name travels as what the attestation's `Attribution` states: the party, and
+    what established it, in the one field of this artefact that names a person
+    ([ADR-0123](../../docs/adr/0123-the-identity-in-the-payload-states-what-established-it.md)).
     """
 
     models: DeclaredModels
@@ -1692,7 +1696,14 @@ def _provenance(payload: TargetPayload) -> dict[str, Any]:
     return {
         "target": payload.result.target_name,
         "attestation": {
-            "identity": record.attestation.identity,
+            # The name **and what established it**, in one value and not in a key
+            # beside it: a sentence a later renderer could drop is a sentence a
+            # reader might never see, and a second key would change the shape of
+            # every artefact already signed (ADR-0123). Which of the three sentences
+            # this is was decided where the name arrived — a verified session, a
+            # workflow runner, or nothing at all — and no serialiser can promote one
+            # to another.
+            "identity": record.attestation.attested_by.stated(),
             "endpoint_sha256": record.endpoint_hash,
             "recorded_at": record.recorded_at.isoformat(),
             "statements": [wording for _, wording in record.attestation.STATEMENTS],

@@ -31,6 +31,7 @@ from backend.bench import decided, held, pending
 from backend.bench.adaptive import precedent
 from backend.bench.adaptive.precedent import DURABLE_PRECEDENT
 from backend.bench.adjudication import Completion
+from backend.bench.attested_name import NameGiven
 from backend.bench.calibration import (
     CalibrationResult,
     DropNamespace,
@@ -102,7 +103,7 @@ CASES_DIR = Path(__file__).resolve().parents[1] / "cases"
 AUTH_TOKEN = "reference-auth-token"
 
 BENCH_ATTESTATION = Attestation(
-    identity="bench engineer, calibration fixture",
+    attested_by=NameGiven(given="bench engineer, calibration fixture"),
     authorised_to_test=True,
     not_production=True,
     accepts_provider_policy_and_cost=True,

@@ -227,6 +227,7 @@ from backend.bench.adaptive.tree import BranchSchedule
 from backend.bench.adjudication import Completion
 from backend.bench.admission import admitted_elective, admitted_library
 from backend.bench.applicability import applicable
+from backend.bench.attested_name import AttestedName, NameGiven, VerifiedSubject
 from backend.bench.capability import (
     NO_REASONING_EFFORT_ACCEPTED,
     NO_TEMPERATURE_ACCEPTED,
@@ -690,9 +691,14 @@ class AttestationRequest(NamesNobody):
         The operator is an argument and not a default anywhere: a call site that
         forgot it does not compile, which is the one way this seam can be kept
         honest at three call sites in one file.
+
+        **`attributed_to` is where a verified session becomes a claim in a signed
+        document** (ADR-0123). It is decided here, from the operator the door
+        admitted, because this is the only place in this repository that holds both
+        the name and the fact that a verifier produced it.
         """
         return Attestation(
-            identity=operator.subject,
+            attested_by=attributed_to(operator),
             authorised_to_test=self.authorised_to_test,
             not_production=self.not_production,
             accepts_provider_policy_and_cost=self.accepts_provider_policy_and_cost,
@@ -6211,6 +6217,27 @@ def nobody_verified() -> Operator:
     way, and which of the two answers it is decided once, in `create_app`.
     """
     return NOBODY_VERIFIED
+
+
+def attributed_to(operator: Operator) -> AttestedName:
+    """What a signed document may say established this name — a session, or nothing.
+
+    The one place on this surface where a verification becomes a claim in an
+    artefact, and the reason `Attestation` takes an `AttestedName` rather than a
+    string (ADR-0123).
+
+    **Compared by value and not by `is`.** `NO_DOOR` is a member no caller can
+    construct, so the factory compares it with `is` (ADR-0121 decision 2); an
+    `Operator` is an ordinary frozen dataclass anybody can build one of, and the
+    failure to avoid here is a copy of `NOBODY_VERIFIED` arriving from somewhere else
+    and being printed as verified. Equality can only err the other way — a token
+    whose subject really is that sentence would be recorded as unverified — and
+    understating what was checked is the direction this field is allowed to be wrong
+    in (ADR-0116's cost paragraph).
+    """
+    if operator == NOBODY_VERIFIED:
+        return NameGiven(given=operator.subject)
+    return VerifiedSubject(subject=operator.subject)
 
 
 def admitting(verifier: Verifier) -> Callable[[str | None], Operator]:

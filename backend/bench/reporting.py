@@ -59,15 +59,7 @@ from backend.bench.resending import HeldOutcome, HeldReading, HeldRoutesSent
 from backend.bench.route_key import RouteKey
 
 WHAT_LICENSES_THIS_BLOCK = (
-    "Every route in this block entered it on a named operator's approval and an "
-    "evaluator-confirmed break against this target, and on nothing else. It faced no "
-    "admission bar and no declared threshold: the bar asks whether a route separates "
-    "three agents of known construction, which is a question about generality, and "
-    "these are the confirmed breaks it refused. So a reader of a figure here is "
-    "trusting a person's decision where every figure in the measured sections is "
-    "trusting a threshold declared before the run. What each line claims is only "
-    "this: this exact probe produced this exact verdict against this exact agent, "
-    "and here is whether it still does (ADR-0117)."
+    "Held on an operator's approval, not the admission bar (ADR-0117)."
 )
 """What a reader of this block is trusting, which is not what they trust elsewhere.
 
@@ -76,6 +68,14 @@ once, carried into the payload, and printed by both the Markdown and the console
 `labels.bears_stated`'s reason: a surface that assembled the sentence would be a
 second copy of a claim the signed document already makes, and two copies of one claim
 are two claims the day one of them is edited.
+
+**One line, on the operator's judgement that four sentences were not being read.**
+It ran four and spelled out what the bar asks and why these routes failed it. What
+survives is the only part a reader must not miss — that an approval and not the bar
+is what put a route here — and the citation, because the argument itself is
+ADR-0117's to make and is still made there in full. A caveat nobody finishes is a
+caveat nobody has read, so the cost of the cut is paid against the long form and not
+against the disclosure.
 """
 
 NO_RATE_OVER_THESE = (
@@ -390,10 +390,8 @@ class HeldBlock:
             return self.unlisted
         if not self.lines:
             return (
-                f"No route is held against {self.target_name}. Nothing this bench "
-                "has confirmed against this agent was refused by the admission bar, "
-                "so there is nothing to re-send — which is an empty library and not "
-                "a block that failed to render."
+                f"No route is held against {self.target_name} — "
+                "an empty library, not an unread one."
             )
         said = (
             f"{self.held} route(s) are held against {self.target_name}: "

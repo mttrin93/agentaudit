@@ -111,7 +111,7 @@ export const SERVED: TargetReport = {
   "held_routes": {
     "reading": "held",
     "stated": "3 route(s) are held against staging support agent: 2 still open and 1 closed. 1 of them broke the target again on this run. 1 of them have closed once and come back.",
-    "licensed_by": "Every route in this block entered it on a named operator's approval and an evaluator-confirmed break against this target, and on nothing else. It faced no admission bar and no declared threshold: the bar asks whether a route separates three agents of known construction, which is a question about generality, and these are the confirmed breaks it refused. So a reader of a figure here is trusting a person's decision where every figure in the measured sections is trusting a threshold declared before the run. What each line claims is only this: this exact probe produced this exact verdict against this exact agent, and here is whether it still does (ADR-0117).",
+    "licensed_by": "Held on an operator's approval, not the admission bar (ADR-0117).",
     "no_rate_over_these": "These are counts and there is no rate over them. A held route is selected because it already broke this target, so a quotient of any two figures here would be a rate over a sample chosen on its own outcome: it would fall with every new finding, two targets would stop being comparable, and the band's cut points were computed against no such population. Nothing in this block is summed into a family rate, an interval, the break score or the band, no decision about this bench's own fitness is taken on any of it, and none of those figures is derived from anything here (ADR-0117 §4).",
     "held": 3,
     "open": 2,

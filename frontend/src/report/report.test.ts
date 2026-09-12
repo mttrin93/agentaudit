@@ -1698,9 +1698,14 @@ describe('the confirmed breaks held against this target', () => {
 
     expect(held.licensedBy).toBe(SERVED.held_routes.licensed_by)
     expect(held.licensedBy).toContain('operator')
-    expect(held.licensedBy).toContain('no declared threshold')
-    expect(held.licensedBy).toBe(SERVED.held_routes.licensed_by)
-    expect(screen).toContain('{held.licensedBy}')
+    // The clause that carries the cost, whatever length the sentence is cut to: what
+    // put a route here is the approval and not the bar.
+    expect(held.licensedBy).toContain('not the admission bar')
+    // Carried and not drawn, the same as `noRateOverThese` below: the sentence is on
+    // the payload and in the `report.md` a recipient is handed, and the screen shows
+    // the readings and their counts. What this asserts is that it is still signed —
+    // a screen that stopped printing it is not an artefact that stopped making it.
+    expect(screen).not.toContain('{held.licensedBy}')
 
     // And the artefact's other standing sentence is carried and not drawn: ADR-0115's
     // split is that the screen carries the figures and the document carries the

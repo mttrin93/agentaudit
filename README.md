@@ -101,7 +101,9 @@ flowchart TB
         direction TB
         SC["<b>Scored layer</b><br/>every active case × 10 attempts, a fresh session each<br/>4 families checked by string, 2 read by an adjudicator model<br/>every number in the report comes from here"]
         AD["<b>Adaptive layer</b><br/>attacker agent, 5 tools, T=8 turns × k=2 episodes per family<br/>never scored, reported in its own section"]
+        HR["<b>Held routes</b> — this target's own library<br/>every route ever held against <i>this</i> agent, re-sent<br/>its own denominator, never a family's rate"]
         SC --> AD
+        SC --> HR
     end
 
     ART["report.json · report.md · report.sig<br/>Ed25519 over the JSON"]
@@ -118,7 +120,7 @@ flowchart TB
 
     PEND[("pending/routes.sqlite<br/>routes the attacker found<br/>against a real agent")]
     PREC[("precedent/findings.sqlite<br/>one row per deterministic finding,<br/>no target identity at all")]
-    HELD[("Held against the target it beat —<br/>on its report, never in a rate")]
+    HELD[("<b>Target library</b> — held/routes.sqlite<br/>the confirmed breaks the bar refused,<br/>one library per target, git-ignored")]
     ADM{"Does it separate the<br/>3 reference agents?<br/>D ≥ 0.4"}
 
     UI --> REG
@@ -134,7 +136,10 @@ flowchart TB
     PREC -.->|"retrieve_precedent — earns its place at run 2"| AD
     PEND -->|"you decide, then the 3 reference agents"| ADM
     ADM -->|"yes — written in, and the library version moves"| LIB
-    ADM -->|"no"| HELD
+    ADM -->|"no — but you keep it"| HELD
+    HELD -->|"only against the agent it beat"| HR
+    HR -->|"2 clean runs close it; a closed route<br/>that breaks again reopens"| HELD
+    HR --> ART
     GATE -->|"which families may publish a rate at all"| ART
     GATE -->|"retires a case that stopped discriminating"| LIB
 ```
@@ -145,9 +150,18 @@ The **scored layer** produces the numbers. It sends the fixed cases and nothing
 else. The **adaptive layer** is an attacker agent that goes looking for new
 routes; nothing it finds reaches a rate. If it finds a good one it can *propose*
 a new case — and that route then has to separate the three reference agents
-before it is written into the library. A route the bar refuses is not thrown
-away: it is **held** against the target it beat, and printed on that target's
-report beside the six, still without moving a rate.
+before it is written into the library.
+
+A route the bar refuses is not thrown away. It goes into that agent's own
+**target library**, and every later run of *that* agent re-sends it
+([ADR-0117](./docs/adr/0117-a-refused-break-is-held-against-the-target-it-beat-and-is-scored-beside-the-six.md)).
+This is the part an operator actually wants: you were told your agent ran a tool
+after a stop signal, you changed something, and the next run tells you whether it
+is closed. Two consecutive clean runs close a held route; a closed route that
+breaks again reopens, and the report says *found on 3 March, closed on 19 March*.
+None of it touches a rate — a set of routes chosen **because** they already broke
+this agent is a sample selected on its outcome, so it gets its own denominator
+and its own section rather than dragging a family's number around.
 
 ## The scored layer: where the numbers come from
 

@@ -111,7 +111,7 @@ The bar is right to refuse it. The route is not general, and the case library is
 - **Cross-target learning.** Held routes are per target and nothing generalises from one target's library to another's. [ADR-0011](../adr/0011-the-adaptive-attacker-is-label-blind.md) is why, and it is untouched: nothing in a target library reaches the attacker, the judge or the adjudicator.
 - **Steering the adaptive attacker away from routes already held.** A memory that told the attacker what it has already found would be a real improvement and is a different ticket; nothing here changes what the attacker sees.
 - **Cross-tenant isolation.** Still the named P1 blocker it is in `precedent.py`, and this store inherits the same single-tenant namespace and the same honesty about it.
-- **A held route in the signed artefact's sentences.** The figures belong in the report ([ADR-0115](../adr/0115-the-report-screen-carries-the-figures-and-the-artefact-carries-the-sentences.md)); whether the signed document carries a held-route section is a question for the ADR and not assumed here.
+- **A held route in the signed artefact's sentences.** The figures belong in the report ([ADR-0115](../adr/0115-the-report-screen-carries-the-figures-and-the-artefact-carries-the-sentences.md)); whether the signed document carries a held-route section is a question for the ADR and not assumed here. [ADR-0119](../adr/0119-a-held-routes-figures-travel-in-the-signed-artefact-and-its-prose-does-not.md) answers it: the figures and the dates are in the signed document, the attacker's own account of each break is not, and **user story 4 above is therefore unmet on every surface** — the ADR records that as a cost rather than closing the story.
 
 ## Further Notes
 

@@ -2073,6 +2073,93 @@ select option {
   border-bottom: 0;
 }
 
+/*
+ * Held against this target: the counts, and the routes behind them.
+ *
+ * It borrows `.per-family` for the same reason the searches table does — one edge for
+ * the family column, so a reader moves between the three tables without relearning the
+ * shape — and it borrows nothing about a rate, because there is no rate here and no
+ * cell for one (ADR-0117 §4). There is no bar, no band hue and no tint: a length beside
+ * a count invites the eye to compare it with the rate bars two sections up, which is
+ * the one comparison this block exists to prevent.
+ *
+ * The counts are a description list rather than a row of figures, because each one has
+ * to carry the question it answers: *still open* is the library's state and *broke it
+ * again* is this run's reading, and four of the six would be read as each other with
+ * only their numbers on the page.
+ */
+.held-counts {
+  margin: 1rem 0 1.5rem;
+  display: grid;
+  gap: 0.55rem;
+}
+
+.held-counts dt {
+  font-size: 0.78rem;
+  letter-spacing: 0.04em;
+  text-transform: lowercase;
+  color: var(--quiet);
+}
+
+.held-counts dd {
+  margin: 0.1rem 0 0;
+  color: var(--quiet);
+}
+
+/* The figure in ink beside the line that says what it counts — and nothing else on
+ * this page is set this way, so the eye does not read it against a rate. */
+.held-counts .held-figure {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-variant-numeric: tabular-nums;
+  font-size: 1.1rem;
+  color: var(--ink);
+  margin-right: 0.35rem;
+}
+
+.per-family.held-routes {
+  table-layout: fixed;
+}
+
+.per-family.held-routes th:first-child,
+.per-family.held-routes td:first-child {
+  width: 26%;
+}
+
+.per-family.held-routes .outcome-cell {
+  width: 16%;
+}
+
+/* The probe's digest under the family name, quietly: it is the key the store files
+ * this route under and never the probe itself (ADR-0008), and a reader needs it only
+ * to tell two routes in one family apart. */
+.per-family.held-routes .route-key {
+  display: block;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.72rem;
+  font-weight: 400;
+  color: var(--quiet);
+  overflow-wrap: anywhere;
+}
+
+/* A word and not a colour. A regression is a closing and a return, which is a fact a
+ * reader acts on — and a tint standing for it would be the severity scale this project
+ * refuses, arriving through a stylesheet (D3, ADR-0112). */
+.per-family.held-routes .regressed {
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  color: var(--quiet);
+}
+
+.per-family.held-routes tbody th,
+.per-family.held-routes tbody td {
+  border-bottom: 1px solid var(--line);
+}
+
+.per-family.held-routes tbody tr:last-child th,
+.per-family.held-routes tbody tr:last-child td {
+  border-bottom: 0;
+}
+
 /* The published entries as the chips they already were.
  *
  * Ranged **left**, and it is the one column that is: the figures before it are ranged

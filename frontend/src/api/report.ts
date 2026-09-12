@@ -518,6 +518,81 @@ export interface ElectiveSection {
   not_requested: NotRequested[]
 }
 
+/**
+ * One confirmed break the admission bar refused, held against this target.
+ *
+ * **Every field is a name, an id off a closed set, or `null`**, and that is the
+ * type-level half of the fence at this last step: there is no numeric property here
+ * for a later edit to lift off and read against a rate, and no field a payload, a
+ * criterion or a model's prose could arrive in (ADR-0008, ADR-0117 §4).
+ *
+ * `outcome` is `null` for a route this run did not send — every closed one, because a
+ * closed route stops being sent — and a screen that read that as *clean* would print
+ * a probe nobody paid for. `reopened_in` is what makes a row a **regression** rather
+ * than a new finding, and `closed_in` is kept beside it because a regression is
+ * precisely the pair of a closing and a return (ADR-0117 §5).
+ */
+export interface HeldRouteRow {
+  family: string
+  /** The family and the digest of the probe, as the store keys it. Never the probe. */
+  route: string
+  state: string
+  outcome: string | null
+  found_in: string
+  closed_in: string | null
+  reopened_in: string | null
+  regressed: boolean
+  /**
+   * The whole row as one sentence, as the signed Markdown prints it.
+   *
+   * Typed because it is on the wire and **never rendered here**, on `band_stated`'s
+   * own terms: a renamed key upstream has to fail `tsc` against the served fixture
+   * rather than arrive as `undefined` in a browser. The screen draws the same facts
+   * as columns — a family, a state, a history of run ids, what this run read — which
+   * is the split ADR-0115 §1 makes: the screen carries the figures and the artefact
+   * carries the sentence.
+   */
+  stated: string
+}
+
+/**
+ * The target library as the signed document reports it: counts, and no rate.
+ *
+ * **Counts and never a quotient, on the wire and on the screen.** A held route is
+ * selected because it already broke this target, so a rate over these is a rate over
+ * a sample chosen on its own outcome — it falls with every new finding, two targets
+ * stop being comparable, and the band's cut points were computed against no such
+ * population. *3 of 5* is two integers here, and there is nowhere on this screen the
+ * quotient appears (ADR-0014, ADR-0117 §4).
+ *
+ * `licensed_by` and `no_rate_over_these` are the artefact's own sentences and are
+ * typed because this screen prints them rather than wording them: a reader of one
+ * figure in this block is trusting a named operator's approval where every figure in
+ * the family grid is trusting a threshold declared before the run, and a screen that
+ * assembled that sentence would be a second copy of a claim the signed document
+ * already makes (`bears_stated`'s own terms).
+ *
+ * `reading` is a name off a closed set of three — a run that never read a library, a
+ * library holding nothing, and a library holding routes — because a consumer that
+ * told them apart by a count of zero would print a store that would not open as an
+ * agent nothing has been found against.
+ */
+export interface HeldRoutesSection {
+  reading: string
+  stated: string
+  licensed_by: string
+  no_rate_over_these: string
+  held: number
+  open: number
+  closed: number
+  still_breaking: number
+  not_read: number
+  regressed: number
+  routes: HeldRouteRow[]
+  /** Readings this run could not count into the records they were read off. */
+  not_counted: string[]
+}
+
 export interface TargetReport {
   artefact: string
   artefact_version: number
@@ -550,6 +625,25 @@ export interface TargetReport {
    */
   elective: ElectiveSection
   coverage_gaps: CoverageGap[]
+  /**
+   * The confirmed breaks held against this target, and what this run made of them.
+   *
+   * That the signed document carries any of this is
+   * [ADR-0119](../../../docs/adr/0119-a-held-routes-figures-travel-in-the-signed-artefact-and-its-prose-does-not.md),
+   * which admits the figures and the dates and keeps the attacker's own account of
+   * each break out — so there is no `description` on a row and nowhere for one.
+   *
+   * Its own key beside `measured` and inside none of it, which is the shape of
+   * ADR-0117 §4: held routes are on a denominator of their own, and a figure of theirs
+   * reachable from `measured` would be that denominator joined to the six by a field
+   * name. Nothing in `measured` reads this and nothing here is derived from it.
+   *
+   * Present on every artefact, including one for a target that holds nothing and one
+   * from a run that never read a library: a key that appeared only when a route was
+   * held would be indistinguishable from a document made before target libraries
+   * existed, and the `reading` is what tells the three apart.
+   */
+  held_routes: HeldRoutesSection
   provenance: ReportProvenance
   rendered_sha256: string | null
   key_id: string | null

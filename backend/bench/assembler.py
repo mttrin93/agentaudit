@@ -86,6 +86,7 @@ from backend.bench.published import (
     ClaimedInPart,
     UntestedCategory,
 )
+from backend.bench.reporting import HeldBlock
 from backend.bench.reproducibility import Reproducibility
 from backend.bench.scanner import (
     NOTHING_DECLARED,
@@ -1527,6 +1528,21 @@ class TargetResult:
     `NotMeasurable`.
     """
 
+    held_routes: HeldBlock | None = None
+    """This target's target library as this run's report states it, or `None`.
+
+    A block beside the four sections and inside none of them, which is ADR-0117 §4's
+    own shape. What it buys here: `MeasuredSection` is keyed on `Family` and there is
+    no key in it for one of these to arrive in, nothing below reads this and it reads
+    nothing — so this function, which combines no two sections, has nothing to combine.
+
+    **Three readings**, the same three `TargetRun.held_routes` keeps apart two records
+    back. `None` is a result that never reached a target library — a hand-built record,
+    or a caller from before there were target libraries. A `HeldBlock` that holds
+    nothing is *nothing has been found against this agent yet*, which is a fact and
+    reads as one. A populated one is every route ever held, open and closed.
+    """
+
     claimed_in_part: tuple[ClaimedInPart, ...] = CLAIMED_IN_PART
     """The published categories the library's families claim, and where each stops.
 
@@ -1944,6 +1960,12 @@ def assemble(
         ),
         coverage_gaps=coverage_gaps,
         elective=elective,
+        # The target library as this run's report states it, carried straight off the
+        # run record. Built in `calibration._run_target`, because that is the only
+        # place the store and the run are both in hand, and passed through here
+        # untouched: this function combines no two sections, and a block assembled
+        # out of `target_run.attempts` would be the join ADR-0117 §4 forbids.
+        held_routes=target_run.held_block,
     )
 
 

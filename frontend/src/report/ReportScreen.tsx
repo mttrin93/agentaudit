@@ -97,6 +97,7 @@ import {
   type FamilyFindingsReading,
   type FamilyRow,
   type FindingsView,
+  type HeldReading,
   type ElectiveFigures,
   type LabelReading,
   type ReportView,
@@ -454,6 +455,8 @@ function TheReport({
 
       {episodes ? <TheRoute route={routeReading(episodes)} /> : null}
 
+      <TheHeldRoutes held={view.held} />
+
       {/*
         No elective tier section.
 
@@ -488,6 +491,128 @@ function TheReport({
         </ul>
       </section>
     </>
+  )
+}
+
+
+/**
+ * Confirmed breaks held against this target, and whether they still break it.
+ *
+ * **The block a reader is told to trust differently, and the sentence saying so is the
+ * first thing in it.** Every figure elsewhere on this page rests on a threshold
+ * declared before the run; every figure here rests on a named operator's approval and
+ * an evaluator-confirmed break against this agent
+ * ([ADR-0117](../../../docs/adr/0117-a-refused-break-is-held-against-the-target-it-beat-and-is-scored-beside-the-six.md)'s
+ * cost paragraph). Both standing sentences are the artefact's own and are printed as
+ * they stand: a screen that worded them would be a second copy of a claim the signed
+ * document already makes.
+ *
+ * **Its own section, drawn after the scored layer and the search, and never a row in
+ * the per-family table.** The six are what the gate's denominator is fixed at
+ * (ADR-0015) and a held route is on a denominator of its own; a seventh row would be
+ * that denominator joined to the six by a screen rather than by arithmetic. It sits
+ * below both tables for the same reason the adaptive section does — a block a reader
+ * meets between the figures is a block they read against them.
+ *
+ * **Counts, and nothing on this page divides two of them.** *3 of 5* is printed as
+ * two integers with a sentence between them, which is what `HeldReading` carries and
+ * all it carries: there is no quotient in the reading, no `reduce` in this component,
+ * and no cell for one to be drawn into (ADR-0005, ADR-0117 §4).
+ *
+ * **The three readings are three, and none is a count of zero.** A run that never read
+ * a library, a library holding nothing, and a library holding routes are told apart by
+ * the payload's own `reading`; a screen that inferred them from `held === 0` would
+ * print a store that would not open as an agent nothing has been found against.
+ */
+function TheHeldRoutes({ held }: { held: HeldReading }) {
+  return (
+    <section>
+      <h2>Held against this target</h2>
+      {/* The same treatment `.asserts` gives the two other standing claims on this
+          page: a fact about what the figures below are, read once, above them.
+
+          **One paragraph and not two.** `noRateOverThese` is the artefact's other
+          standing sentence and it is not drawn here — ADR-0115's split is that the
+          screen carries the figures and the document carries the sentences, and the
+          one this block cannot do without is the one ADR-0117's cost paragraph
+          requires in as many words. The other is in the `report.md` a recipient is
+          handed, and nothing on this page divides two of these counts. */}
+      <p className="asserts">{held.licensedBy}</p>
+      <p>{held.stated}</p>
+      {held.reading === 'held' ? (
+        <>
+          <dl className="held-counts">
+            {held.counts.map((count) => (
+              <div key={count.of}>
+                <dt>{count.of}</dt>
+                {/* The figure and the line that says what it counts, because four of
+                    these six answer questions a reader would otherwise answer with the
+                    wrong one — *still open* is the library's state and *broke it again*
+                    is this run's reading, and a run that could not reach the agent is
+                    exactly where they differ. */}
+                <dd>
+                  <span className="held-figure">{count.figure}</span> {count.reads}
+                </dd>
+              </div>
+            ))}
+          </dl>
+          <div className="table-wrap">
+            <table className="per-family held-routes">
+              <thead>
+                <tr>
+                  <th scope="col">family</th>
+                  <th scope="col" className="outcome-cell">
+                    state
+                  </th>
+                  {/* Where it came from and where it went, as run ids: a run record
+                      carries its own date, and a date drawn here would be a copy of one
+                      of its fields that nothing keeps in step. */}
+                  <th scope="col">history</th>
+                  <th scope="col">this run</th>
+                </tr>
+              </thead>
+              <tbody>
+                {held.routes.map((route) => (
+                  <tr key={route.route}>
+                    <th scope="row">
+                      {route.family}
+                      {/* The probe's digest and never the probe: a route that beat this
+                          agent is a working unpublished exploit (ADR-0008). */}
+                      <span className="route-key">{route.route}</span>
+                    </th>
+                    <td className="outcome-cell">
+                      {route.state}
+                      {route.regressed ? (
+                        <span className="regressed"> regression</span>
+                      ) : null}
+                    </td>
+                    <td>{route.history}</td>
+                    {/* `null` is a route this run did not send — every closed one —
+                        and it says so rather than drawing an empty cell a reader would
+                        take for a clean reading. */}
+                    <td>{route.read ?? 'not sent on this run'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      ) : null}
+      {held.notCounted.length ? (
+        <>
+          <p className="aside">
+            Readings this run could not count into the records they were read off. The
+            figures above are the library as it stands; each line here is a reading
+            that did not move it.
+          </p>
+          <ul className="aside">
+            {held.notCounted.map((refusal) => (
+              <li key={refusal}>{refusal}</li>
+            ))}
+          </ul>
+        </>
+      ) : null}
+    </section>
   )
 }
 

@@ -102,6 +102,12 @@ def test_the_rendering_follows_annex_iv_section_order_and_answers_every_point() 
         "4",
         "5a",
         "5b",
+        # Point 5's third section, and the second new section this document has
+        # gained: the confirmed breaks the admission bar refused, held against this
+        # target (ADR-0117 §4). Printed in every report, including one for a target
+        # that holds none — a section that appeared only when a route was held would
+        # be indistinguishable from a report made before target libraries existed.
+        "5c",
         "6",
         "7",
         "8",
@@ -156,7 +162,7 @@ def test_every_section_states_its_own_reproducibility_and_four_read_the_payload(
 
 # --- The golden digest: one document, pinned to the byte ---------------------
 
-GOLDEN_ONE_FAMILY = "9179792e22f2f92b75fb91de83c4f7394943a21a0743d2d00800113d40e89d0e"
+GOLDEN_ONE_FAMILY = "1bd3c9b42fafea5cc45a590880c19ef72b7f3ca80e08fea5b34fbc481d2d1b5d"
 """The sha256 of `_one_family()`'s rendering, written down.
 
 **A tripwire, and it is deliberately a strict one.** Every other assertion in this
@@ -418,6 +424,36 @@ and none losing a distinction. **No figure moves and no key moves**: the block i
 a verifier re-derives nothing from, so an older verifier reads this document exactly as
 it reads the one before it. Every report gains the shorter block, because every report
 carries this block.
+
+Moved a twenty-third time, by #242, and this one is a **new section** rather than a
+block inside an existing one — the second such move on this list. Annex IV point 5 now
+holds three sections: 5a and 5b are what they were, and 5c is the confirmed breaks the
+admission bar refused that are held against this target, with what this run made of
+each
+([ADR-0117](../../docs/adr/0117-a-refused-break-is-held-against-the-target-it-beat-and-is-scored-beside-the-six.md)
+§4). Two things moved every byte after the masthead: the contents list gained a row,
+and the sentence naming which points hold several sections now says point 3 in two and
+point 5 in three. **This fixture never reached a target library**, so the section reads
+*this run read no target library against this agent* — which is neither an empty
+library nor one whose every route is closed, and is the line this digest pins. Under
+that reading the six counts are **absent** rather than printed as zeroes: a block of
+zeroes under a sentence saying nobody looked is the document reporting *nobody looked*
+as *nothing was found*, which is the one reading ADR-0117 §4 says a count of zero must
+never stand for. That any of this is in the signed bytes at all is
+[ADR-0119](../../docs/adr/0119-a-held-routes-figures-travel-in-the-signed-artefact-and-its-prose-does-not.md),
+which admits the figures and the dates and keeps the attacker's account of the break
+out of them.
+
+**No figure moved and no figure arrived in any other section.** Every count in the new
+section is over that target's held routes and is a summand of nothing above it: there
+is no quotient in it, nothing is keyed on `Family`, and the two sentences standing over
+it say what licenses the block and what may not be done with it. **The artefact version
+does not move**: `held_routes` is a key added beside existing keys, and there is
+nothing in it for a verifier to re-derive at all — the records it is derived from are
+the target library, which is not in this document and whose probes never will be
+(ADR-0008). That is the case ADR-0044 §8 and ADR-0070 declined to move the version for,
+and unlike ADR-0088 §7 there is no arithmetic here an older verifier could pass over in
+silence.
 """
 
 

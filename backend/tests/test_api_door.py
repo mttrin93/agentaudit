@@ -25,6 +25,7 @@ from fastapi.testclient import TestClient
 
 from backend.api.app import NO_DOOR, UNAUTHENTICATED, NoIssuer, create_app
 from backend.api.run_config import BenchConfig
+from backend.bench.signing import SIGNING_KEY_VARIABLE, encoded_private, generate
 from backend.identity import (
     ISSUER_JWT_KEY_VARIABLE,
     ISSUER_SECRET_KEY_VARIABLE,
@@ -244,6 +245,7 @@ def test_a_deployment_that_declares_no_door_boots_with_no_issuer(
     to anybody, because the caller said so. This is what `frontend/e2e/harness.py`
     runs: a walkthrough that drives the console with no issuer and no account.
     """
+    monkeypatch.setenv(SIGNING_KEY_VARIABLE, encoded_private(generate()))
     monkeypatch.delenv(ISSUER_JWT_KEY_VARIABLE, raising=False)
     monkeypatch.delenv(ISSUER_SECRET_KEY_VARIABLE, raising=False)
 
@@ -262,6 +264,7 @@ def test_a_verifier_handed_in_is_the_door_a_deployed_bench_gets(
     issuer deleted: a declared verifier is a declaration, so the deployed reading is
     never consulted and the boot does not need one.
     """
+    monkeypatch.setenv(SIGNING_KEY_VARIABLE, encoded_private(generate()))
     monkeypatch.delenv(ISSUER_JWT_KEY_VARIABLE, raising=False)
     monkeypatch.delenv(ISSUER_SECRET_KEY_VARIABLE, raising=False)
 
@@ -284,6 +287,10 @@ def test_a_deployment_that_declares_nothing_at_all_refuses_to_boot(
     because this is the file about the door, and the refusal is the door's most
     consequential behaviour: it is what makes *unconfigured* mean *shut*.
     """
+    # The key, because `deployed_bench()` runs before the door and a bench with
+    # neither credential refuses on the first one. What is asserted here is that a
+    # bench which *can* sign still does not start without an issuer.
+    monkeypatch.setenv(SIGNING_KEY_VARIABLE, encoded_private(generate()))
     monkeypatch.delenv(ISSUER_JWT_KEY_VARIABLE, raising=False)
     monkeypatch.delenv(ISSUER_SECRET_KEY_VARIABLE, raising=False)
 

@@ -50,6 +50,16 @@ const API = `http://127.0.0.1:${API_PORT}`
 
 export default defineConfig({
   testDir: './e2e',
+  // The suffix, stated rather than left to the default. Playwright's default
+  // `testMatch` takes `.test.ts` as well, and `e2e/` now holds one — `door-user.ts`
+  // is a function over a dict and is covered in vitest (`vite.config.ts`). Left at
+  // the default, this runner would pick that file up, find no `test()` in it and
+  // fail the suite on a file that is already green somewhere else.
+  testMatch: '**/*.spec.ts',
+  // The doored walkthrough is not this config's. It needs an account at an issuer
+  // and this suite must run on a fork with none (`door-user.ts`), so it is started
+  // by `playwright.door.config.ts` against a bench this one could not serve.
+  testIgnore: '**/door.spec.ts',
   fullyParallel: false,
   workers: 1,
   retries: 0,

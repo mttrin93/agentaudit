@@ -37,8 +37,11 @@
  * rather than a simulated one: `playwright.config.ts`, `frontend/e2e/`, and
  * `npm run e2e`. It is a separate runner with a separate config because it needs two
  * servers and a browser download, and `include` below keeps the two apart by
- * construction: the `src` tree's `.test.ts` files are vitest's, and the `.spec.ts`
- * files under `e2e/` are Playwright's.
+ * construction: a `.test.ts` is vitest's wherever it sits, and the `.spec.ts` files
+ * under `e2e/` are Playwright's. The suffix and not the directory, because `e2e/`
+ * now holds one of each — `door-user.ts` decides whether the doored walkthrough runs
+ * at all and is a function over a dict, so it is covered where a function over a
+ * dict is covered rather than by starting two servers to ask.
  *
  * **The dev server below is what that walkthrough serves the app with**, and the
  * proxy is why. A previewed build would answer nothing under `/runs`: the seven
@@ -104,6 +107,11 @@ export default defineConfig({
   },
   test: {
     environment: 'node',
-    include: ['src/**/*.test.ts'],
+    // The two trees this runner owns, and the suffix is what divides it from
+    // Playwright's rather than the directory: a `.test.ts` is answerable in node and
+    // a `.spec.ts` drives a browser. `e2e/` holds both — the suites, and the readers
+    // the suites are configured from — so it is included here by suffix and
+    // Playwright is pinned to the other suffix in both of its configs.
+    include: ['src/**/*.test.ts', 'e2e/**/*.test.ts'],
   },
 })

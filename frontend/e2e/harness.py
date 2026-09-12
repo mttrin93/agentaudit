@@ -37,6 +37,7 @@ is shortened only by the two declared-input routes the console already writes to
 import json
 import os
 import sys
+from collections.abc import Mapping
 from pathlib import Path
 
 PUBLIC_KEY = Path(__file__).resolve().parent / "dev-signing.pub"
@@ -108,7 +109,10 @@ The four trace variables are the sink; the four model variables are what would b
 called; the two OpenRouter ones are the credential a call would be billed against;
 the two issuer ones are the door, which this walkthrough declares off below — deleted
 as well as declared off so that an engineer with a real issuer exported does not have
-a browser run that could reach it.
+a browser run that could reach it. The doored path puts those two back, and puts back
+only what `DOOR_JWT_KEY_VARIABLE` and its companion were exported with: an operator
+asking for a doored walkthrough is a variable that exists for nothing else, never an
+inherited one.
 Deleted rather than overridden with something harmless, because a harmless value is
 still a value the factory reads and reports, and the run is supposed to describe a
 bench that declared none of them.
@@ -132,6 +136,48 @@ AUTH_TOKEN = "walkthrough-auth-token"
 filled in with. A credential for a process this file started, and it is typed into the
 browser: a walkthrough that left the field empty would not exercise the one field on
 that form that carries somebody's secret."""
+
+DOOR_JWT_KEY_VARIABLE = "AGENTAUDIT_E2E_ISSUER_JWT_KEY"
+"""The issuer's public key, in PEM, that turns this walkthrough's door on.
+
+**Its own variable and never `AGENTAUDIT_ISSUER_JWT_KEY`.** That one is deleted with
+the rest of the factory's environment, and deliberately: an engineer with a real issuer
+exported must not get a browser run that reaches it. The doored walkthrough is
+therefore something an operator asks for, in a variable that exists for no other
+purpose, and the factory's own name is set from it below — so the factory reads what it
+always reads and the opt-in is visible in one grep.
+
+Absent is the path every clone and every CI run takes: `NO_DOOR`, and a console with no
+publishable key — ADR-0125, which decides that the doored suite is opt-in and that an
+absent test user is a printed skip. `docs/deployment.md` lists the variables.
+
+**The issuer's secret key has no variable here.** Verification against this PEM is
+offline and a session token needs nothing else (ADR-0116 §4); the credential that is
+checked *at* the issuer is the machine one, and no browser suite presents one
+(ADR-0124). A second variable would be a branch this repository has no caller for.
+"""
+
+
+def declared_door(environment: Mapping[str, str]) -> dict[str, str] | None:
+    """What this walkthrough serves: the deployed factory's own reading, or nothing.
+
+    Answers the environment the harness was started with, and answers it as the
+    variable `backend/identity.py` reads rather than as a flag — so the doored run is
+    the deployed reading of the factory and not a third configuration of it.
+
+    **The name is asked of the module that owns it**, for the reason `trace_config` is
+    asked below rather than inferred: a variable renamed in `identity.py` and copied
+    here would leave this harness setting a name nothing reads, and a bench serving
+    every route to anybody while this file said it had a door.
+
+    **Blank is unset**, as it is in `identity.declared_issuer` and for its reason: a
+    variable cleared by whatever set it has declared nothing.
+    """
+    from backend.identity import ISSUER_JWT_KEY_VARIABLE
+
+    jwt_key = environment.get(DOOR_JWT_KEY_VARIABLE, "").strip()
+    return {ISSUER_JWT_KEY_VARIABLE: jwt_key} if jwt_key else None
+
 
 AGENT = "trivial"
 """Which of the three agents is registered: the one with no defences.
@@ -169,8 +215,15 @@ def main() -> int:
     from backend.targets.reference.server import ReferenceConfig, create_reference_app
     from backend.targets.reference.serving import serve
 
+    # Read from `AGENTAUDIT_E2E_ISSUER_JWT_KEY`, which is not in `FACTORY_VARIABLES`
+    # and so survives the deletion below; what the deletion guarantees is the other
+    # half — that the name the factory reads holds this value or nothing, and never
+    # an issuer a shell happened to export.
+    door = declared_door(os.environ)
+
     for variable in FACTORY_VARIABLES:
         os.environ.pop(variable, None)
+    os.environ.update(door or {})
 
     # Asked of the module that owns the answer rather than inferred from the list
     # above. A sink variable renamed or added would leave this walkthrough exporting
@@ -210,16 +263,28 @@ def main() -> int:
         # One line, so that a webServer Playwright is still waiting on can be told
         # apart from one that failed before it bound. A CI run of this job timed out
         # on a silent wait, which is the failure this print is for.
-        print(f"reference agents at {base_url}; the bench on port {port}", flush=True)
+        # Which of the two benches this is, in the line an operator reads: a doored
+        # run that quietly served an open bench would pass every assertion the
+        # issuerless suite makes and prove nothing about the door.
+        served_as = "a door" if door is not None else "no door"
+        print(
+            f"reference agents at {base_url}; the bench on port {port} with "
+            f"{served_as}",
+            flush=True,
+        )
         try:
             uvicorn.run(
-                # The door, declared off. A deployed factory refuses to boot without
-                # an issuer (`app.NO_ISSUER_NO_BOOT`), and this walkthrough has none:
-                # it runs in CI on a fork, against agents it started itself, with a
-                # browser that has no account to sign in to. Declared rather than
-                # defaulted, which is the whole of the distinction — nothing here
-                # falls into an open bench, this file asks for one.
-                create_app(verifier=NO_DOOR),
+                # The door, declared off — unless an operator exported an issuer,
+                # in which case nothing is declared and the factory reads its own
+                # environment like a deployment does. A deployed factory refuses to
+                # boot without an issuer (`app.NO_ISSUER_NO_BOOT`), and the
+                # issuerless walkthrough has none: it runs in CI on a fork, against
+                # agents it started itself, with a browser that has no account to
+                # sign in to. Declared rather than defaulted, which is the whole of
+                # the distinction — nothing here falls into an open bench, this file
+                # asks for one, and the doored path asks for the other by exporting
+                # a key rather than by editing this line.
+                create_app() if door is not None else create_app(verifier=NO_DOOR),
                 host="127.0.0.1",
                 port=int(port),
                 log_level="warning",

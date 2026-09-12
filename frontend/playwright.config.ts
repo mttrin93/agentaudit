@@ -28,87 +28,26 @@
  * under `/runs` — the walkthrough would fail on its first fetch. Widening the Vite
  * config to make a second server work is a change bought by a test.
  *
- * **No retries, here or in CI.** A walkthrough that passes on the second attempt is a
- * walkthrough nobody can read a result off, and the run it drives is deterministic by
- * construction: a stub model, three attempts, and every wait an assertion on state the
- * bench has published rather than a sleep. If this goes red intermittently the fix is
- * in the test, and a retry would hide the evidence for it.
- *
- * **One worker.** The bench refuses to change its declared inputs while a run is in
- * flight (`PUT /bench/settings/*` answers `409`), which is ADR-0007 working: two
- * walkthroughs against one bench would fight over the settings the estimate was built
- * from. So the specs run one after another, and a second *walkthrough* would not be
- * allowed parallelism however many specs sit beside it.
+ * **How this suite runs — no retries, one worker, and how long each spec is given —
+ * is `e2e/suite.ts`**, which both configs read so that the two cannot drift. What is
+ * left here is what this config *is*: the issuerless bench, and the one spec file it
+ * does not run.
  */
 
 import { defineConfig } from '@playwright/test'
 
-import { API_PORT, API_PORT_VARIABLE, APP_PORT } from './e2e/served.ts'
-
-const APP = `http://127.0.0.1:${APP_PORT}`
-const API = `http://127.0.0.1:${API_PORT}`
+import { HOW_IT_RUNS, theBench, theConsole } from './e2e/suite.ts'
 
 export default defineConfig({
-  testDir: './e2e',
-  fullyParallel: false,
-  workers: 1,
-  retries: 0,
-  forbidOnly: !!process.env.CI,
-  // Longer than the walk needs and shorter than a hang. The run itself is four
-  // scored calls and one adaptive turn and finishes in under a second once it is
-  // confirmed; what this covers is a dev server compiling the app on the first
-  // request, and a `uv run` of the verifier at the end.
-  timeout: 90_000,
-  expect: { timeout: 20_000 },
-  reporter: process.env.CI ? 'list' : 'line',
-  use: { baseURL: APP },
-  webServer: [
-    {
-      // From the repository root, which is where `uv` finds the project and where
-      // `backend` is importable from.
-      command: 'uv run python frontend/e2e/harness.py',
-      cwd: '..',
-      url: `${API}/bench/settings`,
-      env: { [API_PORT_VARIABLE]: String(API_PORT) },
-      reuseExistingServer: false,
-      // Piped rather than swallowed: the harness refuses to serve when it can still
-      // see a trace sink, and a refusal nobody printed would read as a port that
-      // never opened.
-      stdout: 'pipe',
-      stderr: 'pipe',
-      timeout: 120_000,
-    },
-    {
-      // `--host 127.0.0.1` and not Vite's default. Its default is `localhost`, which
-      // resolves to both `::1` and `127.0.0.1` on a GitHub runner and is not
-      // guaranteed to be bound on the one this config probes — a CI run of this job
-      // timed out waiting 120 seconds for a dev server that was already up. The
-      // address the app is served on and the address the test asks for are one
-      // constant, and now they are one address family too.
-      command: `npm run dev -- --host 127.0.0.1 --port ${APP_PORT} --strictPort`,
-      url: APP,
-      /*
-       * Two variables, and the second of them is a declaration.
-       *
-       * The bench this suite drives is `NO_DOOR` (ADR-0121) and there is no test
-       * user to sign in as, so the console under test is the issuerless one:
-       * every screen renders, no door is attended, and no request carries an
-       * `Authorization` header. That is stated here rather than left to whether
-       * the developer running this happens to have a publishable key in
-       * `frontend/.env` — a suite that passed in CI and showed a sign-in screen on
-       * the laptop of anybody who had done the setup would be a suite whose result
-       * depends on a gitignored file. An empty value wins over the file, which is
-       * Vite's own precedence: `VITE_`-prefixed variables already in the
-       * environment are applied after the `.env` files are read.
-       */
-      env: { AGENTAUDIT_API: API, VITE_CLERK_PUBLISHABLE_KEY: '' },
-      reuseExistingServer: false,
-      // Piped for the reason the harness's is: a webServer that failed silently is
-      // indistinguishable from one that was slow, and that is the failure this line
-      // was added after.
-      stdout: 'pipe',
-      stderr: 'pipe',
-      timeout: 120_000,
-    },
-  ],
+  ...HOW_IT_RUNS,
+  // The doored walkthrough is not this config's. It needs an account at an issuer
+  // and this suite must run on a fork with none (`e2e/door-user.ts`, ADR-0125), so
+  // it is started by `playwright.door.config.ts` against a bench this one does not
+  // serve.
+  testIgnore: '**/door.spec.ts',
+  // The console under test is the issuerless one, declared: the bench this suite
+  // drives is `NO_DOOR` (ADR-0121) and there is no test user to sign in as, so every
+  // screen renders, no door is attended, and no request carries an `Authorization`
+  // header. `e2e/suite.ts` says why that is an argument rather than a `.env` file.
+  webServer: [theBench(), theConsole('')],
 })

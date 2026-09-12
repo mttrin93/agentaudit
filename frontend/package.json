@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "test": "vitest run",
     "lint": "oxlint",
-    "e2e": "playwright test"
+    "e2e": "playwright test",
+    "e2e:door": "playwright test --config playwright.door.config.ts"
   },
   "dependencies": {
     "@clerk/clerk-react": "^5.61.9",

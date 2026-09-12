@@ -14,6 +14,7 @@ Do not restate these here — read them.
 | Decisions and why they were made | [docs/adr/](./docs/adr/) |
 | Scope, phases, the Sprint line | [PLAN.md](./PLAN.md) |
 | What the bench measures and what it has measured | [docs/validation.md](./docs/validation.md) |
+| Deploying either half, and the two ways a declaration is lost | [docs/deployment.md](./docs/deployment.md) |
 | The build spec — the bench, through the gate | [docs/specs/pre-web-bench.md](./docs/specs/pre-web-bench.md) |
 | The build spec — the signed report and its delivery | [docs/specs/signed-report-and-delivery.md](./docs/specs/signed-report-and-delivery.md) |
 | The build spec — the elective family tier | [docs/specs/elective-family-tier.md](./docs/specs/elective-family-tier.md) |

@@ -103,7 +103,7 @@ CASES_DIR = Path(__file__).resolve().parents[1] / "cases"
 AUTH_TOKEN = "reference-auth-token"
 
 BENCH_ATTESTATION = Attestation(
-    attested_by=NameGiven(given="bench engineer, calibration fixture"),
+    attested_by=NameGiven(name="bench engineer, calibration fixture"),
     authorised_to_test=True,
     not_production=True,
     accepts_provider_policy_and_cost=True,

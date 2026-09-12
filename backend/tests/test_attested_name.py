@@ -20,9 +20,9 @@ from backend.bench.attested_name import (
 )
 
 EVERY_ATTESTED_NAME: tuple[AttestedName, ...] = (
-    VerifiedSubject(subject="user_2abc"),
-    WorkflowActor(actor="ada"),
-    NameGiven(given="Ada Lovelace"),
+    VerifiedSubject(name="user_2abc"),
+    WorkflowActor(name="ada"),
+    NameGiven(name="Ada Lovelace"),
 )
 """One of each, named differently so that a sentence cannot be matched by accident."""
 
@@ -54,7 +54,7 @@ def test_a_verified_subject_names_the_issuer_as_the_thing_that_verified() -> Non
     deployment, and a document that printed a vendor's name would be making a claim
     about the bench's build rather than about the run (ADR-0116 §3).
     """
-    stated = VerifiedSubject(subject="user_2abc").stated()
+    stated = VerifiedSubject(name="user_2abc").stated()
 
     assert "verified session at the issuer this deployment declares" in stated
     assert "a token that issuer signed, naming this subject" in stated
@@ -67,7 +67,7 @@ def test_a_workflow_actor_says_the_runner_checked_it_and_no_issuer_here_did() ->
     document could not say so. It may not say the issuer verified it: nothing this
     deployment declares has heard of a workflow actor.
     """
-    stated = WorkflowActor(actor="ada").stated()
+    stated = WorkflowActor(name="ada").stated()
 
     assert "authenticated by the runner that ran it" in stated
     assert "no issuer this deployment declares" in stated
@@ -80,7 +80,7 @@ def test_a_name_given_says_that_nothing_checked_it() -> None:
     reader who took *an operator this bench did not verify* for an unusual username
     reads, in the same field, that no issuer was asked (ADR-0122, ADR-0123).
     """
-    stated = NameGiven(given="an operator this bench did not verify").stated()
+    stated = NameGiven(name="an operator this bench did not verify").stated()
 
     assert "a name nothing verified" in stated
     assert "No issuer was asked and no token was checked" in stated

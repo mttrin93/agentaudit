@@ -6236,8 +6236,8 @@ def attributed_to(operator: Operator) -> AttestedName:
     in (ADR-0116's cost paragraph).
     """
     if operator == NOBODY_VERIFIED:
-        return NameGiven(given=operator.subject)
-    return VerifiedSubject(subject=operator.subject)
+        return NameGiven(name=operator.subject)
+    return VerifiedSubject(name=operator.subject)
 
 
 def admitting(verifier: Verifier) -> Callable[[str | None], Operator]:

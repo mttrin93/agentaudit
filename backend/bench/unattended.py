@@ -97,7 +97,7 @@ def committed_attestation(document: str, identity: str, target: str) -> Attestat
         # `WorkflowActor` and not a bare name: the runner authenticated this actor
         # and the issuer a deployment declares has never heard of them, so the
         # document says which of the two checked it (ADR-0066, ADR-0123).
-        attested_by=WorkflowActor(actor=identity),
+        attested_by=WorkflowActor(name=identity),
         **{
             field: normalised(wording) in written
             for field, wording in Attestation.STATEMENTS

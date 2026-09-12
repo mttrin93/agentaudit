@@ -1648,13 +1648,17 @@ def test_the_attestation_block_gained_a_sentence_and_not_a_key() -> None:
     """
     block = document(a_payload())["provenance"]["attestation"]
 
-    assert set(block) == {
+    # In order as well as by membership. The canonical bytes are sorted, so an
+    # order that moved here would not move a signature — what it would move is the
+    # block a reader of the raw document meets, and a key that appeared between the
+    # name and what recorded it is the change this pin exists to notice.
+    assert list(block) == [
         "identity",
         "endpoint_sha256",
         "recorded_at",
         "statements",
         "control_proved",
-    }
+    ]
     # And the three statements are still the operator's own three. The bench's
     # sentence about what verified the name is not one of them: an operator attests
     # to what they are doing, and what checked who they are is the bench's claim.
@@ -1666,12 +1670,12 @@ def test_the_attestation_block_gained_a_sentence_and_not_a_key() -> None:
     ("attested", "expected"),
     [
         (
-            VerifiedSubject(subject="user_2abc"),
+            VerifiedSubject(name="user_2abc"),
             "verified session at the issuer this deployment declares",
         ),
-        (WorkflowActor(actor="ada"), "authenticated by the runner that ran it"),
+        (WorkflowActor(name="ada"), "authenticated by the runner that ran it"),
         (
-            NameGiven(given="an operator this bench did not verify"),
+            NameGiven(name="an operator this bench did not verify"),
             "a name nothing verified",
         ),
     ],
@@ -1702,7 +1706,7 @@ def test_the_document_says_which_surface_named_the_operator(
 
 ATTESTED = AttestationRecord(
     attestation=Attestation(
-        attested_by=VerifiedSubject(subject="Matteo Rinaldi"),
+        attested_by=VerifiedSubject(name="Matteo Rinaldi"),
         authorised_to_test=True,
         not_production=True,
         accepts_provider_policy_and_cost=True,

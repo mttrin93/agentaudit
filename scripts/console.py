@@ -171,7 +171,7 @@ def attest(identity: str) -> Attestation | None:
         # `NameGiven`: a terminal reaches the bench in-process and has no door in
         # front of it, so nothing checked this name and the document says so
         # (ADR-0116's scope note, ADR-0123).
-        return Attestation(attested_by=NameGiven(given=identity), **answers)
+        return Attestation(attested_by=NameGiven(name=identity), **answers)
     except ValueError as refusal:
         print(f"\n{refusal}")
         return None

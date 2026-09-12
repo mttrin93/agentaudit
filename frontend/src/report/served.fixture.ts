@@ -540,7 +540,7 @@ export const SERVED: TargetReport = {
   "provenance": {
     "attestation": {
       "endpoint_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-      "identity": "Matteo Rinaldi",
+      "identity": "Matteo Rinaldi — the subject of a verified session at the issuer this deployment declares. That is the whole of what verification established: a token that issuer signed, naming this subject. It is not a legal person, not an employer, and not a claim that the named party was authorised by their organisation to attest anything.",
       "recorded_at": "2026-08-19T09:38:37+00:00",
       "statements": [
         "I am authorised to test this endpoint",

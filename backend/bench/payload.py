@@ -653,7 +653,7 @@ class Provenance:
     hash, because a live URL that answers jailbreak payloads is not a thing to write
     into a document that travels (ADR-0008).
 
-    The name travels as what the attestation's `Attribution` states: the party, and
+    The name travels as what the attestation's `AttestedName` states: the party, and
     what established it, in the one field of this artefact that names a person
     ([ADR-0123](../../docs/adr/0123-the-identity-in-the-payload-states-what-established-it.md)).
     """

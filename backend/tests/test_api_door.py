@@ -579,7 +579,7 @@ def test_a_run_behind_a_door_is_attested_by_a_subject_the_issuer_verified(
         )
 
     attested = _record(app, run_id).attestation.attested_by
-    assert attested == VerifiedSubject(subject=SUBJECT)
+    assert attested == VerifiedSubject(name=SUBJECT)
     assert (
         "verified session at the issuer this deployment declares" in attested.stated()
     )

@@ -90,13 +90,16 @@ export function TheAttestation({
         {step === 0 ? (
           <>
             <AttestingAs />
-            <label>
-              What one call costs you, on your own provider
+            <label className="priced">
+              Price per call
               <input
                 value={attesting.price_per_call}
                 onChange={(event) => declare({ price_per_call: event.target.value })}
                 placeholder="leave empty for a measurement you have not priced"
               />
+              <span className="aside">
+                What one call costs you, on your own provider.
+              </span>
             </label>
           </>
         ) : null}
@@ -178,7 +181,13 @@ export function TheEstimate({
           <dd>Measured on {view.models.join(' and ')}.</dd>
         </div>
       </dl>
-      <p className="aside">{view.statement}</p>
+
+      {/* The estimate's own sentence about itself is not drawn. It is on the wire and
+          in `report.json`, and what an operator needs in front of the spend is the
+          figures and the ceiling they are enforced against — the rows are a table and
+          a paragraph under them explaining how to add them up was a paragraph read
+          past. `THE_ESTIMATE_IS_PER_ROUTE` in `api/app.py` still says it, and
+          ADR-0010 and ADR-0058 still argue it. */}
 
       {/* No form, on the run screen's own reasoning: this is the halt in front of
           the spend, there is no field for Enter to finish, and the one thing a form

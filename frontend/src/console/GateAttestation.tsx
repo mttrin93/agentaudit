@@ -107,13 +107,16 @@ export function TheAttestation({
         {step === 0 ? (
           <>
             <AttestingAs />
-            <label>
-              What one call costs you, on your own provider
+            <label className="priced">
+              Price per call
               <input
                 value={attesting.price_per_call}
                 onChange={(event) => declare({ price_per_call: event.target.value })}
                 placeholder="leave empty for a gate run you have not priced"
               />
+              <span className="aside">
+                What one call costs you, on your own provider.
+              </span>
             </label>
           </>
         ) : null}

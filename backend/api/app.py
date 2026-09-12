@@ -5453,15 +5453,10 @@ def pending_routes_response(pending: BenchPendingRoutes) -> PendingRouteQueue:
 
 
 THE_ESTIMATE_IS_PER_ROUTE = (
-    "one row per route, and the routes are the operator's own selection. Deciding a "
-    "route is three reference agents — three endpoints — at the declared attempts "
-    "per case, plus one registration probe each. Exact because it is a "
-    "multiplication: the adaptive layer is switched off for an admission run, so "
-    "there is no bound here and no second figure to add to this one (ADR-0010, "
-    "ADR-0058). Each row is what that route costs measured on its own, so the rows "
-    "add up to more than the total below and never to less: the routes ride in one "
-    "admission run, and a registration probe is one per agent however many of them "
-    "ride with it"
+    "one row per route, each the exact cost of deciding that route on its own — "
+    "three reference agents at the declared attempts per case, plus a registration "
+    "probe each — so the rows add up to more than the total below and never to less "
+    "(ADR-0010, ADR-0058)"
 )
 """What the estimate says about itself, including why its rows over-add.
 
@@ -5471,6 +5466,14 @@ exact figure the measurement will not spend, and rows that shared the registrati
 probes out between them would be a number no route costs and no run makes. What is
 true of every row is that it is what deciding *that* route costs, which is the
 question an operator selecting routes is asking (ADR-0007).
+
+**One sentence, cut from four.** It also said why the figure is exact — the adaptive
+layer is switched off for an admission run, so there is no bound to add to it — and
+why the rows over-add, which is that the routes ride in one admission run and a
+registration probe is one per agent however many ride with it. Both are still true
+and both are still argued, in ADR-0010 and ADR-0058, which the sentence cites. What
+an operator has to be told before they select is the shape of the figure and that the
+rows are not a total, and a caveat nobody finishes is a caveat nobody has read.
 """
 
 

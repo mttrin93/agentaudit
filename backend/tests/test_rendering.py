@@ -184,7 +184,7 @@ def test_the_document_a_recipient_reads_says_what_established_the_identity() -> 
 
 # --- The golden digest: one document, pinned to the byte ---------------------
 
-GOLDEN_ONE_FAMILY = "4686c84f30d6685e0f27615852e929f950b4757cf6750eb80abbacbae6982d8c"
+GOLDEN_ONE_FAMILY = "c98763e0e017566bbadd3b295cd42d65849c58027af6776c84b059889ac98ccc"
 """The sha256 of `_one_family()`'s rendering, written down.
 
 **A tripwire, and it is deliberately a strict one.** Every other assertion in this
@@ -491,6 +491,17 @@ line. The sentence is the payload's own — the renderer prints it and does not 
 it — and `ARTEFACT_VERSION` does not move, because no key was added: the claim travels
 inside the value of a key every artefact already has, which is what a second key
 would have cost every document signed before today.
+
+Moved a twenty-fifth time, and it is section 5c's licence paragraph, cut from four
+sentences to one. It spelled out what the admission bar asks, why these routes
+failed it, and that a reader here is trusting a person's decision where the measured
+sections trust a declared threshold. What is left is the clause a reader must not
+miss — *held on an operator's approval, not the admission bar* — and the citation,
+because the argument is ADR-0117's to make and is still made there in full. A caveat
+nobody finishes is a caveat nobody has read. No figure moved, no key moved and
+`ARTEFACT_VERSION` does not move: one string in one block is shorter, and the block's
+other standing sentence, the one that forbids a rate over these counts, is untouched
+at full length.
 """
 
 

@@ -472,8 +472,17 @@ textarea[aria-invalid='true'] {
  * `label.declaration` is excluded, and that is the distinction the selector is here to
  * keep: a declaration is a sentence somebody is making with a box beside it, and a
  * field is a value somebody is typing. Two shapes, because they are two acts.
+ *
+ * **`label.priced` is the same field on the two walks that are not the register.** The
+ * gate walk and the pending-routes walk ask for one value — what a call costs — and
+ * asked for it as a bare block label, so the box ran the whole width of the screen for
+ * a figure four characters long, and the same question looked like a different kind of
+ * question depending on which walk you came in by. It is one act, so it is one shape:
+ * the class joins this rule rather than copying its three columns, because two copies
+ * of a grid are two grids the day one is adjusted.
  */
-.declaring label:not(.declaration) {
+.declaring label:not(.declaration),
+label.priced {
   display: grid;
   grid-template-columns: 11rem minmax(0, 28rem) minmax(0, 1fr);
   align-items: center;
@@ -487,9 +496,19 @@ textarea[aria-invalid='true'] {
 
 .declaring label:not(.declaration) > input,
 .declaring label:not(.declaration) > select,
-.declaring label:not(.declaration) > textarea {
+.declaring label:not(.declaration) > textarea,
+label.priced > input {
   grid-column: 2;
   margin-top: 0;
+}
+
+/* The rule this field draws needs room above it here and does not on the register
+   screen. There the fields are a run of them and each rule separates one from the
+   next, so no gap is wanted; here it is one field under one sentence, and a rule
+   tight under that sentence reads as underlining it rather than opening the field
+   below. Space above, and the rule then belongs to what follows it. */
+label.priced {
+  margin-top: 1.6rem;
 }
 
 /* A box sized to what goes in it: a count and a price are a few characters, and a box
@@ -510,7 +529,8 @@ textarea[aria-invalid='true'] {
  * both, the refusal takes the first row of it and the aside the second, which is the
  * order they are read in. */
 .declaring label:not(.declaration) > .aside,
-.declaring label:not(.declaration) > .field-refused {
+.declaring label:not(.declaration) > .field-refused,
+label.priced > .aside {
   grid-column: 3;
   margin-top: 0;
 }
@@ -595,7 +615,14 @@ label.declaration input {
   font-weight: 600;
 }
 
+/* It runs the width of the walk and not the reading measure, which is the same
+   choice `section > .asserts` makes and for the same reason: `p` is capped at
+   `--reading` for prose somebody reads paragraphs of, and these are one or two
+   sentences standing over the box that answers them. Broken at 62rem under a heading
+   and a rule that both run full width, a statement wrapped into a narrow column read
+   as a paragraph abandoned halfway rather than the thing being consented to. */
 .consequence {
+  max-width: none;
   font-size: 1.05rem;
 }
 
@@ -4201,9 +4228,17 @@ code {
  * on a fix mean, and that the adaptive layer's figures are scored on nothing. Its own
  * class rather than the page's `.consequence`, which is a size up from the body and
  * was reading as the more important line of the two. Set quieter than the blocks it
- * explains: a standing fact about what the words mean, read once, and not a finding. */
+ * explains: a standing fact about what the words mean, read once, and not a finding.
+ *
+ * **It runs the width of what it qualifies and not the reading measure.** `p` is
+ * capped at `--reading` for prose a reader reads a paragraph of; this is one line
+ * standing over a table, and broken at 62rem it wrapped three times into a column
+ * narrower than the blocks underneath it, which reads as a paragraph somebody started
+ * and abandoned rather than a caption over the section. Set at the width of the rows
+ * it is about, it is the one or two lines it is. */
 section > .asserts {
   margin-top: 0.4rem;
+  max-width: none;
   font-size: 0.9rem;
   color: var(--quiet);
 }

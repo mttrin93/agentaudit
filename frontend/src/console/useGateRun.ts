@@ -402,11 +402,7 @@ export function useGateRun() {
   }
 
   const confirm = () => {
-    const confirmation = gateConfirmation(
-      started?.status ?? '',
-      confirmed,
-      attesting.identity,
-    )
+    const confirmation = gateConfirmation(started?.status ?? '', confirmed)
     if (confirmation.kind !== 'ready') {
       return
     }

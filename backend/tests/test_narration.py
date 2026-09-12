@@ -963,7 +963,7 @@ def test_a_run_started_over_http_carries_the_findings_it_produced(
             assert record is not None
             client.post(
                 f"/runs/{record.run_id}/approval",
-                json={"confirmed": True, "identity": "operator"},
+                json={"confirmed": True},
             )
             settled(record)
 
@@ -1015,7 +1015,7 @@ def test_a_run_over_http_tells_a_poller_that_its_review_queue_is_not_empty(
             assert record is not None
             client.post(
                 f"/runs/{record.run_id}/approval",
-                json={"confirmed": True, "identity": "operator"},
+                json={"confirmed": True},
             )
             settled(record)
 
@@ -1071,7 +1071,7 @@ def test_a_run_whose_judge_broke_finishes_signs_and_tells_the_poller_so(
             assert record is not None
             client.post(
                 f"/runs/{record.run_id}/approval",
-                json={"confirmed": True, "identity": "operator"},
+                json={"confirmed": True},
             )
             settled(record)
 

@@ -188,7 +188,7 @@ def build_server(client: BenchClient, declaration_path: pathlib.Path) -> MCPServ
             "this only on an operator's explicit yes to the figure start_run "
             "returned — it is the one call on this surface that spends their "
             "inference budget. The identity recorded against the answer is the one "
-            "in agentaudit.toml."
+            "the bench verified this client as, and never a name this tool sends."
         ),
         annotations=ToolAnnotations(
             read_only_hint=False,
@@ -200,24 +200,17 @@ def build_server(client: BenchClient, declaration_path: pathlib.Path) -> MCPServ
     async def approve_run(
         run_id: str, confirmed: bool, reason: str = ""
     ) -> dict[str, Any]:
-        """`POST /runs/{run_id}/approval`, under the file's own identity.
+        """`POST /runs/{run_id}/approval`, under the identity the bench verified.
 
         `confirmed` has no default here for the reason `BenchClient.approve` gives it
         none: the yes is the whole of the seam, and a default is a yes reachable by
-        omission. The identity is the declaration's rather than an argument, because
-        an attestation is a statement somebody made and a caller that could type any
-        name could record the run against somebody who made none (ADR-0007).
+        omission. There is no identity argument and there is no identity on the wire
+        — a caller that could type any name could record the run against somebody who
+        made no statement at all, which is ADR-0007's reasoning and is now ADR-0116
+        §1's rule: the name is read from the credential this client presents.
         """
         with _stated():
-            declaration = _declared()
-            return dict(
-                client.approve(
-                    run_id,
-                    identity=declaration.identity,
-                    confirmed=confirmed,
-                    reason=reason,
-                )
-            )
+            return dict(client.approve(run_id, confirmed=confirmed, reason=reason))
 
     @server.tool(
         name="run_status",

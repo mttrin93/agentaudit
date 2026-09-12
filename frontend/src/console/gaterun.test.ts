@@ -483,7 +483,7 @@ describe('nothing reaches the bench with a statement withheld', () => {
     },
   )
 
-  it('refuses to build one that records nobody, and builds one that is complete', () => {
+  it('refuses to build one from an unfinished walk, and builds a complete one', () => {
     const anonymous = { ...allAttested(), identity: '   ' }
     expect(gateRunRequest(anonymous).kind).toBe('blocked')
     expect(gateRunRequest(nothingAttested()).kind).toBe('blocked')
@@ -493,8 +493,9 @@ describe('nothing reaches the bench with a statement withheld', () => {
       throw new Error('a complete declaration was refused')
     }
     expect(request.body).toEqual({
+      // Three statements, no name: who attested is read from the token at the other
+      // end and a body carrying one is refused (ADR-0116 §1).
       attestation: {
-        identity: 'the operator',
         authorised_to_test: true,
         not_production: true,
         accepts_provider_policy_and_cost: true,
@@ -551,31 +552,30 @@ describe('declining, at either point, sends nothing that spends', () => {
     // Every branch that is not a completed, explicit confirmation withholds the
     // body: this is the function that decides whether 830 calls are spent and a
     // library is rewritten.
-    expect(gateConfirmation('running', true, 'the operator').kind).toBe('withheld')
-    expect(
-      gateConfirmation('awaiting_approval', false, 'the operator').kind,
-    ).toBe('withheld')
-    expect(gateConfirmation('awaiting_approval', true, ' ').kind).toBe('withheld')
+    expect(gateConfirmation('running', true).kind).toBe('withheld')
+    expect(gateConfirmation('awaiting_approval', false).kind).toBe('withheld')
 
-    const ready = gateConfirmation('awaiting_approval', true, ' the operator ')
+    const ready = gateConfirmation('awaiting_approval', true)
     if (ready.kind !== 'ready') {
       throw new Error('an explicit confirmation on a halted gate run was withheld')
     }
-    expect(ready.body).toEqual({
-      confirmed: true,
-      identity: 'the operator',
-      reason: '',
-    })
+    // Two fields exactly. `toEqual` is what carries the assertion that no name goes
+    // with them: the API refuses a body still naming its operator, and who confirmed
+    // is read from the token (ADR-0116 §1).
+    expect(ready.body).toEqual({ confirmed: true, reason: '' })
   })
 
   it('asks nothing at all before a no', () => {
-    // A no is sent rather than withheld, and it asks for nothing first: no identity,
-    // no second click, no reason. Putting a required field in front of the safe
-    // answer would make declining the harder of the two.
+    // A no is sent rather than withheld, and it asks for nothing first: no second
+    // click and no reason. Putting a required field in front of the safe answer
+    // would make declining the harder of the two.
     const declined = gateDecline('')
     expect(declined.confirmed).toBe(false)
     expect(declined.reason).toMatch(/the figures were not confirmed/)
-    expect(gateDecline('the operator', 'not today').reason).toBe('not today')
+    expect(gateDecline('not today')).toEqual({
+      confirmed: false,
+      reason: 'not today',
+    })
   })
 })
 

@@ -123,7 +123,7 @@ def completed(
         assert record is not None
         client.post(
             f"/runs/{run_id}/approval",
-            json={"confirmed": True, "identity": "operator"},
+            json={"confirmed": True},
         )
         settled(record)
         assert record.status is RunStatus.COMPLETED, record.statement
@@ -516,7 +516,7 @@ def test_a_run_that_stopped_without_completing_will_never_have_a_report(
         run_id = str(started["run_id"])
         client.post(
             f"/runs/{run_id}/approval",
-            json={"confirmed": False, "identity": "operator", "reason": "too costly"},
+            json={"confirmed": False, "reason": "too costly"},
         )
         response = client.get(f"/report/{run_id}")
 

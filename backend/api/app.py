@@ -167,17 +167,17 @@ filesystem and environment question::
 
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import replace
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from enum import Enum, StrEnum
 from pathlib import Path
-from typing import Annotated, Final, Literal
+from typing import Annotated, Any, Final, Literal
 
 from fastapi import Body, Depends, FastAPI, Header, HTTPException, Response, status
 from fastapi import Path as PathParam
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from backend.api.gate_runs import DEPLOYED_LIBRARY as DEPLOYED_LIBRARY_MOUNT
 from backend.api.gate_runs import (
@@ -628,23 +628,71 @@ def rule_of_two_reading(request: RuleOfTwoDeclarations) -> RuleOfTwoReading:
     return RuleOfTwoReading(standing=str(read.standing), stated=read.stated())
 
 
-class AttestationRequest(BaseModel):
+NAME_IS_NOT_A_FIELD = (
+    "`identity` is not a field of this request. The name on a record this bench "
+    "signs is the subject of the operator it verified, read from the Authorization "
+    "header at the moment the request becomes a record, and a name a caller supplies "
+    "is a claim nothing checked (ADR-0116 §1). The request is refused rather than "
+    "served with the field ignored: a caller who believes they named the attestation "
+    "and did not is worse off than one who is told they cannot."
+)
+"""Why a body that still names its operator is refused, in the sentence the caller
+reads.
+
+It names the field, where the name now comes from, and why the refusal is not an
+oversight — because the client this is addressed to is one that worked last week, and
+a validation error saying only *extra inputs are not permitted* would leave its author
+to guess whether the field moved, was renamed, or was dropped by mistake.
+"""
+
+
+class NamesNobody(BaseModel):
+    """A body whose operator is read from the token and may not be named in it.
+
+    Inherited rather than repeated, so that the two models a request becomes a record
+    through refuse the field in one place —
+    [ADR-0116](../../docs/adr/0116-the-identity-in-a-report-is-a-verified-claim-and-not-a-typed-string.md)
+    §1 applied structurally. A model that gained the field back would have to say so
+    in its own body, which is a line a reviewer sees.
+
+    Only `identity` is refused and other unknown keys are ignored as everywhere else
+    on this surface: what is being caught is a client that still believes it names the
+    operator, and turning every stray key into a refusal is a different change to the
+    deployed surface that nothing here has argued for.
+    """
+
+    @model_validator(mode="before")
+    @classmethod
+    def _the_operator_is_not_the_callers_to_name(cls, body: Any) -> Any:
+        if isinstance(body, Mapping) and "identity" in body:
+            raise ValueError(NAME_IS_NOT_A_FIELD)
+        return body
+
+
+class AttestationRequest(NamesNobody):
     """The three statements, one field each.
 
     Three fields rather than one `i_agree`, because the record has to show *what*
     was attested — and because two of the three are consequences a user would
     never infer (ADR-0007).
+
+    Who attested is not among them: it is the operator the door verified, and
+    `attestation` takes it rather than reading it off the wire.
     """
 
-    identity: str
     authorised_to_test: bool
     not_production: bool
     accepts_provider_policy_and_cost: bool
 
-    def attestation(self) -> Attestation:
-        """The record, which cannot be constructed with a statement withheld."""
+    def attestation(self, operator: Operator) -> Attestation:
+        """The record, which cannot be constructed with a statement withheld.
+
+        The operator is an argument and not a default anywhere: a call site that
+        forgot it does not compile, which is the one way this seam can be kept
+        honest at three call sites in one file.
+        """
         return Attestation(
-            identity=self.identity,
+            identity=operator.subject,
             authorised_to_test=self.authorised_to_test,
             not_production=self.not_production,
             accepts_provider_policy_and_cost=self.accepts_provider_policy_and_cost,
@@ -5170,11 +5218,14 @@ class StartGateRunRequest(BaseModel):
     cost: CostRequest
 
 
-class ApprovalRequest(BaseModel):
-    """The answer to one run's interrupt. A yes is the only thing that spends."""
+class ApprovalRequest(NamesNobody):
+    """The answer to one run's interrupt. A yes is the only thing that spends.
+
+    Two fields and no name: who answered is `confirmed_by`, and it is the subject the
+    door verified rather than anything in this body (ADR-0116 §1).
+    """
 
     confirmed: bool
-    identity: str
     reason: str = ""
 
 
@@ -6140,6 +6191,28 @@ def deployed_verifier() -> Verifier:
     return verifier
 
 
+NOBODY_VERIFIED: Final = Operator(subject="an operator this bench did not verify")
+"""Who a bench that declared `NO_DOOR` records a request against.
+
+[ADR-0122](../../docs/adr/0122-a-bench-with-no-door-records-that-it-verified-nobody.md)
+decides that it is a stated sentence and which one, and weighs the three alternatives;
+none of that is re-argued here. The local consequence, which is why the constant
+exists at all: `Attestation` refuses a blank identity, so an app that serves every
+route to anybody still has to put something in the field, and this is the only true
+thing it has to put there.
+"""
+
+
+def nobody_verified() -> Operator:
+    """The dependency a bench with no door carries where the door would be.
+
+    A function because it is a FastAPI dependency and takes the place of
+    `admitting`'s: the routes that record an operator declare one parameter either
+    way, and which of the two answers it is decided once, in `create_app`.
+    """
+    return NOBODY_VERIFIED
+
+
 def admitting(verifier: Verifier) -> Callable[[str | None], Operator]:
     """The dependency every route on this surface carries: the operator asking, or
     the refusal that request earned, before any route body runs.
@@ -6256,16 +6329,24 @@ def create_app(
         # door or does not start.
         verifier = NO_DOOR if declared else deployed_verifier()
     shut = verifier is not NO_DOOR
+    # One callable, built once and used twice: the router carries it so that every
+    # route is authenticated by construction, and the six routes that turn a request
+    # into a record declare it as a parameter so that they get the operator it
+    # already established. FastAPI caches a dependency per request by the callable
+    # it is, so those routes read the verification the router made rather than a
+    # second one (ADR-0116 §1 — the name is read where the door read it).
+    # `isinstance` and not the `is NO_DOOR` a line above, on the same value: the two
+    # spellings answer one question and only this one narrows the union for the type
+    # checker, which is what lets `admitting` be handed a `Verifier`.
+    asking = (
+        nobody_verified if isinstance(verifier, DeclaredDoor) else admitting(verifier)
+    )
     app = FastAPI(
         title="AgentAudit",
         version="0.1.0",
         # One dependency, carried by the router and so by every route on it —
         # including the ones added after this line was written.
-        dependencies=(
-            [Depends(admitting(verifier))]
-            if not isinstance(verifier, DeclaredDoor)
-            else []
-        ),
+        dependencies=[Depends(asking)] if shut else [],
         # And the schema goes with them: `/openapi.json`, `/docs` and `/redoc` are
         # Starlette routes rather than `APIRoute`s, so the dependency above does not
         # reach them and *every route is authenticated* would be false by three.
@@ -6312,7 +6393,10 @@ def create_app(
         return rule_of_two_reading(request)
 
     @app.post("/runs", status_code=status.HTTP_202_ACCEPTED)
-    def start_a_run(request: Annotated[StartRunRequest, Body()]) -> RunResponse:
+    def start_a_run(
+        request: Annotated[StartRunRequest, Body()],
+        operator: Operator = Depends(asking),
+    ) -> RunResponse:
         """Record the attestation, declare the estimate, and halt in front of it.
 
         Returns once the graph is holding its interrupt, which is before anything
@@ -6320,7 +6404,7 @@ def create_app(
         takes many minutes and no request should be open for them.
         """
         try:
-            attestation = request.attestation.attestation()
+            attestation = request.attestation.attestation(operator)
             target = request.target.config()
             price = request.cost.price()
         except ValueError as refused:
@@ -6356,6 +6440,7 @@ def create_app(
     def answer_the_interrupt(
         run_id: Annotated[str, PathParam()],
         request: Annotated[ApprovalRequest, Body()],
+        operator: Operator = Depends(asking),
     ) -> RunResponse:
         """Answer the halt. On a yes the suite runs; on anything else it does not.
 
@@ -6368,7 +6453,7 @@ def create_app(
                 run_id,
                 Approval(
                     confirmed=request.confirmed,
-                    identity=request.identity,
+                    identity=operator.subject,
                     reason=request.reason,
                 ),
             )
@@ -7002,6 +7087,7 @@ def create_app(
     @app.post(GATE_RUNS_ROUTE, status_code=status.HTTP_202_ACCEPTED)
     def start_a_gate_run(
         request: Annotated[StartGateRunRequest, Body()],
+        operator: Operator = Depends(asking),
     ) -> GateRunStarted:
         """Record the attestation, declare the estimate per layer, and halt.
 
@@ -7026,7 +7112,7 @@ def create_app(
         where the bench can prove control of an endpoint without asking anybody to.
         """
         try:
-            attestation = request.attestation.attestation()
+            attestation = request.attestation.attestation(operator)
             price = request.cost.price()
         except ValueError as refused:
             # The attestation's own refusal, which names the statements that were
@@ -7053,6 +7139,7 @@ def create_app(
     def answer_the_gate_runs_interrupt(
         gate_run_id: Annotated[str, PathParam()],
         request: Annotated[ApprovalRequest, Body()],
+        operator: Operator = Depends(asking),
     ) -> GateRunStarted:
         """Answer the halt. On a yes the gate run goes; on anything else it does not.
 
@@ -7070,7 +7157,7 @@ def create_app(
                 gate_run_id,
                 Approval(
                     confirmed=request.confirmed,
-                    identity=request.identity,
+                    identity=operator.subject,
                     reason=request.reason,
                 ),
             )
@@ -7157,6 +7244,7 @@ def create_app(
     @app.post(PENDING_MEASUREMENTS_ROUTE, status_code=status.HTTP_202_ACCEPTED)
     def start_a_pending_route_measurement(
         request: Annotated[StartMeasurementRequest, Body()],
+        operator: Operator = Depends(asking),
     ) -> MeasurementStarted:
         """Record the attestation, declare the estimate per route, and halt.
 
@@ -7181,7 +7269,7 @@ def create_app(
         drained itself would be an unbounded spend authorised once.
         """
         try:
-            attestation = request.attestation.attestation()
+            attestation = request.attestation.attestation(operator)
             price = request.cost.price()
         except ValueError as refused:
             raise HTTPException(
@@ -7207,6 +7295,7 @@ def create_app(
     def answer_the_measurements_interrupt(
         measurement_id: Annotated[str, PathParam()],
         request: Annotated[ApprovalRequest, Body()],
+        operator: Operator = Depends(asking),
     ) -> MeasurementStarted:
         """Answer the halt. On a yes the measurement goes; on anything else it does
         not.
@@ -7227,7 +7316,7 @@ def create_app(
                 measurement_id,
                 Approval(
                     confirmed=request.confirmed,
-                    identity=request.identity,
+                    identity=operator.subject,
                     reason=request.reason,
                 ),
             )

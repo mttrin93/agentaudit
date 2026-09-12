@@ -512,7 +512,7 @@ def test_a_run_over_http_tells_a_poller_what_it_filed_and_what_it_withheld(
             assert record is not None
             client.post(
                 f"/runs/{record.run_id}/approval",
-                json={"confirmed": True, "identity": "operator"},
+                json={"confirmed": True},
             )
             settled(record)
 

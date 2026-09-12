@@ -46,8 +46,18 @@ import { servedTarget } from './served.ts'
  */
 const FAMILY = 'data_leakage'
 
-/** Who the walkthrough attests and confirms as. Recorded on the artefact it produces. */
+/** What the walk types into the register screen's *who is attesting* field.
+ *
+ * It does not reach the artefact and it no longer reaches the wire: `identity` came
+ * off the request bodies, and the name on the record is the subject of the operator
+ * the API verified — which for this harness, which declares `NO_DOOR`, is nobody.
+ * The field is still on the screen, and #250 is where it becomes a line naming the
+ * signed-in operator.
+ */
 const IDENTITY = 'the browser walkthrough'
+
+/** What a bench with no door records instead (`app.NOBODY_VERIFIED`). */
+const NOBODY_VERIFIED = 'an operator this bench did not verify'
 
 /**
  * Shrink the next run to something a browser can watch, through the declared inputs.
@@ -159,7 +169,6 @@ test.afterEach(async ({ request }) => {
     await request.post(`/runs/${run.run_id}/approval`, {
       data: {
         confirmed: false,
-        identity: IDENTITY,
         reason: 'the walkthrough that started this run is over',
       },
     })
@@ -379,7 +388,10 @@ test('an operator registers a target, is blocked, confirms, and reads the report
     declared: { rule_of_two: { standing: string } }
   }
   expect(artefact.provenance.attestation.control_proved).toEqual(true)
-  expect(artefact.provenance.attestation.identity).toEqual(IDENTITY)
+  // The name is the one the door established and never the one typed two screens
+  // back: this harness declares `NO_DOOR`, so the bench verified nobody and the
+  // artefact says so (ADR-0116 §1).
+  expect(artefact.provenance.attestation.identity).toEqual(NOBODY_VERIFIED)
   // And the four declarations made on the register screen reached the signed
   // document. Until #177 nothing on the HTTP surface accepted them, so every artefact
   // this bench produced read `not_declared` — this is the assertion that the walk can

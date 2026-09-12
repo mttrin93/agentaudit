@@ -162,7 +162,6 @@ describe('the confirmation', () => {
     expect(request.kind).toBe('ready')
     expect(request.kind === 'ready' && request.body).toEqual({
       confirmed: true,
-      identity: 'operator',
       reason: '',
     })
   })
@@ -220,12 +219,13 @@ describe('the confirmation', () => {
     const request = confirmationRequest({ ...confirming(), identity: '   ' })
 
     expect(request.kind).toBe('ready')
-    // Empty rather than whitespace: the bench writes `confirmed by <name>` from this
-    // value, and a record naming nobody is better than one naming three spaces.
-    expect(request.kind === 'ready' && request.body.identity).toBe('')
   })
 
-  it('records the name the registration was attested by, when one is held', () => {
+  it('sends no name, whatever the screen is holding', () => {
+    // The name a registration was attested by is still held in this browser, and it
+    // no longer goes on the wire: the operator on the record is the one the API
+    // verified the request as, and a body still carrying `identity` is refused
+    // (ADR-0116 §1). `toEqual` is the assertion — an extra key fails it.
     const store = aStore()
     rememberWhoAttested(store, 'run-1', '  Matteo Rinaldi  ')
 
@@ -234,23 +234,26 @@ describe('the confirmation', () => {
       identity: whoAttested(store, 'run-1'),
     })
 
-    expect(request.kind === 'ready' && request.body.identity).toBe('Matteo Rinaldi')
+    expect(request.kind === 'ready' && request.body).toEqual({
+      confirmed: true,
+      reason: '',
+    })
   })
 })
 
 describe('declining', () => {
   it('is a no on the wire and can never be read as a yes', () => {
-    const body = declineRequest('operator', 'the adaptive ceiling is too high')
+    const body = declineRequest('the adaptive ceiling is too high')
 
     expect(body.confirmed).toBe(false)
     expect(body.reason).toBe('the adaptive ceiling is too high')
   })
 
   it('asks for nothing first, so the safe answer is never the harder one', () => {
-    const body = declineRequest('', '')
+    const body = declineRequest('')
 
     expect(body.confirmed).toBe(false)
-    expect(body.identity).toBe('')
+    expect(Object.keys(body).sort()).toEqual(['confirmed', 'reason'])
     // A stated reason either way: a declined run is a result about the estimate,
     // and it is recorded as declined rather than left to time out as unanswered.
     expect(body.reason).toContain('declined at the approval interrupt')

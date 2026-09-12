@@ -426,7 +426,7 @@ def test_the_route_tells_a_human_what_happened_instead_of_denying_the_run(
     with a_restarted_api(recorded) as client:
         answered = client.post(
             f"/runs/{row.run_id}/approval",
-            json={"confirmed": True, "identity": "operator", "reason": ""},
+            json={"confirmed": True, "reason": ""},
         )
 
     assert answered.status_code == 409, answered.text

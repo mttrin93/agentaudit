@@ -31,7 +31,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from starlette.types import ASGIApp, Receive, Scope, Send
 
-from backend.api.app import NoIssuer, ReportRefusal, create_app
+from backend.api.app import NOBODY_VERIFIED, NoIssuer, ReportRefusal, create_app
 from backend.api.report import UNDECLARED_MODEL, ReportConfig
 from backend.api.runs import (
     BenchConfig,
@@ -349,7 +349,7 @@ def a_request(
             "declared_tools": list(DECLARED_TOOL_NAMES),
             "sends": target.retry.sends,
         },
-        "attestation": {"identity": BENCH_ATTESTATION.identity, **attestation},
+        "attestation": {**attestation},
         "nonce": nonce,
         "cost": {"price_per_call": price_per_call, "currency": "USD"},
         "note_planted": note_planted,
@@ -438,7 +438,7 @@ def test_a_target_that_does_not_echo_the_nonce_is_never_attempted(
         started = client.post("/runs", json=a_request(watched.target, nonce)).json()
         client.post(
             f"/runs/{started['run_id']}/approval",
-            json={"confirmed": True, "identity": "operator"},
+            json={"confirmed": True},
         )
         record = settled(_record(bench, started))
 
@@ -472,7 +472,7 @@ def test_a_target_that_will_not_echo_keeps_the_family_its_canary_is_for(
         ).json()
         client.post(
             f"/runs/{started['run_id']}/approval",
-            json={"confirmed": True, "identity": "operator"},
+            json={"confirmed": True},
         )
         record = settled(_record(bench, started))
 
@@ -1128,7 +1128,7 @@ def test_a_declined_interrupt_sends_nothing_and_spends_nothing_and_says_so(
         started = client.post("/runs", json=a_request(watched.target, nonce)).json()
         answered = client.post(
             f"/runs/{started['run_id']}/approval",
-            json={"confirmed": False, "identity": "operator", "reason": "too dear"},
+            json={"confirmed": False, "reason": "too dear"},
         ).json()
         record = settled(_record(bench, started))
 
@@ -1162,7 +1162,7 @@ def test_a_declined_run_is_settled_by_the_thread_that_ran_it_and_not_by_the_answ
         started = client.post("/runs", json=a_request(watched.target, nonce)).json()
         answered = client.post(
             f"/runs/{started['run_id']}/approval",
-            json={"confirmed": False, "identity": "operator", "reason": "too dear"},
+            json={"confirmed": False, "reason": "too dear"},
         ).json()
         record = _record(bench, started)
 
@@ -1207,7 +1207,7 @@ def test_an_interrupt_is_answered_once(leakage_case: Case) -> None:
     with watched_reference() as watched, api([leakage_case]) as (client, bench):
         nonce = registered(client, watched)
         started = client.post("/runs", json=a_request(watched.target, nonce)).json()
-        answer = {"confirmed": False, "identity": "operator"}
+        answer = {"confirmed": False}
         first = client.post(f"/runs/{started['run_id']}/approval", json=answer)
         second = client.post(f"/runs/{started['run_id']}/approval", json=answer)
 
@@ -1240,7 +1240,7 @@ def test_the_run_id_comes_back_while_the_suite_is_still_running(
 
         answered = client.post(
             f"/runs/{started['run_id']}/approval",
-            json={"confirmed": True, "identity": "operator"},
+            json={"confirmed": True},
         ).json()
 
         assert answered["run_id"] == started["run_id"]
@@ -1250,7 +1250,7 @@ def test_the_run_id_comes_back_while_the_suite_is_still_running(
         finished = settled(record)
 
     assert finished.status is RunStatus.COMPLETED
-    assert finished.confirmed_by == "operator"
+    assert finished.confirmed_by == NOBODY_VERIFIED.subject
 
 
 def test_the_suite_runs_under_the_ceiling_that_was_confirmed(
@@ -1267,7 +1267,7 @@ def test_the_suite_runs_under_the_ceiling_that_was_confirmed(
         record = _record(bench, started)
         client.post(
             f"/runs/{started['run_id']}/approval",
-            json={"confirmed": True, "identity": "operator"},
+            json={"confirmed": True},
         )
         settled(record)
 
@@ -1308,7 +1308,7 @@ def test_an_abort_mid_episode_records_that_episode_as_censored(
         )
         client.post(
             f"/runs/{started['run_id']}/approval",
-            json={"confirmed": True, "identity": "operator"},
+            json={"confirmed": True},
         )
         settled(record)
 
@@ -1349,7 +1349,7 @@ def test_an_operator_can_stop_a_running_suite(leakage_case: Case) -> None:
         record = _record(bench, started)
         client.post(
             f"/runs/{started['run_id']}/approval",
-            json={"confirmed": True, "identity": "operator"},
+            json={"confirmed": True},
         )
         stopped = client.post(f"/runs/{started['run_id']}/stop")
         assert stopped.status_code == 200
@@ -1432,7 +1432,7 @@ def test_a_stop_inside_an_episode_records_that_episode_as_censored(
         record = _record(bench, started)
         client.post(
             f"/runs/{started['run_id']}/approval",
-            json={"confirmed": True, "identity": "operator"},
+            json={"confirmed": True},
         )
 
         # Pressed once the second layer is the one spending, so there is an episode
@@ -1486,7 +1486,7 @@ def test_a_run_that_is_not_running_cannot_be_stopped(leakage_case: Case) -> None
 
         client.post(
             f"/runs/{started['run_id']}/approval",
-            json={"confirmed": True, "identity": "operator"},
+            json={"confirmed": True},
         )
         settled(record)
         # And ended: whatever it settled as, there is nothing left to stop.
@@ -2294,7 +2294,7 @@ def test_a_run_state_counting_against_another_ceiling_is_refused() -> None:
 def _approve(client: TestClient, run_id: str) -> None:
     client.post(
         f"/runs/{run_id}/approval",
-        json={"confirmed": True, "identity": "operator"},
+        json={"confirmed": True},
     )
 
 

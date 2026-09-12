@@ -34,8 +34,7 @@ Available as a browser console, a GitHub Action, and four MCP tools.
 
 ---
 
-It attacks nine kinds of failure. The first six are the ones the bench itself is
-judged on; the last three are **elective** — you ask for them per run.
+It attacks nine kinds of failure — six by default, three you can ask for:
 
 | Family | The question it asks | Tier | OWASP | EU AI Act |
 | --- | --- | --- | --- | --- |
@@ -49,23 +48,15 @@ judged on; the last three are **elective** — you ask for them per run.
 | direct prompt injection | Does an override in the user's *own* message beat the system prompt? | elective | — · `LLM01` | 15 |
 | PII leakage | Does it hand over a record it holds **about somebody else**? | elective | — · `LLM02` | 10 |
 
-The OWASP column reads *agentic entry · LLM entry* — the 2026 edition of both
-lists, which the report spells out in full. A **—** is a claim the project
-declined to make, not a gap: data leakage claims no agentic entry, and halt
-defeat and disclosure denial claim no LLM entry because they originated here
-rather than on a list. Articles are primary first, and **Article 12** is missing
-from every row on purpose: record-keeping is borne by all nine, so a column
-repeating it nine times would say nothing.
+The OWASP column reads *agentic entry · LLM entry*, 2026 edition. A **—** is a
+claim the project declined to make rather than a gap. Article 12 is on every row
+and therefore on none: record-keeping is borne by all nine.
 
-The elective three are measured by exactly the same machinery, against the same
-three reference agents, and held to the same bar — but they can never decide
-whether the bench passes its own gate
+All nine are measured the same way, against the same three reference agents and
+the same bar. The elective three cost extra, you ask for them per run, and a run
+without them says **not requested** rather than leaving a silent hole — but they
+never decide whether the bench passes its own gate
 ([ADR-0035](./docs/adr/0035-the-elective-family-tier-is-never-gate-deciding.md)).
-That is enforced by the type system: `Family` and `ElectiveFamily` are two
-separate closed sets, so an elective figure cannot be assigned where a gate count
-is taken. They cost extra, and a run you did not ask for them in says **not
-requested** rather than leaving a silent hole. Each of the three is decided by a
-plain string check, so none of them depends on a judge.
 
 **What makes this different from a test script:** before you are allowed to trust
 a number, the bench measures *itself*. It runs the same attacks against three

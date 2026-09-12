@@ -13,6 +13,7 @@ name = "agentaudit"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
+    { name = "clerk-backend-api" },
     { name = "cryptography" },
     { name = "deepeval" },
     { name = "fastapi" },
@@ -45,6 +46,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "chromadb", marker = "extra == 'corpus'", specifier = ">=1.5.9" },
+    { name = "clerk-backend-api", specifier = ">=7.0.0" },
     { name = "cryptography", specifier = ">=50.0.0" },
     { name = "deepeval", specifier = ">=4.1.8" },
     { name = "fastapi", specifier = ">=0.141.1" },
@@ -668,6 +670,22 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/38/4e/937bc4d2e6f8ab9664ec79931fbbd69efff47e513ec2924b071e4b0ff774/chromadb-1.5.9-cp39-abi3-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:9192d111bd662241625867962333d99369a00769a50f8b2f58cb388731274d7e", size = 22680924, upload-time = "2026-05-05T05:54:36.25Z" },
     { url = "https://files.pythonhosted.org/packages/e6/ec/0c42039e80b9acc534f67b73b7a42471948042859b3a64867b50a4a77fa3/chromadb-1.5.9-cp39-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:cc09b3df76e5a5cb386aed2715a2eea152e3949f9e1ba93c7119505377749929", size = 23316203, upload-time = "2026-05-05T05:54:41.157Z" },
     { url = "https://files.pythonhosted.org/packages/eb/ce/0f7be6e5d0feafa2cda54b12e6542afeea7dea89d2d411e14da90f8abb96/chromadb-1.5.9-cp39-abi3-win_amd64.whl", hash = "sha256:4fd0b560e56761b7f3cb4d5c6205fd5f20814484b4a3e4e9af9038c2b428fc6c", size = 23542454, upload-time = "2026-05-05T05:54:54.942Z" },
+]
+
+[[package]]
+name = "clerk-backend-api"
+version = "7.0.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "cryptography" },
+    { name = "httpcore" },
+    { name = "httpx" },
+    { name = "pydantic" },
+    { name = "pyjwt" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/d8/48/de97a14a8fcc9da3f37ed2d6320be489f4dd076e640c9bac60482f620e59/clerk_backend_api-7.0.0.tar.gz", hash = "sha256:2ff8eab7a75d7ff527cadfaf4ebba53ee5316ac1f7bc22f0d0d6f1b8033082f0", size = 291950, upload-time = "2026-08-11T13:50:25.109Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/f4/11/ba1731756d7e8bce06ac3428604629600cde7c17f1b8415277f62f18657c/clerk_backend_api-7.0.0-py3-none-any.whl", hash = "sha256:8df8639dcdaa600dbd1a26878ecaeb6dcc724b2d21247eb6abef4cbd73be9eb5", size = 598066, upload-time = "2026-08-11T13:50:23.67Z" },
 ]
 
 [[package]]

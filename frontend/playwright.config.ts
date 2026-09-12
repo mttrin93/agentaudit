@@ -87,7 +87,21 @@ export default defineConfig({
       // constant, and now they are one address family too.
       command: `npm run dev -- --host 127.0.0.1 --port ${APP_PORT} --strictPort`,
       url: APP,
-      env: { AGENTAUDIT_API: API },
+      /*
+       * Two variables, and the second of them is a declaration.
+       *
+       * The bench this suite drives is `NO_DOOR` (ADR-0121) and there is no test
+       * user to sign in as, so the console under test is the issuerless one:
+       * every screen renders, no door is attended, and no request carries an
+       * `Authorization` header. That is stated here rather than left to whether
+       * the developer running this happens to have a publishable key in
+       * `frontend/.env` — a suite that passed in CI and showed a sign-in screen on
+       * the laptop of anybody who had done the setup would be a suite whose result
+       * depends on a gitignored file. An empty value wins over the file, which is
+       * Vite's own precedence: `VITE_`-prefixed variables already in the
+       * environment are applied after the `.env` files are read.
+       */
+      env: { AGENTAUDIT_API: API, VITE_CLERK_PUBLISHABLE_KEY: '' },
       reuseExistingServer: false,
       // Piped for the reason the harness's is: a webServer that failed silently is
       // indistinguishable from one that was slow, and that is the failure this line

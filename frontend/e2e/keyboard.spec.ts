@@ -93,10 +93,9 @@ test('a step the walk may not leave holds its button, and cites nothing for it',
 
   // The list of what the walk is waiting for came off this screen at the operator's
   // request: every reason it gave is a control the reader is looking at — three
-  // unticked boxes. `RegisterScreen.tsx` says so where it
-  // stood, and says what the lost description costs a reader who cannot see them.
-  // The field above them is a line now and not a control (#250), so the three boxes
-  // are the whole of it.
+  // unticked boxes, and, until #250, the field above them. `RegisterScreen.tsx` says
+  // so where it stood, and says what the lost description costs a reader who cannot
+  // see them. The three boxes are the whole of it now.
   await expect(page.locator('ul.blocked')).toHaveCount(0)
   // And the citation went with the list. An `aria-describedby` naming an id nothing on
   // the page carries resolves to nothing, which is worse than the silence it fills.

@@ -733,8 +733,9 @@ export function RegisterScreen() {
           `blocked.tsx` drew one here — a line per withheld statement, in the guard's
           own wording, cited by the disabled button through `aria-describedby`. On this
           walk every reason it could give is a control the reader is looking at: three
-          unticked boxes on the screen, and the name field above them. It restated the
-          form.
+          unticked boxes on the screen. It restated the form. The name field above them
+          was the fourth reason when this was written and is a line now, so there is one
+          fewer thing this list could have said (#250).
 
           **What that costs is the citation, and the cost is real.** A screen reader in
           browse mode reaching the dead button now reads *Continue, dimmed* and nothing

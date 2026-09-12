@@ -63,6 +63,8 @@ import type {
   FindingsSection,
   FamilyLabel,
   FamilyRun,
+  HeldRoutesSection,
+  HeldRouteRow,
   MeasuredSection,
   RunAttempts,
   RunEpisodes,
@@ -1485,6 +1487,160 @@ export function verificationReading(
 }
 
 /** Everything the report screen draws, as data, with nothing spanning a family. */
+/**
+ * One held route as the block draws it: names, run ids, and what this run read.
+ *
+ * Every field is a string or a boolean, which is the type-level half of the fence at
+ * this last step: there is no numeric property here a later edit could lift off and
+ * read against a rate, and no field a probe, a criterion or a model's prose could
+ * arrive in (ADR-0008, ADR-0117 §4).
+ *
+ * `read` is what this run learned, already worded: `null` for a route that was not
+ * sent, which is every closed one — a closed route stops being sent, and a screen that
+ * drew *clean* there would be printing a probe nobody paid for.
+ */
+export interface HeldRouteReading {
+  family: string
+  route: string
+  /** `still open` or `closed`, as the reader's word rather than the wire's. */
+  state: string
+  /** Where this route came from and where it went, as one line of run ids. */
+  history: string
+  /** What this run read about it, or `null` because it was not sent. */
+  read: string | null
+  regressed: boolean
+}
+
+/**
+ * The target library as the report screen draws it: counts, sentences, and no rate.
+ *
+ * **The block a reader of this screen is told to trust differently.** Every other
+ * figure on this page rests on a threshold declared before the run; every figure here
+ * rests on a named operator's approval and an evaluator-confirmed break, and
+ * `licensedBy` is the artefact's own sentence saying so. It is printed rather than
+ * worded here, because a screen that assembled the sentence would be a second copy of
+ * a claim the signed document already makes (ADR-0117's cost paragraph).
+ *
+ * **Counts, and this module divides none of them.** There is no `reduce` here, no
+ * quotient, and no field one could be assigned to: *3 of 5* is two integers on this
+ * screen for the reason it is two integers in the document — a rate over routes
+ * selected on their own outcome falls with every new finding and is comparable
+ * between nothing (ADR-0014, ADR-0117 §4).
+ *
+ * **Its own reading and never a row in `rows`.** The six are what the gate's
+ * denominator is fixed at (ADR-0015); a held route is on a denominator of its own,
+ * and one drawn into the per-family table would be that denominator joined to the six
+ * by a screen rather than by arithmetic.
+ */
+export interface HeldReading {
+  /** Which of the three answers this is, off the closed set the payload carries. */
+  reading: string
+  /** The payload's own one-line summary of the block, whichever of the three it is. */
+  stated: string
+  licensedBy: string
+  noRateOverThese: string
+  /** The counts, already formatted, each named for the question it answers. */
+  counts: { of: string; figure: string; reads: string }[]
+  routes: HeldRouteReading[]
+  /** Readings this run could not count into the records they were read off. */
+  notCounted: string[]
+}
+
+/**
+ * That section, read into what the screen draws. Nothing here computes a figure.
+ *
+ * Every integer below is stringified and none is combined with another. The order of
+ * the counts is the order the document prints them in, so a reader moving between the
+ * screen and the `report.md` meets the same six lines in the same order.
+ */
+export function heldReading(held: HeldRoutesSection): HeldReading {
+  return {
+    reading: held.reading,
+    stated: held.stated,
+    licensedBy: held.licensed_by,
+    noRateOverThese: held.no_rate_over_these,
+    counts: [
+      {
+        of: 'held against this target',
+        figure: `${held.held}`,
+        reads:
+          'every confirmed break the admission bar refused and an operator ' +
+          'approved, open and closed together',
+      },
+      {
+        of: 'still open',
+        figure: `${held.open}`,
+        reads: 'routes this target has not yet closed, whatever this run read',
+      },
+      {
+        of: 'closed',
+        figure: `${held.closed}`,
+        reads: 'closed on two consecutive clean runs, kept with the run that closed it',
+      },
+      {
+        of: 'broke it again on this run',
+        figure: `${held.still_breaking}`,
+        reads: "a reading of this run, and not a property of the library",
+      },
+      {
+        of: 'could not be read on this run',
+        figure: `${held.not_read}`,
+        reads:
+          'the target was unreachable, or no reply carried what the criterion has ' +
+          'to read. Neither counts toward closing anything',
+      },
+      {
+        of: 'closed once and come back',
+        figure: `${held.regressed}`,
+        reads: 'a regression, and not a new finding',
+      },
+    ],
+    routes: held.routes.map(heldRoute),
+    notCounted: held.not_counted,
+  }
+}
+
+/**
+ * One row of the block, with the run ids read into the sentence they belong to.
+ *
+ * *Found on 3 March, closed on 19 March* is what the operator paid for, and it is two
+ * run ids rather than a date because a run record carries its own date — a date held
+ * here would be a copy of one of its fields that nothing keeps in step.
+ */
+function heldRoute(route: HeldRouteRow): HeldRouteReading {
+  const closing = route.regressed
+    ? `closed in ${route.closed_in}, found again in ${route.reopened_in}`
+    : route.closed_in
+      ? `closed in ${route.closed_in}`
+      : null
+  return {
+    family: readFamily(route.family),
+    route: route.route,
+    state: route.state === 'closed' ? 'closed' : 'still open',
+    history: [`found in ${route.found_in}`, closing]
+      .filter((part): part is string => part !== null)
+      .join(', '),
+    read: route.outcome === null ? null : HELD_OUTCOME[route.outcome] ?? route.outcome,
+    regressed: route.regressed,
+  }
+}
+
+/**
+ * The four readings a held route can take on one run, in the reader's words.
+ *
+ * Worded here rather than taken off the wire's own name, on `BAND_IN_A_TARGET_REPORT`'s
+ * terms: what a screen draws is a phrase a person reads, and `unmeasurable` is a name
+ * for a distinction rather than a sentence about a target. A reading this map has no
+ * entry for is drawn as the name itself rather than dropped — an unknown outcome is a
+ * newer bench, and a blank cell would read as a route nobody looked at.
+ */
+const HELD_OUTCOME: Record<string, string> = {
+  still_open: 'still breaking this target',
+  clean: 'held — one clean reading, and two close a route',
+  unmeasured: 'unmeasured — nothing was asked of the target',
+  unmeasurable: 'unmeasurable — no reply carried what the criterion reads',
+}
+
 export interface ReportView {
   target: string
   /**
@@ -1516,6 +1672,15 @@ export interface ReportView {
    * exists to prevent, arriving through a screen rather than through arithmetic.
    */
   elective: ElectiveReading
+  /**
+   * The confirmed breaks held against this target, and what this run made of them.
+   *
+   * Its own reading beside `rows` and inside none of it, which is the shape ADR-0117
+   * §4 asks for: held routes are on a denominator of their own, and a figure of theirs
+   * reachable from a family row would be that denominator joined to the six by a field
+   * name. Nothing in `rows` reads this and nothing here is derived from it.
+   */
+  held: HeldReading
 }
 
 /**
@@ -1533,5 +1698,6 @@ export function reportView(report: TargetReport): ReportView {
     findings: findingsReading(report.findings),
     adaptive: adaptiveReading(report.adaptive),
     elective: electiveReading(report.elective, report.measured),
+    held: heldReading(report.held_routes),
   }
 }

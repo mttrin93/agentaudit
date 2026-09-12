@@ -52,6 +52,7 @@ import {
   familyAnswers,
   familyRows,
   findingsReading,
+  heldReading,
   reportView,
   routeReading,
   verificationReading,
@@ -1658,6 +1659,139 @@ describe('the route the attacker took', () => {
     expect(named).toEqual([])
   })
 })
+
+describe('the confirmed breaks held against this target', () => {
+  it('counts every route ever held, and prints no rate over any two of them', () => {
+    // ADR-0117 §4. *3 of 5* is two integers on this screen for the reason it is two
+    // integers in the document: a rate over routes selected on their own outcome
+    // falls with every new finding and is comparable between nothing.
+    const held = heldReading(SERVED.held_routes)
+
+    expect(held.reading).toBe('held')
+    expect(held.counts.map((count) => `${count.of} ${count.figure}`)).toEqual([
+      'held against this target 3',
+      'still open 2',
+      'closed 1',
+      'broke it again on this run 1',
+      'could not be read on this run 0',
+      'closed once and come back 1',
+    ])
+
+    // Every figure is a string of digits and none of them is a quotient: 2/3 is
+    // 0.666…, 1/3 is 0.333…, and neither appears anywhere in the reading.
+    for (const quotient of [0.67, 0.66, 0.33, 0.34, 0.6]) {
+      expect(numbersIn(held)).not.toContain(quotient)
+    }
+    const named = keysIn(held).filter((key) =>
+      FORBIDDEN_IN_A_KEY.some((word) => key.toLowerCase().includes(word)),
+    )
+    expect(named).toEqual([])
+  })
+
+  it('prints the artefact’s own sentence about what licenses it', () => {
+    // The cost ADR-0117 does not soften: a reader of a figure in this block is
+    // trusting a named operator's approval where every figure in the family table is
+    // trusting a threshold declared before the run. The sentence is the payload's —
+    // a screen that worded it would be a second copy of a claim the signed document
+    // already makes.
+    const held = heldReading(SERVED.held_routes)
+
+    expect(held.licensedBy).toBe(SERVED.held_routes.licensed_by)
+    expect(held.licensedBy).toContain('operator')
+    expect(held.licensedBy).toContain('no declared threshold')
+    expect(held.noRateOverThese).toBe(SERVED.held_routes.no_rate_over_these)
+    expect(screen).toContain('{held.licensedBy}')
+    expect(screen).toContain('{held.noRateOverThese}')
+  })
+
+  it('shows a closed route with the run that closed it, and a reopened one as a regression', () => {
+    const held = heldReading(SERVED.held_routes)
+    const closed = held.routes.find((route) => route.state === 'closed')
+    const back = held.routes.find((route) => route.regressed)
+
+    expect(closed?.history).toContain('closed in run-2026-03-19-0002')
+    // A closed route stops being sent, so this run read nothing about it — and a
+    // screen drawing *clean* there would be printing a probe nobody paid for.
+    expect(closed?.read).toBeNull()
+
+    // A regression is the pair of a closing and a return, so both run ids are on the
+    // line: a reopened route with only its rediscovery would read as a new finding.
+    expect(back?.history).toContain('closed in run-2026-03-19-0002')
+    expect(back?.history).toContain('found again in run-2026-03-26-0003')
+    expect(back?.state).toBe('still open')
+  })
+
+  it('carries no probe, no criterion and no attacker prose', () => {
+    // A route that beat this agent is a working unpublished exploit (ADR-0008), and
+    // the attacker's own account of the break is the half the spec leaves out of the
+    // signed document until an ADR decides it.
+    const printed = JSON.stringify(heldReading(SERVED.held_routes))
+
+    for (const key of ['payload', 'probe:', 'success_condition', 'description']) {
+      expect(printed).not.toContain(key)
+    }
+    // The digest is what identifies a route, and it is not the probe.
+    expect(heldBlock(SERVED).routes[0].route).toMatch(/^[a-z_]+-[0-9a-f]{16}$/)
+  })
+
+  it('is drawn in its own section and never as a row of the per-family table', () => {
+    // The six are what the gate's denominator is fixed at (ADR-0015); a held route is
+    // on a denominator of its own, and a seventh row would be that denominator joined
+    // to the six by a screen rather than by arithmetic.
+    const view = reportView(SERVED)
+
+    // The rows are what the measured section and the search make of them and nothing
+    // else: the block has its own reading beside them, and a held route's family
+    // appearing as a row is that family's own rate rather than anything held.
+    expect(view.rows).toEqual(familyRows(SERVED.measured, SERVED.adaptive))
+    const printed = JSON.stringify(view.rows)
+    for (const route of SERVED.held_routes.routes) {
+      expect(printed).not.toContain(route.route)
+    }
+    expect(screen).toContain('<TheHeldRoutes held={view.held} />')
+    // The table it draws is its own, so no rule about a rate, an interval or a band
+    // reaches it.
+    expect(screen).toContain('per-family held-routes')
+  })
+
+  it('tells a library that holds nothing from a run that never read one', () => {
+    // Three readings and none of them is a count of zero: a screen that inferred them
+    // from `held === 0` would print a store that would not open as an agent nothing
+    // has been found against.
+    const empty = {
+      ...SERVED.held_routes,
+      held: 0,
+      open: 0,
+      closed: 0,
+      still_breaking: 0,
+      not_read: 0,
+      regressed: 0,
+      routes: [],
+      not_counted: [],
+    }
+    const nothing = heldReading({
+      ...empty,
+      reading: 'holds_nothing',
+      stated: 'No route is held against staging support agent.',
+    })
+    const neverAsked = heldReading({
+      ...empty,
+      reading: 'not_asked',
+      stated: 'This run read no target library against this agent.',
+    })
+
+    expect(nothing.reading).not.toBe(neverAsked.reading)
+    expect(nothing.stated).not.toBe(neverAsked.stated)
+    // And both still carry the sentence saying what the block would be worth, so a
+    // reader cannot meet the block once without it.
+    expect(neverAsked.licensedBy).toBe(SERVED.held_routes.licensed_by)
+  })
+})
+
+/** The held block of one served payload, read. */
+function heldBlock(report: TargetReport) {
+  return heldReading(report.held_routes)
+}
 
 /** Every dotted key path in the view, however deeply nested. */
 function keysIn(node: unknown, path = ''): string[] {

@@ -290,9 +290,14 @@ rather than of the bench:
   service scales to zero. Download the three files while the run is in front of
   you; they verify anywhere.
 
-Anyone with the URL can start a run, and a run spends this deployment's
-OpenRouter credit. Every run still halts for an explicit confirmation of the
-estimate before it sends anything.
+**It has a door.** The console asks you to sign in, and a run you start records
+the subject of that session as its operator in the signed report. Sign-in runs
+against a *development* instance of the provider — a production one needs a
+domain this deployment does not own — so expect an `accounts.dev` screen and a
+development banner.
+
+A run spends this deployment's OpenRouter credit, and still halts for an explicit
+confirmation of the estimate before it sends anything.
 
 ## Run it yourself
 

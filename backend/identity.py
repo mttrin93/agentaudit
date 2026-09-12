@@ -42,9 +42,12 @@ signed document there is anything local to check. So the offline argument above
 covers session tokens and nothing else, and
 [ADR-0124](../docs/adr/0124-a-machine-credential-is-verified-at-the-issuer-and-named-as-a-machine.md)
 records the cost and why it was accepted rather than worked around. The local
-consequences, both below: the secret key stops being a fallback and becomes
-required for this one kind of caller, and an issuer that cannot be reached refuses
-the credential as `UNAVAILABLE` rather than as a statement about it.
+consequences, all below: the secret key stops being a fallback and becomes
+required for this one kind of caller; an issuer that cannot be reached refuses the
+credential as `UNAVAILABLE` rather than as a statement about it; and *machine
+credential* here is narrower than the provider's `is_machine_token`, because two of
+the four prefixes that function matches name a person
+(`NOT_A_CALLER_THIS_BENCH_ADMITS`).
 
 **What is deliberately not here.** No route, no dependency and no decision about
 an undeclared issuer: the factory declares the door and decides what an
@@ -63,10 +66,11 @@ from enum import StrEnum
 from typing import Protocol, runtime_checkable
 
 from clerk_backend_api.security import authenticate_request
-from clerk_backend_api.security.machine import is_machine_token
+from clerk_backend_api.security.machine import get_token_type, is_machine_token
 from clerk_backend_api.security.types import (
     AuthenticateRequestOptions,
     AuthErrorReason,
+    TokenType,
     TokenVerificationErrorReason,
 )
 
@@ -106,6 +110,36 @@ reports it as a token that did not verify — which would tell an operator whose
 credential is current and correct that their credential is bad, when the fact is
 that this deployment declared nothing to check it with. `UNAVAILABLE` and this
 sentence are the true answer (ADR-0124).
+"""
+
+MACHINE_CREDENTIALS = frozenset({TokenType.MACHINE_TOKEN, TokenType.MACHINE_TOKEN_V2})
+"""The credential kinds whose subject is a machine's id and never a person's.
+
+Two of the provider's five token types, named rather than matched on a prefix: the
+prefixes are the provider's to extend and `get_token_type` is where it maps them,
+so a fifth prefix added upstream arrives here as whatever type the provider says it
+is instead of as an unrecognised string this module guessed at.
+"""
+
+NOT_A_CALLER_THIS_BENCH_ADMITS = (
+    "this bench admits a session token from somebody signed in at its console and "
+    "a machine credential from its MCP client, and what was presented is neither. "
+    "An OAuth access token and a user API key are checked at the endpoint a machine "
+    "credential is checked at, and the issuer answers about both with a subject "
+    "that is a person's — so this deployment will not accept one"
+)
+"""Why two of the four prefixes the provider calls machine tokens are refused here.
+
+`is_machine_token` is true of `m2m_`, `mt_`, `oat_` and `ak_`, and only the first
+two name a machine: the provider's own `RequestState.to_auth` reads an OAuth
+token's `subject` into a *user id*, and an API key's into a user or an org. A bench
+that took the library's word for it would print `VerifiedMachine`'s sentence — *no
+person was present* — over a credential a person holds, which is the one direction
+this field may not be wrong in (ADR-0124 decision 6).
+
+`UNTRUSTED` and not a sixth cause: the credential is well-formed and this
+deployment does not admit that kind of caller, which is what that member already
+says (ADR-0120 §3).
 """
 
 BEARER = "bearer"
@@ -378,7 +412,11 @@ class ClerkVerifier:
         presented = _token_in(authorization)
         if isinstance(presented, Unverified):
             return presented
-        machine = is_machine_token(presented)
+        machine = get_token_type(presented) in MACHINE_CREDENTIALS
+        if is_machine_token(presented) and not machine:
+            return Unverified(
+                cause=Unverifiable.UNTRUSTED, reason=NOT_A_CALLER_THIS_BENCH_ADMITS
+            )
         if machine and not self.issuer.secret_key:
             return Unverified(
                 cause=Unverifiable.UNAVAILABLE, reason=MACHINE_NEEDS_SECRET_KEY

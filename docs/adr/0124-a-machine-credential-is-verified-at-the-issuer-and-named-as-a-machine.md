@@ -85,6 +85,19 @@ and the artefact prints a sentence that claims no person.**
    `CONNECTION_CLOSED` with nothing behind it. *Unconfigured never means anonymous*,
    which is `NO_ISSUER_NO_BOOT`'s rule at the client end of the same wire.
 
+6. **Two of the four prefixes the provider calls machine tokens are refused by
+   name.** `is_machine_token` matches `m2m_`, `mt_`, `oat_` and `ak_`, and only the
+   first two name a machine — the library's own `RequestState.to_auth` reads an OAuth
+   access token's `subject` into a *user id*, and an API key's into a user or an
+   organisation. Taking the library's word for it would print *no person was present*
+   over a credential a person holds, which is decision 2's failure with the sign
+   flipped and is worse than the thing decision 2 exists to prevent: an overstatement
+   that is also false. So the type is read from `get_token_type`, and an `oat_` or
+   `ak_` credential is `UNTRUSTED` with a sentence saying this bench admits a console
+   session and an MCP machine credential and not a third thing. Not a sixth
+   `Unverifiable`: well-formed and not admitted by this deployment is what `UNTRUSTED`
+   already means (ADR-0120 §3).
+
 ## Alternatives
 
 **Let the MCP client stay anonymous and keep recording `NOBODY_VERIFIED`.** Free, and
@@ -135,6 +148,13 @@ artefact.** This is a loss of information relative to a typed name and a gain re
 to a typed name nobody checked. A recipient who wants to know which person approved a
 run started over MCP has to ask the operator, and the document no longer implies it
 knows.
+
+**A caller holding an OAuth token or a user API key is turned away, not
+downgraded.** Either could have been admitted as an `Operator` and printed as a
+verified session, which would name a real person. It would also call an API key a
+session, and this bench has no reading for *a person's long-lived credential*; the
+honest answer while it has none is that such a caller is not one this deployment
+admits. A reading for them is a new ADR, not a branch added here.
 
 **A fourth reading is a fourth sentence to keep true.** `attested_name.py` is now four
 types and `test_attested_name.py` asserts that no two of them say the same thing about

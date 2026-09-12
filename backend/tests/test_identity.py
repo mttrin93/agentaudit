@@ -35,6 +35,7 @@ from backend.identity import (
     ISSUER_JWT_KEY_VARIABLE,
     ISSUER_SECRET_KEY_VARIABLE,
     MACHINE_NEEDS_SECRET_KEY,
+    NOT_A_CALLER_THIS_BENCH_ADMITS,
     ClerkVerifier,
     Issuer,
     Machine,
@@ -359,6 +360,35 @@ def test_a_machine_credential_naming_no_subject_is_refused_rather_than_verified(
 
     assert isinstance(refused, Unverified)
     assert refused.cause is Unverifiable.MALFORMED
+
+
+@pytest.mark.parametrize(
+    "credential",
+    ["oat_anOauthAccessTokenAPersonAuthorised", "ak_aUserScopedApiKey"],
+)
+def test_a_credential_the_issuer_reads_as_a_person_is_refused_and_not_named_a_machine(
+    no_network: None, credential: str
+) -> None:
+    """The two prefixes that go to the same endpoint and come back naming somebody.
+
+    `is_machine_token` is true of four prefixes and only two of them are machines:
+    the issuer answers about an OAuth access token and about a user API key with a
+    `subject` that is a person's id. Admitted as a `Machine`, either would be printed
+    under the one sentence in the artefact that says *no person was present* — false,
+    and false in the direction ADR-0123 forbids. So this bench admits the two kinds of
+    caller it has and refuses the rest by name (ADR-0124 decision 6).
+
+    `no_network` because the refusal is earned before the issuer is asked: a bench
+    that posted these and read the answer would be deciding, after the fact, what to
+    call a principal it had already accepted.
+    """
+    refused = ClerkVerifier(Issuer(secret_key="sk_test_nothing")).verify(
+        f"Bearer {credential}"
+    )
+
+    assert isinstance(refused, Unverified)
+    assert refused.cause is Unverifiable.UNTRUSTED
+    assert refused.reason == NOT_A_CALLER_THIS_BENCH_ADMITS
 
 
 def test_a_verified_machine_is_never_blank() -> None:

@@ -209,3 +209,51 @@ export const TheDoorAttended = createContext<AtTheDoor | null>(null)
 export function useOperator(): AtTheDoor | null {
   return useContext(TheDoorAttended)
 }
+
+/**
+ * What a bench with no door records against every request it serves.
+ *
+ * The same string as `backend/api/app.NOBODY_VERIFIED`, written down a second time
+ * because it crosses the wire in neither direction: this console never sends it and
+ * never reads it back off a registration, so there is nothing to derive it from and
+ * a copy is the only way a screen can say what the artefact will say. The decision
+ * that it is a stated sentence rather than `anonymous` or a blank is
+ * [ADR-0122](../../../docs/adr/0122-a-bench-with-no-door-records-that-it-verified-nobody.md)
+ * and is not re-argued here; the local consequence is that a screen showing who will
+ * be recorded has a true thing to show when nobody signed in, and `door.test.ts`
+ * holds the two spellings to the letter.
+ */
+export const NOBODY_VERIFIED = 'an operator this bench did not verify'
+
+/**
+ * Who the bench will record an attestation against, in the two readings a screen
+ * needs and the one flag that tells them apart.
+ *
+ * `named` is for the person standing there and `recorded` is what goes in the
+ * document — `theOperator` above says why those are two strings. `verified` is what
+ * stops a screen implying the difference is cosmetic: a console with no issuer has
+ * no name at all, and the honest line there is the bench's own sentence rather than
+ * a display name with nothing behind it.
+ */
+export interface WhoIsAttesting {
+  named: string
+  recorded: string
+  verified: boolean
+}
+
+/**
+ * The attesting operator, read off the door, or the doorless reading of the same
+ * question.
+ *
+ * Takes the whole `AtTheDoor` rather than an `Operator`, because `null` is the
+ * answer it exists to give: a clone with no issuer renders every screen
+ * (`useOperator` above), and every one of the three walks that collects an
+ * attestation has to draw something on that build. Answering it here rather than in
+ * each screen's markup is what keeps the three from drifting into three sentences.
+ */
+export function whoIsAttesting(at: AtTheDoor | null): WhoIsAttesting {
+  if (at === null) {
+    return { named: NOBODY_VERIFIED, recorded: NOBODY_VERIFIED, verified: false }
+  }
+  return { named: at.operator.named, recorded: at.operator.subject, verified: true }
+}

@@ -237,10 +237,11 @@ class RouteProgress:
         self.reason = reason
         self.entered_as = entered_as
         self.where = f"decided: {state}" + (
-            ", on counts the admission memory already held — nothing was sent to "
-            "a reference agent for this route (ADR-0032)"
-            if remembered
-            else ""
+            # The clause and not its explanation. That no reference agent was called
+            # is what ADR-0032 means by a remembered count, and the row saying so at
+            # length put the reasoning in front of an operator scanning for where a
+            # route got to. The fact is kept; the gloss is the ADR's.
+            ", on counts the admission memory already held" if remembered else ""
         )
 
 

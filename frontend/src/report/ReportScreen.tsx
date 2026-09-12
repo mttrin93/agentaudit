@@ -543,21 +543,14 @@ function TheHeldRoutes({ held }: { held: HeldReading }) {
       <p>{held.stated}</p>
       {held.reading === 'held' ? (
         <>
-          <dl className="held-counts">
-            {held.counts.map((count) => (
-              <div key={count.of}>
-                <dt>{count.of}</dt>
-                {/* The figure and the line that says what it counts, because four of
-                    these six answer questions a reader would otherwise answer with the
-                    wrong one — *still open* is the library's state and *broke it again*
-                    is this run's reading, and a run that could not reach the agent is
-                    exactly where they differ. */}
-                <dd>
-                  <span className="held-figure">{count.figure}</span> {count.reads}
-                </dd>
-              </div>
-            ))}
-          </dl>
+          {/* The six counts are not drawn. Four of them are in the sentence above —
+              how many are held, how many still open, how many closed, and how many
+              broke the target again on this run — and the two that are not are zero
+              on a library this size and have a column each in the table below. Six
+              figures with a caption apiece, over a table of one row, was a legend
+              longer than the thing it explained. `held.counts` is still built, still
+              tested, and still in the `report.md` a recipient reads, where there is
+              no table beside it. */}
           <div className="table-wrap">
             <table className="per-family held-routes">
               <thead>
@@ -679,8 +672,16 @@ function TheFailures({ findings }: { findings: FindingsView }) {
       <p className="asserts">{WHAT_THIS_SECTION_IS}</p>
       {/* Except where there is nothing under it. A reading with no block on it has only
           the payload's own sentence to say why, and that sentence is the section
-          (ADR-0070 §4). */}
-      {findings.kind === 'explained' ? null : (
+          (ADR-0070 §4).
+
+          **And except where the block below already says it.** A broken reading draws
+          its own three lines — what broke, what it got, and the instrument's own
+          detail — and the payload's sentence is those same three joined into prose, so
+          printing both put the same two facts on the page twice, the second time in a
+          paragraph. The sentence is still on the payload and still in the `report.md`
+          a recipient reads, where there is no block beside it. */}
+      {findings.kind === 'explained' ||
+      (findings.kind === 'broken' && findings.broke) ? null : (
         <p className="aside">{findings.stated}</p>
       )}
       {findings.kind === 'explained' ? (

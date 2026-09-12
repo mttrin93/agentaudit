@@ -24,11 +24,7 @@
  */
 
 import { TheControl, TheQueue } from './PendingQueue'
-import {
-  TheAttestation,
-  TheEstimate,
-  TheMeasurement,
-} from './PendingDeciding'
+import { TheAttestation, TheEstimate, TheMeasurement } from './PendingDeciding'
 import { usePendingRoutes } from './usePendingRoutes'
 import { measurementEstimateView, modelBars, progressRows } from './pending'
 import { useArrivalFocus, useScreenTitle } from './announce'
@@ -157,13 +153,7 @@ export function PendingRoutesScreen() {
       )}
 
       {stage === 'watching' && reading !== null ? (
-        <TheMeasurement
-          status={reading.status}
-          statement={reading.statement}
-          rows={progressRows(reading)}
-          bars={modelBars(reading)}
-          lines={reading.lines}
-        />
+        <TheMeasurement rows={progressRows(reading)} bars={modelBars(reading)} />
       ) : null}
 
       {view === null ? null : (

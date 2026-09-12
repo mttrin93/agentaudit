@@ -3006,6 +3006,23 @@ code {
   max-width: var(--reading);
 }
 
+/* The measurement takes the deciding box's width, because it is the answer to it: the
+ * card and the pass below it sit under the control that started them, and a block that
+ * ran wider than the box it answers read as a different kind of thing rather than the
+ * next step of one. Both, and not only the card — a bar is a figure and a figure that
+ * outruns its own card is a measurement of the window. */
+.measuring .artefacts,
+.measuring .model-passes {
+  max-width: var(--reading);
+}
+
+/* And the pass stands off the card rather than against it. The bar is what this run is
+ * doing now and the card is what it has decided so far — two readings, not one block
+ * in two halves, and flush under the card's edge the bar read as a footer of it. */
+.measuring .model-passes {
+  margin-top: 1.6rem;
+}
+
 /*
  * The queue of routes awaiting a decision, as rows of one table.
  *

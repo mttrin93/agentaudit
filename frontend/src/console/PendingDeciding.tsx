@@ -230,39 +230,45 @@ export function TheEstimate({
  * wrote rather than only against a status.
  */
 export function TheMeasurement({
-  status,
-  statement,
   rows,
   bars,
-  lines,
 }: {
-  status: string
-  statement: string
   rows: ProgressRow[]
   bars: ModelBar[]
-  lines: string[]
 }) {
   return (
-    <section className="watching">
+    <section className="measuring">
       <h2>The measurement</h2>
-      {/* Polite: this reports itself as it goes and answers nothing anybody pressed
-          after the confirmation (ADR-0080). */}
-      <div className="citation" role="status">
-        <h3>{status}</h3>
-        <p>{statement}</p>
-      </div>
-      <ul className="artefacts routes-queue">
+      {/* The status block is not drawn. It repeated the confirmation an operator had
+          just given — who confirmed it, that the routes go to the three agents, and
+          that the ceiling aborts rather than exceeds — beside rows that say where each
+          route is and bars that say how far each model has got. `reading.status` and
+          `reading.statement` are still built and still tested, and both travel on the
+          wire.
+
+          **The live region moves with it**, onto the rows: this screen reports itself
+          as it goes and something has to be the thing a screen reader is told about
+          (ADR-0080). The rows are what actually changes — a route's state is the
+          progress — so they are the honest live region, and the block that announced
+          a sentence that never changed was announcing nothing twice. */}
+      <ul className="artefacts routes-queue" role="status">
         {rows.map((row) => (
           <li className="artefact" key={row.route}>
             <h3>{row.target}</h3>
-            <p>{row.description}</p>
+            {/* The attacker's prose is not repeated here. It is on the route's row in
+                the queue below, where a reader picking routes needs it; on this card
+                the questions are where this one got to and what it was decided as,
+                and a paragraph above them pushed both under the fold. */}
+            {/* The state alone. `where` says where a route got to, which while a
+                pass is running is the one thing the state cannot say — but once a
+                route is decided it reads *decided: rejected* over a state that reads
+                *rejected*, which is the same word twice under two labels. The bar
+                below carries the in-flight reading, so this row keeps the answer and
+                drops the commentary. `row.where` is still built and still tested. */}
             <dl className="review">
-              <dt>Where</dt>
-              <dd>{row.where}</dd>
               <dt>State</dt>
               <dd>{row.state}</dd>
             </dl>
-            {row.reason ? <p className="aside">{row.reason}</p> : null}
             {row.state === ADMITTED && row.enteredAs ? (
               <p>
                 Written into the case library as <code>{row.enteredAs}</code>.
@@ -271,37 +277,34 @@ export function TheMeasurement({
           </li>
         ))}
       </ul>
-      {lines.length ? (
-        <>
-          <h3>What the bar said</h3>
-          <ul className="names">
-            {lines.map((line, at) => (
-              <li key={`${at}-${line}`}>{line}</li>
-            ))}
-          </ul>
-        </>
-      ) : null}
+      {/* The bar's own lines are not drawn, and the reason a row carries is not
+          drawn beside it: what a route is doing is its state, and the sentences
+          under it restated that at length — the bar's reading model by model, and
+          the decision's own prose. Both are still built, still tested, and still on
+          the wire; the queue below folds the reason behind *why*, which is where a
+          reader who wants it goes.
+
+          The bars stay, without a heading over them. They answer the one question
+          the rows cannot — how far in a pass is — and the heading was a line of
+          chrome over a control that says what it is. */}
       {bars.length ? (
-        <>
-          <h3>How far each model has got</h3>
-          <ul className="model-passes">
-            {bars.map((bar) => (
-              <li className={`model-pass ${bar.state}`} key={bar.model}>
-                <p className="model-name">
-                  <span className="name">{bar.model}</span>
-                  <span className="count">
-                    {bar.attempted} / {bar.of}
-                  </span>
-                </p>
-                {/* The element and not a div of a computed width: the browser draws
-                    the share from the two counts, so no percentage is written down
-                    for the figure scan in `pending.test.ts` to find. */}
-                <progress value={bar.attempted} max={bar.of} />
-                <p className="aside">{bar.reading}</p>
-              </li>
-            ))}
-          </ul>
-        </>
+        <ul className="model-passes">
+          {bars.map((bar) => (
+            <li className={`model-pass ${bar.state}`} key={bar.model}>
+              <p className="model-name">
+                <span className="name">{bar.model}</span>
+                <span className="count">
+                  {bar.attempted} / {bar.of}
+                </span>
+              </p>
+              {/* The element and not a div of a computed width: the browser draws the
+                  share from the two counts, so no percentage is written down for the
+                  figure scan in `pending.test.ts` to find. */}
+              <progress value={bar.attempted} max={bar.of} />
+              <p className="aside">{bar.reading}</p>
+            </li>
+          ))}
+        </ul>
       ) : null}
     </section>
   )

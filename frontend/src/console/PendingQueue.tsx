@@ -279,7 +279,13 @@ export function TheControl({
       ) : (
         <div className="citation uncited">
           <h3>{control.heading}</h3>
-          <p>{control.statement}</p>
+          {/* The bench's own sentence is not drawn, the same way the queue's is not
+              drawn above. It restated the heading, then named the lease's holder, the
+              measurement's id, the hour it was taken and the path of the lease file —
+              four facts an operator cannot act on, in front of the one thing they can
+              do, which is the button. `control.statement` is still built and still
+              tested, and it still travels on the wire for a reader who wants the
+              holder. */}
           <p className="aside">
             The bench’s own name for this: <code>{control.refusal}</code>.
           </p>
@@ -294,12 +300,13 @@ export function TheControl({
               </p>
             </>
           ) : null}
-          {control.waiting ? null : (
-            <p className="aside">
-              Nothing has been sent and nothing has been spent: every route below
-              that is awaiting a decision is still awaiting one.
-            </p>
-          )}
+          {/* On both readings now, and not only where nothing is waiting: it was
+              carried inside the sentence above for the waiting one, and it is the
+              half of that sentence an operator actually needs. */}
+          <p className="aside">
+            Nothing has been sent and nothing has been spent: every route below that
+            is awaiting a decision is still awaiting one.
+          </p>
         </div>
       )}
     </section>

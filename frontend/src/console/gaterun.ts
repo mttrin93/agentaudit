@@ -401,13 +401,18 @@ export function gateConfirmation(
  * it as declined by a person, which is a better record than the *unanswered* a
  * closed tab leaves, and its sentence says that nothing was sent and not one case
  * record was written to.
+ *
+ * **It takes nothing, and the argument it used to take is a defect worth naming.**
+ * There is no reason box on the gate screen and never was, so the one call site
+ * passed the walk's *who is attesting* field — a person's typed name landing in the
+ * `reason` of a decline, where a reader of the run's record would meet it as the
+ * stated cause for not spending. The field is gone (#250) and so is the parameter, so
+ * there is nothing at this call site to put there by mistake again.
  */
-export function gateDecline(reason: string = ''): ApprovalBody {
+export function gateDecline(): ApprovalBody {
   return {
     confirmed: false,
-    reason:
-      reason.trim() ||
-      'declined at the approval interrupt: the figures were not confirmed',
+    reason: 'declined at the approval interrupt: the figures were not confirmed',
   }
 }
 

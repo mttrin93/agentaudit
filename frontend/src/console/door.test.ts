@@ -84,9 +84,9 @@ describe('who the bench will record this attestation against', () => {
 
   it('is the display name to read and the subject to record, and they are not one string', () => {
     expect(whoIsAttesting(ADA)).toEqual({
+      verified: true,
       named: 'Ada Lovelace',
       recorded: 'user_2abc',
-      verified: true,
     })
   })
 
@@ -95,10 +95,12 @@ describe('who the bench will record this attestation against', () => {
     // door either: what lands in the artefact is `app.NOBODY_VERIFIED` (ADR-0122).
     // A screen that printed a friendlier placeholder here would be promising a name
     // the record will not carry.
+    // And no `named` at all: there is no display name to have, and a member holding
+    // a copy of the sentence would be a screen one narrowing away from printing it as
+    // one (ADR-0123 §1).
     expect(whoIsAttesting(null)).toEqual({
-      named: NOBODY_VERIFIED,
-      recorded: NOBODY_VERIFIED,
       verified: false,
+      recorded: NOBODY_VERIFIED,
     })
   })
 

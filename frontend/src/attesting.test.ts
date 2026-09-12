@@ -16,6 +16,14 @@
  *
  * The three files are named rather than globbed. A glob would go quietly green the
  * day one of them is renamed, and these are the three screens the decision is about.
+ *
+ * **What is not covered here or anywhere: what a signed-in operator sees.** Every
+ * assertion below is about the absence, and the one rendering assertion this change
+ * has is the walkthrough's, which runs the issuerless console against a `NO_DOOR`
+ * bench (`playwright.config.ts`) and so reads the doorless line. Driving the other
+ * branch needs a test user at the issuer, which the spec called out as the awkward
+ * part and which #252 is where it is bought. The verified line has been read by a
+ * person and by nothing else.
  */
 
 import { describe, expect, it } from 'vitest'
@@ -59,6 +67,6 @@ describe('the name an attestation is recorded under', () => {
   it('is the bench’s own sentence on a console with no issuer', () => {
     // The case the e2e suite runs as (`playwright.config.ts`), and the one a screen
     // could most easily get wrong by printing a placeholder where a name would go.
-    expect(whoIsAttesting(null).named).toBe(NOBODY_VERIFIED)
+    expect(whoIsAttesting(null).recorded).toBe(NOBODY_VERIFIED)
   })
 })

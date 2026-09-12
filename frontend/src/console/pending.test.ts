@@ -252,7 +252,7 @@ describe('nothing starts a measurement on a guess', () => {
     }
   })
 
-  it('asks the three statements in the record’s own wording', () => {
+  it('asks the three statements in the record’s own wording, and asks for no name', () => {
     // A friendlier version of a statement the bench then records in its own words
     // is the failure this asserts against.
     expect(MEASUREMENT_STATEMENTS).toHaveLength(3)

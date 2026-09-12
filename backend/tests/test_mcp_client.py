@@ -22,6 +22,7 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 
+from backend.api.app import NOBODY_VERIFIED
 from backend.api.run_state import NeverPresented
 from backend.bench.contract import RetryPolicy, TargetConfig
 from backend.bench.library import Case
@@ -142,7 +143,11 @@ def test_a_start_carries_the_whole_declaration_and_stops_at_the_estimate(
     assert record is not None
     assert started["status"] == "awaiting_approval"
     assert started["estimate"]["total"]["calls"] > 0
-    assert record.attestation.identity == "matteo"
+    # The one field of the committed file that does not travel: the attestation is
+    # recorded against the operator the API verified this client as, and this bench
+    # has no door, so it names nobody and says so (ADR-0116 §1). What this client
+    # presents is #251's.
+    assert record.attestation.identity == NOBODY_VERIFIED.subject
     assert record.target.url == watched.target.url
     assert record.target.declared_tools == ("search", "email")
     assert record.target.retains_session_state is True
@@ -208,13 +213,11 @@ def test_a_declined_approval_is_a_status_a_confirmed_one_is_not(
         bench_client = _bench_client(client)
         declined = bench_client.approve(
             str(_started(client, watched)["run_id"]),
-            identity="matteo",
             confirmed=False,
             reason="too dear",
         )
         confirmed = bench_client.approve(
             str(_started(client, watched)["run_id"]),
-            identity="matteo",
             confirmed=True,
         )
         for record in bench.records():
@@ -238,7 +241,7 @@ def test_a_report_that_was_never_signed_is_named_and_carries_the_refusal(
     with watched_reference() as watched, api([leakage_case]) as (client, bench):
         bench_client = _bench_client(client)
         run_id = str(_started(client, watched)["run_id"])
-        bench_client.approve(run_id, identity="matteo", confirmed=True)
+        bench_client.approve(run_id, confirmed=True)
         record = bench.record(run_id)
         assert record is not None
         settled(record)

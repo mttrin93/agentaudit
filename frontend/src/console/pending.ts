@@ -419,7 +419,7 @@ export function measurementRequest(
   return {
     kind: 'ready',
     body: {
-      attestation: { identity: attesting.identity.trim(), ...attesting.attested },
+      attestation: { ...attesting.attested },
       cost: {
         price_per_call: priced ? priced : null,
         currency: priced ? attesting.currency.trim() : '',
@@ -588,7 +588,6 @@ export const AWAITING_APPROVAL = 'awaiting_approval'
 export function measurementConfirmation(
   status: string,
   confirmed: boolean,
-  identity: string,
   reason: string = '',
 ): { kind: 'ready'; body: ApprovalBody } | { kind: 'withheld'; missing: string[] } {
   const missing: string[] = []
@@ -604,18 +603,14 @@ export function measurementConfirmation(
         'and nothing has been sent to a reference agent',
     )
   }
-  if (!identity.trim()) {
-    missing.push(
-      'a confirmation has to record who gave it: the measurement is charged to ' +
-        'whoever confirms it',
-    )
-  }
+  // No name is asked for or sent, on `gateConfirmation`'s reasoning: who confirmed
+  // is the operator the API verified this request as (ADR-0116 §1).
   if (missing.length) {
     return { kind: 'withheld', missing }
   }
   return {
     kind: 'ready',
-    body: { confirmed: true, identity: identity.trim(), reason: reason.trim() },
+    body: { confirmed: true, reason: reason.trim() },
   }
 }
 
@@ -628,13 +623,9 @@ export function measurementConfirmation(
  * named is still pending, with its payload, and the library it was holding has gone
  * back exactly as it was.
  */
-export function measurementDecline(
-  identity: string,
-  reason: string = '',
-): ApprovalBody {
+export function measurementDecline(reason: string = ''): ApprovalBody {
   return {
     confirmed: false,
-    identity: identity.trim(),
     reason:
       reason.trim() ||
       'declined at the approval interrupt: the estimate was not confirmed',

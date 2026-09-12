@@ -740,8 +740,11 @@ function startRunBody(declarations: Declarations): StartRunBody {
       // `declared_tools` above (ADR-0038 §2).
       ...ruleOfTwoDeclared(declarations),
     },
+    // The three statements and no name: the operator on the record is the one the
+    // API verified this request as, and a body still carrying `identity` is refused
+    // (ADR-0116 §1). The screen still asks who is attesting, and #250 is where that
+    // ask becomes a line naming the signed-in operator.
     attestation: {
-      identity: declarations.identity.trim(),
       ...declarations.attested,
     },
     nonce: declarations.nonce,

@@ -53,14 +53,17 @@ export interface Refusal {
 }
 
 /**
- * The three statements, one field each, beside who made them.
+ * The three statements, one field each.
  *
  * Three booleans rather than one `i_agree`, because the record has to show *what*
  * was attested — and the API will not construct an `Attestation` with any one of
  * them withheld.
+ *
+ * Who made them is deliberately not here. The name on the record is the subject of
+ * the operator the API verified the request as, and a body still carrying `identity`
+ * is refused rather than served with the field ignored (ADR-0116 §1).
  */
 export interface AttestationBody {
-  identity: string
   authorised_to_test: boolean
   not_production: boolean
   accepts_provider_policy_and_cost: boolean
@@ -324,7 +327,6 @@ export interface ElectiveFamilyRun {
  */
 export interface ApprovalBody {
   confirmed: boolean
-  identity: string
   reason: string
 }
 

@@ -225,9 +225,7 @@ def api(
 
 
 def approve(client: TestClient, run_id: str) -> None:
-    client.post(
-        f"/runs/{run_id}/approval", json={"confirmed": True, "identity": "operator"}
-    )
+    client.post(f"/runs/{run_id}/approval", json={"confirmed": True})
 
 
 def settled(bench: BenchRuns, run_id: str, seconds: float = 120.0) -> RunStatus:

@@ -109,7 +109,7 @@ def test_the_route_lists_each_run_with_calls_spent_per_layer(
         assert record is not None
         client.post(
             f"/runs/{run_id}/approval",
-            json={"confirmed": True, "identity": "operator"},
+            json={"confirmed": True},
         )
         settled(record)
         body = _listed(client)

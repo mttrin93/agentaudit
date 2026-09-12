@@ -98,7 +98,7 @@ class BenchApi:
     def answer(self, run_id: str, confirmed: bool) -> None:
         self.client.post(
             f"/runs/{run_id}/approval",
-            json={"confirmed": confirmed, "identity": "operator"},
+            json={"confirmed": confirmed},
         )
 
     def episodes(self, run_id: str) -> Any:

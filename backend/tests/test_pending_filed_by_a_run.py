@@ -274,7 +274,7 @@ def test_a_customer_run_files_its_proposals_and_says_so_on_its_own_record(
         record = _record(bench, started)
         client.post(
             f"/runs/{started['run_id']}/approval",
-            json={"confirmed": True, "identity": "operator"},
+            json={"confirmed": True},
         )
         settled(record)
 
@@ -541,7 +541,7 @@ def test_a_run_the_ceiling_aborted_still_files_what_its_attacker_had_found(
         record = _record(served, started)
         client.post(
             f"/runs/{started['run_id']}/approval",
-            json={"confirmed": True, "identity": "operator"},
+            json={"confirmed": True},
         )
         settled(record)
 

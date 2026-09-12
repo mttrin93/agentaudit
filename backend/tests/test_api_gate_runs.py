@@ -293,7 +293,7 @@ def a_gate_request(
     if withheld is not None:
         attestation[withheld] = False
     return {
-        "attestation": {"identity": BENCH_ATTESTATION.identity, **attestation},
+        "attestation": {**attestation},
         "cost": {"price_per_call": price_per_call, "currency": "USD"},
     }
 
@@ -301,7 +301,6 @@ def a_gate_request(
 def a_confirmation(confirmed: bool = True) -> dict[str, Any]:
     return {
         "confirmed": confirmed,
-        "identity": BENCH_ATTESTATION.identity,
         "reason": "" if confirmed else "not spending that today",
     }
 

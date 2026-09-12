@@ -914,7 +914,6 @@ def stop_every_run(client: TestClient) -> None:
                     f"{answered_at}/{run_id}/approval",
                     json={
                         "confirmed": False,
-                        "identity": "the suite",
                         "reason": "the test that started this run is over",
                     },
                 )

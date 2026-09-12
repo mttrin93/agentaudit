@@ -286,7 +286,7 @@ export function gateRunRequest(attesting: Attesting): GateRunRequest {
   return {
     kind: 'ready',
     body: {
-      attestation: { identity: attesting.identity.trim(), ...attesting.attested },
+      attestation: { ...attesting.attested },
       cost: {
         price_per_call: priced ? priced : null,
         currency: priced ? attesting.currency.trim() : '',
@@ -373,7 +373,6 @@ export function gateInterruptView(
 export function gateConfirmation(
   status: string,
   confirmed: boolean,
-  identity: string,
   reason: string = '',
 ): { kind: 'ready'; body: ApprovalBody } | { kind: 'withheld'; missing: string[] } {
   const missing: string[] = []
@@ -389,18 +388,16 @@ export function gateConfirmation(
         'until they are, and nothing has been sent and nothing written',
     )
   }
-  if (!identity.trim()) {
-    missing.push(
-      'a confirmation has to record who gave it: the gate run is charged to ' +
-        'whoever confirms it',
-    )
-  }
+  // Nothing here asks for a name. Who confirmed is the operator the API verified
+  // this request as, read from the token at the moment the answer becomes a record
+  // (ADR-0116 §1), so a screen that blocked on one would be blocking on a value it
+  // no longer sends.
   if (missing.length) {
     return { kind: 'withheld', missing }
   }
   return {
     kind: 'ready',
-    body: { confirmed: true, identity: identity.trim(), reason: reason.trim() },
+    body: { confirmed: true, reason: reason.trim() },
   }
 }
 
@@ -412,10 +409,9 @@ export function gateConfirmation(
  * closed tab leaves, and its sentence says that nothing was sent and not one case
  * record was written to.
  */
-export function gateDecline(identity: string, reason: string = ''): ApprovalBody {
+export function gateDecline(reason: string = ''): ApprovalBody {
   return {
     confirmed: false,
-    identity: identity.trim(),
     reason:
       reason.trim() ||
       'declined at the approval interrupt: the figures were not confirmed',

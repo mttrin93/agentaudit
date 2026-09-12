@@ -234,7 +234,6 @@ export function confirmationRequest(declared: Confirming): ConfirmationRequest {
     kind: 'ready',
     body: {
       confirmed: true,
-      identity: declared.identity.trim(),
       reason: declared.reason.trim(),
     },
   }
@@ -251,10 +250,9 @@ export function confirmationRequest(declared: Confirming): ConfirmationRequest {
  * (`approval.py`). Putting a required field in front of the safe answer would be a
  * consent surface that made declining the harder of the two.
  */
-export function declineRequest(identity: string, reason: string): ApprovalBody {
+export function declineRequest(reason: string): ApprovalBody {
   return {
     confirmed: false,
-    identity: identity.trim(),
     reason:
       reason.trim() ||
       'declined at the approval interrupt: the figures were not confirmed',

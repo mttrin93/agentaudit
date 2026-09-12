@@ -236,7 +236,7 @@ class BenchClient:
         return self._answered(response, httpx.codes.ACCEPTED)
 
     def approve(
-        self, run_id: str, *, identity: str, confirmed: bool, reason: str = ""
+        self, run_id: str, *, confirmed: bool, reason: str = ""
     ) -> dict[str, Any]:
         """Answer the halt. On a yes the suite runs; on anything else it does not.
 
@@ -244,12 +244,17 @@ class BenchClient:
         this client that must be written out at every call site: the yes is the whole
         of the consent seam, and a default would be one somebody could reach by
         omission.
+
+        **Who answered is not an argument and is not on the wire.** The bench records
+        the operator it verified this client as, and a body carrying a name is refused
+        (ADR-0116 §1). What this client is verified as is #251's, and until it
+        presents a credential of its own the bench it reaches is one with no door.
         """
         return self._answered(
             self._request(
                 "POST",
                 APPROVAL_ROUTE.format(run_id=run_id),
-                json={"confirmed": confirmed, "identity": identity, "reason": reason},
+                json={"confirmed": confirmed, "reason": reason},
             ),
             httpx.codes.OK,
         )
@@ -350,8 +355,12 @@ def _body(declaration: Declaration) -> dict[str, Any]:
         target["sends"] = declaration.sends
     return {
         "target": target,
+        # The three statements and no name: the identity on the record is the
+        # operator the bench verified this client as, and a body that named one
+        # would be refused (ADR-0116 §1). `Declaration.identity` is still what the
+        # terminal surfaces attest as — they construct the record in-process and
+        # never over this wire.
         "attestation": {
-            "identity": declaration.identity,
             "authorised_to_test": declaration.authorised_to_test,
             "not_production": declaration.not_production,
             "accepts_provider_policy_and_cost": (

@@ -84,6 +84,7 @@ from backend.api import pending_routes
 from backend.api.app import (
     GATE_RUN_ROUTE,
     GATE_RUNS_ROUTE,
+    NOBODY_VERIFIED,
     PENDING_MEASUREMENT_APPROVAL_ROUTE,
     PENDING_MEASUREMENT_ROUTE,
     PENDING_MEASUREMENTS_ROUTE,
@@ -142,7 +143,6 @@ from backend.bench.retirement import live_library
 from backend.bench.rule import DECLARED_RULE
 from backend.tests.conftest import (
     ADJUDICATING,
-    BENCH_ATTESTATION,
     a_target,
     authored_library,
     calibrate,
@@ -387,7 +387,6 @@ def approval_of(measurement_id: str) -> str:
 def a_confirmation(confirmed: bool = True) -> dict[str, Any]:
     return {
         "confirmed": confirmed,
-        "identity": BENCH_ATTESTATION.identity,
         "reason": "" if confirmed else "not spending that today",
     }
 
@@ -402,7 +401,7 @@ def a_request(
     if withheld is not None:
         attestation[withheld] = False
     return {
-        "attestation": {"identity": BENCH_ATTESTATION.identity, **attestation},
+        "attestation": {**attestation},
         "cost": {"price_per_call": price_per_call, "currency": "USD"},
         "routes": routes,
     }
@@ -1093,7 +1092,7 @@ def test_an_approval_holds_the_route_the_bar_refused(
     [row] = reading["routes"]
     assert row["state"] == RouteState.REJECTED
     assert "held against" in row["reason"]
-    assert BENCH_ATTESTATION.identity in row["reason"]
+    assert NOBODY_VERIFIED.subject in row["reason"]
     decided = PENDING_ROUTES.filed(record.route)
     assert isinstance(decided, Decided)
     assert decided.reason == row["reason"]

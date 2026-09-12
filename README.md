@@ -310,6 +310,24 @@ uv run python -m scripts.keygen --public /tmp/dev-signing.pub
 export AGENTAUDIT_SIGNING_KEY=<the private half it prints once>
 ```
 
+**The bench also has a door, and the console goes through it.** The API verifies the
+operator at the console against an identity provider, and — on the same reasoning as
+the signing key — it refuses to start with none declared (ADR-0116 §2). Create an
+application at [dashboard.clerk.com](https://dashboard.clerk.com), then:
+
+```bash
+# in the root .env, read by the API: the instance's public key, in PEM
+AGENTAUDIT_ISSUER_JWT_KEY=<the PEM the dashboard prints>
+# in frontend/.env, compiled into the bundle: the publishable key, which is public
+cp frontend/.env.example frontend/.env    # and paste the key into it
+```
+
+Signed out, the whole console is the hosted sign-in; signed in, it is the console,
+and the name in the report it signs is the subject of that session rather than a
+string somebody typed. A console built with no publishable key renders every screen
+and sends no credential, which is what the browser specs run as — against a bench
+that says it has no door in code (`frontend/e2e/harness.py`).
+
 Start the two halves in two terminals:
 
 ```bash

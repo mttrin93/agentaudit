@@ -35,9 +35,6 @@ import { expect, test, type Page } from '@playwright/test'
 
 import { servedTarget } from './served.ts'
 
-/** Who this spec attests as, on a registration that is never posted. */
-const IDENTITY = 'the keyboard spec'
-
 /**
  * The field the stubbed refusal names, and the id the input under it carries.
  *
@@ -61,13 +58,10 @@ const ALSO_REFUSED_FIELD = 'body.target.name'
 
 const ALSO_REFUSED_MSG = 'a target needs a name that is not blank'
 
-/** The three statements ticked and the name recorded, which is what holds step one. */
+/** The three statements ticked, which is the whole of what holds step one. */
 async function completeTheEndpointStep(page: Page): Promise<void> {
   await page.goto('/#/register')
   await expect(page.getByRole('heading', { name: 'The endpoint' })).toBeVisible()
-  await page
-    .getByPlaceholder('recorded against every one of the three statements')
-    .fill(IDENTITY)
   for (const statement of [
     /authorised to test this endpoint/,
     /staging or sandbox environment/,
@@ -99,8 +93,10 @@ test('a step the walk may not leave holds its button, and cites nothing for it',
 
   // The list of what the walk is waiting for came off this screen at the operator's
   // request: every reason it gave is a control the reader is looking at — three
-  // unticked boxes and the field above them. `RegisterScreen.tsx` says so where it
+  // unticked boxes. `RegisterScreen.tsx` says so where it
   // stood, and says what the lost description costs a reader who cannot see them.
+  // The field above them is a line now and not a control (#250), so the three boxes
+  // are the whole of it.
   await expect(page.locator('ul.blocked')).toHaveCount(0)
   // And the citation went with the list. An `aria-describedby` naming an id nothing on
   // the page carries resolves to nothing, which is worse than the silence it fills.

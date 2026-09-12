@@ -46,17 +46,18 @@ import { servedTarget } from './served.ts'
  */
 const FAMILY = 'data_leakage'
 
-/** What the walk types into the register screen's *who is attesting* field.
+/**
+ * What a bench with no door records against every request it serves
+ * (`app.NOBODY_VERIFIED`).
  *
- * It does not reach the artefact and it no longer reaches the wire: `identity` came
- * off the request bodies, and the name on the record is the subject of the operator
- * the API verified — which for this harness, which declares `NO_DOOR`, is nobody.
- * The field is still on the screen, and #250 is where it becomes a line naming the
- * signed-in operator.
+ * The walk types no name at all now. There is no field for one — the attestation
+ * step names whoever the bench will record instead of asking (#250) — and this suite
+ * runs as the issuerless console against a `NO_DOOR` harness (`playwright.config.ts`),
+ * so what that line has to say is this sentence. It is asserted twice below: on the
+ * screen before anything is sent, and in the signed artefact at the end. Those are
+ * the two ends of the one claim this ticket makes, and a screen promising a name the
+ * document will not carry is exactly what the assertion on the first of them stops.
  */
-const IDENTITY = 'the browser walkthrough'
-
-/** What a bench with no door records instead (`app.NOBODY_VERIFIED`). */
 const NOBODY_VERIFIED = 'an operator this bench did not verify'
 
 /**
@@ -206,9 +207,11 @@ test('an operator registers a target, is blocked, confirms, and reads the report
   // is taken as the declaration the moment it arrives, so an operator who never
   // touches this field registers as that kind — and this walk is that operator.
   await expect(page.getByRole('combobox')).toHaveValue(/.+/)
-  await page
-    .getByPlaceholder('recorded against every one of the three statements')
-    .fill(IDENTITY)
+
+  // Who the bench will record, read off the screen rather than typed into it. This
+  // console attends no door, so the honest line is the sentence the artefact will
+  // carry — and the same string is asserted against the signed document below.
+  await expect(page.getByText(NOBODY_VERIFIED)).toBeVisible()
 
   for (const statement of [
     /authorised to test this endpoint/,

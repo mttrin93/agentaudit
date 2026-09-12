@@ -69,7 +69,7 @@ export function TheAttestation({
   const reasons = last ? missing : []
   return (
     <section>
-      {/* A form, so that Enter in either of the two fields below does what the primary
+      {/* A form, so that Enter in the price field below does what the primary
           button does — the register walk's own arrangement, for the same reason and on
           the same footer (#120). Nothing here spends anything: the forward control
           reaches the estimate, and the halt in front of the spend is the screen after

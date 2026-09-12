@@ -1,5 +1,15 @@
 # AgentAudit
 
+*An adversarial test bench for AI agents. It attacks a target across six failure
+families, proves its own discriminating power before its results are trusted, and
+reports the outcome as a signed artefact anyone can verify offline.*
+
+**[Open the live console](https://frontend-psi-three-16.vercel.app)** ·
+[the API it talks to](https://agentaudit-api-362055134735.europe-west1.run.app) ·
+[how it works](#how-it-works) · [what it has measured about itself](./docs/validation.md)
+
+---
+
 AgentAudit attacks your AI agent on purpose, so you find out how it fails before
 a customer does.
 

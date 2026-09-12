@@ -69,6 +69,7 @@ from backend.api.app import (
     BENCH_GATE_ROUTE,
     GATE_RUN_APPROVAL_ROUTE,
     GATE_RUNS_ROUTE,
+    NO_DOOR,
     create_app,
 )
 from backend.api.gate_runs import (
@@ -1550,7 +1551,7 @@ def test_a_citation_written_from_a_terminal_reaches_this_process_at_its_next_boo
     monkeypatch.setenv(SIGNING_KEY_VARIABLE, encoded_private(generate()))
     monkeypatch.setattr("backend.api.app.DEPLOYED_LIBRARY_MOUNT", library)
 
-    running = create_app()
+    running = create_app(verifier=NO_DOOR)
     assert cast(BenchRuns, running.state.bench).config.report.gate is None
     assert list(library.glob("*.toml")), "the mount was not seeded from the image"
 

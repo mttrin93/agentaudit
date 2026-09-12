@@ -90,6 +90,7 @@ from backend.api.app import (
     GATE_RUN_APPROVAL_ROUTE,
     GATE_RUN_ROUTE,
     GATE_RUNS_ROUTE,
+    NO_DOOR,
     PENDING_MEASUREMENT_APPROVAL_ROUTE,
     PENDING_MEASUREMENTS_ROUTE,
     RULE_OF_TWO_ROUTE,
@@ -483,7 +484,7 @@ def test_a_deployment_cites_the_gate_run_its_own_library_recorded(
     monkeypatch.setenv(SIGNING_KEY_VARIABLE, encoded_private(generate()))
     monkeypatch.setattr("backend.api.app.DEPLOYED_LIBRARY_MOUNT", mount)
 
-    body = TestClient(create_app()).get(BENCH_GATE_ROUTE).json()
+    body = TestClient(create_app(verifier=NO_DOOR)).get(BENCH_GATE_ROUTE).json()
 
     expected = citation_of(RECORDED)
     assert body["citation"] == citation(expected)
@@ -508,7 +509,7 @@ def test_a_deployment_whose_library_records_no_gate_run_states_the_absence(
     monkeypatch.setenv(SIGNING_KEY_VARIABLE, encoded_private(generate()))
     monkeypatch.setattr("backend.api.app.DEPLOYED_LIBRARY_MOUNT", mount)
 
-    app = create_app()
+    app = create_app(verifier=NO_DOOR)
     body = TestClient(app).get(BENCH_GATE_ROUTE).json()
 
     assert body["citation"] == {"cited": False, "stated": UNCITED_GATE}
@@ -536,7 +537,7 @@ def test_the_citation_a_deployment_reads_is_the_one_its_reports_carry(
     monkeypatch.setenv(SIGNING_KEY_VARIABLE, encoded_private(generate()))
     monkeypatch.setattr("backend.api.app.DEPLOYED_LIBRARY_MOUNT", mount)
 
-    app = create_app()
+    app = create_app(verifier=NO_DOOR)
     carried = cast(BenchRuns, app.state.bench).config.report.gate
     served = TestClient(app).get(BENCH_GATE_ROUTE).json()["citation"]
 

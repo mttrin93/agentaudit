@@ -31,7 +31,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from starlette.types import ASGIApp, Receive, Scope, Send
 
-from backend.api.app import ReportRefusal, create_app
+from backend.api.app import NoIssuer, ReportRefusal, create_app
 from backend.api.report import UNDECLARED_MODEL, ReportConfig
 from backend.api.runs import (
     BenchConfig,
@@ -77,6 +77,10 @@ from backend.bench.signing import (
 from backend.graph.approval import Approval
 from backend.graph.budget import Layer, RunBudget, StopRequested
 from backend.graph.runstate import RunState
+from backend.identity import (
+    ISSUER_JWT_KEY_VARIABLE,
+    ISSUER_SECRET_KEY_VARIABLE,
+)
 from backend.targets.reference.model import ModelConfig
 from backend.targets.reference.operator import nonce_planter
 from backend.targets.reference.server import (
@@ -652,6 +656,34 @@ def test_the_deployed_factory_refuses_to_boot_with_no_key(
     assert SIGNING_KEY_VARIABLE in statement
     assert "scripts.keygen" in statement
     assert ReportRefusal.NEVER_SIGNED in statement
+
+
+def test_the_deployed_factory_refuses_to_boot_with_no_issuer(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The second credential, on the first one's terms and for a worse failure.
+
+    ADR-0116 §2 is ADR-0020's reasoning applied to a second credential, and the
+    refusal it asks for is asserted beside the first one because that is the pair a
+    reader of this factory needs to see together. What is asserted is the refusal
+    and what it says: both variables and the way out, which are what the person
+    reading the traceback needs.
+
+    The suite declares an issuer it never reaches (`conftest.SUITE_ISSUER_KEY`), so
+    this test deletes it. The signing key is left in place deliberately: what is
+    asserted is that a bench which *can* sign still does not start without a door.
+    """
+    monkeypatch.setenv(SIGNING_KEY_VARIABLE, encoded_private(generate()))
+    monkeypatch.delenv(ISSUER_JWT_KEY_VARIABLE, raising=False)
+    monkeypatch.delenv(ISSUER_SECRET_KEY_VARIABLE, raising=False)
+
+    with pytest.raises(NoIssuer) as refused:
+        create_app()
+
+    statement = str(refused.value)
+    assert ISSUER_JWT_KEY_VARIABLE in statement
+    assert ISSUER_SECRET_KEY_VARIABLE in statement
+    assert "NO_DOOR" in statement
 
 
 def test_a_bench_handed_its_own_configuration_reads_no_environment(

@@ -1,8 +1,9 @@
 """Who is asking, and the one place this repository reads an issuer's environment.
 
-Two things live here and nothing else: the function that reads what a deployment
-declared about its identity provider, and the type the API declares so that it
-never has to know whose provider it is.
+Two things live here and nothing else: what a deployment declared about its
+identity provider — read once, and handed on as the verifier that declaration
+makes — and the type the API declares so that it never has to know whose provider
+it is.
 
 [ADR-0116](../docs/adr/0116-the-identity-in-a-report-is-a-verified-claim-and-not-a-typed-string.md)
 decides *why* — `Attestation.identity` is the one field in a signed report the
@@ -33,12 +34,12 @@ which is why `Issuer` keeps the two values separate rather than collapsing them
 into one credential: a caller can see, before a request arrives, whether this
 deployment will have to ask somebody.
 
-**What is deliberately not here.** No route, no dependency, no `create_app`
-argument: the declaration on the factory is the next task's, and this module is
-imported by it rather than knowing it exists. No role, no organisation and no
-permission — one authenticated principal and no tiers is the spec's scope, and a
-bench where some operators may start a gate run and others may not is a different
-decision with its own ADR.
+**What is deliberately not here.** No route, no dependency and no decision about
+an undeclared issuer: the factory declares the door and decides what an
+undeclared one means (ADR-0116 §2), and this module is imported by it rather than
+knowing it exists. No role, no organisation and no permission — one authenticated
+principal and no tiers is the spec's scope, and a bench where some operators may
+start a gate run and others may not is a different decision with its own ADR.
 """
 
 from __future__ import annotations
@@ -382,3 +383,20 @@ def _refusal(reason: object | None, message: str | None) -> Unverified:
             )
         ),
     )
+
+
+def declared_verifier(environment: Mapping[str, str] | None = None) -> Verifier | None:
+    """The verifier this deployment's declaration makes, or `None` for none declared.
+
+    `declared_issuer` says what a deployment declared and this says what it would
+    verify with. Two functions rather than one, because this is the only place the
+    concrete implementation is named: `backend/api/` imports this and the protocol
+    and never `ClerkVerifier`, which is what keeps ADR-0116 §3's reversibility real
+    at the boundary that matters.
+
+    **Still not a decision about what to do with `None`.** Whether an undeclared
+    issuer is an open bench or a refusal to boot is the factory's, and `create_app`
+    is where ADR-0116 §2 decides it.
+    """
+    issuer = declared_issuer(environment)
+    return None if issuer is None else ClerkVerifier(issuer)

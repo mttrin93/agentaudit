@@ -28,7 +28,8 @@ Available as a browser console, a GitHub Action, and four MCP tools.
 [Run it yourself](#run-it-yourself) ·
 [In your CI](#in-your-own-pipeline) ·
 [From your editor](#from-your-coding-agent) ·
-[What it has measured](./docs/validation.md)
+[What it has measured](./docs/validation.md) ·
+[On the Turing College showcase](https://showcase.turingcollege.com/project/437abe97-047b-4ac9-84d6-bf699b2eefaa)
 
 </div>
 

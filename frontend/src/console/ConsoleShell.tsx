@@ -20,6 +20,21 @@
  * `<main className="screen">`, which is what keeps the prose in one reading column
  * inside the frame, so this file contributes a wrapper and no second `main`.
  *
+ * **The operator is at the foot of the rail, and so is the way out.** The shell is
+ * where the door's two facts belong, for the reason the shell is the boundary at
+ * all: they are true on every screen and no screen owns them. The name printed is
+ * the display name the issuer holds and not the subject the bench records — the two
+ * are pulled apart in `door.ts`, and which one a *document* carries is ADR-0123's.
+ * Where this console has no issuer there is nothing at the foot of the rail, which
+ * is the clone the repository has always had.
+ *
+ * **A refusal at the bench's door is shown here and not on the screen that met it.**
+ * Being signed out is a fact about the session; a screen's own refusal is about the
+ * request it made. So it sits above the screen, once, instead of every area module
+ * growing an outcome for *not signed in* — and the screen underneath keeps whatever
+ * it was showing, which is what lets an expiry mid-run be an interruption rather
+ * than a lost run.
+ *
  * **And it is skippable.** The rail is seven destinations before the reading column
  * on every screen, which a keyboard reader pays for every time they arrive at a
  * screen they have already chosen. The control that skips it is the first thing in
@@ -38,6 +53,7 @@ import {
   type Destination,
 } from './rail'
 import { RailGlyph } from './railIcons'
+import { useOperator, type AtTheDoor, type Remedy } from './door'
 
 export function ConsoleShell() {
   const { pathname } = useLocation()
@@ -67,6 +83,7 @@ export function ConsoleShell() {
    */
   const remembered = onScreen ?? theRunLastInView(sessionStorage)
   const rail = railView(pathname, remembered)
+  const door = useOperator()
   return (
     <div className="console">
       {/*
@@ -110,12 +127,60 @@ export function ConsoleShell() {
             </ul>
           </>
         )}
+
+        {door === null ? null : (
+          <div className="rail-operator">
+            <h2 className="rail-heading">Signed in</h2>
+            <p className="operator-name">{door.operator.named}</p>
+            <button type="button" className="quiet" onClick={door.signInAgain}>
+              Sign out
+            </button>
+          </div>
+        )}
       </nav>
 
       <div className="console-body" ref={wrapper} tabIndex={-1}>
+        {door?.refusal ? (
+          <TheDoorsRefusal remedy={door.refusal} door={door} />
+        ) : null}
         <Outlet />
       </div>
     </div>
+  )
+}
+
+/**
+ * What the bench's door said, and the one thing there is to do about it.
+ *
+ * `role="alert"` and not a polite region: the operator pressed something and the
+ * bench turned the request away, and the screen underneath is unchanged — nothing
+ * else on the page says the press was answered at all.
+ *
+ * **The verifier's sentence is printed whole**, which is the same rule the identity
+ * sentence in a report is under (ADR-0123): it is the bench's account of why, it
+ * names the cause, and a console with its own words in that place would be
+ * answering for a refusal it did not make.
+ *
+ * The way back in is offered for one of the two readings and not the other, and
+ * `remedyFor` in `door.ts` is where that is decided — signing in again against an
+ * issuer the bench cannot reach fails in exactly the same way.
+ */
+function TheDoorsRefusal({ remedy, door }: { remedy: Remedy; door: AtTheDoor }) {
+  return (
+    <section className="refusal" role="alert">
+      <h2>{remedy.heading}</h2>
+      <p>{remedy.statement}</p>
+      <p className="aside">
+        {remedy.signInAgain ? (
+          <button type="button" onClick={door.signInAgain}>
+            Sign in again
+          </button>
+        ) : null}
+        <button type="button" className="quiet" onClick={door.letItGo}>
+          Put this away
+        </button>
+      </p>
+    </section>
   )
 }
 

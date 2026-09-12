@@ -4605,13 +4605,16 @@ textarea,
 /*
  * What the bench's door said, above the screen that met it.
  *
- * The gutters are `.screen`'s, because it sits in the same column as one and a
- * refusal flush against the rail would be the only block on the page that is.
+ * It lines up with `.screen`'s reading column and not with the frame: 130rem less
+ * the 1.5rem gutter on each side, which is the block width a screen's own rows come
+ * out at. A refusal flush against the rail would be the only thing on the page that
+ * is. Nothing under it — the screen's own top padding is the gap.
  */
 .console-body > .refusal {
   box-sizing: border-box;
-  max-width: 130rem;
-  margin: 2.2rem auto -1rem;
+  width: calc(100% - 3rem);
+  max-width: 127rem;
+  margin: 2.2rem auto 0;
 }
 
 .console-body > .refusal .aside {

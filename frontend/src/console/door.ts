@@ -70,12 +70,7 @@ export interface IssuedUser {
  * console that has lost the session rather than as an issuer that was told no name.
  */
 export function theOperator(user: IssuedUser): Operator {
-  const held = [
-    user.fullName,
-    user.username,
-    user.primaryEmailAddress?.emailAddress,
-    user.id,
-  ]
+  const held = [user.fullName, user.username, user.primaryEmailAddress?.emailAddress]
   return {
     named: held.find((one) => one?.trim())?.trim() ?? user.id,
     subject: user.id,

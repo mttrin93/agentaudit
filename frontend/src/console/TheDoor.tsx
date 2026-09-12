@@ -12,21 +12,29 @@
  *
  * **Hash routing is why this needs no callback route.** Every document request this
  * app serves is for `/` (`main.tsx`), so there is no server-rendered path for the
- * issuer to reconcile and no redirect route to add — and a session that expires on
- * the run screen comes back to the run screen, because the fragment never left the
- * browser.
+ * issuer to reconcile and no redirect route to add.
  *
- * **The reasoning is in `door.ts` and the wiring is here**, the way `rail.ts` is not
- * `ConsoleShell.tsx`: what is answerable with no DOM is answered in node, and what
- * is left in this file is a provider, a memo and two pieces of markup.
+ * **Where the sign-in is drawn depends on the fragment, and that is the issuer's
+ * doing rather than a choice made here.** Arriving at `/` or `/#/`, the card below
+ * renders in place, in this console's colours. Arriving at a screen —
+ * `/#/runs/<id>`, `/#/register` — the issuer's client decides it is not mounted at
+ * its own sign-in URL and sends the browser to the hosted portal, which comes back
+ * to the whole URL it left, fragment included. Measured in a browser on all four
+ * paths, not assumed.
  *
- * **No key declared is the console this repository has always been.** A clone with
- * no issuer account renders every screen and attends no door, which means no
- * `Authorization` header at all — the reading `api/http.ts` and ADR-0121 both call
- * declared-open. That is not this file letting somebody past a gate: the gate is
- * the API's, and a bench with a door refuses a headerless request with a sentence
- * this shell then shows. What it buys is that `npm run e2e`, `npm run dev` against
- * a `NO_DOOR` bench, and a contributor with no account all still work.
+ * Declaring `signInUrl="/"` on the provider does stop the trip out — and the
+ * redirect it does instead is to `/#/`, with the screen the operator asked for
+ * dropped from the `redirect_url` it builds. Losing the run somebody followed a
+ * link to is worse than a page in somebody else's palette, so it is not declared.
+ * Either way no screen of the console renders while nobody is signed in, and the
+ * fragment survives the round trip, which is what an expiry mid-run needs.
+ *
+ * **The reasoning is in `door.ts` and the wiring is here** — see that file's own
+ * first paragraph for why. What is left here is a provider, a memo and two pieces
+ * of markup.
+ *
+ * A build that declares no key mounts none of this and renders `children` as they
+ * are, which `door.ts:issuerDeclaredIn` says what to make of.
  */
 
 import { useMemo, useState, type ReactNode } from 'react'
@@ -52,7 +60,7 @@ import {
  * the second of them a name configured somewhere this repository cannot see. The
  * line under it still says what the card is for, in a verb.
  */
-function dressed(): { variables: Record<string, string>; elements: object } {
+function dressed() {
   return {
     variables: painted(),
     elements: { headerTitle: { display: 'none' } },
@@ -66,12 +74,19 @@ function painted(): Record<string, string> {
 }
 
 export function TheDoor({ children }: { children: ReactNode }) {
+  /*
+   * Once. It reads the computed style of the root element, and a fresh object on
+   * every render is the issuer's components re-applying an appearance that cannot
+   * have changed: the stylesheet is a build artefact and this console has one
+   * palette.
+   */
+  const appearance = useMemo(() => dressed(), [])
   const issuer = issuerDeclaredIn(import.meta.env)
   if (issuer === null) {
     return children
   }
   return (
-    <ClerkProvider publishableKey={issuer} appearance={dressed()}>
+    <ClerkProvider publishableKey={issuer} appearance={appearance}>
       <SignedOut>
         <TheSignIn />
       </SignedOut>
@@ -153,7 +168,12 @@ function Attending({ children }: { children: ReactNode }) {
       value={{
         operator: theOperator(user),
         refusal,
-        signInAgain: () => void clerk.signOut(),
+        // Back to where they were standing, hash and all. The default is the
+        // issuer's `afterSignOutUrl`, which is `/` — and `/` is the landing
+        // screen, so signing in again on the run screen would come back to a
+        // console that had lost the run. That is the interruption story 8 asks
+        // for read backwards.
+        signInAgain: () => void clerk.signOut({ redirectUrl: window.location.href }),
         letItGo: () => setRefusal(null),
       }}
     >

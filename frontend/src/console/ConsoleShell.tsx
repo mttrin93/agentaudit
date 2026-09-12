@@ -16,9 +16,13 @@
  * own id and the position still comes from `GET /runs/{id}` on every poll, so a
  * screen re-entered is a screen that asks the bench again.
  *
- * **The rail is a nav and the screen is a main.** Each screen brings its own
- * `<main className="screen">`, which is what keeps the prose in one reading column
- * inside the frame, so this file contributes a wrapper and no second `main`.
+ * **The destinations are a nav and the screen is a main.** Each screen brings its
+ * own `<main className="screen">`, which is what keeps the prose in one reading
+ * column inside the frame, so this file contributes a wrapper and no second `main`.
+ * The landmark is the list of destinations rather than the whole rail column: the
+ * wordmark above them names the instrument and the block below them names the
+ * session, and a reader who jumps to a navigation landmark should land in places
+ * the console goes.
  *
  * **The operator is at the foot of the rail, and so is the way out.** The shell is
  * where the door's two facts belong, for the reason the shell is the boundary at
@@ -53,7 +57,7 @@ import {
   type Destination,
 } from './rail'
 import { RailGlyph } from './railIcons'
-import { useOperator, type AtTheDoor, type Remedy } from './door'
+import { useOperator, type AtTheDoor } from './door'
 
 export function ConsoleShell() {
   const { pathname } = useLocation()
@@ -108,25 +112,33 @@ export function ConsoleShell() {
         Skip to the screen
       </button>
 
-      <nav className="rail" aria-label="The console">
+      <div className="rail">
         <p className="mark">
           Agent<span>Audit</span>
         </p>
-        <ul>
-          {rail.destinations.map((there) => (
-            <RailLink there={there} key={there.path} />
-          ))}
-        </ul>
-        {rail.run === null ? null : (
-          <>
-            <h2 className="rail-heading">The run you are working on</h2>
-            <ul>
-              {rail.run.screens.map((there) => (
-                <RailLink there={there} key={there.path} />
-              ))}
-            </ul>
-          </>
-        )}
+        {/*
+          The destinations are the nav and the two things under it are not. The
+          wordmark names the instrument and the block at the foot names the session:
+          neither is somewhere the console goes, and a landmark a keyboard reader
+          jumps to expecting a list of places should hold places.
+        */}
+        <nav aria-label="The console">
+          <ul>
+            {rail.destinations.map((there) => (
+              <RailLink there={there} key={there.path} />
+            ))}
+          </ul>
+          {rail.run === null ? null : (
+            <>
+              <h2 className="rail-heading">The run you are working on</h2>
+              <ul>
+                {rail.run.screens.map((there) => (
+                  <RailLink there={there} key={there.path} />
+                ))}
+              </ul>
+            </>
+          )}
+        </nav>
 
         {door === null ? null : (
           <div className="rail-operator">
@@ -137,12 +149,10 @@ export function ConsoleShell() {
             </button>
           </div>
         )}
-      </nav>
+      </div>
 
       <div className="console-body" ref={wrapper} tabIndex={-1}>
-        {door?.refusal ? (
-          <TheDoorsRefusal remedy={door.refusal} door={door} />
-        ) : null}
+        {door?.refusal ? <TheDoorsRefusal door={door} /> : null}
         <Outlet />
       </div>
     </div>
@@ -165,7 +175,11 @@ export function ConsoleShell() {
  * `remedyFor` in `door.ts` is where that is decided — signing in again against an
  * issuer the bench cannot reach fails in exactly the same way.
  */
-function TheDoorsRefusal({ remedy, door }: { remedy: Remedy; door: AtTheDoor }) {
+function TheDoorsRefusal({ door }: { door: AtTheDoor }) {
+  const remedy = door.refusal
+  if (remedy === null) {
+    return null
+  }
   return (
     <section className="refusal" role="alert">
       <h2>{remedy.heading}</h2>

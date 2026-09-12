@@ -254,7 +254,10 @@ test('the rail is skippable, and the skip is the first thing the keyboard finds'
   // The thing being skipped. Seven is what `rail.ts` names off a screen that is not a
   // run's; asserting *more than two* rather than exactly seven keeps this test about
   // the rail being a queue and not about how long the queue is this week.
-  expect(await page.locator('nav.rail a').count()).toBeGreaterThan(2)
+  // `.rail nav` and not `nav.rail`: the rail column holds the wordmark and, on a
+  // console with an issuer, who is signed in — neither of which is a destination, so
+  // the landmark is the list of destinations inside it (`ConsoleShell.tsx`).
+  expect(await page.locator('.rail nav a').count()).toBeGreaterThan(2)
 
   await page.keyboard.press('Tab')
   const skip = page.getByRole('button', { name: 'Skip to the screen' })

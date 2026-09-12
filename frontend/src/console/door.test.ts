@@ -3,9 +3,8 @@
  * what to do about a request the bench's door turned away.
  *
  * These run in node with no DOM, which is why the decisions live in `door.ts` and
- * not in the component that mounts them. `vite.config.ts` argues against buying
- * jsdom so that a test can read markup; the markup around all of this is the e2e
- * suite's, and what is asserted here is the reasoning the component carries out.
+ * not in the component that mounts them. The markup around all of this is the e2e
+ * suite's; what is asserted here is the reasoning the component carries out.
  */
 
 import { describe, expect, it } from 'vitest'

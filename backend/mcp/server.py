@@ -21,7 +21,7 @@ ADR's *Considered options* and the spec's own scope. A description is what a mod
 reads before it asks, so the four are written where the asking happens as well as
 where they are answered.
 
-**Nothing is caught bare.** The five named failures of `client.py` and
+**Nothing is caught bare.** The six named failures of `client.py` and
 `declaration.py` become a `ToolError` carrying the refusal's own sentence, and
 anything else is a crash the framework reports as one: a surface that turned every
 exception into a tool result would hand a model a sentence about a bug as though it
@@ -45,6 +45,7 @@ from backend.mcp.client import (
     BenchClient,
     BenchRefused,
     BenchUnreachable,
+    NoCredential,
     NoEstimate,
     ReportNotSigned,
 )
@@ -65,6 +66,7 @@ second call is what spends.
 
 STATED_FAILURES = (
     DeclarationRefused,
+    NoCredential,
     BenchUnreachable,
     BenchRefused,
     NoEstimate,
@@ -72,9 +74,14 @@ STATED_FAILURES = (
 )
 """Every failure this surface has a sentence for, named one by one.
 
-A tuple of five types rather than `except Exception`, so that a sixth condition
+A tuple of six types rather than `except Exception`, so that a seventh condition
 somebody adds to `client.py` arrives here as a crash and not as a `ToolError` that
 says whatever the exception happened to stringify to.
+
+`NoCredential` is first among the client's five because it is the only one raised
+before a request goes out: an operator who launched this server without
+`AGENTAUDIT_MACHINE_TOKEN` meets it on their first tool call, reads the variable's
+name in the sentence, and has not sent anything to a bench to find that out.
 """
 
 
@@ -98,9 +105,9 @@ def _sentence(failure: Exception) -> str:
 
     A `ToolError` carries a string and nothing else, so a caller of this surface can
     only branch on words: the names this package keeps beside its sentences have to
-    be *in* the sentence or they do not reach a model at all. Three of the five put
-    theirs there already — `BenchRefused` its status, `ReportNotSigned` its outcome —
-    and this adds the one that does not.
+    be *in* the sentence or they do not reach a model at all. Three of the six put
+    theirs there already — `BenchRefused` its status, `ReportNotSigned` its outcome,
+    `NoCredential` the variable to set — and this adds the one that does not.
     """
     if isinstance(failure, DeclarationRefused):
         return f"{failure.refusal}: {failure}"
@@ -187,8 +194,11 @@ def build_server(client: BenchClient, declaration_path: pathlib.Path) -> MCPServ
             "declared target; anything else ends the run having sent nothing. Call "
             "this only on an operator's explicit yes to the figure start_run "
             "returned — it is the one call on this surface that spends their "
-            "inference budget. The identity recorded against the answer is the one "
-            "the bench verified this client as, and never a name this tool sends."
+            "inference budget. The identity recorded against the answer is the "
+            "machine credential this server authenticates with, verified by the "
+            "bench and never a name this tool sends: the report says a machine "
+            "answered, so relay the figure and the operator's yes rather than "
+            "treating the record as their signature."
         ),
         annotations=ToolAnnotations(
             read_only_hint=False,
@@ -208,6 +218,10 @@ def build_server(client: BenchClient, declaration_path: pathlib.Path) -> MCPServ
         — a caller that could type any name could record the run against somebody who
         made no statement at all, which is ADR-0007's reasoning and is now ADR-0116
         §1's rule: the name is read from the credential this client presents.
+
+        **What that name is, is a machine, and the artefact says so** (ADR-0124). The
+        consent seam is unmoved by it: the operator's yes is still what this call
+        requires, and what the record now stops claiming is that they typed it.
         """
         with _stated():
             return dict(client.approve(run_id, confirmed=confirmed, reason=reason))

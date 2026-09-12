@@ -8,6 +8,15 @@ reach it at two seams and nowhere else: `declared_issuer`, and `verify` on a
 **Every token here is minted in this file.** The keys are generated per module,
 the tokens are signed locally, and no test holds an account at any issuer — which
 is the property the protocol exists to buy (ADR-0120).
+
+**The machine credential is the one thing that cannot be minted.** It is not a
+signed document: it is an opaque secret the issuer holds a record of, and the only
+way to a verified one is an account and a network call. So what is asserted here
+is everything either side of that call — that a machine credential is refused by
+name where this deployment declared nothing to check it with, that it reaches the
+network where a session token does not, and that a verified answer becomes a
+`Machine` and not an `Operator`, with the provider's own `RequestState` standing in
+for the one call nothing in this suite may make (ADR-0124).
 """
 
 from __future__ import annotations
@@ -18,14 +27,17 @@ from typing import Any
 
 import jwt
 import pytest
+from clerk_backend_api.security.types import AuthStatus, RequestState
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 
 from backend.identity import (
     ISSUER_JWT_KEY_VARIABLE,
     ISSUER_SECRET_KEY_VARIABLE,
+    MACHINE_NEEDS_SECRET_KEY,
     ClerkVerifier,
     Issuer,
+    Machine,
     Operator,
     Unverifiable,
     Unverified,
@@ -71,6 +83,15 @@ def _token(private: str = PRIVATE, **claims: Any) -> str:
     }
     payload.update(claims)
     return jwt.encode(payload, private, algorithm="RS256")
+
+
+MACHINE_CREDENTIAL = "m2m_aCredentialNoIssuerHereHasEverIssued"
+"""A credential of the shape the issuer mints for a machine, and of no other worth.
+
+The prefix is the whole of what the library reads before it decides to ask the
+issuer, which is why a string is enough to assert the routing: nothing in this file
+gets as far as an answer without standing one in.
+"""
 
 
 def _verifier() -> ClerkVerifier:
@@ -226,6 +247,118 @@ def test_verification_of_a_valid_token_reaches_no_network(
     verified = _verifier().verify(f"Bearer {_token()}")
 
     assert isinstance(verified, Operator)
+
+
+def test_a_machine_credential_is_refused_where_only_a_public_key_is_declared(
+    no_network: None,
+) -> None:
+    """The deployment's own gap, named as the deployment's and not the caller's.
+
+    A public key verifies a signed document and a machine credential is not one, so
+    a bench declaring only `AGENTAUDIT_ISSUER_JWT_KEY` has nothing to check this
+    with. Reported as `UNAVAILABLE` and refused before the library is reached: left
+    to the provider it would be posted to the issuer under an empty bearer, come
+    back as a token that did not verify, and tell an operator whose credential is
+    perfectly good that their credential is bad (ADR-0124).
+    """
+    refused = _verifier().verify(f"Bearer {MACHINE_CREDENTIAL}")
+
+    assert isinstance(refused, Unverified)
+    assert refused.cause is Unverifiable.UNAVAILABLE
+    assert refused.reason == MACHINE_NEEDS_SECRET_KEY
+    assert ISSUER_SECRET_KEY_VARIABLE in refused.reason
+
+
+def test_a_machine_credential_reaches_the_issuer_where_a_session_token_does_not(
+    no_network: None,
+) -> None:
+    """The cost of ADR-0124, asserted rather than written down and hoped for.
+
+    One verifier, one fixture, two credentials. The session token verifies with no
+    socket opened, which is ADR-0116 §4's whole claim; the machine credential fails
+    *because* a socket was refused, which is the offline argument not applying to
+    it. If this test ever passes with both as an `Operator`, the provider has
+    started verifying machine credentials locally and the module docstring is owed
+    a correction.
+    """
+    verifier = ClerkVerifier(Issuer(jwt_key=PUBLIC, secret_key="sk_test_nothing"))
+
+    assert isinstance(verifier.verify(f"Bearer {_token()}"), Operator)
+
+    refused = verifier.verify(f"Bearer {MACHINE_CREDENTIAL}")
+
+    assert isinstance(refused, Unverified)
+    assert refused.cause is Unverifiable.UNAVAILABLE
+
+
+def _answering(payload: dict[str, Any]) -> Any:
+    """The issuer's verification endpoint, answering yes with that record.
+
+    The one stand-in in this file, and it stands in for a network call rather than
+    for any code of this repository's: `RequestState` is the provider's own type and
+    what is under test is which key of its payload a machine's name is read from. A
+    verified machine credential cannot be minted — it is an opaque secret and the
+    issuer is the only thing that can say it is current — so the alternative to this
+    is a test that only runs for somebody holding an account.
+    """
+
+    def answer(request: object, options: object) -> RequestState:
+        return RequestState(
+            status=AuthStatus.SIGNED_IN, token=MACHINE_CREDENTIAL, payload=payload
+        )
+
+    return answer
+
+
+def test_a_verified_machine_credential_is_a_machine_and_never_an_operator(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The subject comes off `subject`, and what comes back is the other type.
+
+    Two facts in one test because they are one behaviour: the issuer answers about a
+    machine credential with the credential's record, whose principal is `subject` and
+    not the `sub` a JWT carries, and reading the wrong key would yield a refusal
+    saying the credential named nobody. `Machine` rather than `Operator` is what
+    keeps `attributed_to` able to tell a program from a person.
+    """
+    monkeypatch.setattr(
+        "backend.identity.authenticate_request",
+        _answering({"subject": "mch_2xyz", "claims": {}}),
+    )
+
+    verified = ClerkVerifier(Issuer(secret_key="sk_test_nothing")).verify(
+        f"Bearer {MACHINE_CREDENTIAL}"
+    )
+
+    assert verified == Machine(subject="mch_2xyz")
+    assert not isinstance(verified, Operator)
+
+
+def test_a_machine_credential_naming_no_subject_is_refused_rather_than_verified(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`Operator`'s rule, for the second type: a blank name is a refusal.
+
+    The `sub` key is deliberately present and populated, because a reader that had
+    fallen back to it would pass this test while recording a machine under a key the
+    issuer does not use for one.
+    """
+    monkeypatch.setattr(
+        "backend.identity.authenticate_request",
+        _answering({"subject": "", "sub": "user_2abcDEF"}),
+    )
+
+    refused = ClerkVerifier(Issuer(secret_key="sk_test_nothing")).verify(
+        f"Bearer {MACHINE_CREDENTIAL}"
+    )
+
+    assert isinstance(refused, Unverified)
+    assert refused.cause is Unverifiable.MALFORMED
+
+
+def test_a_verified_machine_is_never_blank() -> None:
+    with pytest.raises(ValueError):
+        Machine(subject="   ")
 
 
 def test_a_refusal_has_no_subject_to_read() -> None:

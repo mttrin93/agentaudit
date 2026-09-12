@@ -227,7 +227,12 @@ from backend.bench.adaptive.tree import BranchSchedule
 from backend.bench.adjudication import Completion
 from backend.bench.admission import admitted_elective, admitted_library
 from backend.bench.applicability import applicable
-from backend.bench.attested_name import AttestedName, NameGiven, VerifiedSubject
+from backend.bench.attested_name import (
+    AttestedName,
+    NameGiven,
+    VerifiedMachine,
+    VerifiedSubject,
+)
 from backend.bench.capability import (
     NO_REASONING_EFFORT_ACCEPTED,
     NO_TEMPERATURE_ACCEPTED,
@@ -309,7 +314,9 @@ from backend.graph.runstate import Attempt, RunState
 from backend.identity import (
     ISSUER_JWT_KEY_VARIABLE,
     ISSUER_SECRET_KEY_VARIABLE,
+    Machine,
     Operator,
+    Principal,
     Unverifiable,
     Unverified,
     Verifier,
@@ -685,7 +692,7 @@ class AttestationRequest(NamesNobody):
     not_production: bool
     accepts_provider_policy_and_cost: bool
 
-    def attestation(self, operator: Operator) -> Attestation:
+    def attestation(self, operator: Principal) -> Attestation:
         """The record, which cannot be constructed with a statement withheld.
 
         The operator is an argument and not a default anywhere: a call site that
@@ -6209,7 +6216,7 @@ thing it has to put there.
 """
 
 
-def nobody_verified() -> Operator:
+def nobody_verified() -> Principal:
     """The dependency a bench with no door carries where the door would be.
 
     A function because it is a FastAPI dependency and takes the place of
@@ -6219,12 +6226,20 @@ def nobody_verified() -> Operator:
     return NOBODY_VERIFIED
 
 
-def attributed_to(operator: Operator) -> AttestedName:
-    """What a signed document may say established this name — a session, or nothing.
+def attributed_to(operator: Principal) -> AttestedName:
+    """What a signed document may say established this name — a session, a
+    credential, or nothing.
 
     The one place on this surface where a verification becomes a claim in an
     artefact, and the reason `Attestation` takes an `AttestedName` rather than a
     string (ADR-0123).
+
+    **The machine reading is decided by the type and not by the name.** Both
+    `Operator` and `Machine` carry a `subject`, so every other line on this surface
+    can read one without knowing which it has; this is the single line where the
+    difference is load-bearing, and ADR-0124 is why it is a type at the door rather
+    than a prefix matched here. A run a coding agent started is not a run a person
+    confirmed, and the sentence in the artefact has to say which it was.
 
     **Compared by value and not by `is`.** `NO_DOOR` is a member no caller can
     construct, so the factory compares it with `is` (ADR-0121 decision 2); an
@@ -6235,12 +6250,14 @@ def attributed_to(operator: Operator) -> AttestedName:
     understating what was checked is the direction this field is allowed to be wrong
     in (ADR-0116's cost paragraph).
     """
+    if isinstance(operator, Machine):
+        return VerifiedMachine(name=operator.subject)
     if operator == NOBODY_VERIFIED:
         return NameGiven(name=operator.subject)
     return VerifiedSubject(name=operator.subject)
 
 
-def admitting(verifier: Verifier) -> Callable[[str | None], Operator]:
+def admitting(verifier: Verifier) -> Callable[[str | None], Principal]:
     """The dependency every route on this surface carries: the operator asking, or
     the refusal that request earned, before any route body runs.
 
@@ -6255,7 +6272,7 @@ def admitting(verifier: Verifier) -> Callable[[str | None], Operator]:
 
     def the_operator_asking(
         authorization: Annotated[str | None, Header()] = None,
-    ) -> Operator:
+    ) -> Principal:
         verified = verifier.verify(authorization)
         if isinstance(verified, Unverified):
             presented = verified.cause in UNAUTHENTICATED
@@ -6422,7 +6439,7 @@ def create_app(
     @app.post("/runs", status_code=status.HTTP_202_ACCEPTED)
     def start_a_run(
         request: Annotated[StartRunRequest, Body()],
-        operator: Operator = Depends(asking),
+        operator: Principal = Depends(asking),
     ) -> RunResponse:
         """Record the attestation, declare the estimate, and halt in front of it.
 
@@ -6467,7 +6484,7 @@ def create_app(
     def answer_the_interrupt(
         run_id: Annotated[str, PathParam()],
         request: Annotated[ApprovalRequest, Body()],
-        operator: Operator = Depends(asking),
+        operator: Principal = Depends(asking),
     ) -> RunResponse:
         """Answer the halt. On a yes the suite runs; on anything else it does not.
 
@@ -7114,7 +7131,7 @@ def create_app(
     @app.post(GATE_RUNS_ROUTE, status_code=status.HTTP_202_ACCEPTED)
     def start_a_gate_run(
         request: Annotated[StartGateRunRequest, Body()],
-        operator: Operator = Depends(asking),
+        operator: Principal = Depends(asking),
     ) -> GateRunStarted:
         """Record the attestation, declare the estimate per layer, and halt.
 
@@ -7166,7 +7183,7 @@ def create_app(
     def answer_the_gate_runs_interrupt(
         gate_run_id: Annotated[str, PathParam()],
         request: Annotated[ApprovalRequest, Body()],
-        operator: Operator = Depends(asking),
+        operator: Principal = Depends(asking),
     ) -> GateRunStarted:
         """Answer the halt. On a yes the gate run goes; on anything else it does not.
 
@@ -7271,7 +7288,7 @@ def create_app(
     @app.post(PENDING_MEASUREMENTS_ROUTE, status_code=status.HTTP_202_ACCEPTED)
     def start_a_pending_route_measurement(
         request: Annotated[StartMeasurementRequest, Body()],
-        operator: Operator = Depends(asking),
+        operator: Principal = Depends(asking),
     ) -> MeasurementStarted:
         """Record the attestation, declare the estimate per route, and halt.
 
@@ -7322,7 +7339,7 @@ def create_app(
     def answer_the_measurements_interrupt(
         measurement_id: Annotated[str, PathParam()],
         request: Annotated[ApprovalRequest, Body()],
-        operator: Operator = Depends(asking),
+        operator: Principal = Depends(asking),
     ) -> MeasurementStarted:
         """Answer the halt. On a yes the measurement goes; on anything else it does
         not.

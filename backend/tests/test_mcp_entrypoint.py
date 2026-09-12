@@ -1,6 +1,6 @@
 """`python -m backend.mcp`: what it decides, and what it refuses to decide at boot.
 
-The two defaults are this module's own — `server.py` reads no environment variable
+The three variables are this module's own — `server.py` reads no environment variable
 and picks no target — so they are asserted here and nowhere else.
 """
 
@@ -18,6 +18,7 @@ from backend.mcp.__main__ import (
     configured,
     serving,
 )
+from backend.mcp.client import MACHINE_TOKEN_VARIABLE
 from backend.tests.test_mcp_tools import NOWHERE, UNREACHED, declared
 
 EXAMPLE = pathlib.Path(__file__).resolve().parents[2] / "agentaudit.toml.example"
@@ -25,6 +26,16 @@ EXAMPLE = pathlib.Path(__file__).resolve().parents[2] / "agentaudit.toml.example
 
 DECLARED = declared(UNREACHED, nonce="planted")
 """A complete declaration naming a target nothing in this file sends anything to."""
+
+LAUNCHED_WITH = {MACHINE_TOKEN_VARIABLE: "m2m_aCredentialNoIssuerHereHasIssued"}
+"""A launch that declared a credential, for the tests that are about something else.
+
+Named rather than inlined because of what it holds off: a client with no credential
+refuses in front of the wire, so every test here about a *later* failure has to get
+past this one first. That ordering is the behaviour and not a nuisance — an operator
+missing both a credential and a bench is told about the credential, which is the one
+they can fix without leaving the editor.
+"""
 
 
 @pytest.fixture
@@ -37,19 +48,36 @@ def test_an_unset_environment_names_the_local_bench_and_the_committed_file() -> 
     """Both defaults, read from an environment that says nothing.
 
     An operator who started the API the README's way and committed the file at the
-    root it documents runs the server with no configuration at all.
+    root it documents runs the server with no configuration at all — and has no
+    credential, which is the one thing here with no default to fall back on.
     """
-    assert configured({}) == (DEFAULT_API, pathlib.Path(DEFAULT_DECLARATION))
+    assert configured({}) == (DEFAULT_API, pathlib.Path(DEFAULT_DECLARATION), None)
 
 
-def test_either_variable_names_the_thing_it_is_named_for() -> None:
-    """`AGENTAUDIT_API` moves the bench, `AGENTAUDIT_DECLARATION` moves the file."""
+def test_every_variable_names_the_thing_it_is_named_for() -> None:
+    """`AGENTAUDIT_API` moves the bench, `AGENTAUDIT_DECLARATION` moves the file, and
+    `AGENTAUDIT_MACHINE_TOKEN` is who the client is (ADR-0124)."""
     assert configured(
         {
             "AGENTAUDIT_API": "https://bench.example.test",
             "AGENTAUDIT_DECLARATION": "targets/checkout.toml",
+            MACHINE_TOKEN_VARIABLE: "  m2m_aCredential  ",
         }
-    ) == ("https://bench.example.test", pathlib.Path("targets/checkout.toml"))
+    ) == (
+        "https://bench.example.test",
+        pathlib.Path("targets/checkout.toml"),
+        "m2m_aCredential",
+    )
+
+
+def test_a_credential_set_to_nothing_is_a_credential_nobody_declared() -> None:
+    """Blank is unset, as it is in `identity.declared_issuer`.
+
+    A launch configuration whose credential was cleared has declared none — and what
+    it must not produce is an empty `Bearer` on the wire, which a bench would read as
+    a client that has no token while this end read it as configured.
+    """
+    assert configured({MACHINE_TOKEN_VARIABLE: "   "})[2] is None
 
 
 @pytest.mark.anyio
@@ -68,7 +96,8 @@ async def test_a_bench_that_is_not_there_is_the_first_tool_call_and_not_the_boot
     declaration.write_text(DECLARED, encoding="utf-8")
 
     with serving(
-        {"AGENTAUDIT_API": NOWHERE, "AGENTAUDIT_DECLARATION": str(declaration)}
+        LAUNCHED_WITH
+        | {"AGENTAUDIT_API": NOWHERE, "AGENTAUDIT_DECLARATION": str(declaration)}
     ) as server:
         assert len(await server.list_tools()) == 4
         with pytest.raises(ToolError) as unreachable:
@@ -89,7 +118,7 @@ async def test_no_declaration_where_one_was_expected_is_not_a_boot_failure(
     """
     absent = tmp_path / "absent.toml"
 
-    with serving({"AGENTAUDIT_DECLARATION": str(absent)}) as server:
+    with serving(LAUNCHED_WITH | {"AGENTAUDIT_DECLARATION": str(absent)}) as server:
         assert len(await server.list_tools()) == 4
         with pytest.raises(ToolError) as refused:
             await server.call_tool("start_run", {})
@@ -126,3 +155,25 @@ def test_the_example_states_nothing_it_means_to_leave_unstated() -> None:
         example.under_human_supervision,
         example.sends,
     ) == (None, None, None, None, None)
+
+
+@pytest.mark.anyio
+async def test_a_launch_with_no_credential_is_the_first_tool_call_and_not_the_boot(
+    tmp_path: pathlib.Path,
+) -> None:
+    """The third absence an operator arrives with, answered where the other two are.
+
+    The credential is knowable at boot in a way the bench and the file are not, and
+    it is still not checked there: a server that exited would leave a coding agent
+    reading `CONNECTION_CLOSED`, which names nothing an operator can act on. So the
+    four tools list, and the call names the variable to set (ADR-0124).
+    """
+    declaration = tmp_path / "agentaudit.toml"
+    declaration.write_text(DECLARED, encoding="utf-8")
+
+    with serving({"AGENTAUDIT_DECLARATION": str(declaration)}) as server:
+        assert len(await server.list_tools()) == 4
+        with pytest.raises(ToolError) as refused:
+            await server.call_tool("start_run", {})
+
+    assert MACHINE_TOKEN_VARIABLE in str(refused.value)

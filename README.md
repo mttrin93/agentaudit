@@ -557,15 +557,28 @@ the address it tried.
       "args": ["run", "python", "-m", "backend.mcp"],
       "env": {
         "AGENTAUDIT_API": "http://127.0.0.1:8000",
-        "AGENTAUDIT_DECLARATION": "agentaudit.toml"
+        "AGENTAUDIT_DECLARATION": "agentaudit.toml",
+        "AGENTAUDIT_MACHINE_TOKEN": "m2m_..."
       }
     }
   }
 }
 ```
 
-Both variables have those values as defaults, so a client that sets neither reaches a
+The first two have those values as defaults, so a client that sets neither reaches a
 local bench and the file at the root it was spawned in.
+
+**The third has no default and is the credential this server authenticates as.**
+`AGENTAUDIT_MACHINE_TOKEN` is a machine credential issued by the identity provider the
+bench declares, and the run you start here is recorded against its subject — the
+report says *a machine credential the issuer this deployment declares verified*, and
+that no person was present. That is the point: a run started from your editor was not
+started by whoever last signed in on this laptop
+([ADR-0124](./docs/adr/0124-a-machine-credential-is-verified-at-the-issuer-and-named-as-a-machine.md)).
+Launch it without one and the server still starts and still lists its tools; the first
+tool call is where you are told, by name, which variable is unset. A bench that means
+to admit this client declares `AGENTAUDIT_ISSUER_SECRET_KEY` as well as the public key,
+because a machine credential is checked at the issuer and not against a PEM.
 
 **`start_run` does not spend and `approve_run` does.** The first starts a run against
 the target your file declares, returns the estimate and both layer ceilings, and stops

@@ -1,6 +1,6 @@
 """Where a name in a signed report came from, and what that is worth.
 
-One field of the artefact names a *person*: `identity`, in the provenance block's
+One field of the artefact names a *party*: `identity`, in the provenance block's
 attestation. Three surfaces write it — the API behind a door, the Action in a
 caller's own repository, and a terminal — and until this module existed they wrote
 the same `str`, so a recipient holding two reports could not tell a verified subject
@@ -11,18 +11,23 @@ decides that the field says what established it and what that does not amount to
 that the sentence travels in the field's own value rather than in a key beside it,
 and why the three alternatives lost. None of that is re-argued here.
 
-What this module is, locally: three types, one per surface that can name somebody.
-They are the only things `Attestation` accepts, so a name cannot reach the artefact
-without one of them having been chosen where the name arrived. `stated()` is the
-only way a name gets out, and each of the three composes its own middle clause — so
-a surface cannot borrow another's evidence, and nothing reads as verified by
-accident.
+What this module is, locally: four types, one per *reading* a surface may make.
+Four rather than three because the API's door admits two kinds of caller and what it
+established about them differs — a person at a session, and a machine at a credential
+(ADR-0124). They are the only things `Attestation` accepts, so a name cannot reach
+the artefact without one of them having been chosen where the name arrived.
+`stated()` is the only way a name gets out, and each of the four composes its own
+middle clause — so a surface cannot borrow another's evidence, and nothing reads as
+verified by accident.
 
 **One shape, so that the parts that must not differ cannot.** The blank refusal, the
 `name — claim. refusals` shape and the closing sentence are on the base and are
 written once; what a subclass supplies is the one clause that is genuinely its own.
-A fourth surface is then a `_claim` and a docstring, and the thing it cannot do by
-forgetting is drop the limits (ADR-0123 §4).
+A further surface is then a `_claim` and a docstring, and the thing it cannot do by
+forgetting is drop the limits (ADR-0123 §4). `VerifiedMachine` is the first one added
+on those terms
+([ADR-0124](../../docs/adr/0124-a-machine-credential-is-verified-at-the-issuer-and-named-as-a-machine.md)),
+and adding it cost a `_claim`, a docstring and a name on the union below.
 """
 
 from __future__ import annotations
@@ -53,7 +58,7 @@ class _AttestedName:
     """A name, the claim its surface may make about it, and the limits on all three.
 
     Not exported and not usable as itself — `_claim` is unimplemented here, so the
-    only way to a sentence is through one of the three below. What lives on this
+    only way to a sentence is through one of the four below. What lives on this
     class is everything that must be identical across them.
     """
 
@@ -87,7 +92,9 @@ class VerifiedSubject(_AttestedName):
     """A name off a token the issuer this deployment declares put its signature on.
 
     The name is the subject `identity.Operator` carries: the identifier an issuer
-    puts on a session, which for a machine credential is the machine's.
+    puts on a *session*. A machine credential's subject is never this one —
+    `VerifiedMachine` is where that goes, because a session at an issuer is a person
+    having signed in and this sentence would say so about a program (ADR-0124).
 
     Constructed at one place — the route that turns a request into a record, from the
     operator the door admitted — because that is the only place a verification
@@ -101,6 +108,33 @@ class VerifiedSubject(_AttestedName):
             "the subject of a verified session at the issuer this deployment "
             "declares. That is the whole of what verification established: a token "
             "that issuer signed, naming this subject."
+        )
+
+
+@dataclass(frozen=True)
+class VerifiedMachine(_AttestedName):
+    """The subject of a machine credential the declared issuer checked, and no person.
+
+    Held apart from `VerifiedSubject` for the reason `WorkflowActor` is held apart
+    from both: a different thing was established. A session token says somebody
+    signed in; a machine credential says a secret somebody provisioned is current,
+    and there is nobody at the other end of it. Printing the verified reading over a
+    machine credential would put *the subject of a verified session* on a run a
+    coding agent started while its operator was reading something else — which is
+    the sentence ADR-0116 exists to stop the bench from writing.
+
+    Constructed where `VerifiedSubject` is, off the same door, from the credential
+    the caller presented (`api.app.attributed_to`).
+    """
+
+    def _claim(self) -> str:
+        """See `_AttestedName._claim`."""
+        return (
+            "the subject of a machine credential the issuer this deployment "
+            "declares verified at its own endpoint. That is the whole of what "
+            "verification established: a credential that issuer holds, current at "
+            "the moment of the request, naming this machine. No person was present, "
+            "and this field names none."
         )
 
 
@@ -136,7 +170,7 @@ class NameGiven(_AttestedName):
     the sentence `api.app.NOBODY_VERIFIED` holds, which names nobody at all
     (ADR-0122).
 
-    It is the weakest of the three and it is deliberately the one a caller reaches by
+    It is the weakest of the four and it is deliberately the one a caller reaches by
     default: the failure this module exists to prevent is a document claiming more
     than was checked, so the reading that claims least is the one that costs nothing
     to choose.
@@ -150,11 +184,11 @@ class NameGiven(_AttestedName):
         )
 
 
-AttestedName = VerifiedSubject | WorkflowActor | NameGiven
-"""What may name somebody in an attestation. Three types, never one type with a flag.
+AttestedName = VerifiedSubject | VerifiedMachine | WorkflowActor | NameGiven
+"""What may name somebody in an attestation. Four types, never one type with a flag.
 
 `identity.Verification`'s shape, one layer out and for its reason: a boolean beside a
-string can be set by anybody, and a union can only be narrowed. Spelled as the three
+string can be set by anybody, and a union can only be narrowed. Spelled as the four
 rather than as the base, so that a type added to this module is a type added to this
 line — a subclass is not admitted to the artefact by inheriting.
 """

@@ -16,21 +16,31 @@ which is what `_bench_client` below is about.
 from __future__ import annotations
 
 import dataclasses
+from collections.abc import Iterator
+from contextlib import contextmanager
+from dataclasses import dataclass
 from typing import Any, cast
 
 import httpx
 import pytest
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from backend.api.app import NOBODY_VERIFIED
+from backend.api.app import NOBODY_VERIFIED, create_app
+from backend.api.run_config import BenchConfig
 from backend.api.run_state import NeverPresented
+from backend.api.runs import BenchRuns
+from backend.bench.attested_name import VerifiedMachine
 from backend.bench.contract import RetryPolicy, TargetConfig
 from backend.bench.library import Case
 from backend.declaration import Declaration
+from backend.identity import Machine, Unverifiable, Unverified, Verification
 from backend.mcp.client import (
+    MACHINE_TOKEN_VARIABLE,
     BenchClient,
     BenchRefused,
     BenchUnreachable,
+    NoCredential,
     NoEstimate,
     ReportNotSigned,
     _body,
@@ -42,6 +52,15 @@ from backend.tests.test_api_runs import (
     settled,
     watched_reference,
 )
+
+CREDENTIAL = "m2m_aCredentialTheseTestsPresent"
+"""What every client in this file authenticates as.
+
+The app these tests build declares no door, so nothing here reads it — which is the
+point of asserting separately, below, that it goes out on the wire at all. A literal
+and not a fixture: a credential that varied per test would be a credential no test
+could assert the header of.
+"""
 
 
 def _bench_client(client: TestClient) -> BenchClient:
@@ -55,7 +74,7 @@ def _bench_client(client: TestClient) -> BenchClient:
     which uses a real `httpx.Client` because a transport failure is the one thing an
     in-process client cannot produce.
     """
-    return BenchClient(cast(httpx.Client, client))
+    return BenchClient(cast(httpx.Client, client), CREDENTIAL)
 
 
 NOWHERE = "http://127.0.0.1:9"
@@ -309,7 +328,7 @@ def test_a_bench_that_is_not_listening_is_named_and_names_where_it_looked() -> N
     """
     with httpx.Client(base_url=NOWHERE) as http:
         with pytest.raises(BenchUnreachable) as unreachable:
-            BenchClient(http).issue_nonce()
+            BenchClient(http, CREDENTIAL).issue_nonce()
 
     assert NOWHERE in str(unreachable.value)
 
@@ -324,7 +343,7 @@ def test_artefact_urls_names_the_four_paths_and_fetches_none() -> None:
     three would still verify.
     """
     with httpx.Client(base_url=NOWHERE) as http:
-        urls = BenchClient(http).artefact_urls("run-7")
+        urls = BenchClient(http, CREDENTIAL).artefact_urls("run-7")
 
     assert urls == {
         "payload": f"{NOWHERE}/report/run-7",
@@ -348,7 +367,8 @@ def test_the_four_artefact_routes_are_the_ones_the_app_serves() -> None:
     from backend.api.app import report_paths
 
     served = report_paths("run-7")
-    urls = BenchClient(httpx.Client(base_url=NOWHERE)).artefact_urls("run-7")
+    client = BenchClient(httpx.Client(base_url=NOWHERE), CREDENTIAL)
+    urls = client.artefact_urls("run-7")
 
     assert tuple(f"{NOWHERE}{path}" for path in served) == (
         urls["payload"],
@@ -413,3 +433,135 @@ def test_a_file_that_declares_no_send_ceiling_leaves_the_route_its_own(
     assert record is not None
     assert "sends" not in _body(a_declaration(watched.target, "n"))["target"]
     assert record.target.retry.sends == RetryPolicy().sends
+
+
+MACHINE_SUBJECT = "mch_2NxTheMcpClientAsking"
+"""Who the door below says this client is: an identifier for a provisioned thing."""
+
+
+@dataclass(frozen=True)
+class OneCredential:
+    """A door admitting exactly the credential this file's client presents.
+
+    A stub and not an issuer, for `test_api_door.py`'s reason: a suite that needed an
+    account to assert a credential reaches a door would be a suite nobody could run
+    on a fork. What it verifies is the header value, which is the only thing this
+    client controls.
+    """
+
+    def verify(self, authorization: str | None) -> Verification:
+        if authorization == f"Bearer {CREDENTIAL}":
+            return Machine(subject=MACHINE_SUBJECT)
+        return Unverified(
+            cause=Unverifiable.ABSENT,
+            reason="this door admits one machine credential and was shown another",
+        )
+
+
+@contextmanager
+def behind_a_door(cases: list[Case]) -> Iterator[tuple[TestClient, BenchRuns]]:
+    """The same app the rest of this file uses, with the fourth declaration filled in.
+
+    Separate from `api()` because that builds the bench every other test here wants —
+    one with no door, where a client's header is read by nothing. The point of the
+    three tests below is the header, so this is the one place in the file it is read.
+    """
+    app: FastAPI = create_app(
+        BenchConfig(cases=cases, approval_wait_seconds=10.0), verifier=OneCredential()
+    )
+    with TestClient(app) as client:
+        yield client, cast(BenchRuns, app.state.bench)
+
+
+def test_a_client_presenting_its_credential_is_admitted_by_a_bench_with_a_door(
+    leakage_case: Case,
+) -> None:
+    """The credential goes out on every request, asserted where it is read.
+
+    A nonce comes back, which it cannot without the header having arrived: the door
+    is in front of every route on this surface (ADR-0121) and `POST /nonces` is no
+    exception.
+    """
+    with behind_a_door([leakage_case]) as (client, _):
+        nonce = BenchClient(cast(httpx.Client, client), CREDENTIAL).issue_nonce()
+
+    assert nonce
+
+
+def test_a_client_presenting_the_wrong_credential_is_refused_by_the_door(
+    leakage_case: Case,
+) -> None:
+    """The other half, without which the test above would pass on an open bench.
+
+    The refusal arrives as this client's general case, carrying the door's own
+    sentence: `client.py` translates no status code it has no distinct action for,
+    and there is nothing a coding agent can do about the credential its operator
+    launched it with except say so.
+    """
+    with behind_a_door([leakage_case]) as (client, _):
+        with pytest.raises(BenchRefused) as refused:
+            BenchClient(cast(httpx.Client, client), "m2m_somethingElse").issue_nonce()
+
+    assert refused.value.status == 401
+
+
+def test_a_run_started_over_this_client_is_attested_as_the_machine_it_authenticates_as(
+    leakage_case: Case,
+) -> None:
+    """#251's acceptance line, end to end and through the real routes.
+
+    The client presents its credential, the door verifies it as a machine, and the
+    record the run carries names that credential's subject — a name nothing in the
+    request body could have carried, because the body has no field for one
+    (ADR-0116 §1). The run is left at its interrupt and then declined, so nothing is
+    sent to the target and nothing is spent; the record exists from the moment the
+    attestation is taken, which is before either.
+    """
+    with (
+        watched_reference() as watched,
+        behind_a_door([leakage_case]) as (
+            client,
+            bench,
+        ),
+    ):
+        machine = BenchClient(cast(httpx.Client, client), CREDENTIAL)
+        nonce = machine.issue_nonce()
+        watched.plant(watched.target, nonce, "by-hand")
+        started = machine.start(a_declaration(watched.target, nonce))
+        run_id = str(started["run_id"])
+        machine.approve(run_id, confirmed=False, reason="this test spends nothing")
+        record = bench.record(run_id)
+
+    assert record is not None
+    assert record.attestation.attested_by == VerifiedMachine(name=MACHINE_SUBJECT)
+    assert record.attestation.identity == MACHINE_SUBJECT
+
+
+def test_a_client_with_no_credential_names_the_variable_and_sends_nothing() -> None:
+    """The refusal an operator who set no credential meets, in front of the wire.
+
+    Pointed at a closed port, so the assertion is doubled: a client that had made the
+    request anyway would raise `BenchUnreachable` here and not this, which is how
+    *nothing was sent* is asserted rather than assumed. The sentence names the
+    variable because that is the remedy, and the refusal exists at all because a
+    bench with no door would have accepted the request and recorded the run against
+    nobody (ADR-0124).
+    """
+    with httpx.Client(base_url=NOWHERE) as http:
+        with pytest.raises(NoCredential) as none:
+            BenchClient(http, None).issue_nonce()
+
+    assert MACHINE_TOKEN_VARIABLE in str(none.value)
+    assert NOWHERE not in str(none.value)
+
+
+def test_a_blank_credential_is_no_credential_and_not_an_empty_bearer() -> None:
+    """What a variable set to nothing comes to, at the end that sends the header.
+
+    `configured` already treats blank as unset, and this is the same rule one layer
+    in: a client handed whitespace presents no `Bearer` with nothing after it, which
+    `identity._token_in` would read as a caller that has no token anyway.
+    """
+    with httpx.Client(base_url=NOWHERE) as http:
+        with pytest.raises(NoCredential):
+            BenchClient(http, "   ").issue_nonce()

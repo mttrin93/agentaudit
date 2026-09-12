@@ -22,17 +22,29 @@ lift it; this is the second reader admitted on the same terms.
 
 **A verification is a value and an unverified identity has no name on it**, both
 decided in ADR-0120 and neither re-argued here. What they come to in this file:
-`verify` returns `Operator | Unverified` and every `return` in it is one of the
-two, so a `raise` added later is a visible departure; and `Unverified` has no
+`verify` returns a `Verification` and every `return` in it is one of that union's
+members, so a `raise` added later is a visible departure; and `Unverified` has no
 `subject` field, so narrowing the union is the only way to read a name.
 
-**Verification is offline on the happy path.** `authenticate_request` with
-`jwt_key` set checks the signature against the public key this process holds and
-opens no socket (ADR-0116 §4). A `secret_key` with no `jwt_key` beside it is the
-fallback for a key this process has not seen, and it *does* reach the issuer —
-which is why `Issuer` keeps the two values separate rather than collapsing them
-into one credential: a caller can see, before a request arrives, whether this
-deployment will have to ask somebody.
+**Verification is offline on the happy path, and the happy path is a session
+token.** `authenticate_request` with `jwt_key` set checks the signature against
+the public key this process holds and opens no socket (ADR-0116 §4). A
+`secret_key` with no `jwt_key` beside it is the fallback for a key this process
+has not seen, and it *does* reach the issuer — which is why `Issuer` keeps the two
+values separate rather than collapsing them into one credential: a caller can see,
+before a request arrives, whether this deployment will have to ask somebody.
+
+**A machine credential is the exception, and it is not one this seam chose.** It
+arrives on the same `Bearer` header and takes the provider's *networked*
+verification by construction: the library posts the credential to the issuer's own
+verification endpoint, because a machine credential is an opaque secret and not a
+signed document there is anything local to check. So the offline argument above
+covers session tokens and nothing else, and
+[ADR-0124](../docs/adr/0124-a-machine-credential-is-verified-at-the-issuer-and-named-as-a-machine.md)
+records the cost and why it was accepted rather than worked around. The local
+consequences, both below: the secret key stops being a fallback and becomes
+required for this one kind of caller, and an issuer that cannot be reached refuses
+the credential as `UNAVAILABLE` rather than as a statement about it.
 
 **What is deliberately not here.** No route, no dependency and no decision about
 an undeclared issuer: the factory declares the door and decides what an
@@ -51,6 +63,7 @@ from enum import StrEnum
 from typing import Protocol, runtime_checkable
 
 from clerk_backend_api.security import authenticate_request
+from clerk_backend_api.security.machine import is_machine_token
 from clerk_backend_api.security.types import (
     AuthenticateRequestOptions,
     AuthErrorReason,
@@ -70,6 +83,24 @@ ISSUER_SECRET_KEY_VARIABLE = "AGENTAUDIT_ISSUER_SECRET_KEY"
 """The credential the fallback path presents to fetch a key this process has not
 seen. Absent is the ordinary reading: with `ISSUER_JWT_KEY_VARIABLE` set, nothing
 on the happy path needs it."""
+
+MACHINE_NEEDS_SECRET_KEY = (
+    "a machine credential is checked at the issuer's own verification endpoint, "
+    f"and the call that checks it presents {ISSUER_SECRET_KEY_VARIABLE}. This "
+    f"deployment declared only {ISSUER_JWT_KEY_VARIABLE}, which verifies a "
+    "session token against a public key and can say nothing about a credential "
+    "that is not a signed document. This says nothing about the credential that "
+    "was presented"
+)
+"""Why a deployment that declared only the public key cannot verify a machine.
+
+Refused before the library is called rather than after: with no secret key the
+provider posts the credential to the issuer with an empty bearer, is told no, and
+reports it as a token that did not verify — which would tell an operator whose
+credential is current and correct that their credential is bad, when the fact is
+that this deployment declared nothing to check it with. `UNAVAILABLE` and this
+sentence are the true answer (ADR-0124).
+"""
 
 BEARER = "bearer"
 """The one scheme this seam reads. A token arriving under another scheme is
@@ -135,9 +166,9 @@ def declared_issuer(environment: Mapping[str, str] | None = None) -> Issuer | No
 class Operator:
     """A principal a verifier established, and the name a record may carry.
 
-    `subject` is the identifier the issuer puts on a session — a user id or, for
-    a machine credential, the id of the machine. It is deliberately not called a
-    name, an email or a person: ADR-0116's cost paragraph is that verification
+    `subject` is the identifier the issuer puts on a session — a user id, and
+    never the id of a machine, which is `Machine` below. It is deliberately not
+    called a name, an email or a person: ADR-0116's cost paragraph is that verification
     moves this field from *unchecked* to *checked against one issuer* and that
     this is not identity assurance.
 
@@ -204,8 +235,48 @@ class Unverified:
     reason: str
 
 
-Verification = Operator | Unverified
-"""What a verifier answers with. Two types, never one type with a flag."""
+@dataclass(frozen=True)
+class Machine:
+    """A machine credential's subject: a program was verified, and no person was.
+
+    `subject` is the identifier the issuer puts on the machine — the id of a thing
+    somebody provisioned, which is a different fact from the id of somebody who
+    signed in. Its own type and not a field on `Operator`, for ADR-0120's reason
+    one layer along: a boolean beside a subject can be dropped by a caller who
+    never thought about it, and this distinction is the one thing a signed report
+    must not get wrong in the flattering direction (ADR-0124).
+
+    **The name that comes out of this is not a person's**, and the only consumer
+    that matters is `api.app.attributed_to`, where it becomes the fourth
+    `AttestedName`. Everything else on this surface reads `.subject` and does not
+    care — which is why this is a sibling of `Operator` rather than a subclass of
+    it: a subclass would satisfy `isinstance(x, Operator)` at every one of those
+    sites and be printed as a person by the one site that matters.
+    """
+
+    subject: str
+
+    def __post_init__(self) -> None:
+        if not self.subject.strip():
+            raise ValueError(
+                "a verified machine has a subject. A credential that named "
+                "nothing is an Unverified and not a Machine with an empty name "
+                "in it"
+            )
+
+
+Principal = Operator | Machine
+"""Who a verifier established: a person at a session, or a machine at a credential.
+
+What every route on the authenticated surface carries, so that a route body cannot
+be written that only works for one of the two. Both have a `subject` and nothing
+here branches on which is which — the single place that does is `attributed_to`,
+and it is the place a name becomes a claim in a signed document.
+"""
+
+
+Verification = Principal | Unverified
+"""What a verifier answers with. Three types, never one type with a flag."""
 
 
 @runtime_checkable
@@ -288,10 +359,24 @@ class ClerkVerifier:
     issuer: Issuer
 
     def verify(self, authorization: str | None) -> Verification:
-        """Satisfies `Verifier`. See that protocol for the contract."""
+        """Satisfies `Verifier`. See that protocol for the contract.
+
+        **One call to the library for both kinds of credential, and two readings
+        of what comes back.** Which path the library takes is decided by the
+        credential's own prefix and not here — a session token is checked against
+        the declared public key in this process, a machine credential is posted to
+        the issuer — so the branch below is about the shape of the answer and
+        never about how it was obtained. What that costs is in the module
+        docstring and in ADR-0124.
+        """
         presented = _token_in(authorization)
         if isinstance(presented, Unverified):
             return presented
+        machine = is_machine_token(presented)
+        if machine and not self.issuer.secret_key:
+            return Unverified(
+                cause=Unverifiable.UNAVAILABLE, reason=MACHINE_NEEDS_SECRET_KEY
+            )
         try:
             state = authenticate_request(
                 _Headers({"Authorization": f"Bearer {presented}"}),
@@ -310,17 +395,23 @@ class ClerkVerifier:
             )
         if not state.is_signed_in:
             return _refusal(state.reason, state.message)
-        subject = str((state.payload or {}).get("sub", "")).strip()
+        # Two keys and not one. The issuer puts a session's principal on `sub`,
+        # as a JWT does; the verification endpoint answers about a machine
+        # credential with the credential's record, whose principal is `subject`.
+        # Taken from the library's own `RequestState.to_auth`, which reads the
+        # same two keys for the same two cases.
+        claim = "subject" if machine else "sub"
+        subject = str((state.payload or {}).get(claim, "")).strip()
         if not subject:
             return Unverified(
                 cause=Unverifiable.MALFORMED,
                 reason=(
-                    "the token verified and names no subject. A signature over a "
-                    "token with no `sub` is a valid signature over nobody, and "
-                    "there is nothing here to record against a run"
+                    "the credential verified and names no subject. A signature "
+                    f"over a token with no `{claim}` is a valid signature over "
+                    "nobody, and there is nothing here to record against a run"
                 ),
             )
-        return Operator(subject=subject)
+        return Machine(subject=subject) if machine else Operator(subject=subject)
 
 
 def _token_in(authorization: str | None) -> str | Unverified:

@@ -15,12 +15,14 @@ from backend.bench.attested_name import (
     NOT_ESTABLISHED,
     AttestedName,
     NameGiven,
+    VerifiedMachine,
     VerifiedSubject,
     WorkflowActor,
 )
 
 EVERY_ATTESTED_NAME: tuple[AttestedName, ...] = (
     VerifiedSubject(name="user_2abc"),
+    VerifiedMachine(name="mch_2xyz"),
     WorkflowActor(name="ada"),
     NameGiven(name="Ada Lovelace"),
 )
@@ -60,6 +62,22 @@ def test_a_verified_subject_names_the_issuer_as_the_thing_that_verified() -> Non
     assert "a token that issuer signed, naming this subject" in stated
 
 
+def test_a_verified_machine_says_a_machine_was_checked_and_no_person_was() -> None:
+    """The MCP client's reading, and the one thing it must not be mistaken for.
+
+    The run was started by a program holding a credential, which is a real check and
+    is not somebody signing in. `VerifiedSubject`'s middle clause would put a
+    *verified session* on a run a coding agent started while nobody was looking at
+    it, so this one names the credential, says where it was checked, and says in the
+    same field that no person was there (ADR-0124).
+    """
+    stated = VerifiedMachine(name="mch_2xyz").stated()
+
+    assert "machine credential the issuer this deployment declares verified" in stated
+    assert "No person was present, and this field names none." in stated
+    assert "verified session" not in stated
+
+
 def test_a_workflow_actor_says_the_runner_checked_it_and_no_issuer_here_did() -> None:
     """The Action's name, which is checked, and checked by somebody else.
 
@@ -89,10 +107,12 @@ def test_a_name_given_says_that_nothing_checked_it() -> None:
 
 @pytest.mark.parametrize("attested", EVERY_ATTESTED_NAME)
 def test_no_attested_name_can_be_read_as_another(attested: AttestedName) -> None:
-    """Three sentences, and no two of them say the same thing about the checking.
+    """Four sentences, and no two of them say the same thing about the checking.
 
-    The whole point of three types rather than one string: a reader can tell which
-    surface wrote the field, and a surface cannot borrow another's evidence.
+    The whole point of four types rather than one string: a reader can tell which
+    reading was written into the field, and a surface cannot borrow another's
+    evidence. The pair it matters most for is `VerifiedSubject` and
+    `VerifiedMachine`: both come off the same door, and only one of them is a person.
     """
     others = [one for one in EVERY_ATTESTED_NAME if one is not attested]
     claim = attested.stated().removeprefix(f"{attested.name} — ")
@@ -102,7 +122,9 @@ def test_no_attested_name_can_be_read_as_another(attested: AttestedName) -> None
 
 
 @pytest.mark.parametrize("blank", ["", "   ", "\n"])
-@pytest.mark.parametrize("of", [VerifiedSubject, WorkflowActor, NameGiven])
+@pytest.mark.parametrize(
+    "of", [VerifiedSubject, VerifiedMachine, WorkflowActor, NameGiven]
+)
 def test_no_attested_name_can_be_made_over_a_blank(
     of: type[AttestedName], blank: str
 ) -> None:

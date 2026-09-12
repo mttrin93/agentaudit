@@ -48,7 +48,7 @@ from backend.tests.test_api_runs import (
     settled,
     watched_reference,
 )
-from backend.tests.test_mcp_client import _bench_client
+from backend.tests.test_mcp_client import CREDENTIAL, _bench_client
 
 NOWHERE = "http://127.0.0.1:9"
 """Discard, on a port nothing listens on: a bench nobody started."""
@@ -512,7 +512,7 @@ async def test_an_unreachable_bench_is_a_stated_failure(tmp_path: pathlib.Path) 
     declaration = tmp_path / "agentaudit.toml"
     declaration.write_text(declared(UNREACHED, nonce="planted"), encoding="utf-8")
     with httpx.Client(base_url=NOWHERE) as http:
-        server = build_server(BenchClient(http), declaration)
+        server = build_server(BenchClient(http, CREDENTIAL), declaration)
         with pytest.raises(ToolError) as unreachable:
             await server.call_tool("start_run", {})
 

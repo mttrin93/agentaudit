@@ -25,6 +25,13 @@ in `app.py` and once here. What keeps the two in step is that
 responses anywhere in it: a route that moves breaks this client in CI on the same
 commit that moves it.
 
+**It authenticates, and it does not decide what as.** The credential is handed to
+the constructor and goes out as a `Bearer` header on every request; what the bench
+makes of it is the bench's, and the subject recorded against a run started here is
+read off the credential at the door and never sent in a body (ADR-0116 §1). The one
+thing decided in this module is that a client with no credential sends nothing —
+`NoCredential`, below, for its reason.
+
 **The case-library lease is deliberately not translated.** `LibraryBusy` is answered
 on one route, `api/gate_runs.py`'s, because the lease is a gate run's and never a
 target run's — so no call on this client can meet it. A fifth name for a condition
@@ -38,6 +45,15 @@ from typing import Any
 import httpx
 
 from backend.declaration import Declaration
+
+MACHINE_TOKEN_VARIABLE = "AGENTAUDIT_MACHINE_TOKEN"
+"""The machine credential this surface presents, named where the refusal names it.
+
+Read in `__main__.configured`, which is the module that reads environments, and
+spelled here because this is the module that has to print it: `NoCredential`'s whole
+value is that it names the variable to set, and one spelling in two files is one
+spelling that can drift. A client is handed the value and never the variable.
+"""
 
 NONCES_ROUTE = "/nonces"
 RUNS_ROUTE = "/runs"
@@ -56,6 +72,24 @@ The three files that *are* the artefact and the verification that is a reading o
 them, in `api/app.py:report_paths`'s order — a caller that saved the three under the
 names they arrive with would still verify.
 """
+
+
+class NoCredential(RuntimeError):
+    """This client has no machine credential, so it presented none and sent nothing.
+
+    Raised in front of the wire and never after it. The alternative was to make the
+    request anyway and let the bench answer — which works, and is exactly wrong: a
+    bench that declared no door would accept it, and the run would be recorded
+    against nobody while the operator's `.env` quietly had no credential in it
+    ([ADR-0124](../../docs/adr/0124-a-machine-credential-is-verified-at-the-issuer-and-named-as-a-machine.md)).
+    *Unconfigured never means anonymous*, which is `NO_ISSUER_NO_BOOT`'s rule at the
+    client end of the same wire.
+
+    It is a failure of the call and not of the launch for `__main__.py`'s reason: a
+    module that exited at boot would leave a coding agent with a closed pipe and no
+    sentence to relay. The sentence names the variable, because the remedy is to set
+    it.
+    """
 
 
 class BenchUnreachable(RuntimeError):
@@ -167,15 +201,48 @@ class BenchClient:
     Takes an `httpx.Client` rather than a base URL, so the process that decides where
     the bench is and how long to wait for it is the process that built the client —
     and so the tests can hand in the app itself. It closes nothing it did not open.
+
+    **The credential is the second argument and it has no default.** This surface is
+    a machine, it authenticates as one, and the name recorded against a run it starts
+    is that credential's subject rather than the name of whoever last signed in on
+    the laptop the coding agent is running on (ADR-0116 §5, ADR-0124). `None` is
+    allowed here and says *this launch declared none* — it is read, not checked, at
+    construction, and `NoCredential` is what the first call makes of it. A default
+    would make the anonymous reading reachable by omission, which is the one thing a
+    credential argument must not be.
     """
 
-    def __init__(self, http: httpx.Client) -> None:
+    def __init__(self, http: httpx.Client, credential: str | None) -> None:
         self._http = http
+        self._credential = credential
+
+    def _authorization(self) -> dict[str, str]:
+        """The one header this client adds, or the refusal that it has none.
+
+        Built per request rather than written into the transport's default headers,
+        for the two reasons this class is shaped the way it is: the `httpx.Client` is
+        the caller's and this one closes nothing it did not open, so it does not
+        mutate it either; and a credential the transport supplies is a credential
+        whose absence is discovered by the far end, as a `401` at best and, against a
+        bench with no door, as a run recorded against nobody.
+        """
+        credential = (self._credential or "").strip()
+        if not credential:
+            raise NoCredential(
+                f"this client has no machine credential to present: "
+                f"{MACHINE_TOKEN_VARIABLE} is unset in the environment this server "
+                "was launched with, so nothing was sent. A run started here is "
+                "recorded against the credential it authenticates with, and a "
+                "client with none would be asking a bench to record a run against "
+                "nobody"
+            )
+        return {"Authorization": f"Bearer {credential}"}
 
     def _request(self, method: str, path: str, **kwargs: Any) -> httpx.Response:
         """One call, with the transport's failure named before anything is read."""
+        headers = self._authorization()
         try:
-            return self._http.request(method, path, **kwargs)
+            return self._http.request(method, path, headers=headers, **kwargs)
         except (httpx.ConnectError, httpx.ConnectTimeout) as unreachable:
             # The connect-class failures only, and the narrowness is deliberate. A
             # read that timed out is a request that went out, and on `POST /runs`

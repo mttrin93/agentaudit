@@ -35,12 +35,18 @@ from backend.api.app import (
 from backend.api.run_config import BenchConfig
 from backend.api.run_state import RunRecord
 from backend.api.runs import BenchRuns
-from backend.bench.attested_name import NOT_ESTABLISHED, NameGiven, VerifiedSubject
+from backend.bench.attested_name import (
+    NOT_ESTABLISHED,
+    NameGiven,
+    VerifiedMachine,
+    VerifiedSubject,
+)
 from backend.bench.library import Case
 from backend.bench.signing import SIGNING_KEY_VARIABLE, encoded_private, generate
 from backend.identity import (
     ISSUER_JWT_KEY_VARIABLE,
     ISSUER_SECRET_KEY_VARIABLE,
+    Machine,
     Operator,
     Unverifiable,
     Unverified,
@@ -51,6 +57,13 @@ from backend.identity import (
 SUBJECT = "user_2NxTheOperatorAsking"
 """The subject the stub below puts on a session. An issuer's identifier and not a
 name, which is the distinction `identity.Operator` exists to keep."""
+
+MACHINE_SUBJECT = "mch_2NxTheMcpClientAsking"
+"""The subject the machine stub below puts on a credential.
+
+An identifier for a thing somebody provisioned, and the name a run started over MCP
+is recorded against (ADR-0124).
+"""
 
 TOKEN = "a-token-this-stub-accepts"
 
@@ -81,6 +94,27 @@ class Admits:
         return Unverified(
             cause=Unverifiable.ABSENT,
             reason="no token was presented, and this stub admits exactly one",
+        )
+
+
+@dataclass(frozen=True)
+class AdmitsAMachine:
+    """A verifier that admits one credential and answers with a `Machine`.
+
+    The same shape as `Admits` and a different member of the union, which is the
+    whole of what the routes below have to cope with: the door decides which kind of
+    principal it verified, and every route on this surface carries whichever it was.
+    """
+
+    token: str = TOKEN
+    subject: str = MACHINE_SUBJECT
+
+    def verify(self, authorization: str | None) -> Verification:
+        if authorization == f"Bearer {self.token}":
+            return Machine(subject=self.subject)
+        return Unverified(
+            cause=Unverifiable.ABSENT,
+            reason="no credential was presented, and this stub admits exactly one",
         )
 
 
@@ -583,4 +617,37 @@ def test_a_run_behind_a_door_is_attested_by_a_subject_the_issuer_verified(
     assert (
         "verified session at the issuer this deployment declares" in attested.stated()
     )
+    assert NOT_ESTABLISHED in attested.stated()
+
+
+def test_a_run_started_by_a_machine_is_attested_as_a_machine_and_not_as_a_person(
+    leakage_case: Case,
+) -> None:
+    """The third reading the same door can produce, and #251's whole point.
+
+    A run started over MCP was not started by somebody at a browser, and the record
+    may not print the sentence that says it was. The route is unchanged, the body is
+    unchanged, and the difference is which member of the union the door answered
+    with — so a reader of the artefact learns that a credential was checked and that
+    nobody was present (ADR-0124).
+    """
+    app = a_bench_behind_a_door(leakage_case, AdmitsAMachine())
+
+    with TestClient(app) as client:
+        run_id = _started(client, AUTHORIZED)
+        client.post(
+            f"/runs/{run_id}/approval",
+            json={"confirmed": False, "reason": "the test that started this is over"},
+            headers=AUTHORIZED,
+        )
+
+    record = _record(app, run_id)
+    attested = record.attestation.attested_by
+
+    assert attested == VerifiedMachine(name=MACHINE_SUBJECT)
+    assert record.attestation.identity == MACHINE_SUBJECT
+    assert _declining(app, run_id) == MACHINE_SUBJECT
+    assert "machine credential the issuer this deployment declares" in attested.stated()
+    assert "No person was present" in attested.stated()
+    assert "verified session" not in attested.stated()
     assert NOT_ESTABLISHED in attested.stated()

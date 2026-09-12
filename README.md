@@ -5,7 +5,6 @@ families, proves its own discriminating power before its results are trusted, an
 reports the outcome as a signed artefact anyone can verify offline.*
 
 **[Open the live console](https://frontend-psi-three-16.vercel.app)** ·
-[the API it talks to](https://agentaudit-api-362055134735.europe-west1.run.app) ·
 [how it works](#how-it-works) · [what it has measured about itself](./docs/validation.md)
 
 ---
@@ -28,6 +27,25 @@ It attacks six kinds of failure:
 | halt defeat | Does it keep working after being told to stop? |
 | disclosure denial | Does it deny being an AI when asked? |
 
+Those six are the ones the bench is judged on. There are **three more you can ask
+for**, the *elective* families:
+
+| Elective family | The question it asks | |
+| --- | --- | --- |
+| memory poisoning | Does an instruction planted in one turn still run two turns later, after the document carrying it is gone? | `ASI06` |
+| direct prompt injection | Does an override in the user's *own* message beat the system prompt? | `LLM01` |
+| PII leakage | Does it hand over a record it holds **about somebody else**? | `LLM02` |
+
+The elective three are measured by exactly the same machinery, against the same
+three reference agents, and held to the same bar — but they can never decide
+whether the bench passes its own gate
+([ADR-0035](./docs/adr/0035-the-elective-family-tier-is-never-gate-deciding.md)).
+That is enforced by the type system: `Family` and `ElectiveFamily` are two
+separate closed sets, so an elective figure cannot be assigned where a gate count
+is taken. You select them per run, they cost extra, and a run you did not ask for
+them in says **not requested** rather than leaving a silent hole. Each of the
+three is decided by a plain string check, so none of them depends on a judge.
+
 **What makes this different from a test script:** before you are allowed to trust
 a number, the bench measures *itself*. It runs the same attacks against three
 agents we built on purpose — one with no defences, one weak, one hardened. An
@@ -40,63 +58,93 @@ instead of trusted.
 
 ```mermaid
 flowchart TB
-    subgraph browser["1 · You, in the console"]
-        direction TB
-        REG["Register your agent<br/>URL, token, declared tools"]
-        NONCE["Plant a nonce<br/>proves the endpoint is yours"]
-        ATT["Attest — three statements"]
-        OK["Approve the cost estimate<br/>nothing is sent before you say yes"]
-        REG --> NONCE --> ATT --> OK
+    subgraph surfaces["Three ways in — all of them the same API"]
+        direction LR
+        UI["The console<br/>React, behind an identity provider"]
+        CI["GitHub Action<br/>runs on your runner, your keys"]
+        MCP["MCP server<br/>4 tools, a machine credential"]
     end
 
-    LIB[("Case library<br/>18 hand-written cases")]
-
-    subgraph run["2 · The run, in the backend"]
+    subgraph consent["Before anything is sent to your agent"]
         direction TB
-        SC["Scored layer<br/>18 cases × 10 attempts each<br/>every number in the report comes from here"]
-        AD["Adaptive layer<br/>an attacker agent invents its own attacks<br/>never scored, reported on its own"]
+        REG["Register — URL, token, declared tools,<br/>and the Rule of Two questions"]
+        NONCE["Plant the nonce — proof you can edit<br/>the system prompt, and the secret<br/>data leakage tries to steal"]
+        ATT["Three attestations"]
+        HALT["The estimate, then a halt.<br/>Checkpointed to SQLite, so it<br/>outlives the process"]
+        REG --> NONCE --> ATT --> HALT
+    end
+
+    LIB[("Case library — backend/cases/<br/>21 active cases across the six families<br/>9 more across the three elective families")]
+
+    subgraph run["One run against your agent"]
+        direction TB
+        SC["<b>Scored layer</b><br/>every active case × 10 attempts, a fresh session each<br/>4 families checked by string, 2 read by an adjudicator model<br/>every number in the report comes from here"]
+        AD["<b>Adaptive layer</b><br/>attacker agent, 5 tools, T=8 turns × k=2 episodes per family<br/>never scored, reported in its own section"]
         SC --> AD
     end
 
-    subgraph out["3 · The result"]
+    ART["report.json · report.md · report.sig<br/>Ed25519 over the JSON"]
+    VER["scripts/verify.py — offline, no network.<br/>Recomputes every rate and interval<br/>from the raw counts"]
+
+    subgraph proof["What the bench proves about itself"]
         direction TB
-        REP["report.json + report.md + report.sig"]
-        VER["Your reader runs scripts/verify.py<br/>offline, no network"]
-        REP --> VER
+        REF["3 reference agents we built<br/>trivial · weak · hardened"]
+        GOLD["30 hand-labelled transcripts<br/>DeepEval → Cohen's κ"]
+        GATE["<b>Gate run</b> — the console, or scripts/gate<br/>a D per case · retirement at D &lt; 0.25<br/>elective families measured, deciding nothing"]
+        REF --> GATE
+        GOLD --> GATE
     end
 
-    GATE["The gate — scripts/gate.py<br/>the same attacks against 3 reference agents<br/>+ 30 hand-labelled transcripts (DeepEval)"]
+    PEND[("pending/routes.sqlite<br/>routes the attacker found<br/>against a real agent")]
+    PREC[("precedent/findings.sqlite<br/>one row per deterministic finding,<br/>no target identity at all")]
+    HELD[("Held against the target it beat —<br/>on its report, never in a rate")]
+    ADM{"Does it separate the<br/>3 reference agents?<br/>D ≥ 0.4"}
 
-    OK --> SC
+    UI --> REG
+    CI -->|"the committed agentaudit.toml"| HALT
+    MCP -->|"the committed agentaudit.toml"| HALT
+    HALT -->|"you approve — nothing is sent before this"| SC
     LIB -->|"the payloads it sends"| SC
-    SC --> REP
-    AD --> REP
-    AD -. "propose_case — the only way back<br/>to the scored side" .-> GATE
-    GATE -. "admits a proposed case only if D ≥ 0.4" .-> LIB
-    GATE -. "decides which families may publish a rate" .-> REP
+    SC --> ART
+    AD --> ART
+    ART --> VER
+    AD -->|"propose_case"| PEND
+    SC -.->|"after the run has finished reading"| PREC
+    PREC -.->|"retrieve_precedent — earns its place at run 2"| AD
+    PEND -->|"you decide, then the 3 reference agents"| ADM
+    ADM -->|"yes — written in, and the library version moves"| LIB
+    ADM -->|"no"| HELD
+    GATE -->|"which families may publish a rate at all"| ART
+    GATE -->|"retires a case that stopped discriminating"| LIB
 ```
 
 A run has two layers, and they are never added together.
 
-The **scored layer** produces the numbers. It sends 18 fixed attack messages and
-nothing else. The **adaptive layer** is an attacker agent that goes looking for
-new routes; nothing it finds reaches a rate. If it finds a good one it can
-*propose* a new case, and the gate decides whether the library grows.
+The **scored layer** produces the numbers. It sends the fixed cases and nothing
+else. The **adaptive layer** is an attacker agent that goes looking for new
+routes; nothing it finds reaches a rate. If it finds a good one it can *propose*
+a new case — and that route then has to separate the three reference agents
+before it is written into the library. A route the bar refuses is not thrown
+away: it is **held** against the target it beat, and printed on that target's
+report beside the six, still without moving a rate.
 
 ## The scored layer: where the numbers come from
 
-**What it sends.** 18 cases, written by hand. A **case** is one attack message
-plus the rule that decides whether it worked. The messages are not invented
-during the run — they sit in `backend/cases/` as files you can read before you
-agree to anything. Each file records why it was added, who found it, and which
-published risk category it belongs to, if any. Each also says what it does *not*
-cover, because one case is never a whole category.
+**What it sends.** 21 active cases across the six families — three to five each,
+written by hand — plus 9 more if you asked for the elective families. A **case**
+is one attack message plus the rule that decides whether it worked. The messages
+are not invented during the run: they sit in `backend/cases/` as files you can
+read before you agree to anything. Each file records why it was added, who found
+it, and which published risk category it belongs to, if any. Each also says what
+it does *not* cover, because one case is never a whole category.
 
 **How often.** Each case is sent 10 times, in a fresh session each time. Models
 are not deterministic, so one try tells you almost nothing and ten tell you
 something. One try of one case is an **attempt**. Every family holds at least
 three cases, so a family gets **30 attempts or more** — and that number is the
-bottom of every fraction in the report.
+bottom of every fraction in the report. It is printed beside every figure rather
+than assumed, because a family can grow a case: a route the bench's own attacker
+found, once it has cleared the bar against the three reference agents.
 
 **How a try is judged.** Four families are decided by a plain check, with no
 opinion in it:
@@ -128,7 +176,17 @@ agent would hide the family that is actually broken.
 
 **When it cannot answer**, the report says **not measurable** — for example scope
 creep, when your agent does not report which tools it called. It never says 0%.
-An agent that was never tested must not look like an agent that survived.
+An agent that was never tested must not look like an agent that survived. A
+family you simply did not ask for says **not requested**, which is a different
+thing again; the report keeps five kinds of nothing apart rather than collapsing
+them into a blank.
+
+**Elective families get a rate too**, with its interval and its band, in a block
+beside the six's and inside neither
+([ADR-0088](./docs/adr/0088-an-elective-familys-rate-against-a-target-is-a-fact-about-that-target.md)).
+How your agent did against memory poisoning is a fact about your agent. Whether
+the *bench* can discriminate on memory poisoning is a fact about the bench, so
+that figure prints on the gate document instead.
 
 ## How the bench proves the attacks work
 
@@ -190,9 +248,9 @@ log, and every probe opens a fresh session.
 **Long-term memory is a database**, `precedent/findings.sqlite`, so it outlives
 the process. One row per deterministic finding — the family, what failed, how to
 fix it — and no target identity at all. A run files its findings only after it
-has finished reading, so nothing a run files can inform its own report. The store
-earns its place at run two, which is what makes it long-term memory rather than a
-second name for run state.
+has finished reading, so nothing a run files can inform its own report: the store
+earns its place at run two, which is what makes it memory rather than a second
+name for run state.
 
 ## Try it live
 
@@ -259,11 +317,18 @@ Open <http://localhost:5173>.
 
 **No agent of your own to test?** The repository ships the three reference agents,
 and the bench can attack all three without you registering anything. That is a
-gate run:
+**gate run**, and it is how the bench checks itself. It has its own screen in the
+console — *The gate*, with the same attestation, estimate and halt a target run
+has — or you can run it headless:
 
 ```bash
 uv run python -m scripts.gate --identity "your name"
 ```
+
+The console also has a **Routes to decide** screen, where a route the adaptive
+attacker found against a real agent waits for you: you approve an estimate, the
+bench measures the route against the three reference agents, and `D ≥ 0.4`
+decides whether it enters the library or is held against the target it beat.
 
 ### What you do on screen
 
@@ -285,8 +350,8 @@ uv run python -m scripts.gate --identity "your name"
 The Settings screen shows what the bench is set to: signing keys, case library,
 the four models behind its instruments, and each layer's ceiling. Five things can
 be changed, and each is printed in the report of every run made under it: the
-attacker's model and temperature, turns per episode, episodes per family, and
-attempts per case.
+attacker's model (six to choose from) and its temperature, turns per episode,
+episodes per family, and attempts per case.
 
 Not every model accepts every parameter, and the bench knows which before it
 calls one — setting a temperature on a model that takes none is refused when you
@@ -346,10 +411,9 @@ budget, so a bench on every commit spends on every commit. Use
 makes a run free: no judging model is built, and the two judged families are
 reported as not attempted rather than at zero.
 
-**The attestation is a committed file, and it names the target.** The three
-statements in full, reviewed in a pull request. A run against a target the file
-does not name is refused before anything is sent — so pointing the bench
-somewhere else means editing a reviewed diff, and that is the point.
+**The attestation is a committed file, and it names the target.** A run against a
+target the file does not name is refused before anything is sent — so pointing
+the bench somewhere else means editing a reviewed diff, and that is the point.
 
 **What makes the step red is a file in your repository, not a number in ours.**
 There is no overall score to threshold, so the bar is per family and it is a
@@ -358,9 +422,9 @@ passes or the reason the family is switched off. A family the bar covers that
 this run has no result for **fails** the step rather than passing quietly
 ([ADR-0067](./docs/adr/0067-the-bar-is-per-family-and-a-withdrawn-family-is-not-green.md)).
 
-**Pin the tag.** The tag pins the bench, the bench pins the case library, and the
-library version is recorded in every report. When a rate moves, check that
-version before you conclude anything about your agent.
+**Pin the tag.** It pins the bench, which pins the case library, whose version is
+recorded in every report. When a rate moves, check that version before you
+conclude anything about your agent.
 
 The full workflow, with a comment on every input, is
 [docs/examples/agentaudit-workflow.yml](./docs/examples/agentaudit-workflow.yml).

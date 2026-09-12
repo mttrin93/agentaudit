@@ -82,8 +82,8 @@ flowchart TB
     subgraph surfaces["Three ways in — all of them the same API"]
         direction LR
         UI["The console<br/>React, behind an identity provider"]
-        CI["GitHub Action<br/>runs on your runner, your keys"]
-        MCP["MCP server<br/>4 tools, a machine credential"]
+        CI["GitHub Action<br/>your runner, your keys<br/>reads the committed agentaudit.toml"]
+        MCP["MCP server<br/>4 tools, a machine credential<br/>reads the same agentaudit.toml"]
     end
 
     subgraph consent["Before anything is sent to your agent"]
@@ -101,7 +101,7 @@ flowchart TB
         direction TB
         SC["<b>Scored layer</b><br/>every active case × 10 attempts, a fresh session each<br/>4 families checked by string, 2 read by an adjudicator model<br/>every number in the report comes from here"]
         AD["<b>Adaptive layer</b><br/>attacker agent, 5 tools, T=8 turns × k=2 episodes per family<br/>never scored, reported in its own section"]
-        HR["<b>Held routes</b> — this target's own library<br/>every route ever held against <i>this</i> agent, re-sent<br/>its own denominator, never a family's rate"]
+        HR["<b>Held routes</b><br/>every route ever held against <i>this</i> agent, re-sent<br/>its own denominator, never a family's rate"]
         SC --> AD
         SC --> HR
     end
@@ -120,12 +120,12 @@ flowchart TB
 
     PEND[("pending/routes.sqlite<br/>routes the attacker found<br/>against a real agent")]
     PREC[("precedent/findings.sqlite<br/>one row per deterministic finding,<br/>no target identity at all")]
-    HELD[("<b>Target library</b> — held/routes.sqlite<br/>the confirmed breaks the bar refused,<br/>one library per target, git-ignored")]
+    HELD[("<b>Target library</b> — held/routes.sqlite<br/>the confirmed breaks the bar refused<br/>one library per target, git-ignored<br/>a route closes after 2 clean runs,<br/>and reopens if it breaks again")]
     ADM{"Does it separate the<br/>3 reference agents?<br/>D ≥ 0.4"}
 
     UI --> REG
-    CI -->|"the committed agentaudit.toml"| HALT
-    MCP -->|"the committed agentaudit.toml"| HALT
+    CI --> HALT
+    MCP --> HALT
     HALT -->|"you approve — nothing is sent before this"| SC
     LIB -->|"the payloads it sends"| SC
     SC --> ART
@@ -138,13 +138,15 @@ flowchart TB
     ADM -->|"yes — written in, and the library version moves"| LIB
     ADM -->|"no — but you keep it"| HELD
     HELD -->|"only against the agent it beat"| HR
-    HR -->|"2 clean runs close it; a closed route<br/>that breaks again reopens"| HELD
+    HR --> HELD
     HR --> ART
     GATE -->|"which families may publish a rate at all"| ART
     GATE -->|"retires a case that stopped discriminating"| LIB
 ```
 
-A run has two layers, and they are never added together.
+A run has two layers, and they are never added together. (Held routes are a
+third pass and not a third layer: they are scored, but on a denominator of their
+own.)
 
 The **scored layer** produces the numbers. It sends the fixed cases and nothing
 else. The **adaptive layer** is an attacker agent that goes looking for new

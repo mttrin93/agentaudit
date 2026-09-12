@@ -16,6 +16,8 @@ import {
   refusalRead,
   type DoorRefusal,
 } from './http'
+import { issueNonce } from './nonces'
+import { runStanding } from './runs'
 
 /** A fetch that answers once, and records what it was called with. */
 function answering(status: number, body: unknown, headers: HeadersInit = {}) {
@@ -74,11 +76,9 @@ describe('the token, attached in one place', () => {
   })
 
   it('is absent where a door is attended and nobody is signed in', async () => {
-    // Signed out is not an error to throw here: the request goes, the bench
-    // refuses it at the door, and the sentence it wrote is what the screen shows.
-    const fetching = answering(401, {
-      detail: { refusal: 'absent', statement: 'no token was presented' },
-    })
+    // Signed out is not an error to throw here: the request goes, and what the
+    // bench does with it is the bench's to say.
+    const fetching = answering(200, { rule: 'read' })
     aDoorHolding(null)
 
     await authed('/bench/settings')
@@ -98,6 +98,7 @@ describe('the token, attached in one place', () => {
       token: () => Promise.reject(new Error('the issuer could not be reached')),
     })
 
+    // The response the caller gets is the bench's refusal and not a thrown issuer.
     expect((await authed('/runs/r1')).status).toBe(401)
     expect(bearerOf(fetching)).toBeNull()
   })
@@ -185,6 +186,32 @@ describe('the door’s own refusal, read once and not consumed', () => {
   })
 })
 
+describe('a refusal at the door, where the caller raises', () => {
+  it('carries the bench’s sentence out of a poll rather than a status code', async () => {
+    // The polling reads are where an expiry actually lands: a run is read every two
+    // seconds while it goes. These raise, because there is no partial standing to
+    // fall back on — but what they raise says what the bench said. *No such run*
+    // over an expired session would send an operator looking for a record that is
+    // there.
+    answering(401, {
+      detail: { refusal: 'expired', statement: 'this session has expired' },
+    })
+
+    await expect(runStanding('r1')).rejects.toThrow('this session has expired')
+  })
+
+  it('says the same of the value an operator plants before a run', async () => {
+    answering(503, {
+      detail: {
+        refusal: 'unavailable',
+        statement: 'the issuer’s keys could not be read',
+      },
+    })
+
+    await expect(issueNonce()).rejects.toThrow('the issuer’s keys could not be read')
+  })
+})
+
 describe('one seam, swept', () => {
   it('is the only module under src/api that calls fetch at all', () => {
     // What makes *one place a token is attached* true rather than intended. A
@@ -202,9 +229,12 @@ describe('one seam, swept', () => {
       .map(([path]) => path)
 
     expect(calling).toEqual([])
-    // And the roster is not empty, which is the way this assertion fails silently:
-    // a glob that matched nothing would pass it.
-    expect(Object.keys(modules).length).toBeGreaterThan(8)
+    // And the glob actually read the directory, which is the way an assertion over
+    // an empty list fails silently. Named modules rather than a count: a roster
+    // that shrank to nothing would still be over eight for a while.
+    expect(Object.keys(modules)).toEqual(
+      expect.arrayContaining(['./http.ts', './runs.ts', './settings.ts', './nonces.ts']),
+    )
   })
 })
 

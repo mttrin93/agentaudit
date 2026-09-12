@@ -373,7 +373,8 @@ export async function gateRunReading(gateRunId: string): Promise<GateRunReading>
   )
   if (!response.ok) {
     throw new Error(
-      `the bench has no gate run ${gateRunId} to report on (HTTP ${response.status})`,
+      `the bench did not report on gate run ${gateRunId}: ` +
+        `${await refusalIn(response)}`,
     )
   }
   return (await response.json()) as GateRunReading

@@ -5,23 +5,29 @@
  * Both of these were private to `bench.ts` before #14 split it by API area. They are
  * exported now because six modules need them, and they are in a module of their own
  * rather than in `contracts.ts` because a contract is a shape and these are conduct.
- * `authed` is the only function in this app that calls `fetch`, and `http.test.ts`
- * sweeps `src/api/` to keep that true — a nineteenth call site would be a request
- * that went out with no bearer on it and would be found in production by a `401`.
+ * `authed` is the only function under `src/api/` that calls `fetch`, and
+ * `http.test.ts` sweeps the directory to keep that true — a nineteenth call site
+ * would be a request that went out with no bearer on it, found in production by a
+ * `401` rather than here. The screens are held to the same line from the other
+ * side by `console/gate.test.ts` and `console/settings.test.ts`, which read their
+ * own modules for a `fetch(` and find none.
  *
- * **One place a token is attached, and the same place a door's refusal leaves**
- * (the spec's frontend seam, under [ADR-0116](../../../docs/adr/0116-the-identity-in-a-report-is-a-verified-claim-and-not-a-typed-string.md)).
- * The alternative was for each of the area modules' outcome types to gain a case
- * for *not signed in*: eighteen call sites, three route families and every screen
- * that reads one, to carry a fact that is about the session and not about the
- * request. So a door is attended once — by a component inside the issuer's provider,
+ * **One place a token is attached, and the same place a door's refusal leaves.**
+ * The seam is the one
+ * [the spec declares](../../../docs/specs/the-authenticated-operator.md), under
+ * [ADR-0116](../../../docs/adr/0116-the-identity-in-a-report-is-a-verified-claim-and-not-a-typed-string.md);
+ * what is local to this file is that the refusal goes back out the way the token
+ * came in. A door is attended once — by a component inside the issuer's provider,
  * since a token comes from a hook and these modules are plain functions that run
  * under `environment: 'node'` with no jsdom — and it hears about its own refusals
- * through the callback it registered.
+ * through the callback it registered, rather than each area module's outcome type
+ * gaining a case for *not signed in*. Being signed out is a fact about the session
+ * and not about the request that met it.
  *
- * `bench.ts` re-exports `attendTheDoor` and nothing else from this file. `authed`
- * stays unexported from the barrel for the reason `fetched` always did: a screen
- * that fetched a path of its own would be a route the barrel does not list.
+ * `bench.ts` re-exports `attendTheDoor` and the two types it takes, and nothing
+ * else from this file. `authed`, `fetched` and the refusal readers stay out of the
+ * barrel for the reason they always did: a screen that fetched a path of its own
+ * would be a route the barrel does not list.
  *
  * **`refusalRead` never throws and never invents.** It reads the sentence the bench
  * wrote and, where there is none, says so in as many words: a refusal presented as

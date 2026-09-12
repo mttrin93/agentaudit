@@ -347,8 +347,8 @@ export async function measurementReading(
   )
   if (!response.ok) {
     throw new Error(
-      `the bench has no measurement ${measurementId} to report on ` +
-        `(HTTP ${response.status})`,
+      `the bench did not report on measurement ${measurementId}: ` +
+        `${await refusalIn(response)}`,
     )
   }
   return (await response.json()) as MeasurementReading

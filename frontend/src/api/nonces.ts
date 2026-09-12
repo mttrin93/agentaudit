@@ -8,7 +8,7 @@
  * was issued for is refused or not.
  */
 
-import { authed } from './http'
+import { authed, refusalIn } from './http'
 
 /** The value the operator plants, the probe that will ask for it, and why. */
 export interface NonceIssued {
@@ -17,13 +17,18 @@ export interface NonceIssued {
   statement: string
 }
 
-/** Issue a nonce. One value, one run: the next run needs one planted again. */
+/**
+ * Issue a nonce. One value, one run: the next run needs one planted again.
+ *
+ * Raises with the bench's sentence, which since #248 may be the door's: the first
+ * request of a walk is where a console that is not signed in finds out.
+ */
 export async function issueNonce(): Promise<NonceIssued> {
   const response = await authed('/nonces', { method: 'POST' })
   if (!response.ok) {
     throw new Error(
-      `the bench refused to issue a nonce (HTTP ${response.status}), so there is ` +
-        'nothing to plant and no registration to attempt',
+      `the bench refused to issue a nonce, so there is nothing to plant and no ` +
+        `registration to attempt: ${await refusalIn(response)}`,
     )
   }
   return (await response.json()) as NonceIssued

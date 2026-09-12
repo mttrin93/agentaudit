@@ -16,6 +16,7 @@ from pathlib import Path
 
 import pytest
 
+from backend.bench.attested_name import NameGiven
 from backend.bench.calibration import run_calibration
 from backend.bench.library import Case, DiscoveredBy
 from backend.bench.registration import Attestation, endpoint_hash
@@ -65,7 +66,7 @@ def test_an_attestation_missing_any_one_statement_cannot_be_constructed(
     wording = dict(Attestation.STATEMENTS)[withheld]
 
     with pytest.raises(ValueError) as refusal:
-        Attestation(identity="operator", **statements)
+        Attestation(attested_by=NameGiven(name="operator"), **statements)
 
     # The refusal names the statement that was not made, because "incomplete" on
     # its own tells an operator nothing about which consequence they declined.
@@ -74,9 +75,17 @@ def test_an_attestation_missing_any_one_statement_cannot_be_constructed(
 
 
 def test_an_attestation_has_to_record_who_made_it() -> None:
+    """No route to a record over a blank name, wherever the refusal is now made.
+
+    The refusal moved into `AttestedName` with ADR-0123 — a name and what
+    established it are one object, so the check belongs where the name arrives —
+    and this asserts the consequence that matters at this seam: the call that would
+    build such an attestation raises before an `Attestation` exists, so there is no
+    liability record signed by nobody.
+    """
     with pytest.raises(ValueError):
         Attestation(
-            identity="   ",
+            attested_by=NameGiven(name="   "),
             authorised_to_test=True,
             not_production=True,
             accepts_provider_policy_and_cost=True,

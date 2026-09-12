@@ -28,6 +28,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from decimal import Decimal
 
+from backend.bench.attested_name import WorkflowActor
 from backend.bench.registration import Attestation
 from backend.graph.approval import Approval, Approve
 from backend.graph.budget import NOT_PRICED, BudgetPayload, CallPrice
@@ -93,7 +94,10 @@ def committed_attestation(document: str, identity: str, target: str) -> Attestat
         )
     written = statements(document)
     return Attestation(
-        identity=identity,
+        # `WorkflowActor` and not a bare name: the runner authenticated this actor
+        # and the issuer a deployment declares has never heard of them, so the
+        # document says which of the two checked it (ADR-0066, ADR-0123).
+        attested_by=WorkflowActor(name=identity),
         **{
             field: normalised(wording) in written
             for field, wording in Attestation.STATEMENTS

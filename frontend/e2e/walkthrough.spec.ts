@@ -60,6 +60,15 @@ const IDENTITY = 'the browser walkthrough'
 const NOBODY_VERIFIED = 'an operator this bench did not verify'
 
 /**
+ * The limits every attested name in the artefact carries
+ * (`backend/bench/attested_name.NOT_ESTABLISHED`). Held here so that the walk asserts
+ * what a recipient reads, and not only that a name came back.
+ */
+const NOT_ESTABLISHED =
+  'It is not a legal person, not an employer, and not a claim that the named ' +
+  'party was authorised by their organisation to attest anything.'
+
+/**
  * Shrink the next run to something a browser can watch, through the declared inputs.
  *
  * The two `PUT`s under `/bench/settings` and nothing else — the same two the settings
@@ -391,7 +400,14 @@ test('an operator registers a target, is blocked, confirms, and reads the report
   // The name is the one the door established and never the one typed two screens
   // back: this harness declares `NO_DOOR`, so the bench verified nobody and the
   // artefact says so (ADR-0116 §1).
-  expect(artefact.provenance.attestation.identity).toEqual(NOBODY_VERIFIED)
+  expect(artefact.provenance.attestation.identity).toContain(NOBODY_VERIFIED)
+  // And it says it in a sentence rather than in a name a reader could take for an
+  // unusual username: the field carries what established it and what that does not
+  // amount to (ADR-0123).
+  expect(artefact.provenance.attestation.identity).toContain(
+    'a name nothing verified',
+  )
+  expect(artefact.provenance.attestation.identity).toContain(NOT_ESTABLISHED)
   // And the four declarations made on the register screen reached the signed
   // document. Until #177 nothing on the HTTP surface accepted them, so every artefact
   // this bench produced read `not_declared` — this is the assertion that the walk can

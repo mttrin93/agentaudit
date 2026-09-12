@@ -10,6 +10,7 @@ from pathlib import Path
 
 import pytest
 
+from backend.bench.attested_name import NOT_ESTABLISHED
 from backend.bench.calibration import TargetRun, run_calibration
 from backend.bench.contract import Transcript
 from backend.bench.evaluator import Verdict
@@ -1243,9 +1244,14 @@ def test_a_committed_declaration_is_what_a_ci_run_declares(
     signed = json.loads((published / "report.json").read_text(encoding="utf-8"))
     assert signed["target"] == "checkout-agent", "the file named the target"
     assert signed["declared"]["rule_of_two"]["standing"] != "not_declared"
-    assert signed["provenance"]["attestation"]["identity"] == ACTOR, (
+    identity = signed["provenance"]["attestation"]["identity"]
+    assert identity.startswith(f"{ACTOR} — "), (
         "the attestation is the runner's authenticated actor and never the file's"
     )
+    # And the document says which party checked it: the runner did, and no issuer
+    # this deployment declares has heard of a workflow actor (ADR-0066, ADR-0123).
+    assert "authenticated by the runner that ran it" in identity
+    assert NOT_ESTABLISHED in identity
 
 
 def test_a_key_declared_in_the_file_and_passed_as_an_input_refuses_the_run(

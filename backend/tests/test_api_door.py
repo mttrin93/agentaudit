@@ -35,6 +35,7 @@ from backend.api.app import (
 from backend.api.run_config import BenchConfig
 from backend.api.run_state import RunRecord
 from backend.api.runs import BenchRuns
+from backend.bench.attested_name import NOT_ESTABLISHED, NameGiven, VerifiedSubject
 from backend.bench.library import Case
 from backend.bench.signing import SIGNING_KEY_VARIABLE, encoded_private, generate
 from backend.identity import (
@@ -546,3 +547,40 @@ def test_a_bench_with_no_door_records_that_it_verified_nobody(
 
     assert _record(app, run_id).attestation.identity == NOBODY_VERIFIED.subject
     assert _declining(app, run_id) == NOBODY_VERIFIED.subject
+
+    # And the artefact says it in a sentence rather than in a name a reader could
+    # take for an unusual username: what a bench with no door recorded is a name
+    # nothing verified, stated (ADR-0123).
+    stated = _record(app, run_id).attestation.attested_by.stated()
+    assert isinstance(_record(app, run_id).attestation.attested_by, NameGiven)
+    assert NOBODY_VERIFIED.subject in stated
+    assert "a name nothing verified" in stated
+
+
+def test_a_run_behind_a_door_is_attested_by_a_subject_the_issuer_verified(
+    leakage_case: Case,
+) -> None:
+    """The other half, and the one that may make the stronger claim.
+
+    The same route, the same body, and the difference is the door: a request the
+    verifier admitted is recorded as a verified subject, and a signed report says
+    which issuer's signature established the name. Beside the `NO_DOOR` assertion
+    above, because the pair is the whole of what #247 put in the document — a reader
+    holding one report can now tell which of the two they have (ADR-0116, ADR-0123).
+    """
+    app = a_bench_behind_a_door(leakage_case, Admits())
+
+    with TestClient(app) as client:
+        run_id = _started(client, AUTHORIZED)
+        client.post(
+            f"/runs/{run_id}/approval",
+            json={"confirmed": False, "reason": "the test that started this is over"},
+            headers=AUTHORIZED,
+        )
+
+    attested = _record(app, run_id).attestation.attested_by
+    assert attested == VerifiedSubject(name=SUBJECT)
+    assert (
+        "verified session at the issuer this deployment declares" in attested.stated()
+    )
+    assert NOT_ESTABLISHED in attested.stated()

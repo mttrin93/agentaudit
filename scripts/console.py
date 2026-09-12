@@ -31,6 +31,7 @@ from backend.bench.adaptive.discrimination import NoFamiliesInScope, measure
 from backend.bench.adaptive.episode import AdaptiveEpisode
 from backend.bench.adjudication import Completion
 from backend.bench.admission import library_provenance, outcome_for
+from backend.bench.attested_name import NameGiven
 from backend.bench.calibration import CalibrationResult, PlantNonce, TargetRun
 from backend.bench.completion import completion_for, narrator_for
 from backend.bench.contract import TargetConfig
@@ -167,7 +168,10 @@ def attest(identity: str) -> Attestation | None:
     }
 
     try:
-        return Attestation(identity=identity, **answers)
+        # `NameGiven`: a terminal reaches the bench in-process and has no door in
+        # front of it, so nothing checked this name and the document says so
+        # (ADR-0116's scope note, ADR-0123).
+        return Attestation(attested_by=NameGiven(name=identity), **answers)
     except ValueError as refusal:
         print(f"\n{refusal}")
         return None

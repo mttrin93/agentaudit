@@ -30,6 +30,7 @@ from pathlib import Path
 import pytest
 
 from backend.bench.assembler import ControlStatus, FamilyEntry, ScannedControl
+from backend.bench.attested_name import NOT_ESTABLISHED
 from backend.bench.capability import (
     NO_REASONING_EFFORT_ACCEPTED,
     NO_TEMPERATURE_ACCEPTED,
@@ -160,9 +161,30 @@ def test_every_section_states_its_own_reproducibility_and_four_read_the_payload(
         )
 
 
+def test_the_document_a_recipient_reads_says_what_established_the_identity() -> None:
+    """The rendering carries the sentence, and carries the payload's own.
+
+    The golden digest below says a byte moved; this says which claim arrived, and it
+    is the acceptance criterion the digest cannot state. `report.md` is the document
+    a recipient reads — a reader who never opens the JSON is the reader this field
+    can most easily mislead — so what verification established is on the page and not
+    only in the bytes beside it (ADR-0123, PLAN.md D4).
+    """
+    body = document(_one_family())
+    stated = body["provenance"]["attestation"]["identity"]
+
+    markdown = render(_one_family())
+
+    # Twice: section 1 names who attested and section 2 records the attestation. Both
+    # print the payload's string whole, so a reader arriving at either meets the same
+    # claim and no renderer is composing a second wording of it.
+    assert markdown.count(stated) == 2
+    assert NOT_ESTABLISHED in stated
+
+
 # --- The golden digest: one document, pinned to the byte ---------------------
 
-GOLDEN_ONE_FAMILY = "1bd3c9b42fafea5cc45a590880c19ef72b7f3ca80e08fea5b34fbc481d2d1b5d"
+GOLDEN_ONE_FAMILY = "4686c84f30d6685e0f27615852e929f950b4757cf6750eb80abbacbae6982d8c"
 """The sha256 of `_one_family()`'s rendering, written down.
 
 **A tripwire, and it is deliberately a strict one.** Every other assertion in this
@@ -454,6 +476,21 @@ the target library, which is not in this document and whose probes never will be
 (ADR-0008). That is the case ADR-0044 §8 and ADR-0070 declined to move the version for,
 and unlike ADR-0088 §7 there is no arithmetic here an older verifier could pass over in
 silence.
+
+Moved a twenty-fourth time, by #247, and it is the shortest field in the document:
+`identity`. The one field in a signed report that names a *person* now carries what
+established that name and what that does not amount to — the subject of a verified
+session at the issuer this deployment declares, and not a legal person, not an
+employer, and not a claim that the named party was authorised by their organisation
+to attest anything
+([ADR-0123](../../docs/adr/0123-the-identity-in-the-payload-states-what-established-it.md),
+which is ADR-0116's cost paragraph carried into the artefact). It moves two lines:
+section 1's **Attested by** bullet, which is also split in two so that the timestamp
+no longer trails a sentence ending in three refusals, and section 2's **Identity**
+line. The sentence is the payload's own — the renderer prints it and does not compose
+it — and `ARTEFACT_VERSION` does not move, because no key was added: the claim travels
+inside the value of a key every artefact already has, which is what a second key
+would have cost every document signed before today.
 """
 
 

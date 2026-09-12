@@ -114,8 +114,11 @@ def _general_description(body: Mapping[str, Any]) -> Section:
         title="The target, and the headline finding",
         body=(
             f"- **Target**: `{body['target']}`",
-            f"- **Attested by**: {attestation['identity']}, "
-            f"recorded {attestation['recorded_at']}",
+            # Two bullets and not one line since #247: the identity carries what
+            # established it, and a clause appended after a sentence that ends in
+            # three refusals would read as part of the last of them (ADR-0123).
+            f"- **Attested by**: {attestation['identity']}",
+            f"- **Attestation recorded**: {attestation['recorded_at']}",
             "- **One run, in two layers**: the recorded library at the declared "
             "attempts per case, then one adaptive attacker. Only the first is scored.",
             "",
@@ -215,6 +218,9 @@ def _how_the_run_was_made(body: Mapping[str, Any]) -> Section:
         body=(
             "### The attestation this run required",
             "",
+            # The payload's own sentence, printed and never reworded: it says who
+            # attested and what established that name, and a renderer that
+            # summarised it would be the drop ADR-0123 refused a second key over.
             f"- **Identity**: {attestation['identity']}",
             f"- **Recorded at**: {attestation['recorded_at']}",
             f"- **Endpoint**: `sha256:{attestation['endpoint_sha256']}` — the "

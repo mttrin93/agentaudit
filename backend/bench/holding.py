@@ -93,6 +93,11 @@ def hold_refused(
     queue row carries rather than on the held record, because the record is
     `HeldRoute` and widening it is a decision of its own.
 
+    A route already held is left exactly as it stands — unless it is **closed**,
+    which is the one case where a rediscovery writes: the route the operator fixed
+    has broken their agent again, and the record reopens as a regression rather than
+    being filed afresh under a run that would lose both dates (ADR-0117 §5).
+
     `routes` has a default for `queued.file_proposals`'s reason and with its
     consequence: the default is the module-level object bound at import, so every
     caller writes to the one git-ignored location and a test that wants its own
@@ -104,8 +109,6 @@ def hold_refused(
     if refusal is not None:
         return Holding(None, refusal)
     already = routes.held(record.target, record.route)
-    if already is not None:
-        return Holding(already, _already(already))
     try:
         held = routes.hold(_route_from(record))
     except Exception as refused:  # noqa: BLE001 - never fails a decision
@@ -117,6 +120,16 @@ def hold_refused(
                 "a storage fault costs here is a record and never an answer",
             ),
         )
+    if already is not None:
+        # Which of the two sentences is decided by what the store did rather than by
+        # a second reading of the state: `hold` leaves an open record exactly as it
+        # found it and reopens a closed one, so the record coming back unchanged is
+        # the rediscovery and a changed one is the regression. Asking the state here
+        # as well would be one fact in two modules, and the day they disagreed the
+        # operator's row would describe a write that did not happen.
+        if held == already:
+            return Holding(already, _already(already))
+        return Holding(held, _reopened(held, already, approved_by))
     return Holding(
         held,
         (
@@ -126,6 +139,25 @@ def hold_refused(
             "licenses this record is an evaluator-confirmed break and an approval, "
             "not a declared threshold (ADR-0117 §2)"
         ),
+    )
+
+
+def _reopened(held: HeldRoute, was: HeldRoute, approved_by: str) -> str:
+    """What a rediscovery of a **closed** route says, and it says regression.
+
+    ADR-0117 §5 decides that a closed route which breaks again reads as a regression
+    and `HeldRoutes.hold` performs it; what is local here is the sentence, and it
+    carries both dates because this is the row an operator reads and a row that sent
+    them to a document for *when did this close?* would be a row that could have just
+    told them (`_one_door`).
+    """
+    return (
+        f"{held.route.stated()} is held against {held.target} again on the approval "
+        f"of {approved_by}, and this is a **regression**: it was found in "
+        f"{held.found_in}, closed in {was.closed_in} after "
+        f"{was.clean_runs} clean run(s), and has broken the agent again. The record "
+        "is the same record and the window starts over — a defect that came back is "
+        "not a new finding (ADR-0117 §5)"
     )
 
 

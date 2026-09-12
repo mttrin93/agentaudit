@@ -49,15 +49,18 @@ on every historical record being present and parseable — and here the state de
 whether a route is still sent at all, so a missing run record would silently reopen a
 closed defect or close an open one.
 
-**Nothing writes to this store yet and nothing reads one into a run.** The type and
-the store are first because every other part of the feature depends on their shape.
-Filing a decided route here is #239 and sending a held route is #240.
+**Three modules write here and each writes one kind of sentence.** `holding.py` files
+a decided route (#239), `resending.py` sends every open one on every run of its target
+(#240), and `closing.py` counts what those runs read back into the record — two clean
+runs close a route and it stops being sent (#241). The transitions themselves are on
+the record below, because a state and a count that may not disagree are one fact and
+not two fields.
 """
 
 from __future__ import annotations
 
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import StrEnum
 from hashlib import sha256
 from pathlib import Path
@@ -117,8 +120,9 @@ that says a fix worked when nothing was fixed.
 
 Named on the record's side because the record is where the contradiction is
 refusable — `HeldRoute.__post_init__` refuses a closed route with fewer clean runs
-than this and an open one with more. *Counting* the clean runs is the retirement
-ticket's, and it will read this constant rather than a second copy of the number.
+than this and an open one with more. `HeldRoute.after_a_clean_run` reads it rather
+than carrying a second copy of the number, and `closing.py` decides which readings
+reach it.
 """
 
 PAGE = 100
@@ -226,6 +230,33 @@ class HeldRoute:
     (ADR-0117 §5) — which is the sending ticket's arithmetic, not this record's.
     """
 
+    closed_in: str | None = None
+    """The `run_id` of the run whose reading closed this route. `None` while open.
+
+    The second half of *found on 3 March, closed on 19 March* (ADR-0117 §5, spec
+    user story 12), and a second field rather than an overwrite of `found_in`: the
+    two are different runs and a reader wants both. A run id for `found_in`'s
+    reason — the run record carries the date, the target and the declaration, and a
+    date stored here would be a copy of one of its fields that nothing keeps in step.
+
+    Required of a closed route and refused on an open one that was never closed, so
+    the record cannot be in a state whose own report it contradicts.
+    """
+
+    reopened_in: str | None = None
+    """The `run_id` of the run that found this route again after it had closed.
+
+    What makes a reopened route a **regression** rather than a new finding (ADR-0117
+    §5, spec user story 13). Kept even after a second closing, because *this route
+    has come back once* is the fact a reader needs and a field that emptied itself
+    on the next close would answer *has it ever regressed?* with no.
+
+    Set by `HeldRoutes.hold`, which is the only way a closed route reopens: a closed
+    route is not sent, so the run loop can never read one breaking. What can happen
+    is that the attacker walks the path again, the evaluator confirms the break
+    again, and an operator decides it again — the same door ADR-0117 §2 opened.
+    """
+
     provenance = DiscoveredBy.TARGET_SPECIFIC
     """The sixth provenance, and a constant rather than a field.
 
@@ -264,6 +295,40 @@ class HeldRoute:
                 "resets the count to zero and nothing takes it below"
             )
         self._refuse_a_state_the_count_contradicts()
+        self._refuse_a_history_the_state_contradicts()
+
+    def _refuse_a_history_the_state_contradicts(self) -> None:
+        """The two run ids against the state, so no record can misreport its own past.
+
+        Three refusals and one question — *does this record's history say what its
+        state says?* A closed route with no closing run cannot print the second half
+        of the sentence it exists for; an open route carrying one that nothing
+        reopened says it closed and says nothing about how it came back; and a
+        reopening with no closing behind it is a regression of something that never
+        stopped (ADR-0117 §5).
+        """
+        closed = self.state is HeldState.CLOSED
+        if closed and not (self.closed_in or "").strip():
+            raise ValueError(
+                f"{self.route.stated()} is recorded closed against {self.target} "
+                "without saying which run closed it. *Found on 3 March, closed on "
+                "19 March* is the sentence the operator paid for, and half of it "
+                "is this field (ADR-0117 §5)"
+            )
+        if self.reopened_in is not None and self.closed_in is None:
+            raise ValueError(
+                f"{self.route.stated()} is recorded as reopened against "
+                f"{self.target} having never closed. A regression is a defect that "
+                "came back, and a route that never stopped breaking the target did "
+                "not come back"
+            )
+        if not closed and self.closed_in is not None and self.reopened_in is None:
+            raise ValueError(
+                f"{self.route.stated()} is recorded open against {self.target} and "
+                "closed by a run. A closed route that is open again was reopened by "
+                "something, and a record that does not say by what reports a "
+                "regression as a route that was never closed (ADR-0117 §5)"
+            )
 
     def _refuse_a_state_the_count_contradicts(self) -> None:
         """ADR-0117 §5 as an invariant of the record rather than of one call site.
@@ -312,6 +377,73 @@ class HeldRoute:
         """
         return _key(self.target, self.route)
 
+    @property
+    def regressed(self) -> bool:
+        """Whether this route has ever closed and come back. ADR-0117 §5.
+
+        Read off `reopened_in` and never off the state, so that a route which
+        regressed and was then fixed again still reads as one: a reader deciding
+        whether to trust a fix wants to know that this defect has returned before.
+        """
+        return self.reopened_in is not None
+
+    def after_a_clean_run(self, run_id: str) -> HeldRoute:
+        """This record after one run of its target that did not break on it.
+
+        **One operation over the state and the count**, because the record refuses
+        every intermediate: an open route on `CLEAN_RUNS_TO_CLOSE` clean runs is
+        refused and so is a closed one below it, so a caller that set the count and
+        then the state would raise between the two lines. There is no order in which
+        two writes work, which is the point — the window is one fact.
+
+        Closing is a state and never a deletion. Everything the record carried is
+        carried on: the run that found it, the attacker's description, and the
+        payload the route would be re-sent with if it ever reopened.
+
+        A route closing for the second time takes the second run's id and the first
+        is not kept. One field, because what a reader of a report is asking is *did
+        my fix work* and the answer is about the closing that stands; that this
+        record has been round the loop before is `reopened_in`, which is kept. A
+        full history of closings and returns is a series and not a field, and no
+        ADR has decided the bench should hold one.
+        """
+        counted = self.clean_runs + 1
+        if counted < CLEAN_RUNS_TO_CLOSE:
+            return replace(self, clean_runs=counted)
+        return replace(
+            self, clean_runs=counted, state=HeldState.CLOSED, closed_in=run_id
+        )
+
+    def after_a_break(self) -> HeldRoute:
+        """This record after a run on which the route broke the target again.
+
+        The count goes to zero and the state does not move: the window is
+        *consecutive* clean runs, so a break is not a smaller number of them. No run
+        id is taken, because a break changes nothing a reader dates — the route is
+        still open, still found in the run that found it, and this run's reading is
+        recorded as a reading (`resending.HeldReading`) rather than on the record.
+        """
+        return self if self.clean_runs == 0 else replace(self, clean_runs=0)
+
+    def reopened_by(self, run_id: str) -> HeldRoute:
+        """This closed record, open again, as the regression it is (ADR-0117 §5).
+
+        The count goes back to zero — the fix this route closed on has been shown
+        not to hold, so the window starts again — and `closed_in` is **kept**: it is
+        the run that closed it, which happened, and a regression is precisely the
+        pair of a closing and a return. `found_in` is untouched for the same reason:
+        this is the same finding coming back, which is what distinguishes it from a
+        new one.
+
+        The rediscovery's own description and payload are **not** taken. The route
+        is keyed on a digest of the probe, so a record this reopens is a record of
+        the same probe, and the attacker's account of what it did is an account of
+        the same break — a later run's rephrasing of it would overwrite the words
+        the operator was first shown for no gain. The run that brought it back is
+        `reopened_in`, which is where a reader goes for the rest.
+        """
+        return replace(self, state=HeldState.OPEN, clean_runs=0, reopened_in=run_id)
+
     def stored(self) -> dict[str, Any]:
         """The record as the store holds it, payload and target and all."""
         return {
@@ -325,6 +457,8 @@ class HeldRoute:
             "found_in": self.found_in,
             "state": str(self.state),
             "clean_runs": self.clean_runs,
+            "closed_in": self.closed_in,
+            "reopened_in": self.reopened_in,
         }
 
     @classmethod
@@ -349,6 +483,8 @@ class HeldRoute:
             found_in=str(value["found_in"]),
             state=HeldState(str(value["state"])),
             clean_runs=int(value["clean_runs"]),
+            closed_in=_run_or_none(value.get("closed_in")),
+            reopened_in=_run_or_none(value.get("reopened_in")),
         )
 
 
@@ -421,13 +557,33 @@ class HeldRoutes:
         walked the same path again. One route is one held record per target,
         however many times it is rediscovered (ADR-0117 §1).
 
-        What a rediscovery *should* do to a closed route is reopen it as a
-        regression, and that is the filing ticket's decision and not this one's:
-        nothing calls this yet.
+        **A rediscovery of a *closed* route reopens it**, and that is the one case
+        where this store does write over a record it found. A closed route is not
+        sent, so no run loop can ever read one breaking again — the only way the
+        bench learns that a fixed defect came back is that the attacker walks the
+        path again, the evaluator confirms the break again and an operator decides
+        it again, which is the same door ADR-0117 §2 opened for the first finding.
+        Reopened rather than filed afresh, because a new record would lose the run
+        that found it and the run that closed it, and a defect that has come back is
+        a **regression** and not a new finding (ADR-0117 §5, spec user story 13).
         """
         found = self.held(route.target, route.route)
-        if found is not None:
+        if found is not None and found.state is not HeldState.CLOSED:
             return found
+        held = route if found is None else found.reopened_by(route.found_in)
+        self.store.put(self.namespace, held.held_under, held.stored())
+        return held
+
+    def record(self, route: HeldRoute) -> HeldRoute:
+        """Write this record over the one held under the same key.
+
+        The write `hold` deliberately is not, and the two are separated for that
+        reason: `hold` answers *has this route been found before?* and leaves an
+        open record exactly as it found it, while this is a record that has already
+        been read, counted and moved by one of `HeldRoute`'s own transitions. Anything
+        contradictory the caller composed was refused by the record before it got
+        here, so what this may write is bounded by the type and not by this method.
+        """
         self.store.put(self.namespace, route.held_under, route.stored())
         return route
 
@@ -495,6 +651,16 @@ def _key(target: str, route: RouteKey) -> str:
     route is held does not yet have the record it is asking for.
     """
     return f"{_digest(target)}-{route.filed_under}"
+
+
+def _run_or_none(value: Any) -> str | None:
+    """A run id off a stored record, `None` where the record names no run.
+
+    `_planted`'s reason one field over, and it is the same trap: the record refuses
+    a closed route with no closing run, so a `None` read back as the string `"None"`
+    would not fail — it would pass, and print a run id that never existed.
+    """
+    return None if value is None else str(value)
 
 
 def _planted(value: Any) -> str | None:

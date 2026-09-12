@@ -219,11 +219,12 @@ class BenchClient:
     def _authorization(self) -> dict[str, str]:
         """The one header this client adds, or the refusal that it has none.
 
-        Built per request rather than set on the client's own `headers` at
-        construction, so that the absence is answered where a caller can be told
-        about it: default headers on an `httpx.Client` are applied inside the
-        transport, and a credential missing there is a `401` from the far end at
-        best and a run recorded against nobody at worst.
+        Built per request rather than written into the transport's default headers,
+        for the two reasons this class is shaped the way it is: the `httpx.Client` is
+        the caller's and this one closes nothing it did not open, so it does not
+        mutate it either; and a credential the transport supplies is a credential
+        whose absence is discovered by the far end, as a `401` at best and, against a
+        bench with no door, as a run recorded against nobody.
         """
         credential = (self._credential or "").strip()
         if not credential:

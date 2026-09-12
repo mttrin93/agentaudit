@@ -52,18 +52,6 @@ The OWASP column reads *agentic entry · LLM entry*, 2026 edition. A **—** is 
 claim the project declined to make rather than a gap. Article 12 is on every row
 and therefore on none: record-keeping is borne by all nine.
 
-All nine are measured the same way, against the same three reference agents and
-the same bar. The elective three cost extra, you ask for them per run, and a run
-without them says **not requested** rather than leaving a silent hole — but they
-never decide whether the bench passes its own gate
-([ADR-0035](./docs/adr/0035-the-elective-family-tier-is-never-gate-deciding.md)).
-
-**What makes this different from a test script:** before you are allowed to trust
-a number, the bench measures *itself*. It runs the same attacks against three
-agents we built on purpose — one with no defences, one weak, one hardened. An
-attack that cannot tell those three apart proves nothing, so it is retired
-instead of trusted.
-
 ---
 
 ## How it works
@@ -214,7 +202,8 @@ beside the six's and inside neither
 ([ADR-0088](./docs/adr/0088-an-elective-familys-rate-against-a-target-is-a-fact-about-that-target.md)).
 How your agent did against memory poisoning is a fact about your agent. Whether
 the *bench* can discriminate on memory poisoning is a fact about the bench, so
-that figure prints on the gate document instead.
+that figure prints on the gate document instead — where it decides nothing
+([ADR-0035](./docs/adr/0035-the-elective-family-tier-is-never-gate-deciding.md)).
 
 ## How the bench proves the attacks work
 

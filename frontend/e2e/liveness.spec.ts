@@ -18,16 +18,10 @@
 
 import { expect, test, type Page } from '@playwright/test'
 
-/** Who this spec attests as, on a registration that is never posted. */
-const IDENTITY = 'the liveness spec'
-
-/** The three statements ticked and the name recorded, which is what holds step one. */
+/** The three statements ticked, which is the whole of what holds step one. */
 async function completeTheEndpointStep(page: Page): Promise<void> {
   await page.goto('/#/register')
   await expect(page.getByRole('heading', { name: 'The endpoint' })).toBeVisible()
-  await page
-    .getByPlaceholder('recorded against every one of the three statements')
-    .fill(IDENTITY)
   for (const statement of [
     /authorised to test this endpoint/,
     /staging or sandbox environment/,

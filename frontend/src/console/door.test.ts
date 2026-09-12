@@ -10,10 +10,12 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  NOBODY_VERIFIED,
   issuerDeclaredIn,
   remedyFor,
   theConsolesPalette,
   theOperator,
+  whoIsAttesting,
 } from './door'
 
 describe('the issuer, declared or not', () => {
@@ -69,6 +71,46 @@ describe('who is signed in', () => {
         primaryEmailAddress: null,
       }).named,
     ).toBe('user_2abc')
+  })
+})
+
+describe('who the bench will record this attestation against', () => {
+  const ADA = {
+    operator: { named: 'Ada Lovelace', subject: 'user_2abc' },
+    refusal: null,
+    signInAgain: () => {},
+    letItGo: () => {},
+  }
+
+  it('is the display name to read and the subject to record, and they are not one string', () => {
+    expect(whoIsAttesting(ADA)).toEqual({
+      verified: true,
+      named: 'Ada Lovelace',
+      recorded: 'user_2abc',
+    })
+  })
+
+  it('is the bench’s own sentence where this console attends no door', () => {
+    // A clone built with no issuer signs nobody in, and the bench it talks to has no
+    // door either: what lands in the artefact is `app.NOBODY_VERIFIED` (ADR-0122).
+    // A screen that printed a friendlier placeholder here would be promising a name
+    // the record will not carry.
+    // And no `named` at all: there is no display name to have, and a member holding
+    // a copy of the sentence would be a screen one narrowing away from printing it as
+    // one (ADR-0123 §1).
+    expect(whoIsAttesting(null)).toEqual({
+      verified: false,
+      recorded: NOBODY_VERIFIED,
+    })
+  })
+
+  it('says nobody was verified in the words the record uses, and not in a word of its own', () => {
+    // The string is the backend's, and the two would have to disagree only once for
+    // a screen to promise one thing and an artefact to say another. `anonymous` and
+    // the empty string are the two ADR-0122 refused, and neither may creep back in
+    // as a console-side softening.
+    expect(NOBODY_VERIFIED).toBe('an operator this bench did not verify')
+    expect(whoIsAttesting(null).verified).toBe(false)
   })
 })
 

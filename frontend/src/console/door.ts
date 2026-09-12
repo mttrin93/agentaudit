@@ -209,3 +209,69 @@ export const TheDoorAttended = createContext<AtTheDoor | null>(null)
 export function useOperator(): AtTheDoor | null {
   return useContext(TheDoorAttended)
 }
+
+/**
+ * What a bench with no door records against every request it serves.
+ *
+ * The same string as `backend/api/app.NOBODY_VERIFIED`, written down a second time
+ * because it crosses the wire in neither direction: this console never sends it and
+ * never reads it back off a registration, so there is nothing to derive it from and
+ * a copy is the only way a screen can say what the artefact will say. The decision
+ * that it is a stated sentence rather than `anonymous` or a blank is
+ * [ADR-0122](../../../docs/adr/0122-a-bench-with-no-door-records-that-it-verified-nobody.md)
+ * and is not re-argued here; the local consequence is that a screen showing who will
+ * be recorded has a true thing to show when nobody signed in, and `door.test.ts`
+ * holds the two spellings to the letter.
+ *
+ * **`e2e/walkthrough.spec.ts` writes it a third time, and that one must not import
+ * this.** That spec reads the sentence off the register screen and then off the signed
+ * artefact the same run produced, and the claim it is making is that those two agree.
+ * A spec that took the string from this module would be asserting the console against
+ * itself and would stay green through a console and a backend that had drifted apart —
+ * which is the one failure the assertion exists for.
+ */
+export const NOBODY_VERIFIED = 'an operator this bench did not verify'
+
+/**
+ * Who the bench will record an attestation against: a verified operator with two
+ * names, or a bench that verified nobody and has one sentence.
+ *
+ * `named` is for the person standing there and `recorded` is what goes in the
+ * document — `theOperator` above says why those are two strings.
+ *
+ * **A union and not a `verified: boolean` beside them**, which is
+ * [ADR-0123](../../../docs/adr/0123-the-identity-in-the-payload-states-what-established-it.md)
+ * §1's shape carried to the screen that shows the same claim: a flag beside a string
+ * can be set by anybody and a union can only be narrowed. It also deletes the member
+ * that has no meaning in the doorless reading — there is no display name when nobody
+ * signed in, and the alternative was a `named` holding a copy of the sentence for no
+ * caller to read.
+ *
+ * **`verified` is about the session and not about the last request.** A refusal the
+ * bench has already shown is still held on the door (`AtTheDoor.refusal`) and does not
+ * make this `false`: the subtree carrying a value at all is one the issuer mounted for
+ * a signed-in user with a user record (`TheDoor.tsx`), which is the same claim the
+ * bench will check the token for. A screen that flipped this on a stale refusal would
+ * be telling an operator the artefact will name nobody while their next request is
+ * about to be recorded under their subject.
+ */
+export type WhoIsAttesting =
+  | { verified: true; named: string; recorded: string }
+  | { verified: false; recorded: string }
+
+/**
+ * The attesting operator, read off the door, or the doorless reading of the same
+ * question.
+ *
+ * Takes the whole `AtTheDoor` rather than an `Operator`, because `null` is the
+ * answer it exists to give: a clone with no issuer renders every screen
+ * (`useOperator` above), and every one of the three walks that collects an
+ * attestation has to draw something on that build. Answering it here rather than in
+ * each screen's markup is what keeps the three from drifting into three sentences.
+ */
+export function whoIsAttesting(at: AtTheDoor | null): WhoIsAttesting {
+  if (at === null) {
+    return { verified: false, recorded: NOBODY_VERIFIED }
+  }
+  return { verified: true, named: at.operator.named, recorded: at.operator.subject }
+}

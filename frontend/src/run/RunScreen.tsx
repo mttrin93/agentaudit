@@ -51,7 +51,6 @@ import {
   confirmationRequest,
   declineRequest,
   interruptView,
-  whoAttested,
   theFiguresPresented,
   type ConfirmationRequest,
 } from './interrupt'
@@ -218,17 +217,10 @@ export function RunScreen() {
     return () => clearInterval(ticking)
   }, [inFlight])
 
-  /**
-   * The name the confirmation is recorded under, from the registration that made
-   * this run. No screen asks for it again.
-   */
-  const identity = whoAttested(sessionStorage, runId)
-
   const request: ConfirmationRequest = confirmationRequest({
     status: progress?.status ?? '',
     figures,
     confirmed,
-    identity,
     // No field asks for one. A decline carries `declineRequest`'s own sentence and a
     // confirmation carries none, which is what a screen with no reason box means.
     reason: '',

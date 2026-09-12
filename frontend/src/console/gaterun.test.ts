@@ -13,9 +13,11 @@
  * target run does not.
  *
  * **That there is no path to a body with a statement withheld.** Parametrised over
- * the three, and over the identity, because the failure is the same either way: a
- * request that reached the bench without one would be refused there, and a screen
- * that could build one is a screen one refactor away from sending it.
+ * the three: a request that reached the bench without one would be refused there,
+ * and a screen that could build one is a screen one refactor away from sending it.
+ * The identity was the fourth thing this was parametrised over; it is not declared
+ * on this walk any more and the body may not carry it at all (ADR-0116 §1), so what
+ * is asserted about it now is its absence.
  *
  * **That declining anything spends nothing.** A withheld statement produces no body
  * at all; a declined estimate produces a `confirmed: false` that needs neither a
@@ -411,7 +413,6 @@ function block<K extends DecidedBlock['kind']>(
 /** Everything declared and every statement made. Nothing here is defaulted. */
 function allAttested(): Attesting {
   return {
-    identity: 'the operator',
     attested: {
       authorised_to_test: true,
       not_production: true,
@@ -483,9 +484,10 @@ describe('nothing reaches the bench with a statement withheld', () => {
     },
   )
 
-  it('refuses to build one from an unfinished walk, and builds a complete one', () => {
-    const anonymous = { ...allAttested(), identity: '   ' }
-    expect(gateRunRequest(anonymous).kind).toBe('blocked')
+  it('refuses an unfinished walk, builds a complete one, and holds no name in either', () => {
+    // Nothing on this walk collects a name, so there is no unnamed declaration to
+    // refuse: what holds it is the three statements and nothing else.
+    expect('identity' in nothingAttested()).toBe(false)
     expect(gateRunRequest(nothingAttested()).kind).toBe('blocked')
 
     const request = gateRunRequest(allAttested())
@@ -565,16 +567,18 @@ describe('declining, at either point, sends nothing that spends', () => {
     expect(ready.body).toEqual({ confirmed: true, reason: '' })
   })
 
-  it('asks nothing at all before a no', () => {
+  it('asks nothing at all before a no, and takes nothing that could be put in it', () => {
     // A no is sent rather than withheld, and it asks for nothing first: no second
     // click and no reason. Putting a required field in front of the safe answer
     // would make declining the harder of the two.
-    const declined = gateDecline('')
-    expect(declined.confirmed).toBe(false)
-    expect(declined.reason).toMatch(/the figures were not confirmed/)
-    expect(gateDecline('not today')).toEqual({
+    //
+    // The second assertion is the one with history. This took an optional reason and
+    // the screen had no box for one, so the call site passed the typed *who is
+    // attesting* — a name recorded as the stated cause of a decline. `toEqual` over
+    // the whole body is what says nothing else can arrive there.
+    expect(gateDecline()).toEqual({
       confirmed: false,
-      reason: 'not today',
+      reason: 'declined at the approval interrupt: the figures were not confirmed',
     })
   })
 })

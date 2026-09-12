@@ -17,6 +17,7 @@ import type {
 import {
   GATE_RUN_STATEMENTS,
 } from './gaterun'
+import { AttestingAs } from '../attesting'
 import { Blocked, STILL_UNDECLARED } from '../blocked'
 
 /**
@@ -68,7 +69,7 @@ export function TheAttestation({
   const reasons = last ? missing : []
   return (
     <section>
-      {/* A form, so that Enter in either of the two fields below does what the primary
+      {/* A form, so that Enter in the price field below does what the primary
           button does — the register walk's own arrangement, for the same reason and on
           the same footer (#120). Nothing here spends anything: the forward control
           reaches the estimate, and the halt in front of the spend is the screen after
@@ -105,14 +106,7 @@ export function TheAttestation({
 
         {step === 0 ? (
           <>
-            <label>
-              Who is attesting
-              <input
-                value={attesting.identity}
-                onChange={(event) => declare({ identity: event.target.value })}
-                placeholder="recorded against every one of the three statements"
-              />
-            </label>
+            <AttestingAs />
             <label>
               What one call costs you, on your own provider
               <input

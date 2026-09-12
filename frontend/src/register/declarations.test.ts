@@ -38,7 +38,6 @@ function fullyDeclared(): Declarations {
     url: 'https://staging.example/agent',
     auth_token: 'token',
     agent_type: 'customer support',
-    identity: 'operator',
     attested: {
       authorised_to_test: true,
       not_production: true,
@@ -78,14 +77,39 @@ describe('the three attestations', () => {
     }
   })
 
-  it('are recorded against somebody, so an unnamed attestation registers nothing', () => {
-    const declarations = { ...fullyDeclared(), identity: '   ' }
+  it('are recorded against a name this walk neither asks for nor holds', () => {
+    // The field came off the screen and the declaration with it (#250). The name on
+    // the record is the subject of the session the API verified the request as, so
+    // there is nothing here to type, nothing to leave blank and nothing to wait for.
+    expect('identity' in nothingDeclared()).toBe(false)
 
-    const request = registrationRequest(declarations)
+    const request = registrationRequest(fullyDeclared())
 
-    expect(request.kind).toBe('blocked')
-    expect(request.kind === 'blocked' && request.missing).toContain(
-      'an attestation has to record who made it',
+    expect(request.kind).toBe('ready')
+    // `toEqual` is the assertion, and the keys are the three statements: a body that
+    // grew an `identity` back would be refused by the API with a `422` naming a field
+    // that is not one, and this is where that is caught instead.
+    expect(request.kind === 'ready' && request.body.attestation).toEqual({
+      authorised_to_test: true,
+      not_production: true,
+      accepts_provider_policy_and_cost: true,
+    })
+  })
+
+  it('hold no step of the walk for want of a name, on any step', () => {
+    // The guard is gone from both places it stood — the target step and the
+    // registration itself — and the sentence it refused in goes with it. Asserted
+    // over every step rather than the one it was on, because a name is asked for on
+    // no screen of this walk now.
+    for (const step of WALK_STEPS) {
+      expect(unmetConditions(step, nothingDeclared()).join(' ')).not.toContain(
+        'record who made it',
+      )
+    }
+    const blocked = registrationRequest(nothingDeclared())
+    expect(blocked.kind).toBe('blocked')
+    expect(blocked.kind === 'blocked' && blocked.missing.join(' ')).not.toContain(
+      'record who made it',
     )
   })
 })
@@ -381,15 +405,16 @@ describe('a priced run', () => {
 })
 
 describe('what a step is still waiting for', () => {
-  it('names the statements and the name that hold the endpoint step', () => {
+  it('names the statements that hold the endpoint step, and nothing else', () => {
     const nothing = nothingDeclared()
 
     const unmet = unmetConditions('target', nothing)
 
-    expect(unmet).toEqual([
-      ...ATTESTATION_STATEMENTS.map((one) => `not attested: ${one.wording}`),
-      'an attestation has to record who made it',
-    ])
+    // The three, and only the three. The name that used to be the fourth is not a
+    // declaration on this walk any more, so the step is held by the boxes alone.
+    expect(unmet).toEqual(
+      ATTESTATION_STATEMENTS.map((one) => `not attested: ${one.wording}`),
+    )
   })
 
   it('is empty on exactly the steps that may be left', () => {

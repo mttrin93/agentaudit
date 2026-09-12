@@ -396,13 +396,6 @@ export function measurementRequest(
         'and never defaulted to all of them',
     )
   }
-  if (!attesting.identity.trim()) {
-    missing.push(
-      'an attestation has to record who made it: the measurement is charged to ' +
-        'whoever attests it, and the case record an admitted route becomes carries ' +
-        'the run that wrote it',
-    )
-  }
   if (attesting.price_per_call.trim() && !attesting.currency.trim()) {
     // `CallPrice`'s own guard, held here so the operator meets it as an unfinished
     // step rather than as a 422: an amount with a currency the bench chose is a

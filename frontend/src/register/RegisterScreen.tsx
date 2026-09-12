@@ -73,7 +73,8 @@ import {
   type Declarations,
   type Step,
 } from './declarations'
-import { rememberTheFigures, rememberWhoAttested } from '../run/interrupt'
+import { rememberTheFigures } from '../run/interrupt'
+import { AttestingAs } from '../attesting'
 import { useArrivalFocus, useScreenTitle } from '../console/announce'
 import { REGISTER_A_TARGET } from '../console/rail'
 
@@ -179,7 +180,6 @@ const FIELDS = {
   agent_type: 'body.target.agent_type',
   sends: 'body.target.sends',
   declared_tools: 'body.target.declared_tools',
-  identity: 'body.attestation.identity',
   price_per_call: 'body.cost.price_per_call',
   currency: 'body.cost.currency',
   exposes_tool_calls: 'body.target.exposes_tool_calls',
@@ -520,9 +520,11 @@ export function RegisterScreen() {
       // arrives with this response and nowhere else. Held under the run's own id,
       // for the screen that has to show it before anybody may confirm it.
       rememberTheFigures(sessionStorage, outcome.run.run_id, outcome.run.estimate)
-      // And who attested it. The interrupt has no field asking again, and the bench
-      // writes `confirmed by <name>` when the answer arrives.
-      rememberWhoAttested(sessionStorage, outcome.run.run_id, declarations.identity)
+      // And nothing else. The name the interrupt is confirmed under used to be
+      // handed over beside the figures, because `sessionStorage` was the only thing
+      // bridging the two screens; the session's token bridges them now, and the
+      // bench reads `confirmed by <name>` off the request the confirmation arrives
+      // on (ADR-0116 §1).
       // A real navigation, and the run id is the whole of what the URL carries:
       // the run exists on the bench, holding its interrupt, and the run screen
       // reads its standing from there rather than from anything this screen chose
@@ -705,11 +707,7 @@ export function RegisterScreen() {
             />
             {/* The three statements, at the foot of the screen that names the endpoint
                 they are about rather than on a page of their own. */}
-            <AttestationStep
-              declarations={declarations}
-              declare={declare}
-              refusals={refusal.fields}
-            />
+            <AttestationStep declarations={declarations} declare={declare} />
           </>
         ) : null}
         {current === 'plant' ? (
@@ -735,8 +733,9 @@ export function RegisterScreen() {
           `blocked.tsx` drew one here — a line per withheld statement, in the guard's
           own wording, cited by the disabled button through `aria-describedby`. On this
           walk every reason it could give is a control the reader is looking at: three
-          unticked boxes on the screen, and the name field above them. It restated the
-          form.
+          unticked boxes on the screen. It restated the form. The name field above them
+          was the fourth reason when this was written and is a line now, so there is one
+          fewer thing this list could have said (#250).
 
           **What that costs is the citation, and the cost is real.** A screen reader in
           browse mode reaching the dead button now reads *Continue, dimmed* and nothing
@@ -1215,23 +1214,15 @@ function WaiveTheProof({
  *
  * An ordered list rather than three sections, because that is what it is: three
  * statements in the order the record lists them, numbered so that somebody who has
- * ticked the first can see how many are left. The name is asked for above them
- * rather than beside one of them, since it is recorded against all three and a field
- * sitting under the first would read as belonging to the first.
+ * ticked the first can see how many are left. Who they are recorded against is named
+ * above them rather than beside one of them, since it is one name against all three
+ * and a line sitting under the first would read as belonging to the first. It is a
+ * line and no longer a field: nobody types the name this record carries (#250).
  */
-function AttestationStep({ declarations, declare, refusals }: RefusableProps) {
+function AttestationStep({ declarations, declare }: StepProps) {
   return (
     <section>
-      <Field label="Who is attesting" field={FIELDS.identity} refusals={refusals}>
-        {(marks) => (
-          <input
-            {...marks}
-            value={declarations.identity}
-            onChange={(event) => declare({ identity: event.target.value })}
-            placeholder="recorded against every one of the three statements"
-          />
-        )}
-      </Field>
+      <AttestingAs />
       <ol className="attestations">
         {ATTESTATION_STATEMENTS.map((statement) => (
           <li key={statement.field}>

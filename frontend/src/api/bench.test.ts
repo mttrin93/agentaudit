@@ -27,7 +27,6 @@ function declared() {
     auth_token: 'bearer-token',
     agent_type: 'customer support',
     sends: 3,
-    identity: 'operator',
     attested: {
       authorised_to_test: true,
       not_production: true,

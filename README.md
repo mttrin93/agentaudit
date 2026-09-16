@@ -13,6 +13,7 @@ Anyone you send that report to can check it offline — no account, no network,
 no trust in us.<br/>
 Available as a browser console, a GitHub Action, and four MCP tools.
 
+[![ci](https://github.com/mttrin93/agentaudit/actions/workflows/ci.yml/badge.svg)](https://github.com/mttrin93/agentaudit/actions/workflows/ci.yml)
 ![tests](https://img.shields.io/badge/tests-2517_passing-2ea44f)
 ![typed](https://img.shields.io/badge/mypy-strict-1f6feb)
 ![python](https://img.shields.io/badge/python-3.12-3776ab)
@@ -20,6 +21,7 @@ Available as a browser console, a GitHub Action, and four MCP tools.
 ![vite](https://img.shields.io/badge/vite-8-646cff)
 ![reports](https://img.shields.io/badge/reports-Ed25519_signed-8957e5)
 ![families](https://img.shields.io/badge/families-6%2B3_elective-d29922)
+[![license](https://img.shields.io/badge/license-MIT-750014)](./LICENSE)
 
 **[Open the live console](https://frontend-psi-three-16.vercel.app)** ·
 [How it works](#how-it-works) ·

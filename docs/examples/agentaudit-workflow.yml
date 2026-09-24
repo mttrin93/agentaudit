@@ -35,7 +35,7 @@ jobs:
       # reads — so pin, and read the library version in the artefact when the
       # numbers move.
       - name: AgentAudit
-        uses: TuringCollegeSubmissions/mrinal-AE.CAP.AFA.1.1@v1
+        uses: mttrin93/agentaudit@v1
         with:
           # Your staging target. Both from secrets: a URL that answers jailbreak
           # payloads and a bearer token are neither of them things to commit.

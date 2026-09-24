@@ -419,7 +419,7 @@ runner, against your staging target, with your keys and your budget. Nothing in
 it reaches AgentAudit.
 
 ```yaml
-- uses: TuringCollegeSubmissions/mrinal-AE.CAP.AFA.1.1@v1
+- uses: mttrin93/agentaudit@v1
   with:
     endpoint: ${{ secrets.AGENTAUDIT_ENDPOINT }}
     token: ${{ secrets.AGENTAUDIT_TARGET_TOKEN }}
